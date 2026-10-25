@@ -5,7 +5,7 @@ import { readAppStorage } from "../../../../runtime/storage";
 import {
   customKeywordSet,
   decodeKeywordPresets,
-  defaultKeywordPresetId,
+  isDefaultKeywordPreset,
   keywordPresetNameError,
   keywordSlots,
   recentKeywordSet,
@@ -78,7 +78,7 @@ export const useKeywordPresetState = create<KeywordPresetState>((set, get) => ({
     return id;
   },
   rename: (id, name) => {
-    if (id !== defaultKeywordPresetId && !keywordPresetNameError(name, get().presets, id))
+    if (!isDefaultKeywordPreset(id) && !keywordPresetNameError(name, get().presets, id))
       set((state) => ({
         presets: state.presets.map((preset) =>
           preset.id === id ? { ...preset, name: name.trim() } : preset,
@@ -88,7 +88,7 @@ export const useKeywordPresetState = create<KeywordPresetState>((set, get) => ({
   remove: (id) =>
     set((state) => {
       const preset = state.presets.find((preset) => preset.id === id);
-      if (!preset || id === defaultKeywordPresetId) return {};
+      if (!preset || isDefaultKeywordPreset(id)) return {};
       return {
         presets: state.presets.filter((preset) => preset.id !== id),
         ...(state.selected === id

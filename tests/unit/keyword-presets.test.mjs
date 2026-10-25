@@ -49,14 +49,22 @@ function profile(initial) {
   };
 }
 
-test("only shot size ships by default, with five keywords and four blank slots", () => {
-  assert.deepEqual(defaultKeywordPresets(), [
-    {
-      id: "builtin:shot-size",
-      name: "景别",
-      keywords: ["特写", "近景", "中景", "远景", "空镜", "", "", "", ""],
-    },
-  ]);
+test("six builtin presets ship in the requested order with nine slots each", () => {
+  const defaults = defaultKeywordPresets();
+  assert.deepEqual(
+    defaults.map(({ name, keywords }) => [name, keywords.filter(Boolean)]),
+    [
+      ["画面主体", ["人物", "物件", "动物", "交通工具", "建筑", "自然景观", "文字屏幕"]],
+      ["景别取景", ["人物远景", "人物全身", "人物半身", "人物特写", "物件全貌", "物件特写"]],
+      ["拍摄视角", ["平拍", "俯拍", "仰拍", "顶拍", "倾斜拍"]],
+      ["主体运动", ["静止", "原地动作", "空间移动", "混合运动"]],
+      ["镜头运动", ["固定", "推", "拉", "水平摇", "垂直摇", "移", "跟", "升降", "环绕"]],
+      ["人物数量", ["无人", "单人", "双人", "多人"]],
+    ],
+  );
+  assert.ok(defaults.every((preset) => preset.keywords.length === 9));
+  defaults[0].keywords[0] = "修改副本";
+  assert.equal(defaultKeywordPresets()[0].keywords[0], "人物");
   assert.equal(decodeKeywordPresets(null).selected, "recent");
 });
 
@@ -78,13 +86,16 @@ test("create snapshots recent keywords, persists edits and selection, and normal
 test("builtin presets are editable and restore leaves custom presets intact", () => {
   const { state } = profile();
   const id = state().createPreset("保留", ["人物"]);
-  state().save("builtin:shot-size", ["改变"]);
-  state().rename("builtin:shot-size", "不可重命名");
-  state().remove("builtin:shot-size");
-  assert.equal(state().presets[0].name, "景别");
-  assert.equal(state().presets[0].keywords[0], "改变");
+  for (const preset of defaultKeywordPresets()) {
+    state().save(preset.id, ["改变"]);
+    state().rename(preset.id, "不可重命名");
+    state().remove(preset.id);
+    const edited = state().presets.find((item) => item.id === preset.id);
+    assert.equal(edited.name, preset.name);
+    assert.equal(edited.keywords[0], "改变");
+  }
   state().restore();
-  assert.deepEqual(state().presets[0], defaultKeywordPresets()[0]);
+  assert.deepEqual(state().presets.slice(0, 6), defaultKeywordPresets());
   assert.equal(state().presets.at(-1).id, id);
 });
 
@@ -121,12 +132,17 @@ test("editing recent keywords creates transient contents without changing preset
 
 test("names reject blanks, reserved names and duplicates while allowing the same rename", () => {
   const { state } = profile();
-  for (const name of [" ", "景别", "自定", "最近使用过的关键字"])
+  for (const name of [
+    " ",
+    ...defaultKeywordPresets().map((preset) => preset.name),
+    "自定",
+    "最近使用过的关键字",
+  ])
     assert.equal(state().createPreset(name, []), null);
   const id = state().createPreset("人像", []);
   assert.equal(state().createPreset(" 人像 ", []), null);
   assert.equal(keywordPresetNameError("人像", state().presets, id), null);
-  state().rename(id, "景别");
+  state().rename(id, "景别取景");
   assert.equal(state().presets.at(-1).name, "人像");
 });
 
@@ -134,11 +150,49 @@ test("invalid profile data recovers defaults, and edited defaults survive reload
   assert.deepEqual(profile("broken").state().presets, defaultKeywordPresets());
   const { state, saved } = profile();
   state().save("builtin:shot-size", ["新内容"]);
-  assert.equal(profile(saved()).state().presets[0].keywords[0], "新内容");
+  assert.equal(
+    profile(saved())
+      .state()
+      .presets.find((preset) => preset.id === "builtin:shot-size").keywords[0],
+    "新内容",
+  );
   const decoded = decodeKeywordPresets({
     selected: "missing",
     presets: [null, { id: "bad", name: "坏", keywords: [1] }],
   });
   assert.deepEqual(decoded.presets, defaultKeywordPresets());
   assert.equal(decoded.selected, "recent");
+});
+
+test("older profiles gain all six defaults and upgrade the unchanged former shot size preset", () => {
+  const custom = { id: "preset:old", name: "自建集", keywords: ["自建关键字"] };
+  const decoded = decodeKeywordPresets({
+    selected: "builtin:shot-size",
+    presets: [
+      { id: "builtin:shot-size", name: "景别", keywords: ["特写", "近景", "中景", "远景", "空镜"] },
+      custom,
+    ],
+  });
+  assert.deepEqual(decoded.presets.slice(0, 6), defaultKeywordPresets());
+  assert.equal(decoded.selected, "builtin:shot-size");
+  assert.equal(decoded.presets.at(-1).id, custom.id);
+  assert.equal(decoded.presets.at(-1).keywords[0], "自建关键字");
+
+  const edited = decodeKeywordPresets({
+    presets: [{ id: "builtin:shot-size", name: "景别", keywords: ["用户编辑"] }],
+  });
+  assert.equal(edited.presets[1].name, "景别取景");
+  assert.equal(edited.presets[1].keywords[0], "用户编辑");
+});
+
+test("new builtin names cannot discard older custom presets with matching names", () => {
+  const decoded = decodeKeywordPresets({
+    selected: "preset:existing",
+    presets: [{ id: "preset:existing", name: "画面主体", keywords: ["我的分类"] }],
+  });
+  assert.equal(decoded.selected, "preset:existing");
+  assert.equal(decoded.presets.at(-1).name, "画面主体（自定义）");
+  assert.equal(decoded.presets.at(-1).keywords[0], "我的分类");
+  assert.equal(new Set(decoded.presets.map((preset) => preset.name)).size, decoded.presets.length);
+  assert.deepEqual(decodeKeywordPresets(decoded), decoded);
 });

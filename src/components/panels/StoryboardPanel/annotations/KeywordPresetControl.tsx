@@ -10,7 +10,7 @@ import {
 import { ModalDialog } from "../../../common/ModalDialog";
 import {
   customKeywordSet,
-  defaultKeywordPresetId,
+  isDefaultKeywordPreset,
   keywordPresetNameError,
   keywordSlots,
   recentKeywordSet,
@@ -130,7 +130,7 @@ export function KeywordPresetControl({
       : id === customKeywordSet
         ? (state.custom ?? keywordSlots([]))
         : (preset?.keywords ?? keywordSlots([])));
-  const canManage = Boolean(preset && preset.id !== defaultKeywordPresetId);
+  const canManage = Boolean(preset && !isDefaultKeywordPreset(preset.id));
   const nameError = keywordPresetNameError(
     name,
     state.presets,
@@ -212,7 +212,9 @@ export function KeywordPresetControl({
       state.restore();
       setDrafts((current) => {
         const next = { ...current };
-        delete next[defaultKeywordPresetId];
+        for (const draftId of Object.keys(next)) {
+          if (isDefaultKeywordPreset(draftId)) delete next[draftId];
+        }
         return next;
       });
     } else if (editing) {

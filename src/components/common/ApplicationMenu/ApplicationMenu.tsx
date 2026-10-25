@@ -427,14 +427,6 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
           </PopupMenu>
         )}
       </div>
-      <button
-        type="button"
-        className="application-menu-trigger application-menu-placeholder"
-        aria-disabled="true"
-        title="剪辑菜单将在后续版本实现"
-      >
-        剪辑(C)
-      </button>
       <div className="application-menu-root">
         <button
           type="button"

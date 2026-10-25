@@ -60,13 +60,13 @@ function fileName(path: string) {
 
 function fileExtension(path: string) {
   const name = fileName(path);
-  const separator = name.lastIndexOf("./");
+  const separator = name.lastIndexOf(".");
   return separator < 0 ? "" : name.slice(separator + 1).toLocaleLowerCase();
 }
 
 function fileStem(path: string) {
   const name = fileName(path);
-  const separator = name.lastIndexOf("./");
+  const separator = name.lastIndexOf(".");
   return separator < 0 ? name : name.slice(0, separator);
 }
 

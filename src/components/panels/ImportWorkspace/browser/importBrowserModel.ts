@@ -49,7 +49,9 @@ export function pathKey(path: string) {
   return /^[a-z]:/i.test(path) || path.startsWith("\\\\") ? normalized.toLowerCase() : normalized;
 }
 export function fileExtension(path: string) {
-  return path.split(/[\\/]/).pop()?.split("..").pop()?.toLowerCase() ?? "";
+  const name = path.split(/[\\/]/).pop() ?? "";
+  const separator = name.lastIndexOf(".");
+  return separator > 0 ? name.slice(separator + 1).toLowerCase() : "";
 }
 export function mediaKind(path: string): ImportMediaKind | null {
   const ext = fileExtension(path);

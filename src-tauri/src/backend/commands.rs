@@ -818,32 +818,65 @@ fn spawn_system_opener(mut command: StdCommand) -> std::io::Result<()> {
     command.spawn().map(|_| ())
 }
 
+fn external_url_supported(url: &str) -> bool {
+    if url
+        .chars()
+        .any(|character| character.is_whitespace() || character.is_control())
+    {
+        return false;
+    }
+    url.get(..8)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
+        || url
+            .get(..7)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("http://"))
+}
+
+fn system_url_command(url: &str) -> StdCommand {
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = StdCommand::new("rundll32");
+        command.arg("url.dll,FileProtocolHandler").arg(url);
+        command
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let mut command = StdCommand::new("open");
+        command.arg(url);
+        command
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        let mut command = StdCommand::new("xdg-open");
+        command.arg(url);
+        command
+    }
+}
+
+/// Opens a validated web URL in the user's default browser instead of the
+/// application webview.
+#[tauri::command]
+pub(crate) fn open_external_url(url: String) -> CommandResult<()> {
+    if !external_url_supported(&url) {
+        return Err(app_error(
+            ErrorCode::ExternalUrlInvalid,
+            format!("Only HTTP and HTTPS URLs can be opened externally: {url}"),
+        ));
+    }
+    let target = url.clone();
+    spawn_system_opener(system_url_command(&url)).map_err(|error| {
+        app_error(
+            ErrorCode::ExternalUrlOpenFailed,
+            format!("Failed to open {target} with the system handler: {error}"),
+        )
+    })
+}
+
 #[tauri::command]
 pub(crate) fn open_user_guide() -> CommandResult<()> {
     const USER_GUIDE_URL: &str = "https://linecut.lycoreco.dpdns.org/";
 
-    #[cfg(target_os = "windows")]
-    let command = {
-        let mut command = StdCommand::new("rundll32");
-        command
-            .arg("url.dll,FileProtocolHandler")
-            .arg(USER_GUIDE_URL);
-        command
-    };
-    #[cfg(target_os = "macos")]
-    let command = {
-        let mut command = StdCommand::new("open");
-        command.arg(USER_GUIDE_URL);
-        command
-    };
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-    let command = {
-        let mut command = StdCommand::new("xdg-open");
-        command.arg(USER_GUIDE_URL);
-        command
-    };
-
-    spawn_system_opener(command).map_err(|error| {
+    spawn_system_opener(system_url_command(USER_GUIDE_URL)).map_err(|error| {
         app_error(
             ErrorCode::DocumentationOpenFailed,
             format!("Failed to open the Locution Pro user guide with the system handler: {error}"),
@@ -1229,6 +1262,19 @@ mod tests {
         assert_eq!(files[0].file_name, "clip.MP4");
 
         fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[test]
+    fn external_url_validation_accepts_http_urls_only() {
+        assert!(external_url_supported(
+            "https://space.bilibili.com/99325557"
+        ));
+        assert!(external_url_supported("HTTP://example.com/path?query=1"));
+        assert!(!external_url_supported("file:///C:/Windows/System32"));
+        assert!(!external_url_supported("javascript:alert(1)"));
+        assert!(!external_url_supported("https://example.com/ spaced"));
+        assert!(!external_url_supported("https://example.com/\n"));
+        assert!(!external_url_supported(""));
     }
 }
 

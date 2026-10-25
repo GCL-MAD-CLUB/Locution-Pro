@@ -38,6 +38,7 @@ import { mediaBinPanelType, type MediaBinPanelParams } from "./components/panels
 import { ProjectDiscardDialog, ProjectSaveDialog } from "./components/common/ProjectSaveDialog";
 import { ExportConflictDialog } from "./components/common/ExportConflictDialog";
 import { PreferencesDialog } from "./components/common/PreferencesDialog";
+import { AboutDialog } from "./components/common/AboutDialog";
 import { ProxyCreationDialog } from "./components/common/ProxyCreationDialog";
 import { ProjectHome } from "./components/common/ProjectHome";
 import { SecondaryTopbar } from "./components/common/SecondaryTopbar";
@@ -298,6 +299,7 @@ function AppContent() {
   const closePanel = usePanelManagerState((state) => state.closePanel);
   const [projectHomeMode, setProjectHomeMode] = useState<"startup" | "manual" | null>("startup");
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [historyNavigating, setHistoryNavigating] = useState(false);
   const [recentMediaPaths, setRecentMediaPaths] = useState(() =>
     readRecentPaths(recentMediaStorageKey),
@@ -1493,6 +1495,7 @@ function AppContent() {
     help: {
       locutionProHelp: { enabled: true, execute: openLocutionProHelp },
       showLogFiles: { enabled: true, execute: showLogFiles },
+      aboutLocutionPro: { enabled: true, execute: () => setAboutOpen(true) },
     },
   };
 
@@ -1551,7 +1554,9 @@ function AppContent() {
             showWelcome={projectHomeMode === "startup"}
             projects={recentProjects}
             busy={isBusy}
-            suspended={Boolean(pendingDiscardMessage || pendingCloseTarget || preferencesOpen)}
+            suspended={Boolean(
+              pendingDiscardMessage || pendingCloseTarget || preferencesOpen || aboutOpen,
+            )}
             onClose={() => setProjectHomeMode(null)}
             onNew={newProject}
             onOpen={openProject}
@@ -1581,6 +1586,7 @@ function AppContent() {
         <ProxyCreationDialog />
         <ExportConflictDialog />
         <PreferencesDialog open={preferencesOpen} onClose={() => setPreferencesOpen(false)} />
+        {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
       </div>
     </HistoryPanelServicesProvider>
   );

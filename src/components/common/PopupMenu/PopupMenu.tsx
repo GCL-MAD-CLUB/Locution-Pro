@@ -84,6 +84,15 @@ export function isPopupMenuEventTarget(target: EventTarget | null) {
   return target instanceof Element && target.closest(".popup-menu") !== null;
 }
 
+/**
+ * Returns whether any PopupMenu is currently open. Keydown events target the focused
+ * element, which is often the menu's trigger rather than the menu itself, so global
+ * shortcut handlers must check the document instead of the event target.
+ */
+export function isPopupMenuOpen() {
+  return document.querySelector(".popup-menu") !== null;
+}
+
 interface PopupMenuViewportLayout {
   maxHeight: number | undefined;
   translateX: number;
@@ -252,6 +261,7 @@ export function PopupMenu({
       if (
         event.defaultPrevented ||
         event.repeat ||
+        event.isComposing ||
         event.ctrlKey ||
         event.metaKey ||
         event.altKey ||
@@ -266,14 +276,19 @@ export function PopupMenu({
       if (!item) {
         return;
       }
+      // An open menu owns the keys it declares, so select in the capture phase and
+      // stop panel shortcuts (for example the source monitor's J/K/L shuttle) from
+      // consuming the mnemonic first. Keys the menu does not declare still fall
+      // through to those handlers.
       event.preventDefault();
+      event.stopImmediatePropagation();
       if (!item.disabled) {
         item.click();
       }
     };
 
-    window.addEventListener("keydown", selectByMnemonic);
-    return () => window.removeEventListener("keydown", selectByMnemonic);
+    window.addEventListener("keydown", selectByMnemonic, true);
+    return () => window.removeEventListener("keydown", selectByMnemonic, true);
   }, [enableMnemonics]);
 
   const transforms = [

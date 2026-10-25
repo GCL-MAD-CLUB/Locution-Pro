@@ -76,6 +76,7 @@ export interface ApplicationMenuModel {
   help: {
     locutionProHelp: ApplicationMenuCommand;
     showLogFiles: ApplicationMenuCommand;
+    aboutLocutionPro: ApplicationMenuCommand;
   };
 }
 
@@ -535,6 +536,14 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
               onSelect={select(help.showLogFiles.execute)}
             >
               显示日志文件(L)...
+            </PopupMenuItem>
+            <PopupMenuSeparator />
+            <PopupMenuItem
+              mnemonic="A"
+              disabled={!help.aboutLocutionPro.enabled}
+              onSelect={select(help.aboutLocutionPro.execute)}
+            >
+              关于 Locution Pro(A)...
             </PopupMenuItem>
           </PopupMenu>
         )}

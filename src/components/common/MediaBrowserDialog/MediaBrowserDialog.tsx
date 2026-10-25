@@ -81,7 +81,7 @@ function pathIsWithin(path: string, directory: string) {
 
 function extension(path: string) {
   const name = path.split(/[\\/]/).pop() ?? path;
-  const separator = name.lastIndexOf("./");
+  const separator = name.lastIndexOf(".");
   return separator < 0 ? "" : name.slice(separator + 1).toLocaleLowerCase();
 }
 

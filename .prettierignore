@@ -15,7 +15,7 @@ package-lock.json
 rust-toolchain.toml
 
 # Plain-text legal notices; the layout is intentional.
-THIRD_PARTY_NOTICES.md
+THIRD_PARTY_NOTICES
 
 # Existing formatting debt; remove entries in a formatting-only change.
 src-tauri/tauri.conf.json

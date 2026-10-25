@@ -68,6 +68,6 @@ npm run docs:build
 
 跨组件变更遵守[系统契约](docs/system-architecture.md)和[错误契约](docs/error-system.md)，媒体变更参阅[媒体处理](docs/media-processing.md)，格式变更参阅[项目文件](src-tauri/src/project_file/README.md)。
 
-引入第三方模型、二进制或代码时固定来源并更新[第三方声明](THIRD_PARTY_NOTICES.md)。保留许可原文，不用主应用版本替换依赖或协议版本。
+引入第三方模型、二进制或代码时固定来源并更新[第三方声明](THIRD_PARTY_NOTICES)。保留许可原文，不用主应用版本替换依赖或协议版本。
 
 从最新 main 创建主题分支，PR 说明问题、最终行为和实际验证。提交信息使用 Conventional Commits，通常 squash merge。版本准备、tag 与正式密钥要求见[发布流程](docs/releasing.md)。

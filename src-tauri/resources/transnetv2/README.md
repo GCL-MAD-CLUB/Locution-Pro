@@ -14,7 +14,7 @@ Run `npm run prepare:transnetv2` from the repository root. Required resources ar
 
 Preparation also copies the corresponding license and notice files. Keep resource
 provenance separate from product help; see
-[third-party notices](../../../THIRD_PARTY_NOTICES.md).
+[third-party notices](../../../THIRD_PARTY_NOTICES).
 
 ## Detection contracts
 

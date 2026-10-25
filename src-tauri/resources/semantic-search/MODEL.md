@@ -25,4 +25,4 @@ source cues and files. Cache reuse depends on text, model and embedding recipe;
 changes to these inputs must invalidate incompatible vectors.
 
 See [media contracts](../../../docs/media-processing.md) and
-[third-party notices](../../../THIRD_PARTY_NOTICES.md) for maintenance and licensing.
+[third-party notices](../../../THIRD_PARTY_NOTICES) for maintenance and licensing.

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { version } from "../../../../package.json";
 import license from "../../../../LICENSE?raw";
-import thirdPartyNotices from "../../../../THIRD_PARTY_NOTICES.md?raw";
+import thirdPartyNotices from "../../../../THIRD_PARTY_NOTICES?raw";
 import { openExternalUrl } from "../../../platform/tauri/externalUrl";
 import "./AboutDialog.css";
 

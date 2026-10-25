@@ -570,6 +570,8 @@ fn distribution_entry(name: &std::ffi::OsStr) -> bool {
             | "storyboard-semantic"
             | "licenses"
             | "license"
+            | "third_party_notices"
+            // Older installations shipped the notices with a Markdown extension.
             | "third_party_notices.md"
     ) || name.ends_with(".exe")
         || name.ends_with(".dll")

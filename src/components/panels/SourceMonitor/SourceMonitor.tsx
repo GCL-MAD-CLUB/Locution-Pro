@@ -14,6 +14,7 @@ import { useSourcePreviewRequest } from "../../../application/media/panelMediaSo
 import { usePersistedProjectPanelState } from "../../../application/media/projectPanelPersistence";
 import type { StillExportRequest } from "../../../application/media/stillExportTask";
 import { isTauriRuntime } from "../../../platform/tauri/runtime";
+import { isPopupMenuOpen } from "../../common/PopupMenu";
 import { StillExportDialog } from "../../common/StillExportDialog/StillExportDialog";
 import {
   usePlaybackCapability,
@@ -877,7 +878,7 @@ export function SourceMonitor() {
 
   useEffect(() => {
     const isShortcutScopeActive = (target?: EventTarget | null) => {
-      if (!panelActive || !isPlaybackShortcutAuthority) {
+      if (!panelActive || !isPlaybackShortcutAuthority || isPopupMenuOpen()) {
         return false;
       }
       const element = sourceMonitorRef.current;

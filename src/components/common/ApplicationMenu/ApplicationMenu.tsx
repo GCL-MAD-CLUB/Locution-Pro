@@ -76,6 +76,7 @@ export interface ApplicationMenuModel {
   help: {
     locutionProHelp: ApplicationMenuCommand;
     showLogFiles: ApplicationMenuCommand;
+    aboutLocutionPro: ApplicationMenuCommand;
   };
 }
 
@@ -426,14 +427,6 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
           </PopupMenu>
         )}
       </div>
-      <button
-        type="button"
-        className="application-menu-trigger application-menu-placeholder"
-        aria-disabled="true"
-        title="剪辑菜单将在后续版本实现"
-      >
-        剪辑(C)
-      </button>
       <div className="application-menu-root">
         <button
           type="button"
@@ -535,6 +528,14 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
               onSelect={select(help.showLogFiles.execute)}
             >
               显示日志文件(L)...
+            </PopupMenuItem>
+            <PopupMenuSeparator />
+            <PopupMenuItem
+              mnemonic="A"
+              disabled={!help.aboutLocutionPro.enabled}
+              onSelect={select(help.aboutLocutionPro.execute)}
+            >
+              关于 Locution Pro(A)...
             </PopupMenuItem>
           </PopupMenu>
         )}

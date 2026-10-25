@@ -1,0 +1,187 @@
+.about-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(576px, calc(100vw - 48px));
+  height: min(490px, calc(100dvh - 48px));
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 26px 30px 28px;
+  overflow: hidden;
+  color: #e8e8e8;
+  background: #000;
+  border: 0;
+  border-radius: 18px;
+  box-shadow: 0 5px 18px rgb(0 0 0 / 28%);
+  font-family: var(--font-song), serif;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.about-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.about-dialog::backdrop {
+  /* Keep the modal focus trap without dimming the workspace behind it. */
+  background: transparent;
+}
+
+.about-dialog-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: 10px;
+  margin-left: -5px;
+}
+
+.about-dialog-icon {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.about-dialog-header h1 {
+  margin: 14px 0 15px;
+  color: #f5f5f5;
+  font-family: var(--font-sans);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.about-dialog-version {
+  margin: 0 0 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+}
+
+.about-dialog-description {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.about-dialog-credits,
+.about-dialog-legal {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: 80%;
+  margin-top: 33px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.about-dialog-credits {
+  /* Hidden overflow still scrolls programmatically but blocks wheel, touch, and keys. */
+  overflow: hidden;
+}
+
+.about-dialog-credits::-webkit-scrollbar,
+.about-dialog-legal::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Without the roll, the scrollbar is the only cue that more credits exist. */
+  .about-dialog-credits {
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  .about-dialog-credits::-webkit-scrollbar {
+    display: block;
+  }
+}
+
+.about-dialog h2 {
+  color: #f5f5f5;
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.about-dialog p,
+.about-dialog dd {
+  margin: 0;
+}
+
+.about-dialog dd a {
+  color: #f5f5f5;
+  text-decoration: none;
+}
+
+.about-dialog dd a:focus-visible {
+  outline: 1px solid #e8e8e8;
+  outline-offset: 3px;
+}
+
+.about-dialog dl {
+  margin: 18px 0 0;
+}
+
+.about-dialog dl > div + div {
+  margin-top: 15px;
+}
+
+.about-dialog dt {
+  font-weight: 700;
+}
+
+.about-dialog-legal {
+  user-select: text;
+}
+
+.about-dialog-legal pre {
+  margin: 12px 0 20px;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.about-dialog-footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 20px;
+}
+
+.about-dialog-legal-link {
+  margin-top: 16px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.about-dialog-legal-link:focus-visible {
+  outline: 1px solid #e8e8e8 !important;
+  outline-offset: 3px;
+}
+
+.about-dialog-wordmark {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #f5f5f5;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.about-dialog-wordmark img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}

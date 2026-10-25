@@ -155,6 +155,8 @@ define_error_codes! {
     StoryboardFrameDecodeFailed => ("STORYBOARD_FRAME_DECODE_FAILED", Media, true),
     FileRevealFailed => ("FILE_REVEAL_FAILED", Platform, true),
     DocumentationOpenFailed => ("DOCUMENTATION_OPEN_FAILED", Platform, true),
+    ExternalUrlInvalid => ("EXTERNAL_URL_INVALID", Validation, false),
+    ExternalUrlOpenFailed => ("EXTERNAL_URL_OPEN_FAILED", Platform, true),
     LogDirectoryOpenFailed => ("LOG_DIRECTORY_OPEN_FAILED", Platform, true),
     ExecutablePathUnavailable => ("EXECUTABLE_PATH_UNAVAILABLE", Platform, true),
     WorkingDirectoryUnavailable => ("WORKING_DIRECTORY_UNAVAILABLE", Platform, true),

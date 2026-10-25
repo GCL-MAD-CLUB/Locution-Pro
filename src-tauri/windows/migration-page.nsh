@@ -320,6 +320,8 @@ Function CheckLegacyDataDirectory
     ${AndIf} $1 != "storyboard-semantic"
     ${AndIf} $1 != "licenses"
     ${AndIf} $1 != "LICENSE"
+    ${AndIf} $1 != "THIRD_PARTY_NOTICES"
+    ; Older installations shipped the notices with a Markdown extension.
     ${AndIf} $1 != "THIRD_PARTY_NOTICES.md"
     ${AndIf} $2 != "exe"
     ${AndIf} $2 != "dll"
@@ -378,6 +380,8 @@ Function CheckPendingDataDirectory
       !insertmacro MigrationArtifactEntry "storyboard-semantic"
       !insertmacro MigrationArtifactEntry "licenses"
       !insertmacro MigrationArtifactEntry "LICENSE"
+      !insertmacro MigrationArtifactEntry "THIRD_PARTY_NOTICES"
+      ; Retain recognition of the resource name used by older installers.
       !insertmacro MigrationArtifactEntry "THIRD_PARTY_NOTICES.md"
     ${EndIf}
     ${If} $1 != "cache-version"

@@ -1,13 +1,17 @@
-.export-conflict-dialog {
+.modal-dialog.export-conflict-dialog {
+  display: grid;
+  grid-template-rows: 28px minmax(0, 1fr) auto;
   width: min(640px, calc(100vw - 32px));
+  height: min(420px, calc(100vh - 32px));
 }
 
-.export-conflict-dialog-body {
+.export-conflict-dialog > .export-conflict-dialog-body {
   display: grid;
-  grid-template-rows: auto minmax(160px, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   row-gap: 12px;
-  min-height: min(320px, calc(100vh - 110px));
+  min-height: 0;
   padding: 24px 24px 14px;
+  overflow: hidden;
 }
 
 .export-conflict-dialog-intro {
@@ -29,7 +33,7 @@
   width: 100%;
   height: 100%;
   overflow: auto;
-  scrollbar-color: #555 var(--color-surface);
+  scrollbar-color: var(--color-scrollbar-thumb) var(--color-surface);
   scrollbar-gutter: stable;
 }
 
@@ -39,9 +43,10 @@
 }
 
 .export-conflict-dialog-list-scroll::-webkit-scrollbar-thumb {
-  background: #555;
+  background: var(--color-scrollbar-thumb);
 }
 
+.export-conflict-dialog-list-scroll::-webkit-scrollbar-track,
 .export-conflict-dialog-list-scroll::-webkit-scrollbar-corner {
   background: var(--color-surface);
 }

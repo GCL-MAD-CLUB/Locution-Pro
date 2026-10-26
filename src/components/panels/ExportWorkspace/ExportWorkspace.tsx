@@ -100,7 +100,11 @@ function ExportSourceZone() {
   );
 }
 
-export function ExportWorkspace() {
+interface ExportWorkspaceProps {
+  onExportStarted: () => void;
+}
+
+export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
   const storedSource = useExportWorkspaceState((state) => state.source);
   const selectedClipIds = useExportWorkspaceState((state) => state.selectedClipIds);
   const settings = useExportWorkspaceState((state) => state.settings);
@@ -392,7 +396,7 @@ export function ExportWorkspace() {
         </section>
       </div>
 
-      <ExportActionBar />
+      <ExportActionBar onExportStarted={onExportStarted} />
     </section>
   );
 }

@@ -1,6 +1,8 @@
+import type { Locator } from "@playwright/test";
+
 import { test, expect, openImport } from "./fixtures";
 
-async function assertUpdateVisualAlignment(dialog: any) {
+async function assertUpdateVisualAlignment(dialog: Locator) {
   const alignment = await dialog.locator(".update-dialog-status").evaluate((row) => {
     const visual = row.querySelector(".update-dialog-visual");
     const text = visual?.nextElementSibling;

@@ -1,5 +1,9 @@
 .update-dialog {
-  width: min(560px, calc(100vw - 48px));
+  width: min(440px, calc(100vw - 48px));
+}
+
+.update-dialog-available {
+  width: min(660px, calc(100vw - 48px));
 }
 
 .update-dialog-body {
@@ -22,16 +26,27 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  min-height: 84px;
+  min-height: 56px;
   padding: 4px 4px 12px;
 }
 
-.update-dialog-status > svg {
+.update-dialog-visual {
+  display: grid;
   flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  place-items: center;
   color: var(--color-accent);
 }
 
-.update-dialog-status[role="alert"] > svg {
+.update-dialog-icon {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.update-dialog-status[role="alert"] .update-dialog-visual {
   color: #e7a1a1;
 }
 

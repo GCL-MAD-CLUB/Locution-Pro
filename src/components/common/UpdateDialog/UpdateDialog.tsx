@@ -1,4 +1,4 @@
-import { ArrowUpRight, Check, CircleAlert, Loader2, RefreshCw } from "lucide-react";
+import { ArrowUpRight, CircleAlert, Loader2, RefreshCw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { MouseEvent } from "react";
@@ -7,6 +7,8 @@ import { captureOperationError } from "../../../errors";
 import { openExternalUrl, resolveExternalUrl } from "../../../platform/tauri/externalUrl";
 import { ModalDialog } from "../ModalDialog";
 import "./UpdateDialog.css";
+
+const appIconUrl = new URL("../../../../src-tauri/icons/icon.ico", import.meta.url).href;
 
 export type UpdateDialogState =
   | { status: "checking" }
@@ -67,7 +69,9 @@ export function UpdateDialog({ state, onClose, onRetry }: UpdateDialogProps) {
 
   return (
     <ModalDialog
-      className="update-dialog"
+      className={
+        state.status === "available" ? "update-dialog update-dialog-available" : "update-dialog"
+      }
       bodyClassName="update-dialog-body"
       title={title}
       actions={actions}
@@ -76,7 +80,9 @@ export function UpdateDialog({ state, onClose, onRetry }: UpdateDialogProps) {
     >
       {state.status === "checking" && (
         <div className="update-dialog-status" role="status">
-          <Loader2 className="spin" size={28} />
+          <div className="update-dialog-visual">
+            <Loader2 className="spin" size={28} />
+          </div>
           <div>
             <h3>正在检查新版本</h3>
             <p>正在连接发布服务，请稍候…</p>
@@ -86,7 +92,9 @@ export function UpdateDialog({ state, onClose, onRetry }: UpdateDialogProps) {
 
       {state.status === "latest" && (
         <div className="update-dialog-status" role="status">
-          <Check size={28} />
+          <div className="update-dialog-visual">
+            <img className="update-dialog-icon" src={appIconUrl} alt="" />
+          </div>
           <div>
             <h3>当前已是最新版本</h3>
             <p>Locution Pro {currentVersion} 已是最新版本，无需更新。</p>
@@ -96,7 +104,9 @@ export function UpdateDialog({ state, onClose, onRetry }: UpdateDialogProps) {
 
       {state.status === "failed" && (
         <div className="update-dialog-status" role="alert">
-          <CircleAlert size={28} />
+          <div className="update-dialog-visual">
+            <CircleAlert size={28} />
+          </div>
           <div>
             <h3>暂时无法检查更新</h3>
             <p>请检查网络连接后重试。你仍然可以继续使用当前版本。</p>

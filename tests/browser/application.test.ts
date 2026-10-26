@@ -1,5 +1,20 @@
 import { test, expect, openImport } from "./fixtures";
 
+async function assertUpdateVisualAlignment(dialog: any) {
+  const alignment = await dialog.locator(".update-dialog-status").evaluate((row) => {
+    const visual = row.querySelector(".update-dialog-visual");
+    const text = visual?.nextElementSibling;
+    if (!(visual instanceof Element) || !(text instanceof Element)) {
+      return { visualWidth: 0, textOffset: 0 };
+    }
+    const visualBox = visual.getBoundingClientRect();
+    const textBox = text.getBoundingClientRect();
+    return { visualWidth: visualBox.width, textOffset: textBox.left - visualBox.right };
+  });
+  expect(alignment.visualWidth).toBe(48);
+  expect(alignment.textOffset).toBeCloseTo(16, 1);
+}
+
 test("启动后台检查仅提示一次并展示发布说明和发布页入口", async ({ page, native }) => {
   await page.addInitScript(() => {
     (window as any).__nativeTest.latestRelease = {
@@ -51,6 +66,7 @@ test("帮助菜单手动检查展示最新状态和失败反馈", async ({ app, 
   await app.getByRole("menuitem", { name: "更新(U)...", exact: true }).click();
   const latest = app.getByRole("dialog", { name: "检查更新", exact: true });
   await expect(latest.getByText("当前已是最新版本")).toBeVisible();
+  await assertUpdateVisualAlignment(latest);
   await latest.getByRole("button", { name: "完成" }).click();
 
   await native.fail("fetch_latest_release", "offline");
@@ -68,6 +84,7 @@ test("手动检查期间不会派发重复请求", async ({ app, native }) => {
   await app.getByRole("menuitem", { name: "更新(U)...", exact: true }).click();
   const checking = app.getByRole("dialog", { name: "检查更新", exact: true });
   await expect(checking.getByText("正在检查新版本")).toBeVisible();
+  await assertUpdateVisualAlignment(checking);
   expect(await native.calls("fetch_latest_release")).toHaveLength(2);
   await checking.getByRole("button", { name: "取消" }).click();
   await native.release("fetch_latest_release");

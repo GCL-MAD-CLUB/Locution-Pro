@@ -117,9 +117,12 @@ export function UpdateDialog({ state, onClose, onRetry }: UpdateDialogProps) {
       {state.status === "available" && (
         <>
           <div className="update-dialog-summary">
-            <span className="update-dialog-badge">新版本</span>
-            <div>
-              <h3>{state.release.title || `Locution Pro ${state.release.version}`}</h3>
+            <img className="update-dialog-summary-icon" src={appIconUrl} alt="" />
+            <div className="update-dialog-summary-content">
+              <div className="update-dialog-title-row">
+                <h3>{state.release.title || `Locution Pro ${state.release.version}`}</h3>
+                <span className="update-dialog-badge">新版本</span>
+              </div>
               <p>
                 {state.release.version} <span>当前版本 {currentVersion}</span>
               </p>

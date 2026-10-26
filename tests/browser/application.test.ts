@@ -18,17 +18,27 @@ async function assertUpdateVisualAlignment(dialog: any) {
 test("启动后台检查仅提示一次并展示发布说明和发布页入口", async ({ page, native }) => {
   await page.addInitScript(() => {
     (window as any).__nativeTest.latestRelease = {
-      version: "v0.5.0",
-      title: "Locution Pro 0.5.0",
+      version: "v999.0.0",
+      title: "Locution Pro 999.0.0",
       body: "## 本次更新\n- 更快的媒体导入\n- [完整说明](https://example.com/notes)",
-      url: "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v0.5.0",
+      url: "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v999.0.0",
     };
   });
   await page.goto("/");
 
   const update = page.getByRole("dialog", { name: "检查更新", exact: true });
   await expect(update).toBeVisible();
-  await expect(update.getByRole("heading", { name: "Locution Pro 0.5.0" })).toBeVisible();
+  await expect(update.getByRole("heading", { name: "Locution Pro 999.0.0" })).toBeVisible();
+  await expect(update.locator(".update-dialog-summary-icon")).toBeVisible();
+  await expect(update.getByText("新版本", { exact: true })).toBeVisible();
+  const badgeOffset = await update.locator(".update-dialog-title-row").evaluate((row) => {
+    const title = row.querySelector("h3");
+    const badge = row.querySelector(".update-dialog-badge");
+    return title instanceof Element && badge instanceof Element
+      ? badge.getBoundingClientRect().left - title.getBoundingClientRect().right
+      : -1;
+  });
+  expect(badgeOffset).toBeGreaterThan(0);
   await expect(update.getByRole("heading", { name: "本次更新" })).toBeVisible();
   await expect(update.getByText("更快的媒体导入")).toBeVisible();
   expect(await native.calls("fetch_latest_release")).toHaveLength(1);
@@ -39,7 +49,7 @@ test("启动后台检查仅提示一次并展示发布说明和发布页入口",
   ]);
   await update.getByRole("button", { name: "前往发布页" }).click();
   expect((await native.calls("open_external_url"))[1].args.url).toBe(
-    "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v0.5.0",
+    "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v999.0.0",
   );
   await update.getByRole("button", { name: "稍后" }).click();
   await expect(update).toHaveCount(0);

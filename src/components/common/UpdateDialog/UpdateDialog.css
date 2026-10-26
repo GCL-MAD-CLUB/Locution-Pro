@@ -70,14 +70,41 @@
 .update-dialog-summary {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 18px;
+}
+
+.update-dialog-summary-icon {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.update-dialog-summary-content {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.update-dialog-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.update-dialog-title-row h3 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  transform: translateY(-1px);
 }
 
 .update-dialog-summary p {
   color: var(--color-text-highlight);
   font-family: var(--font-sans);
   font-weight: 600;
+  transform: translateY(-4px);
 }
 
 .update-dialog-summary p span {

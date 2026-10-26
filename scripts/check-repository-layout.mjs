@@ -65,12 +65,17 @@ for (const file of files) {
       fail(file, "test code belongs in tests/, not scripts/");
     }
   }
-  if (file.endsWith(".mjs")) {
+  if (/\.(?:mjs|js)$/u.test(file)) {
     if (
       !file.startsWith("scripts/") &&
-      !/^tests\/(?:unit|browser|integration)\/[\w-]+\.test\.mjs$/u.test(file)
+      !file.startsWith("src/") &&
+      !/^tests\/(?:unit|integration)\/[\w-]+\.test\.mjs$/u.test(file) &&
+      !/^tests\/browser\/[\w-]+\.harness\.js$/u.test(file)
     ) {
-      fail(file, "MJS files must be maintenance scripts or tests in a designated test directory");
+      fail(
+        file,
+        "JavaScript files must be maintenance scripts, designated tests or browser harnesses",
+      );
     }
     try {
       execFileSync(process.execPath, ["--check", resolve(root, file)], {
@@ -90,5 +95,5 @@ if (failures.length) {
   );
   process.exitCode = 1;
 } else {
-  console.log("Repository layout and MJS syntax checks passed.");
+  console.log("Repository layout and JavaScript syntax checks passed.");
 }

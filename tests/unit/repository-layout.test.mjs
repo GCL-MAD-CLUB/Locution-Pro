@@ -14,6 +14,7 @@ function fixture(t, additions = {}, extraScripts = {}) {
   });
   const files = {
     "package.json": JSON.stringify({
+      type: "module",
       scripts: { "check:layout": "node scripts/check-repository-layout.mjs", ...extraScripts },
     }),
     ".gitignore": "target/\n",
@@ -94,7 +95,27 @@ test("layout check rejects misplaced MJS and invalid syntax without executing it
     "tests/unit/broken.test.mjs": "export const = ;",
   });
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /MJS files must be maintenance scripts or tests/);
+  assert.match(result.stderr, /JavaScript files must be maintenance scripts/);
+  assert.match(result.stderr, /SyntaxError/);
+  assert.doesNotMatch(result.stderr, /Error: must not execute/);
+});
+
+test("layout accepts browser harnesses but rejects undiscovered browser MJS tests", (t) => {
+  const result = fixture(t, {
+    "tests/browser/source.harness.js": "export function run() {}",
+    "tests/browser/missed.test.mjs": "export {};",
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /missed\.test\.mjs: JavaScript files/);
+  assert.doesNotMatch(result.stderr, /source\.harness\.js/);
+});
+
+test("layout syntax-checks browser harnesses without executing native operations", (t) => {
+  const result = fixture(t, {
+    "tests/browser/valid.harness.js": 'throw new Error("must not execute");',
+    "tests/browser/broken.harness.js": "export const = ;",
+  });
+  assert.equal(result.status, 1);
   assert.match(result.stderr, /SyntaxError/);
   assert.doesNotMatch(result.stderr, /Error: must not execute/);
 });

@@ -25,6 +25,9 @@ jobs:
   validate:
     name: Validate release tag
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
     outputs:
       prerelease: ${{ steps.version.outputs.prerelease }}
       tag: ${{ steps.version.outputs.tag }}
@@ -34,11 +37,24 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
           persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # Tags bypass branch protection and workflow_dispatch accepts any existing
+      # tag. Refuse to publish a commit whose CI never passed.
+      - name: Require a successful CI run for the release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_sha="$(git rev-parse HEAD)"
+          runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$release_sha&status=success&per_page=1" --jq '.total_count')"
+          if [[ "$runs" -eq 0 ]]; then
+            echo "::error::No successful CI run found for $release_sha. Wait for CI or rerun this workflow."
+            exit 1
+          fi
+          echo "CI passed for $release_sha"
+      - name: Set up Node.js and npm
+        uses: ./.github/actions/setup-npm
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
       - run: npm ci
       - name: Validate tag and manifest versions
         id: version
@@ -74,11 +90,10 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.tag }}
           persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Set up Node.js and npm
+        uses: ./.github/actions/setup-npm
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
@@ -91,6 +106,29 @@ jobs:
             src-tauri/thumbnail-provider
       - name: Install frontend dependencies
         run: npm ci
+      # The build hooks download ~844 MiB of pinned models when the cache misses.
+      # Cache the verified destination directories; the preparation scripts
+      # re-check every digest, so a stale or partial cache cannot be packaged.
+      # The key also covers the tracked MODEL.md files because the restore
+      # extracts over the checkout and would otherwise ship a stale copy.
+      - name: Restore model assets
+        id: model-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            src-tauri/resources/semantic-search
+            src-tauri/resources/storyboard-semantic
+          key: model-assets-${{ runner.os }}-${{ hashFiles('scripts/prepare-semantic-assets.mjs', 'scripts/prepare-storyboard-semantic-assets.mjs', 'src-tauri/resources/*/MODEL.md') }}
+      - name: Prepare verified model assets
+        run: npm run prepare:semantic && npm run prepare:storyboard-semantic
+      - name: Save model assets
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            src-tauri/resources/semantic-search
+            src-tauri/resources/storyboard-semantic
+          key: ${{ steps.model-cache.outputs.cache-primary-key }}
       - name: Require the official project build secret
         shell: pwsh
         env:
@@ -115,4 +153,7 @@ jobs:
           releaseDraft: true
           prerelease: ${{ needs.validate.outputs.prerelease }}
           includeUpdaterJson: false
+          # Product name stays "Locution Pro"; only the published file name
+          # drops the space so download URLs and CLI use need no escaping.
+          assetNamePattern: "Locution.Pro_[version]_[arch][setup][ext]"
           retryAttempts: 2

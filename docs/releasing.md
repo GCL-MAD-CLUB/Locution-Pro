@@ -26,7 +26,7 @@ npm run check
 npm run release:build -- 0.4.0
 ```
 
-该命令会修改版本文件、检查密钥、格式化相关文件、准备 FFmpeg 并启动构建，不是只读检查。仅更新文档时不运行它。
+该命令会修改版本文件、检查密钥、格式化相关文件、准备 FFmpeg 并启动构建，不是只读检查。构建钩子还会下载并校验语义模型。仅更新文档时不运行它。
 
 安装器相关改动按需要手动执行 `npm run test:installer` 和 `npm run test:installer-identity`。真实模型、GPU 和媒体验证不进入普通 CI。
 
@@ -50,9 +50,17 @@ git push origin v0.4.0
 
 预发布 tag 应与清单完整一致，例如 `v0.4.0-preview`。包含连字符的 tag 由工作流标记为 prerelease。
 
+发布校验要求该提交已有成功的 CI 运行。tag 推送不经过分支保护，因此在 CI 完成前打 tag 会让发布工作流直接失败；等 CI 通过后重跑发布工作流即可。发布附件按 `Locution.Pro_<版本>_x64-setup.exe` 命名，产品名与安装路径仍为 `Locution Pro`。
+
 ## 自动发布内容
 
 发布维护者使用自己的 GitHub 账号为 tag 创建 Release 草稿并填写发布说明。发布工作流先检查 tag 和版本清单，再准备媒体工具、模型与运行资源，构建缩略图提供程序和 Windows 安装包，将附件上传到 Release 草稿。FFmpeg 下载包会核对固定校验值，语义模型使用固定修订版本。
+
+`tauri build` 的 `beforeBuildCommand` 自动执行 `npm run prepare:semantic` 和
+`npm run prepare:storyboard-semantic`，下载并校验约 844 MiB 的模型；失败会中止构建。
+构建机需要访问 Hugging Face。发布工作流按两个准备脚本和 `MODEL.md` 的内容缓存已校验资源，
+缓存命中时准备脚本仍会重新核对全部摘要。完整安装包随模型修订变化，当前约 746 MiB；模型默认随包
+安装，用户可以在安装器中取消语义组件。
 
 确认工作流成功、安装包附件完整、发布说明与兼容提示正确后，由发布维护者使用自己的账号发布草稿。正式版本设为最新版本，预发布版本保留 prerelease 标记。不要在附件上传完成前公开发布。
 

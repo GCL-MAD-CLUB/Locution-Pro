@@ -1,0 +1,56 @@
+name: Browser regression tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/actions/setup-npm/action.yml"
+      - ".github/workflows/browser-tests.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "playwright.config.ts"
+      - "tests/browser/**"
+      - "tests/tsconfig.json"
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: browser-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 22.18.0
+
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js and npm
+        uses: ./.github/actions/setup-npm
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run deterministic and browser regressions
+        run: npm run test:all
+      - name: Upload reports and failure evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-test-results
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 7

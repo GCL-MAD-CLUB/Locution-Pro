@@ -5,7 +5,9 @@ optional text workflow; video import, shot detection and visual search do not
 require subtitles.
 
 Run `npm run prepare:semantic` from the repository root. The preparation command
-downloads pinned assets and checks model and tokenizer digests.
+downloads pinned assets and checks model and tokenizer digests. `tauri build`
+runs the command through `beforeBuildCommand`; the prepared directory occupies
+about 253 MiB.
 
 | Resource  | Contract                                                 |
 | --------- | -------------------------------------------------------- |

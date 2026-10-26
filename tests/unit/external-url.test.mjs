@@ -1,18 +1,8 @@
+import { createModuleLoader } from "./support/module-loader.ts";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { runInNewContext } from "node:vm";
-import ts from "typescript";
 
-function loadModule(path, imports, globals = {}) {
-  const source = readFileSync(new URL(path, import.meta.url), "utf8");
-  const compiled = ts.transpileModule(source, {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
-  }).outputText;
-  const exports = {};
-  runInNewContext(compiled, { exports, require: (name) => imports[name], ...globals });
-  return exports;
-}
+const loadModule = createModuleLoader(import.meta.url);
 
 function loadExternalUrl({ tauri, opened = [], invocations = [] }) {
   return loadModule(

@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "types": ["node", "vite/client"] },
+  "include": [
+    "browser/**/*.ts",
+    "browser/**/*.tsx",
+    "unit/support/**/*.ts",
+    "../playwright.config.ts"
+  ]
+}

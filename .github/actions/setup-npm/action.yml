@@ -1,0 +1,39 @@
+name: Set up Node.js and npm
+description: Install Node.js and the npm version declared in package.json.
+
+inputs:
+  node-version:
+    description: Node.js version
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    # Dependabot writes lockfiles that older npm versions resolve differently,
+    # so install the same npm major declared in package.json. Installing into an
+    # isolated prefix avoids modifying the toolcache Node installation.
+    - name: Use declared npm version
+      shell: bash
+      run: |
+        set -euo pipefail
+        declared_npm="$(node -p "require('./package.json').packageManager.replace(/^npm@/, '').split('+')[0]")"
+        npm_prefix="${RUNNER_TEMP}/npm-${declared_npm}"
+        npm install --global --prefix "$npm_prefix" "npm@$declared_npm" --no-fund --no-audit
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          npm_bin="$npm_prefix"
+        else
+          npm_bin="$npm_prefix/bin"
+        fi
+        installed_npm="$("$npm_bin/npm" --version)"
+        if [[ "$installed_npm" != "$declared_npm" ]]; then
+          echo "::error::Expected npm $declared_npm but found $installed_npm"
+          exit 1
+        fi
+        echo "$npm_bin" >> "$GITHUB_PATH"
+        echo "Using npm $installed_npm from $npm_bin"

@@ -6,6 +6,7 @@ export type OperationKey =
   | "export.reveal"
   | "export.run"
   | "feedback.audio"
+  | "help.checkUpdates"
   | "help.openDocumentation"
   | "help.openLogDirectory"
   | "media.bindSubtitles"
@@ -123,6 +124,7 @@ export type OperationOutcome<T> =
 const clientErrorDefinitions = {
   BROWSER_ABORTED: { category: "cancelled", retryable: false },
   UNEXPECTED_ERROR: { category: "runtime", retryable: true },
+  UPDATE_RESPONSE_INVALID: { category: "format", retryable: true },
   TASK_NOT_RUNNING: { category: "state", retryable: false },
   SUBTITLE_THUMBNAIL_REQUEST_CANCELLED: { category: "cancelled", retryable: false },
   SUBTITLE_THUMBNAIL_BROWSER_UNAVAILABLE: { category: "unsupported", retryable: false },

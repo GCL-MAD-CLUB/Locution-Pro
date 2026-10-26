@@ -52,6 +52,7 @@ mod storyboard_semantic;
 mod subtitles;
 mod tasks;
 mod thumbnail;
+mod update;
 mod workspace;
 
 pub(crate) use browser_visual::*;
@@ -75,4 +76,5 @@ pub(crate) use storyboard_semantic::*;
 pub(crate) use subtitles::*;
 pub(crate) use tasks::*;
 pub(crate) use thumbnail::*;
+pub(crate) use update::*;
 pub(crate) use workspace::*;

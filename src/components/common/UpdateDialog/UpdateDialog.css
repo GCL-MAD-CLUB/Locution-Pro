@@ -1,0 +1,235 @@
+.update-dialog {
+  width: min(440px, calc(100vw - 48px));
+}
+
+.update-dialog-available {
+  width: min(660px, calc(100vw - 48px));
+}
+
+.update-dialog-body {
+  padding: 24px 24px 20px;
+  color: #e8e8e8;
+}
+
+.update-dialog .modal-dialog-actions {
+  padding-top: 0;
+}
+
+.update-dialog .modal-dialog-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.update-dialog-status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 56px;
+  padding: 4px 4px 12px;
+}
+
+.update-dialog-visual {
+  display: grid;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  color: var(--color-accent);
+}
+
+.update-dialog-icon {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.update-dialog-status[role="alert"] .update-dialog-visual {
+  color: #e7a1a1;
+}
+
+.update-dialog-status h3,
+.update-dialog-summary h3 {
+  margin: 0 0 8px;
+  color: var(--color-text-highlight);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.update-dialog-status p,
+.update-dialog-summary p {
+  margin: 0;
+  color: #b7b7b7;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.update-dialog-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.update-dialog-summary-icon {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.update-dialog-summary-content {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.update-dialog-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.update-dialog-title-row h3 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  transform: translateY(-1px);
+}
+
+.update-dialog-summary p {
+  color: var(--color-text-highlight);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  transform: translateY(-4px);
+}
+
+.update-dialog-summary p span {
+  margin-left: 10px;
+  color: #999;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.update-dialog-badge {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  color: var(--color-text-highlight);
+  background: var(--color-accent-hover);
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.update-dialog-notes {
+  max-height: min(340px, calc(100dvh - 310px));
+  padding: 16px 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: #cecece;
+  background: rgb(255 255 255 / 4%);
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: var(--radius-lg);
+  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-width: thin;
+  user-select: text;
+}
+
+.update-dialog-notes h1,
+.update-dialog-notes h2,
+.update-dialog-notes h3,
+.update-dialog-notes h4 {
+  margin: 18px 0 8px;
+  color: var(--color-text-highlight);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.update-dialog-notes h1:first-child,
+.update-dialog-notes h2:first-child,
+.update-dialog-notes h3:first-child,
+.update-dialog-notes p:first-child,
+.update-dialog-notes ul:first-child,
+.update-dialog-notes ol:first-child {
+  margin-top: 0;
+}
+
+.update-dialog-notes p,
+.update-dialog-notes ul,
+.update-dialog-notes ol {
+  margin: 10px 0;
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+.update-dialog-notes ul,
+.update-dialog-notes ol {
+  padding-left: 22px;
+}
+
+.update-dialog-notes li + li {
+  margin-top: 4px;
+}
+
+.update-dialog-notes a {
+  color: #c9b4ee;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.update-dialog-notes a:hover {
+  color: var(--color-text-highlight);
+}
+
+.update-dialog-notes code {
+  padding: 2px 5px;
+  color: #e4d8f7;
+  background: rgb(255 255 255 / 7%);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.update-dialog-notes pre {
+  padding: 12px;
+  overflow-x: auto;
+  background: rgb(0 0 0 / 22%);
+  border-radius: var(--radius-sm);
+}
+
+.update-dialog-notes pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.update-dialog-notes blockquote {
+  margin: 12px 0;
+  padding-left: 12px;
+  color: #aaa;
+  border-left: 2px solid var(--color-border-strong);
+}
+
+.update-dialog-notes img {
+  max-width: 100%;
+  height: auto;
+}
+
+.update-dialog-notes table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.update-dialog-notes th,
+.update-dialog-notes td {
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-strong);
+  text-align: left;
+}
+
+.update-dialog-empty {
+  color: #999;
+}

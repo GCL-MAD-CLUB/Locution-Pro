@@ -158,6 +158,8 @@ define_error_codes! {
     ExternalUrlInvalid => ("EXTERNAL_URL_INVALID", Validation, false),
     ExternalUrlOpenFailed => ("EXTERNAL_URL_OPEN_FAILED", Platform, true),
     LogDirectoryOpenFailed => ("LOG_DIRECTORY_OPEN_FAILED", Platform, true),
+    UpdateCheckFailed => ("UPDATE_CHECK_FAILED", Platform, true),
+    UpdateResponseInvalid => ("UPDATE_RESPONSE_INVALID", Format, true),
     ExecutablePathUnavailable => ("EXECUTABLE_PATH_UNAVAILABLE", Platform, true),
     WorkingDirectoryUnavailable => ("WORKING_DIRECTORY_UNAVAILABLE", Platform, true),
     SystemClockInvalid => ("SYSTEM_CLOCK_INVALID", Platform, true),

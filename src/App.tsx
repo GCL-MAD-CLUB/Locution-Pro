@@ -39,6 +39,7 @@ import { ProjectDiscardDialog, ProjectSaveDialog } from "./components/common/Pro
 import { ExportConflictDialog } from "./components/common/ExportConflictDialog";
 import { PreferencesDialog } from "./components/common/PreferencesDialog";
 import { AboutDialog } from "./components/common/AboutDialog";
+import { UpdateDialog, type UpdateDialogState } from "./components/common/UpdateDialog";
 import { ProxyCreationDialog } from "./components/common/ProxyCreationDialog";
 import { ProjectHome } from "./components/common/ProjectHome";
 import { SecondaryTopbar } from "./components/common/SecondaryTopbar";
@@ -47,6 +48,7 @@ import { storyboardPanelType } from "./components/panels/StoryboardPanel";
 import { subtitlePanelType } from "./components/panels/SubtitlePanel";
 import { cancelAllTaskProgress, useTaskProgressStatus } from "./systems/TaskSystem";
 import { runMediaImportBatchTask } from "./application/media/mediaImportTask";
+import { checkForUpdate } from "./application/update";
 import {
   captureOperationError,
   invokeCommand,
@@ -300,6 +302,8 @@ function AppContent() {
   const [projectHomeMode, setProjectHomeMode] = useState<"startup" | "manual" | null>("startup");
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [updateDialogState, setUpdateDialogState] = useState<UpdateDialogState | null>(null);
+  const updateRequestRef = useRef(0);
   const [historyNavigating, setHistoryNavigating] = useState(false);
   const [recentMediaPaths, setRecentMediaPaths] = useState(() =>
     readRecentPaths(recentMediaStorageKey),
@@ -462,6 +466,21 @@ function AppContent() {
         }
       },
     );
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let active = true;
+    void checkForUpdate()
+      .then((result) => {
+        if (active && result.status === "available") {
+          setUpdateDialogState({ status: "available", release: result.release });
+        }
+      })
+      .catch((error) => captureOperationError("help.checkUpdates", error));
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -704,6 +723,33 @@ function AppContent() {
     if (outcome.status === "success") {
       messagePublished("已打开日志文件夹。");
     }
+  }
+
+  async function checkForUpdates() {
+    if (!isTauriRuntime()) {
+      messagePublished("此功能仅在桌面版可用。");
+      return;
+    }
+    if (updateDialogState?.status === "checking") return;
+    const request = ++updateRequestRef.current;
+    setUpdateDialogState({ status: "checking" });
+    try {
+      const result = await checkForUpdate();
+      if (updateRequestRef.current !== request) return;
+      setUpdateDialogState(
+        result.status === "available"
+          ? { status: "available", release: result.release }
+          : { status: "latest" },
+      );
+    } catch (error) {
+      captureOperationError("help.checkUpdates", error);
+      if (updateRequestRef.current === request) setUpdateDialogState({ status: "failed" });
+    }
+  }
+
+  function closeUpdateDialog() {
+    updateRequestRef.current += 1;
+    setUpdateDialogState(null);
   }
 
   async function newProject() {
@@ -1501,6 +1547,10 @@ function AppContent() {
     help: {
       locutionProHelp: { enabled: true, execute: openLocutionProHelp },
       showLogFiles: { enabled: true, execute: showLogFiles },
+      checkForUpdates: {
+        enabled: updateDialogState?.status !== "checking",
+        execute: checkForUpdates,
+      },
       aboutLocutionPro: { enabled: true, execute: () => setAboutOpen(true) },
     },
   };
@@ -1561,7 +1611,11 @@ function AppContent() {
             projects={recentProjects}
             busy={isBusy}
             suspended={Boolean(
-              pendingDiscardMessage || pendingCloseTarget || preferencesOpen || aboutOpen,
+              pendingDiscardMessage ||
+              pendingCloseTarget ||
+              preferencesOpen ||
+              aboutOpen ||
+              updateDialogState,
             )}
             onClose={() => setProjectHomeMode(null)}
             onNew={newProject}
@@ -1593,6 +1647,13 @@ function AppContent() {
         <ExportConflictDialog />
         <PreferencesDialog open={preferencesOpen} onClose={() => setPreferencesOpen(false)} />
         {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
+        {updateDialogState && (
+          <UpdateDialog
+            state={updateDialogState}
+            onClose={closeUpdateDialog}
+            onRetry={() => void checkForUpdates()}
+          />
+        )}
       </div>
     </HistoryPanelServicesProvider>
   );

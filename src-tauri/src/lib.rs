@@ -139,6 +139,7 @@ pub fn run() {
             open_user_guide,
             open_external_url,
             open_log_directory,
+            fetch_latest_release,
             cancel_task,
             play_system_sound,
             record_frontend_incident

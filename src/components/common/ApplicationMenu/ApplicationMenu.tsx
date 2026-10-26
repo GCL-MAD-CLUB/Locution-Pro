@@ -76,6 +76,7 @@ export interface ApplicationMenuModel {
   help: {
     locutionProHelp: ApplicationMenuCommand;
     showLogFiles: ApplicationMenuCommand;
+    checkForUpdates: ApplicationMenuCommand;
     aboutLocutionPro: ApplicationMenuCommand;
   };
 }
@@ -528,6 +529,13 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
               onSelect={select(help.showLogFiles.execute)}
             >
               显示日志文件(L)...
+            </PopupMenuItem>
+            <PopupMenuItem
+              mnemonic="U"
+              disabled={!help.checkForUpdates.enabled}
+              onSelect={select(help.checkForUpdates.execute)}
+            >
+              更新(U)...
             </PopupMenuItem>
             <PopupMenuSeparator />
             <PopupMenuItem

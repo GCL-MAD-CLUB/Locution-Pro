@@ -46,6 +46,7 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 zeroize = "=1.8.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [

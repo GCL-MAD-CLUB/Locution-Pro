@@ -86,6 +86,12 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
     config: { favorites: [], lastDirectory: "C:/media", settings: {} } as any,
     savedWorkspace: null as any,
     savedProjectId: "",
+    latestRelease: {
+      version: "v0.4.0",
+      title: "Locution Pro 0.4.0",
+      body: "Current release",
+      url: "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v0.4.0",
+    },
     preferences: {
       show_home_on_startup: false,
       auto_save_enabled: false,
@@ -134,6 +140,8 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
       case "generate_storyboard_thumbnails":
       case "generate_subtitle_thumbnails":
         return thumbnailBatch(args, false);
+      case "fetch_latest_release":
+        return state.latestRelease;
       case "get_preferences":
         return state.preferences;
       case "update_preferences":

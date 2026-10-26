@@ -1,48 +1,28 @@
+import { createModuleLoader, deferred, flush } from "./support/module-loader.ts";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { runInNewContext } from "node:vm";
-import ts from "typescript";
 
-const source = readFileSync(
-  new URL("../../src/systems/TaskSystem/TaskSystem.tsx", import.meta.url),
-  "utf8",
-);
-const compiled = ts.transpileModule(source, {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
-}).outputText;
+const loadModule = createModuleLoader(import.meta.url);
 
 // Exercise the actual TaskSystem API and promises; only rendering and reporting
 // are stubbed, so these tests require neither a browser nor a native backend.
 function taskSystem() {
   const errors = [];
-  const exports = {};
   const jsx = (type, props) => ({ type, props });
-  runInNewContext(compiled, {
-    exports,
-    require: (name) => {
-      if (name === "react") {
-        return { useMemo: (build) => build(), useSyncExternalStore: (_, snapshot) => snapshot() };
-      }
-      if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
-      if (name === "lucide-react" || name.endsWith(".css")) return {};
-      if (name === "../../errors") {
-        return { captureOperationError: (...args) => errors.push(args) };
-      }
-      assert.fail(`Unexpected dependency: ${name}`);
-    },
+  const exports = loadModule("../../src/systems/TaskSystem/TaskSystem.tsx", (name) => {
+    if (name === "react") {
+      return { useMemo: (build) => build(), useSyncExternalStore: (_, snapshot) => snapshot() };
+    }
+    if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
+    if (name === "lucide-react" || name.endsWith(".css")) return {};
+    if (name === "../../errors") {
+      return { captureOperationError: (...args) => errors.push(args) };
+    }
+    assert.fail(`Unexpected dependency: ${name}`);
   });
   return { ...exports, errors };
 }
 
-const flush = () => new Promise((resolve) => setImmediate(resolve));
-function deferred() {
-  let resolve;
-  const promise = new Promise((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
 function options(label, listener, on_cancel, operation = "storyboard.detect") {
   return { label, resourceKey: label, operation, current: 0, total: 1, listener, on_cancel };
 }

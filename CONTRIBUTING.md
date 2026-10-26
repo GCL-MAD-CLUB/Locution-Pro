@@ -18,10 +18,14 @@ npm run tauri dev
 - 应用代码位于 `src/`，原生代码与缩略图提供程序位于 `src-tauri/`。
 - Rust 测试内联在被测实现文件的 `#[cfg(test)] mod tests` 中，禁止外置模块或独立测试目录。
 - `tests/unit/` 保存不依赖浏览器、媒体工具或模型的确定性测试，通过 `npm test` 执行。
-- `tests/browser/` 保存手动浏览器测试，`tests/integration/` 保存外部工具测试。
+- `tests/browser/` 保存按需运行的浏览器测试，`tests/integration/` 保存外部工具测试。
 - `scripts/` 只放构建、资源准备、发布与仓库检查命令，每个脚本必须有 package 入口。
 
 真实 FFmpeg 编码、媒体和模型 / GPU 测试不进入普通 CI；Rust 中标记为说明资源条件的忽略测试。审查以代码、差异与针对性测试为主，不生成视频后再使用外部软件做复杂测试。
+
+涉及用户交互的修改提交前运行 `npm run test:all`。首次运行浏览器测试需执行
+`npx playwright install chromium`；测试边界、失败报告和回归用例要求见
+[测试约定](tests/README.md)。浏览器运行器自动关闭自己启动的服务。
 
 ## 格式与检查
 

@@ -250,7 +250,8 @@ const usePanelMediaSelection = createPanelState<PanelMediaSelection>(() => (set,
             workspaceId: videoId ? current.nextWorkspaceId : null,
             nextWorkspaceId: current.nextWorkspaceId + 1,
             projectId,
-            videoId: videoId || "",
+            // Empty automatic initialization must still follow the first import.
+            videoId: videoId || null,
             trackId,
             sources: videoId ? [{ videoId, trackId }] : [],
             sourceHistory: videoId

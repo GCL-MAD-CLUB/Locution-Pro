@@ -1,12 +1,4 @@
-// Run against the Vite development server from a blank page (for example /package.json):
-// const refresh = (await import('/@react-refresh')).default; refresh.injectIntoGlobalHook(window);
-// window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => type => type;
-// window.__vite_plugin_react_preamble_installed__ = true;
-// await (await import('/tests/browser/storyboard-scheduling.test.mjs')).runStoryboardSchedulingTests()
-// This harness mounts the real storyboard detection hook and the real task progress bar with mocked
-// native commands, so it observes the three-slot scheduler through the UI instead of through stubbed
-// listeners. Reload the page before re-running after a failure: the task store and the in-flight
-// detection registry are module-level and cannot be reset.
+// Invoked by state-regressions.test.ts in a fresh browser context.
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";

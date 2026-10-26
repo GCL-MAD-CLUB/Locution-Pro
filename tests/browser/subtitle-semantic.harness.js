@@ -1,6 +1,4 @@
-// Run from a blank Vite-served page after installing the React refresh preamble:
-// await (await import('/tests/browser/subtitle-semantic.test.mjs')).runSubtitleSemanticTests()
-// Real hooks and controls; native inference is held pending to exercise cancellation races.
+// Invoked by state-regressions.test.ts in a fresh browser context.
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";

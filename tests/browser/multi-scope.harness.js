@@ -1,10 +1,4 @@
-// Run against the Vite development server from a blank page (for example /package.json):
-// const refresh = (await import('/@react-refresh')).default; refresh.injectIntoGlobalHook(window);
-// window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => type => type;
-// window.__vite_plugin_react_preamble_installed__ = true;
-// await (await import('/tests/browser/multi-scope.test.mjs')).runMultiScopeTests(true)
-// runSourcePlayerTests(url) additionally tests a real Vite-served 10-second, 24fps MP4.
-// This harness mounts real React hooks and the source player with mocked native commands.
+// Invoked by state-regressions.test.ts in a fresh browser context.
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
@@ -77,7 +71,7 @@ function workspace() {
           sequence,
           start_us: sequence * 1_000_000,
           end_us: (sequence + 1) * 1_000_000,
-          plain_text: id,
+          plain_text: `${id}-${sequence}`,
         })),
       ]),
     ),
@@ -126,17 +120,19 @@ function workspace() {
 export async function runMultiScopeTests(fullUi = false) {
   const previousNative = window.__TAURI_INTERNALS__;
   let finishDetection;
+  const detectionFinishes = new Map();
   let detectionCalls = 0;
   window.__TAURI_INTERNALS__ = {
     convertFileSrc: (path) => path,
     transformCallback: () => 1,
-    invoke: async (command) => {
+    invoke: async (command, args) => {
       if (command === "plugin:event|listen") return 1;
       if (command === "load_project_states") return {};
       if (command === "detect_storyboard_shots") {
         detectionCalls += 1;
         return new Promise((resolve) => {
           finishDetection = resolve;
+          detectionFinishes.set(args.assetId, resolve);
         });
       }
       return null;
@@ -212,6 +208,7 @@ export async function runMultiScopeTests(fullUi = false) {
     await pause();
   };
   const reset = async () => {
+    detectionFinishes.clear();
     await act(() => snapshots.port.projectClosed());
     await act(() => snapshots.port.projectOpened(workspace(), "/audit.lcut", "audit"));
     await act(() => snapshots.board.source.selectVideo("a", "a-1"));
@@ -256,8 +253,8 @@ export async function runMultiScopeTests(fullUi = false) {
     await act(() => snapshots.board.source.selection.rememberFrame("a", 48));
     await act(() => snapshots.board.board.shotSelectionReplaced(["shot-2"], "shot-2"));
     await act(() => snapshots.port.mediaItemsRemoved(["a"]));
-    equal(sourceIds("board"), ["b"], "deleting sole selected source falls back");
-    equal(snapshots.port.activeVideoId, "b", "fallback is previewed");
+    equal(sourceIds("board"), [], "deleting sole selected source leaves the panel empty");
+    equal(snapshots.port.activeVideoId, "", "unselected media is not opened automatically");
     equal(
       snapshots.board.source.selection.sources.map((source) => source.videoId),
       ["a"],
@@ -274,7 +271,7 @@ export async function runMultiScopeTests(fullUi = false) {
     );
     equal(snapshots.port.activeVideoId, "a", "undo restores preview");
     await act(() => snapshots.port.projectHistoryJumped(1));
-    equal(sourceIds("board"), ["b"], "redo restores fallback");
+    equal(sourceIds("board"), [], "redo restores the empty source");
     equal(historySize(), 1, "redo adds no history");
     results.push("delete / undo / redo sole source, selection, frame, preview and history");
 
@@ -306,7 +303,8 @@ export async function runMultiScopeTests(fullUi = false) {
 
     await reset();
     await act(() => snapshots.port.mediaItemsRemoved(["a"]));
-    await act(() => snapshots.board.source.previewSource("b", "b-1", 72));
+    await act(() => snapshots.board.source.selectVideo("b", "b-1"));
+    await act(() => snapshots.board.source.selection.rememberFrame("b", 72));
     await act(() => snapshots.port.projectHistoryJumped(0));
     equal(sourceIds("board"), ["b"], "explicit choice during deletion survives undo");
     equal(
@@ -339,7 +337,7 @@ export async function runMultiScopeTests(fullUi = false) {
     await act(() => snapshots.port.projectOpened(folderWorkspace, "/folder.lcut", "folder-audit"));
     const foldersBefore = getProjectWorkspaceSnapshot().media_bin.folders;
     await act(() => snapshots.port.mediaBinEntriesRemoved(["parent"], []));
-    equal(sourceIds("board"), ["b"], "recursive folder deletion falls back");
+    equal(sourceIds("board"), [], "recursive folder deletion leaves the panel empty");
     equal(getProjectWorkspaceSnapshot().media_bin.folders, [], "folder descendants deleted");
     await act(() => snapshots.port.projectHistoryJumped(0));
     equal(sourceIds("board"), ["a"], "undo recursive folder restores panel source");
@@ -431,7 +429,7 @@ export async function runMultiScopeTests(fullUi = false) {
 
     await reset();
     await act(() => snapshots.port.mediaItemsEnabledChanged(["a"], false));
-    equal(sourceIds("board"), ["b"], "disabled selection falls back");
+    equal(sourceIds("board"), [], "disabled source leaves the panel empty");
     await act(() => snapshots.port.projectHistoryJumped(0));
     equal(sourceIds("board"), ["a"], "undo disable restores original source");
     results.push("disable / undo follows deletion recovery");
@@ -461,7 +459,7 @@ export async function runMultiScopeTests(fullUi = false) {
     equal(sourceIds("sub"), ["a"], "jump across switch and deletion restores source");
     equal(snapshots.sub.source.activeTrackId, "a-1", "jump restores original track");
     await act(() => snapshots.port.projectHistoryJumped(2));
-    equal(sourceIds("sub"), ["b"], "redo jump restores deleted source fallback");
+    equal(sourceIds("sub"), [], "redo jump restores empty source after deletion");
     await act(() => snapshots.port.projectHistoryJumped(1));
     equal(snapshots.sub.source.activeTrackId, "a-2", "undo deletion retains earlier track switch");
     equal(historySize(), 2, "history jumps never append synthetic edits");
@@ -532,17 +530,17 @@ export async function runMultiScopeTests(fullUi = false) {
         .find((button) => button.textContent === "覆盖")
         .click(),
     );
-    for (let index = 0; !finishDetection && index < 100; index += 1) await pause();
-    const finishA = finishDetection;
-    finishDetection = undefined;
+    for (let index = 0; detectionFinishes.size < 2 && index < 100; index += 1) await pause();
+    equal(detectionFinishes.size, 2, "both sources start in the three-slot scheduler");
+    const finishA = detectionFinishes.get("a");
+    const finishB = detectionFinishes.get("b");
     await act(() => snapshots.port.storyboardUpdated("b:b:fp", "queued manual edit", () => manual));
     await act(() => finishA({ shots: manual.shots, frame_rate: 24 }));
-    for (let index = 0; !finishDetection && index < 100; index += 1) await pause();
-    await act(() => finishDetection({ shots: manual.shots, frame_rate: 24 }));
+    await act(() => finishB({ shots: manual.shots, frame_rate: 24 }));
     equal(
       Boolean(document.querySelector(".storyboard-detection-conflict-dialog")),
       true,
-      "queued edits also prompt again",
+      "edits during concurrent detection also prompt again",
     );
     await act(() =>
       [...document.querySelectorAll(".storyboard-detection-conflict-dialog button")]
@@ -559,7 +557,7 @@ export async function runMultiScopeTests(fullUi = false) {
       false,
       "unrelated source edits do not create extra conflicts",
     );
-    results.push("edits made while detection is queued require renewed confirmation");
+    results.push("edits made during concurrent detection require renewed confirmation");
 
     await reset();
     finishDetection = undefined;

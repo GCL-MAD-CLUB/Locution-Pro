@@ -1,39 +1,8 @@
+import { createModuleLoader, deferred, flush } from "./support/module-loader.ts";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { runInNewContext } from "node:vm";
-import ts from "typescript";
 
-function loadModule(path, imports) {
-  const source = readFileSync(new URL(path, import.meta.url), "utf8");
-  const compiled = ts.transpileModule(source, {
-    compilerOptions: {
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.CommonJS,
-      jsx: ts.JsxEmit.ReactJSX,
-    },
-  }).outputText;
-  const exports = {};
-  runInNewContext(compiled, {
-    exports,
-    require: (name) => {
-      assert.ok(name in imports, `Unexpected import: ${name}`);
-      return imports[name];
-    },
-  });
-  return exports;
-}
-
-function deferred() {
-  let resolve, reject;
-  const promise = new Promise((yes, no) => {
-    resolve = yes;
-    reject = no;
-  });
-  return { promise, resolve, reject };
-}
-
-const flush = () => new Promise((resolve) => setImmediate(resolve));
+const loadModule = createModuleLoader(import.meta.url);
 
 function taskHarness({
   mode = "individual",

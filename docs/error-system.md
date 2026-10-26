@@ -1,6 +1,6 @@
 # Error handling contracts
 
-This maintainer reference describes the Locution Pro 0.4.0 baseline. User recovery steps belong in the user guide; diagnostic formats and implementation details belong here.
+This maintainer reference describes the Locution Pro 0.4.1 baseline. User recovery steps belong in the user guide; diagnostic formats and implementation details belong here.
 
 ## Classify at the source
 

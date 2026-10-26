@@ -171,7 +171,6 @@ function SourceMediaSection({
     return (
       <section className="export-media-block">
         <h3 className="export-media-heading">来源：</h3>
-        <p className="export-media-empty">请先选择要预览的片段</p>
       </section>
     );
   }

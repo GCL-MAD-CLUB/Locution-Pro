@@ -31,7 +31,7 @@ import {
   resolveUniqueFileName,
   type ExportConflictAction,
 } from "./exportConflict";
-import { requestExportConflictAction, resolveExportConflict } from "./exportConflictDialogState";
+import { requestExportConflictAction } from "./exportConflictDialogState";
 
 export type ExportTaskOutcome =
   { status: "success"; result: ExportResult } | { status: "cancelled" } | { status: "failed" };
@@ -39,6 +39,8 @@ export type ExportTaskOutcome =
 export interface ExportTaskSubmission {
   eventId: string;
   queuePosition: number;
+  /** True once export_clips is dispatched; false if preparation ends without exporting. */
+  started: Promise<boolean>;
   completion: Promise<ExportTaskOutcome>;
 }
 
@@ -155,6 +157,7 @@ interface PendingExport {
   settings: ExportSettings;
   projectId: string | null;
   resolve: (outcome: ExportTaskOutcome) => void;
+  resolveStarted: (started: boolean) => void;
 }
 
 function cloneClip(clip: ExportClip): ExportClip {
@@ -172,35 +175,8 @@ function cloneSource(source: ExportSource): ExportSource {
 
 /** Executes one already-snapshotted event. Only the queue worker calls this. */
 async function executeExportEvent(event: PendingExport): Promise<ExportTaskOutcome> {
-  const taskId = createFfmpegTaskId("export");
   let cancelled = false;
-  const task = await createTaskProgress({
-    operation: "export.run",
-    label: `正在导出 ${event.source.clips.length} 个片段...`,
-    current: 0,
-    total: 1,
-    blocking: false,
-    listener: listenToFfmpegTaskProgress(taskId),
-    on_cancel: async () => {
-      cancelled = true;
-      resolveExportConflict("cancel");
-      try {
-        await cancelFfmpegTask(taskId);
-      } catch (error) {
-        // The export finished between the cancel click and the backend call;
-        // treat this as a successful cancel rather than a spurious error.
-        if (!((error as { code?: string }).code === "TASK_NOT_RUNNING")) {
-          throw normalizeError(error);
-        }
-      }
-    },
-  });
-
-  if (task.cancelled) {
-    task.remove();
-    return { status: "cancelled" };
-  }
-  exportQueueStore.getState().updateStatus(event.eventId, "running");
+  let task: Awaited<ReturnType<typeof createTaskProgress>> | undefined;
   try {
     const currentClips = event.source.clips;
     const normalized =
@@ -223,7 +199,6 @@ async function executeExportEvent(event: PendingExport): Promise<ExportTaskOutco
     let resolvedExistingFileMode = normalized.existingFileMode;
     const targets = buildExportTargets(currentClips, outputDir, names, normalized.mode);
     const conflicts = await findExistingTargets(targets);
-    if (cancelled || task.cancelled) return { status: "cancelled" };
     if (conflicts.length > 0) {
       let action: ExportConflictAction;
       if (normalized.existingFileMode === "ask") {
@@ -267,9 +242,30 @@ async function executeExportEvent(event: PendingExport): Promise<ExportTaskOutco
       }
     }
 
+    // Conflict decisions belong to preparation, before registering any progress UI.
+    const taskId = createFfmpegTaskId("export");
+    task = await createTaskProgress({
+      operation: "export.run",
+      label: `正在导出 ${exportClips.length} 个片段...`,
+      current: 0,
+      total: 1,
+      blocking: false,
+      listener: listenToFfmpegTaskProgress(taskId),
+      on_cancel: async () => {
+        cancelled = true;
+        try {
+          await cancelFfmpegTask(taskId);
+        } catch (error) {
+          // The backend may already have finished when cancellation arrives.
+          if (!((error as { code?: string }).code === "TASK_NOT_RUNNING")) {
+            throw normalizeError(error);
+          }
+        }
+      },
+    });
     if (cancelled || task.cancelled) return { status: "cancelled" };
     try {
-      const result = await invokeCommand<ExportResult>("export_clips", {
+      const exportCompletion = invokeCommand<ExportResult>("export_clips", {
         clips: exportClips.map((clip) =>
           backendClip(clip, normalized.useProxy, names.get(clip.id) ?? ""),
         ),
@@ -283,6 +279,9 @@ async function executeExportEvent(event: PendingExport): Promise<ExportTaskOutco
         },
         taskId,
       });
+      exportQueueStore.getState().updateStatus(event.eventId, "running");
+      event.resolveStarted(true);
+      const result = await exportCompletion;
       if (cancelled) {
         task.remove();
         return { status: "cancelled" };
@@ -307,7 +306,7 @@ async function executeExportEvent(event: PendingExport): Promise<ExportTaskOutco
     });
     return { status: "failed" };
   } finally {
-    task.remove();
+    task?.remove();
   }
 }
 
@@ -332,6 +331,10 @@ export function enqueueExportTask({
   const queueState = exportQueueStore.getState();
   const queuePosition = queueState.queuedCount + (queueState.activeEventId ? 1 : 0) + 1;
   let resolveCompletion!: (outcome: ExportTaskOutcome) => void;
+  let resolveStarted!: (started: boolean) => void;
+  const started = new Promise<boolean>((resolve) => {
+    resolveStarted = resolve;
+  });
   const completion = new Promise<ExportTaskOutcome>((resolve) => {
     resolveCompletion = resolve;
   });
@@ -341,6 +344,7 @@ export function enqueueExportTask({
     settings: capturedSettings,
     projectId,
     resolve: resolveCompletion,
+    resolveStarted,
   };
   exportQueueStore.getState().append({
     id: eventId,
@@ -352,6 +356,7 @@ export function enqueueExportTask({
     result: null,
   });
   void executeExportEvent(event).then((outcome) => {
+    resolveStarted(false);
     exportQueueStore
       .getState()
       .updateStatus(
@@ -361,7 +366,7 @@ export function enqueueExportTask({
       );
     event.resolve(outcome);
   });
-  return { eventId, queuePosition, completion };
+  return { eventId, queuePosition, started, completion };
 }
 
 /** Queues an export and resolves when that event reaches a terminal state. */

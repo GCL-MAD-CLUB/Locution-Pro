@@ -1314,7 +1314,13 @@ function AppContent() {
       />
     ),
     edit: <DockLayout />,
-    export: <ExportWorkspace />,
+    export: (
+      <ExportWorkspace
+        onExportStarted={() =>
+          setActiveWorkspace((workspace) => (workspace === "export" ? "edit" : workspace))
+        }
+      />
+    ),
   };
 
   function showPanel<Params>(request: OpenPanelRequest<Params>) {

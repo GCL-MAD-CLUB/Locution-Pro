@@ -1831,11 +1831,9 @@ export function SubtitlePanel() {
       return;
     }
     const submission = enqueueQuickExport(source, exportState);
-    messagePublished(
-      submission.queuePosition === 1
-        ? "已开始导出。"
-        : `已加入导出队列，前面有 ${submission.queuePosition - 1} 个任务。`,
-    );
+    if (await submission.started) {
+      messagePublished("已开始导出。");
+    }
     const outcome = await submission.completion;
     if (outcome.status === "success") {
       const completed = outcome.result.outputs.filter(

@@ -1,4 +1,5 @@
 import { FolderOpen } from "lucide-react";
+import { useState } from "react";
 import { captureOperationError } from "../../../../errors";
 import {
   enqueueExportTask,
@@ -11,7 +12,12 @@ import {
   useProjectPort,
 } from "../../../../systems/ProjectSystem";
 
-export function ExportActionBar() {
+interface ExportActionBarProps {
+  onExportStarted: () => void;
+}
+
+export function ExportActionBar({ onExportStarted }: ExportActionBarProps) {
+  const [preparing, setPreparing] = useState(false);
   const source = useExportWorkspaceState((state) => state.source);
   const selectedClipIds = useExportWorkspaceState((state) => state.selectedClipIds);
   const settings = useExportWorkspaceState((state) => state.settings);
@@ -24,6 +30,7 @@ export function ExportActionBar() {
 
   const selectedClips = (source?.clips ?? []).filter((clip) => selectedClipIds.has(clip.id));
   const canExport =
+    !preparing &&
     selectedClips.length > 0 &&
     settings.outputDir.trim() !== "" &&
     settings.outputStem.trim() !== "";
@@ -42,15 +49,36 @@ export function ExportActionBar() {
       source: { ...source, clips: selectedClips },
       projectId,
     });
-    messagePublished(
-      submission.queuePosition === 1
-        ? "已开始导出。"
-        : `已加入导出队列，前面有 ${submission.queuePosition - 1} 个任务。`,
-    );
+    setPreparing(true);
+    void submission.started.then((started) => {
+      setPreparing(false);
+      if (
+        started &&
+        getProjectExportContext().projectId === projectId &&
+        exportWorkspaceStore.getState().source === capturedSource
+      ) {
+        messagePublished("已开始导出。");
+        onExportStarted();
+      }
+    });
     void submission.completion.then((outcome) => {
+      const stillInProject = getProjectExportContext().projectId === projectId;
       const stillShowingSource = exportWorkspaceStore.getState().source === capturedSource;
+      if (stillInProject) {
+        if (outcome.status === "success") {
+          const completed = outcome.result.outputs.filter(
+            (output) => output.status === "completed",
+          ).length;
+          const failed = outcome.result.outputs.filter(
+            (output) => output.status === "failed",
+          ).length;
+          messagePublished(`已导出 ${completed} 个片段${failed > 0 ? `，${failed} 个失败` : ""}。`);
+        } else {
+          messagePublished(outcome.status === "cancelled" ? "已取消导出。" : "导出失败。");
+        }
+      }
       if (outcome.status === "success") {
-        if (getProjectExportContext().projectId === projectId) {
+        if (stillInProject) {
           exportSettingsRecorded(capturedSettings);
         }
         if (projectId) {
@@ -65,9 +93,6 @@ export function ExportActionBar() {
           setStatus("done");
         }
       } else if (stillShowingSource) {
-        if (outcome.status === "cancelled") {
-          messagePublished("已取消导出。");
-        }
         setStatus("idle");
       }
     });

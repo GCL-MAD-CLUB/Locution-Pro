@@ -1,6 +1,6 @@
 # Shot detection assets
 
-Maintainer resource reference for Locution Pro 0.4.0. Shot detection operates on
+Maintainer resource reference for Locution Pro 0.4.1. Shot detection operates on
 video pictures and does not require subtitle tracks.
 
 ## Preparation

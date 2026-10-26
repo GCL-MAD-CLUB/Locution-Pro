@@ -1,6 +1,6 @@
 # Subtitle semantic search assets
 
-Maintainer resource reference for Locution Pro 0.4.0. Subtitle retrieval is an
+Maintainer resource reference for Locution Pro 0.4.1. Subtitle retrieval is an
 optional text workflow; video import, shot detection and visual search do not
 require subtitles.
 

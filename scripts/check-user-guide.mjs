@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const guideRoot = path.join(repositoryRoot, "docs", "user-guide");
 const configPath = path.join(guideRoot, ".vitepress", "config.ts");
+const { version: applicationVersion } = JSON.parse(
+  await readFile(path.join(repositoryRoot, "package.json"), "utf8"),
+);
 const errors = [];
 
 async function listFiles(directory, extension) {
@@ -68,8 +71,8 @@ function checkUserContent(source, label, { readme = false } = {}) {
     }
   } else {
     const versions = source.match(/\b\d+\.\d+\.\d+(?:-[\w.-]+)?\b/gu) ?? [];
-    if (versions.some((version) => version !== "0.4.0")) {
-      errors.push(`${label}: 用户指南应统一到 0.4.0 基线`);
+    if (versions.some((version) => version !== applicationVersion)) {
+      errors.push(`${label}: 用户指南应统一到 ${applicationVersion} 基线`);
     }
     if (/release-notes|^#{1,6}\s+.*(?:新增功能|更新说明|变更日志)/mu.test(source)) {
       errors.push(`${label}: 历史更新记录应放在 CHANGELOG`);

@@ -1,6 +1,6 @@
 # Bundled UI font
 
-Maintainer resource reference for Locution Pro 0.4.0. The upstream font version
+Maintainer resource reference for Locution Pro 0.4.1. The upstream font version
 and license below describe the font itself, independently of the application.
 
 `locution-pro-ui-sans-vf.woff2` comes from face 2 (Source Han Sans SC VF) of

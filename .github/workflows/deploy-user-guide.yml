@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - ".github/actions/setup-npm/action.yml"
       - ".github/workflows/deploy-user-guide.yml"
       - "docs/user-guide/**"
       - "scripts/check-user-guide.mjs"
@@ -36,11 +37,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Set up Node.js and npm
+        uses: ./.github/actions/setup-npm
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0

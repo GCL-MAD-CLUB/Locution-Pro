@@ -1,10 +1,29 @@
 name: Browser regression tests
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/actions/setup-npm/action.yml"
+      - ".github/workflows/browser-tests.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "playwright.config.ts"
+      - "tests/browser/**"
+      - "tests/tsconfig.json"
+  schedule:
+    - cron: "17 4 * * 1"
   workflow_dispatch:
+
+concurrency:
+  group: browser-tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
+
+env:
+  NODE_VERSION: 22.18.0
 
 jobs:
   browser:
@@ -15,11 +34,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Set up Node.js and npm
+        uses: ./.github/actions/setup-npm
         with:
-          node-version: 22.18.0
-          cache: npm
+          node-version: ${{ env.NODE_VERSION }}
       - name: Install dependencies
         run: npm ci
       - name: Install Chromium

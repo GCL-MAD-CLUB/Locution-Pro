@@ -13,7 +13,8 @@ Selected frames are encoded with `vision_model_fp16.onnx` from
 `text_model_int8.onnx` and `tokenizer.json`. Assets live in the `siglip2/`
 subdirectory, are verified against pinned SHA-256 digests, and are prepared by
 the same `npm run prepare:storyboard-semantic` command and installed by the
-existing semantic component choice.
+existing semantic component choice. `tauri build` runs the command through
+`beforeBuildCommand`; the prepared directory occupies about 591 MiB.
 
 Vision input is RGB, bilinear resize to 256 × 256, NCHW float32,
 rescale 1/255 and mean/std 0.5. FP16 describes the model weights; the exported

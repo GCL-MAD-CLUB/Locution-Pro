@@ -8,8 +8,11 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Key main runs by commit so every release candidate keeps its own CI result.
+  # A ref-based group would drop pending runs when pushes land back to back, and
+  # the release workflow requires a successful CI run for the tagged commit.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -29,11 +32,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Set up Node.js and npm
+        uses: ./.github/actions/setup-npm
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
 
       - name: Install frontend dependencies
         run: npm ci
@@ -81,8 +83,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # Also exercises the Windows path of the release job's npm setup.
+      - name: Set up Node.js and npm
+        uses: ./.github/actions/setup-npm
         with:
           node-version: ${{ env.NODE_VERSION }}
 

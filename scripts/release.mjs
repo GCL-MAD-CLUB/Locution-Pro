@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -86,17 +86,15 @@ run(process.execPath, [join(root, "scripts", "check-version-consistency.mjs")]);
 run(process.execPath, [join(root, "scripts", "prepare-ffmpeg-assets.mjs")]);
 run(process.execPath, [tauriCli, "build"]);
 
-const installer = join(
-  root,
-  "src-tauri",
-  "target",
-  "release",
-  "bundle",
-  "nsis",
-  `Locution Pro_${version}_x64-setup.exe`,
-);
-if (!existsSync(installer)) {
-  throw new Error(`Build completed without the expected installer: ${installer}`);
+const bundleDirectory = join(root, "src-tauri", "target", "release", "bundle", "nsis");
+const bundledInstaller = join(bundleDirectory, `Locution Pro_${version}_x64-setup.exe`);
+if (!existsSync(bundledInstaller)) {
+  throw new Error(`Build completed without the expected installer: ${bundledInstaller}`);
 }
+
+// Match the name the release workflow publishes; the product name and install
+// identity stay "Locution Pro", only the file name drops the space.
+const installer = join(bundleDirectory, `Locution.Pro_${version}_x64-setup.exe`);
+renameSync(bundledInstaller, installer);
 
 console.log(`Release installer created: ${installer}`);

@@ -20,7 +20,8 @@ npm run test:e2e:report
 
 默认不重试失败，不允许 `test.only`。失败保留首轮 trace、截图、浏览器错误和原生命令记录，
 结果位于被 Git 忽略的 `test-results/` 和 `playwright-report/`。不录制视频。
-GitHub Actions 的 **Browser regression tests** 工作流也支持手动触发并下载报告。
+GitHub Actions 的 **Browser regression tests** 工作流每周定时运行，并在修改浏览器测试、
+测试配置或依赖清单时随 PR 运行；也支持手动触发并下载报告。
 
 ## 测试边界
 

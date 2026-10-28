@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { useSubtitleSemanticSearch } from "../../src/application/media/subtitleSemanticSearch.ts";
 import { PanelSearch } from "../../src/components/common/PanelSearch/PanelSearch.tsx";
+import { defaultAdvancedSearch } from "../../src/core/editor/textSearch.ts";
 import { PanelInstanceProvider } from "../../src/runtime/systems/PanelState.tsx";
 import { PanelManagerProvider } from "../../src/components/common/DockLayout/index.ts";
 import { SubtitlePanel } from "../../src/components/panels/SubtitlePanel/SubtitlePanel.tsx";
@@ -102,6 +103,9 @@ export async function runSubtitleSemanticTests() {
       null,
       h(TaskProgress, { children: null }),
       h(PanelSearch, {
+        advanced: defaultAdvancedSearch,
+        onAdvancedChange: () => {},
+        historyKind: "subtitle",
         label: "字幕",
         query: input.query,
         mode: input.enabled ? "semantic" : "filter",

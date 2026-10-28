@@ -1,3 +1,5 @@
+import { searchSemanticPrompts } from "../../core/editor/semanticPrompts";
+import { searchLines } from "../../core/editor/textSearch";
 import { Channel } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invokeCommand, runOperation } from "../../errors";
@@ -42,6 +44,7 @@ interface SearchResult {
   version: number;
 }
 interface SearchState {
+  negativePrompts: string;
   enabled: boolean;
   query: string;
   scope: string;
@@ -131,13 +134,18 @@ export function useSubtitleSemanticSearch(
   subtitles: readonly SemanticSubtitle[],
   scope: string,
   clearQuery: () => void,
+  negativePrompts = "",
 ) {
   const indexKey = useMemo(() => JSON.stringify([scope, subtitles]), [scope, subtitles]);
   const requestKey = useMemo(
-    () => (enabled && query.trim() && subtitles.length ? JSON.stringify([indexKey, query]) : ""),
-    [enabled, query, indexKey, subtitles.length],
+    () =>
+      enabled && query.trim() && subtitles.length
+        ? JSON.stringify([indexKey, query, negativePrompts])
+        : "",
+    [enabled, query, negativePrompts, indexKey, subtitles.length],
   );
   const latest = useRef<SearchState>({
+    negativePrompts,
     enabled,
     query,
     scope,
@@ -146,7 +154,16 @@ export function useSubtitleSemanticSearch(
     requestKey,
     clearQuery,
   });
-  latest.current = { enabled, query, scope, subtitles, indexKey, requestKey, clearQuery };
+  latest.current = {
+    negativePrompts,
+    enabled,
+    query,
+    scope,
+    subtitles,
+    indexKey,
+    requestKey,
+    clearQuery,
+  };
   const mounted = useRef(true);
   const busy = useRef(false);
   const indexed = useRef(new Set<string>());
@@ -218,10 +235,16 @@ export function useSubtitleSemanticSearch(
           if (!mounted.current || !current.requestKey || current.indexKey !== start.indexKey)
             return;
           const outcome = await runOperation("subtitle.semanticSearch", () =>
-            invokeCommand<SemanticMatch[]>("search_subtitles_semantic", {
-              query: current.query.trim(),
-              subtitles: current.subtitles,
-            }),
+            searchSemanticPrompts(
+              searchLines(current.query),
+              searchLines(current.negativePrompts),
+              (query) =>
+                invokeCommand<SemanticMatch[]>("search_subtitles_semantic", {
+                  query,
+                  subtitles: current.subtitles,
+                }),
+              () => mounted.current && latest.current.requestKey === current.requestKey,
+            ),
           );
           if (!mounted.current || latest.current.requestKey !== current.requestKey) return;
           completedRequest.current = current.requestKey;

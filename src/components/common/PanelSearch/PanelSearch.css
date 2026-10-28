@@ -90,6 +90,10 @@
   width: 150px;
 }
 
+.panel-search-row .panel-search-rule {
+  width: calc(8ic + 18px);
+}
+
 .panel-search-option-value {
   overflow: hidden;
   color: #bbb;

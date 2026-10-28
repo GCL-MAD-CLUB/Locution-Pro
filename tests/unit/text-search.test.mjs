@@ -5,7 +5,51 @@ import {
   matchesTextSearch,
   textSearchRanges,
   nextSearchMatchIndex,
+  defaultAdvancedSearch,
+  matchesSearchDuration,
+  searchPatternError,
+  searchLines,
 } from "../../src/core/editor/textSearch.ts";
+
+test("advanced text rules combine inclusion, exclusion and case sensitivity", () => {
+  const options = { ...defaultAdvancedSearch, excludedText: "draft\nrough cut" };
+  assert.equal(matchesTextSearch(["Hello world", "draft"], "hello", "contains", options), false);
+  assert.equal(matchesTextSearch(["Hello world"], "hello", "contains", options), true);
+  assert.equal(
+    matchesTextSearch(["Hello world"], "hello", "contains", { ...options, caseSensitive: true }),
+    false,
+  );
+  assert.equal(matchesTextSearch(["DRAFT"], "", "contains", options), false);
+  assert.equal(matchesTextSearch(["a+b"], "a+b", "equals"), true);
+  assert.equal(matchesTextSearch(["a+b extra"], "a+b", "equals"), false);
+});
+
+test("regex matching and highlighting handle invalid syntax and zero-width matches", () => {
+  assert.equal(matchesTextSearch(["Episode 12"], "^Episode \\d+$", "regex"), true);
+  assert.equal(matchesTextSearch(["Episode", "12"], "^Episode \\d+$", "regex"), false);
+  assert.equal(matchesTextSearch(["Episode 12"], "[", "regex"), false);
+  assert.ok(searchPatternError("[", "regex"));
+  assert.equal(searchPatternError("[", "contains"), null);
+  assert.deepEqual(textSearchRanges("😀AB ab", "ab", "regex", undefined, { caseSensitive: true }), [
+    { start: 5, end: 7 },
+  ]);
+  assert.deepEqual(textSearchRanges("abc", "(?=a)", "regex"), []);
+  assert.deepEqual(textSearchRanges("abc", "[", "regex"), []);
+  assert.deepEqual(
+    textSearchRanges("AB ab", "AB", "contains", undefined, { caseSensitive: true }),
+    [{ start: 0, end: 2 }],
+  );
+  assert.deepEqual(textSearchRanges(" cat ", "cat", "equals"), [{ start: 1, end: 4 }]);
+});
+
+test("duration bounds are inclusive and prompt lines are trimmed and deduplicated", () => {
+  const options = { ...defaultAdvancedSearch, minDuration: "1", maxDuration: "2" };
+  assert.equal(matchesSearchDuration(1000000, 2000000, options), true);
+  assert.equal(matchesSearchDuration(1000000, 3000000, options), true);
+  assert.equal(matchesSearchDuration(1000000, 3000001, options), false);
+  assert.equal(matchesSearchDuration(0, 500000, options), false);
+  assert.deepEqual(searchLines(" sunset \r\n\nbeach\nsunset"), ["sunset", "beach"]);
+});
 
 test("search rules distinguish any, all, whole words and negative matches", () => {
   assert.equal(matchesTextSearch(["Hello world"], "hello missing", "contains"), true);

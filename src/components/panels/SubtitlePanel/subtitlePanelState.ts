@@ -1,3 +1,4 @@
+import { defaultAdvancedSearch, type AdvancedSearchOptions } from "../../../core/editor/textSearch";
 import { useLayoutEffect, useMemo } from "react";
 import { panelSessionForContext } from "../../../core/editor/panelSourceSelection";
 import { scopedSubtitles } from "../../../core/editor/multiSource";
@@ -20,6 +21,7 @@ export type SubtitleRatingComparator = "gte" | "lte" | "eq";
 
 interface SubtitleTrackSessionState {
   query: string;
+  advancedSearch: AdvancedSearchOptions;
   searchMode: SearchMode;
   searchRule: SearchRule;
   semanticThreshold: number;
@@ -40,6 +42,7 @@ interface SubtitlePanelUiState extends SubtitleTrackSessionState {
   thumbnailSize: number;
   syncTrackContext: (trackContext: string, workspaceId?: number | null) => void;
   setQuery: (query: string) => void;
+  setAdvancedSearch: (options: AdvancedSearchOptions) => void;
   setSearchMode: (mode: SearchMode) => void;
   setSearchRule: (rule: SearchRule) => void;
   setSemanticThreshold: (value: number) => void;
@@ -75,8 +78,9 @@ interface SubtitlePanelState extends SubtitlePanelUiState, SubtitleState {
 function defaultTrackSessionState(): SubtitleTrackSessionState {
   return {
     query: "",
+    advancedSearch: { ...defaultAdvancedSearch },
     searchMode: "filter",
-    searchRule: "containsAll",
+    searchRule: "contains",
     semanticThreshold: 0,
     showOnlySelected: false,
     minimumRating: 0,
@@ -92,6 +96,7 @@ function defaultTrackSessionState(): SubtitleTrackSessionState {
 function trackSessionFromState(state: SubtitlePanelUiState): SubtitleTrackSessionState {
   return {
     query: state.query,
+    advancedSearch: state.advancedSearch,
     searchMode: state.searchMode,
     searchRule: state.searchRule,
     semanticThreshold: state.semanticThreshold,
@@ -150,6 +155,7 @@ const useSubtitlePanelUiState = createPanelState<SubtitlePanelUiState>(() => (se
       };
     }),
   setQuery: (query) => set({ query }),
+  setAdvancedSearch: (advancedSearch) => set({ advancedSearch }),
   setSemanticThreshold: (value) =>
     set({ semanticThreshold: Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0 }),
   setSearchMode: (searchMode) =>

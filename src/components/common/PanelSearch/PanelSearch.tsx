@@ -1,4 +1,11 @@
-import { ChevronLeft, ChevronRight, ChevronsUpDown } from "lucide-react";
+import { AdvancedSearchDialog } from "./AdvancedSearchDialog";
+import {
+  defaultAdvancedSearch,
+  searchPatternError,
+  searchLines,
+  type AdvancedSearchOptions,
+} from "../../../core/editor/textSearch";
+import { ChevronLeft, ChevronRight, ChevronsUpDown, SlidersHorizontal } from "lucide-react";
 import { Fragment, useEffect, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -17,21 +24,14 @@ import {
 import "./PanelSearch.css";
 import { SearchHistoryInput } from "./SearchHistoryInput";
 import type { SearchHistoryKind } from "./searchHistory";
+import { searchRuleGroups, searchRuleLabels as ruleLabels } from "./searchRules";
 
-const ruleLabels: Record<SearchRule, string> = {
-  contains: "包含",
-  containsAll: "包含所有",
-  containsWords: "包含单词",
-  doesNotContain: "不含",
-  startsWith: "开头为",
-  endsWith: "结尾为",
-  isEmpty: "为空",
-  isNotEmpty: "不为空",
-};
 const scopeLabels = { any: "任何可搜索的字段", title: "标题", keywords: "关键字" };
 type SearchScope = keyof typeof scopeLabels;
 
 interface PanelSearchProps {
+  advanced: AdvancedSearchOptions;
+  onAdvancedChange: (options: AdvancedSearchOptions) => void;
   label: string;
   historyKind: SearchHistoryKind;
   query: string;
@@ -58,6 +58,8 @@ interface PanelSearchProps {
 }
 
 export function PanelSearch({
+  advanced,
+  onAdvancedChange,
   label,
   historyKind,
   query,
@@ -77,6 +79,14 @@ export function PanelSearch({
   onNavigate,
   semantic,
 }: PanelSearchProps) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const advancedActive =
+    advanced.minDuration !== "" ||
+    advanced.maxDuration !== "" ||
+    (mode === "semantic"
+      ? Boolean(advanced.negativePrompts.trim()) || searchLines(query).length > 1
+      : advanced.caseSensitive || Boolean(advanced.excludedText.trim()) || rule === "equals");
+  const patternError = mode !== "semantic" ? searchPatternError(query, rule) : null;
   const [menu, setMenu] = useState<{
     kind: "mode" | "scope" | "rule";
     x: number;
@@ -156,8 +166,14 @@ export function PanelSearch({
       <SearchHistoryInput
         label={label}
         kind={historyKind}
-        query={query}
-        onQueryChange={onQueryChange}
+        query={mode === "semantic" ? query.split(/\r?\n/)[0] : query}
+        onQueryChange={(value) =>
+          onQueryChange(
+            mode === "semantic" && value.trim() && query.includes("\n")
+              ? [value, ...query.split(/\r?\n/).slice(1)].join("\n")
+              : value,
+          )
+        }
         disabled={disabled}
       />
       <span className="panel-search-separator" aria-hidden="true" />
@@ -260,7 +276,7 @@ export function PanelSearch({
           </button>
         </div>
       )}
-      {scope !== undefined && (
+      {scope !== undefined && mode !== "semantic" && (
         <>
           <span className="panel-search-separator" aria-hidden="true" />
           {dropdown("scope", "范围", scopeLabels[scope])}
@@ -272,6 +288,57 @@ export function PanelSearch({
           {dropdown("rule", "规则", ruleLabels[rule])}
         </>
       )}
+      <span className="panel-search-separator" aria-hidden="true" />
+      <button
+        type="button"
+        className={`panel-search-advanced ${advancedActive ? "active" : ""}`}
+        disabled={disabled}
+        title={advancedActive ? "高级搜索条件已启用" : "高级搜索"}
+        aria-label={`${label}高级搜索`}
+        aria-haspopup="dialog"
+        onClick={() => {
+          setMenu(null);
+          setAdvancedOpen(true);
+        }}
+      >
+        <SlidersHorizontal/>
+        <span>
+          高级搜索{advancedActive ? " ·" : ""}
+        </span>
+      </button>
+      {patternError && (
+        <span className="panel-search-validation" role="alert">
+          {patternError}
+        </span>
+      )}
+      {advancedOpen &&
+        createPortal(
+          <AdvancedSearchDialog
+            label={label}
+            initial={{
+              query,
+              mode,
+              rule,
+              scope,
+              threshold: semantic?.threshold ?? 0,
+              options: advanced,
+            }}
+            semanticAvailable={Boolean(semantic)}
+            onClose={() => setAdvancedOpen(false)}
+            onApply={(draft) => {
+              onModeChange(draft.mode);
+              onRuleChange(draft.rule);
+              if (draft.scope !== undefined) onScopeChange?.(draft.scope);
+              semantic?.onThresholdChange(draft.threshold);
+              onQueryChange(
+                draft.mode === "semantic" ? searchLines(draft.query).join("\n") : draft.query,
+              );
+              onAdvancedChange(draft.options);
+              setAdvancedOpen(false);
+            }}
+          />,
+          document.body,
+        )}
       <span className="panel-search-summary">{summary}</span>
       {menu &&
         createPortal(
@@ -313,19 +380,22 @@ export function PanelSearch({
                       {value === "any" && <PopupMenuSeparator />}
                     </Fragment>
                   ))
-                : (Object.keys(ruleLabels) as SearchRule[]).map((value) => (
-                    <Fragment key={value}>
-                      {(value === "startsWith" || value === "isEmpty") && <PopupMenuSeparator />}
-                      <PopupMenuItem
-                        checked={rule === value}
-                        disabled={mode === "highlight" && !canHighlightSearchRule(value)}
-                        onSelect={() => {
-                          onRuleChange(value);
-                          setMenu(null);
-                        }}
-                      >
-                        {ruleLabels[value]}
-                      </PopupMenuItem>
+                : searchRuleGroups.map((group, index) => (
+                    <Fragment key={group[0]}>
+                      {index > 0 && <PopupMenuSeparator />}
+                      {group.map((value) => (
+                        <PopupMenuItem
+                          key={value}
+                          checked={rule === value}
+                          disabled={mode === "highlight" && !canHighlightSearchRule(value)}
+                          onSelect={() => {
+                            onRuleChange(value);
+                            setMenu(null);
+                          }}
+                        >
+                          {ruleLabels[value]}
+                        </PopupMenuItem>
+                      ))}
                     </Fragment>
                   ))}
           </PopupMenu>,
@@ -336,6 +406,7 @@ export function PanelSearch({
 }
 
 export interface SearchHighlightOptions {
+  advanced?: AdvancedSearchOptions;
   query: string;
   rule: SearchRule;
   matchingIds: ReadonlySet<string>;
@@ -356,7 +427,13 @@ export function SearchHighlight({
   renderText?: (text: string) => ReactNode;
 }) {
   const ranges = search?.matchingIds.has(itemId)
-    ? textSearchRanges(text, search.query, search.rule, searchFields)
+    ? textSearchRanges(
+        text,
+        search.query,
+        search.rule,
+        searchFields,
+        search.advanced ?? defaultAdvancedSearch,
+      )
     : [];
   if (!ranges.length) return renderText(text);
   let offset = 0;

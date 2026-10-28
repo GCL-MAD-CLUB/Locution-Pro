@@ -1,3 +1,4 @@
+import { matchesSearchDuration, type AdvancedSearchOptions } from "../../../core/editor/textSearch";
 import {
   useSemanticSearchAvailable,
   useSubtitleSemanticSearch,
@@ -403,11 +404,13 @@ function cueMatches(
   annotation: SubtitleCueAnnotation | undefined,
   query: string,
   rule: SearchRule,
+  options: AdvancedSearchOptions,
 ) {
   return matchesTextSearch(
     [cue.plain_text, cue.speaker ?? "", cue.style ?? "", cueLabel(annotation)],
     query,
     rule,
+    options,
   );
 }
 
@@ -828,6 +831,8 @@ export function SubtitlePanel() {
     thumbnailSize,
     syncTrackContext,
     setQuery,
+    advancedSearch,
+    setAdvancedSearch,
     setSearchMode,
     setSearchRule,
     setShowOnlySelected,
@@ -942,6 +947,7 @@ export function SubtitlePanel() {
     semanticSubtitles,
     semanticScope,
     () => setQuery(""),
+    advancedSearch.negativePrompts,
   );
   const showSimilarity = searchMode === "semantic" && Boolean(query.trim());
   const hasSemanticResults =
@@ -969,12 +975,13 @@ export function SubtitlePanel() {
       allCues.filter(
         (cue) =>
           (!showOnlySelected || selectedCueIds.has(cue.id)) &&
+          matchesSearchDuration(cue.start_us, cue.end_us, advancedSearch) &&
           (searchMode === "semantic"
             ? !query.trim() ||
               semantic.status !== "ready" ||
               (semantic.scores.get(cue.id) ?? -1) >= semanticThreshold
             : searchMode === "highlight" ||
-              cueMatches(cue, cueAnnotations[cue.id], query, searchRule)) &&
+              cueMatches(cue, cueAnnotations[cue.id], query, searchRule, advancedSearch)) &&
           cueMatchesFilter(
             cueAnnotations[cue.id],
             minimumRating,
@@ -992,6 +999,7 @@ export function SubtitlePanel() {
       flagFilters,
       minimumRating,
       query,
+      advancedSearch,
       searchMode,
       searchRule,
       semantic.status,
@@ -1015,10 +1023,12 @@ export function SubtitlePanel() {
     () =>
       searchMode === "highlight" && query.trim()
         ? sortedCues.flatMap((cue, index) =>
-            cueMatches(cue, cueAnnotations[cue.id], query, searchRule) ? [index] : [],
+            cueMatches(cue, cueAnnotations[cue.id], query, searchRule, advancedSearch)
+              ? [index]
+              : [],
           )
         : [],
-    [sortedCues, cueAnnotations, query, searchMode, searchRule],
+    [sortedCues, cueAnnotations, query, searchMode, searchRule, advancedSearch],
   );
   const [searchFocusedCueId, setSearchFocusedCueId] = useState<string | null>(null);
   useEffect(() => {
@@ -1037,11 +1047,20 @@ export function SubtitlePanel() {
         ? {
             query,
             rule: searchRule,
+            advanced: advancedSearch,
             focusedId: searchFocusedCueId,
             matchingIds: new Set(matchingCueIndices.map((index) => sortedCues[index].id)),
           }
         : undefined,
-    [query, searchMode, searchRule, searchFocusedCueId, matchingCueIndices, sortedCues],
+    [
+      query,
+      advancedSearch,
+      searchMode,
+      searchRule,
+      searchFocusedCueId,
+      matchingCueIndices,
+      sortedCues,
+    ],
   );
   const selectedCount = selectedCueIds.size;
   const hasSecondarySelection =
@@ -2391,6 +2410,9 @@ export function SubtitlePanel() {
       </div>
 
       <PanelSearch
+        key={JSON.stringify([selection.workspaceId, trackContext])}
+        advanced={advancedSearch}
+        onAdvancedChange={setAdvancedSearch}
         label="字幕"
         historyKind="subtitle"
         query={query}

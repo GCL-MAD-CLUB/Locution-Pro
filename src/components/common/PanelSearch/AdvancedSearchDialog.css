@@ -170,15 +170,19 @@
 .panel-search-row .panel-search-advanced {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-shrink: 0;
-  padding: 3px 6px;
+  height: 22px;
+  padding: 0;
   background: transparent;
   color: var(--color-text);
   font: inherit;
 }
-.panel-search-row .panel-search-advanced.active {
-  color: var(--color-text-highlight);
+.panel-search-row button.panel-search-advanced.active {
+  color: var(--color-text);
+}
+.panel-search-row .panel-search-advanced.active svg {
+  color: var(--color-accent);
 }
 .panel-search-advanced svg {
   width: 12px;

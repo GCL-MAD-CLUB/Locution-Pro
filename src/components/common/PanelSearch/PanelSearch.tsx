@@ -177,6 +177,22 @@ export function PanelSearch({
         disabled={disabled}
       />
       <span className="panel-search-separator" aria-hidden="true" />
+      <button
+        type="button"
+        className={`panel-search-advanced ${advancedActive ? "active" : ""}`}
+        disabled={disabled}
+        title={advancedActive ? "高级搜索条件已启用" : "高级搜索"}
+        aria-label={`${label}高级搜索`}
+        aria-haspopup="dialog"
+        onClick={() => {
+          setMenu(null);
+          setAdvancedOpen(true);
+        }}
+      >
+        <SlidersHorizontal />
+        <span>高级搜索</span>
+      </button>
+      <span className="panel-search-separator" aria-hidden="true" />
       {dropdown("mode", "模式", mode === "semantic" ? "语义" : mode === "filter" ? "过滤" : "高亮")}
       {mode === "semantic" && semantic ? (
         <div className="panel-search-semantic" aria-label="语义匹配度阈值">
@@ -288,24 +304,6 @@ export function PanelSearch({
           {dropdown("rule", "规则", ruleLabels[rule])}
         </>
       )}
-      <span className="panel-search-separator" aria-hidden="true" />
-      <button
-        type="button"
-        className={`panel-search-advanced ${advancedActive ? "active" : ""}`}
-        disabled={disabled}
-        title={advancedActive ? "高级搜索条件已启用" : "高级搜索"}
-        aria-label={`${label}高级搜索`}
-        aria-haspopup="dialog"
-        onClick={() => {
-          setMenu(null);
-          setAdvancedOpen(true);
-        }}
-      >
-        <SlidersHorizontal/>
-        <span>
-          高级搜索{advancedActive ? " ·" : ""}
-        </span>
-      </button>
       {patternError && (
         <span className="panel-search-validation" role="alert">
           {patternError}

@@ -1,3 +1,9 @@
+import { searchSemanticPrompts } from "../../core/editor/semanticPrompts";
+import {
+  searchLines,
+  searchQueryToMultiline,
+  semanticPromptErrors,
+} from "../../core/editor/textSearch";
 import { Channel } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invokeCommand, runOperation } from "../../errors";
@@ -48,6 +54,7 @@ interface SearchResult {
   version: number;
 }
 interface SearchState {
+  negativePrompts: string;
   enabled: boolean;
   query: string;
   scope: string;
@@ -178,13 +185,21 @@ export function useStoryboardSemanticSearch(
   shots: readonly SemanticShot[],
   scope: string,
   clearQuery: () => void,
+  negativePrompts = "",
 ) {
   const indexKey = useMemo(() => JSON.stringify([scope, shots]), [scope, shots]);
   const requestKey = useMemo(
-    () => (enabled && query.trim() && shots.length ? JSON.stringify([indexKey, query]) : ""),
-    [enabled, query, indexKey, shots.length],
+    () =>
+      enabled &&
+      query.trim() &&
+      shots.length &&
+      !Object.keys(semanticPromptErrors(query, negativePrompts)).length
+        ? JSON.stringify([indexKey, query, negativePrompts])
+        : "",
+    [enabled, query, negativePrompts, indexKey, shots.length],
   );
   const latest = useRef<SearchState>({
+    negativePrompts,
     enabled,
     query,
     scope,
@@ -193,7 +208,16 @@ export function useStoryboardSemanticSearch(
     requestKey,
     clearQuery,
   });
-  latest.current = { enabled, query, scope, shots, indexKey, requestKey, clearQuery };
+  latest.current = {
+    negativePrompts,
+    enabled,
+    query,
+    scope,
+    shots,
+    indexKey,
+    requestKey,
+    clearQuery,
+  };
   const mounted = useRef(true);
   const busy = useRef(false);
   const indexed = useRef(new Set<string>());
@@ -271,10 +295,21 @@ export function useStoryboardSemanticSearch(
               return null;
             }
             if (!mounted.current || latest.current.requestKey !== current.requestKey) return null;
-            return invokeCommand<SemanticMatch[]>("search_storyboards_semantic", {
-              query: current.query.trim(),
-              shots: current.shots,
-            });
+            return searchSemanticPrompts(
+              searchLines(searchQueryToMultiline(current.query, "semantic")),
+              searchLines(current.negativePrompts),
+              (query) =>
+                invokeCommand<SemanticMatch[]>("search_storyboards_semantic", {
+                  query,
+                  shots: current.shots,
+                }),
+              () => mounted.current && latest.current.requestKey === current.requestKey,
+              (queries) =>
+                invokeCommand<SemanticMatch[][]>("search_storyboards_semantic_batch", {
+                  queries,
+                  shots: current.shots,
+                }),
+            );
           });
           if (!mounted.current || latest.current.requestKey !== current.requestKey) return;
           if (outcome.status === "success" && outcome.value === null) return;

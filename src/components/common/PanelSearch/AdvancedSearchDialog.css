@@ -1,0 +1,198 @@
+.advanced-search-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+}
+
+.modal-dialog.advanced-search-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  color: var(--color-text);
+  font: 12px var(--font-sans);
+}
+
+.advanced-search-dialog > .modal-dialog-header,
+.advanced-search-dialog > .modal-dialog-actions {
+  flex-shrink: 0;
+}
+
+.advanced-search-dialog > .advanced-search-body {
+  font-family: var(--font-song);
+  display: grid;
+  gap: 10px;
+  padding: 18px 20px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+}
+
+.advanced-search-field {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.advanced-search-field > span,
+.advanced-search-field > label {
+  text-align: right;
+}
+
+.advanced-search-text {
+  align-items: start;
+}
+
+.advanced-search-text > span,
+.advanced-search-text > label {
+  padding-top: 5px;
+}
+
+.advanced-search-body input:not([type="checkbox"]),
+.advanced-search-body textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 18px;
+  min-height: 18px;
+  padding: 0 4px;
+  color: #aaa;
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border-panel);
+  border-radius: 0;
+  box-shadow: none;
+  font: inherit;
+  line-height: 16px;
+}
+
+.advanced-search-body textarea {
+  height: 64px;
+  min-height: 64px;
+  max-height: 90px;
+  padding: 4px 4px;
+  resize: none;
+  overflow-y: hidden;
+  line-height: 16px;
+}
+
+.advanced-search-body input::placeholder,
+.advanced-search-body textarea::placeholder {
+  font-style: italic;
+  color: #666;
+  opacity: 1;
+}
+
+.advanced-search-body :disabled {
+  opacity: 0.5;
+}
+.advanced-search-body input:not([type="checkbox"]):focus,
+.advanced-search-body textarea:focus {
+  border-bottom-color: var(--color-accent);
+  outline: none;
+}
+
+.select-dropdown.advanced-search-dropdown {
+  box-sizing: border-box;
+  height: 18px;
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border-panel);
+  border-radius: 0;
+  color: #aaa;
+}
+.advanced-search-dropdown > .select-dropdown-trigger {
+  min-height: 16px;
+  height: 16px;
+  line-height: 16px;
+}
+.advanced-search-dropdown > .select-dropdown-trigger svg {
+  width: 12px;
+  height: 12px;
+}
+.select-dropdown.advanced-search-dropdown:hover:not(.disabled) {
+  border-color: var(--color-border-panel);
+  color: #d0d0d0;
+}
+.advanced-search-content {
+  border-top: 1px solid var(--color-border-default);
+  padding-top: 12px;
+}
+
+.advanced-search-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 88px;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.advanced-search-check input {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  padding: 0;
+  flex: none;
+  border: 2px solid #b0b0b0;
+  border-radius: 2px;
+  background: transparent center / contain no-repeat;
+  cursor: pointer;
+}
+.advanced-search-check input:checked {
+  background-color: #b0b0b0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M1.5 6.5 5 10 10.5 2.5' fill='none' stroke='%231d1d1d' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.advanced-search-check input:hover {
+  border-color: #d0d0d0;
+}
+.advanced-search-check input:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 3px;
+}
+.advanced-search-duration {
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-default);
+}
+.advanced-search-range {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.advanced-search-error {
+  margin-left: 88px;
+  color: var(--color-danger);
+  font-size: 11px;
+}
+.advanced-search-body input[aria-invalid="true"],
+.advanced-search-body textarea[aria-invalid="true"],
+.advanced-search-body input[aria-invalid="true"]:focus,
+.advanced-search-body textarea[aria-invalid="true"]:focus {
+  border-bottom-color: var(--color-danger);
+}
+.advanced-search-reset {
+  margin-right: auto;
+}
+
+.panel-search-row .panel-search-advanced {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+}
+.panel-search-row button.panel-search-advanced.active {
+  color: var(--color-text);
+}
+.panel-search-row .panel-search-advanced.active svg {
+  color: #4096f3;
+}
+.panel-search-advanced svg {
+  width: 12px;
+  height: 12px;
+}

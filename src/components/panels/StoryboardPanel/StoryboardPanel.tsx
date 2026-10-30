@@ -1,3 +1,4 @@
+import { matchesSearchDuration, type AdvancedSearchOptions } from "../../../core/editor/textSearch";
 import { KeywordPresetControl } from "./annotations/KeywordPresetControl";
 import { useKeywordSet } from "./annotations/keywordPresetState";
 import {
@@ -474,6 +475,7 @@ function shotMatchesSearch(
   query: string,
   scope: StoryboardSearchScope,
   rule: StoryboardSearchRule,
+  options: AdvancedSearchOptions,
 ) {
   const values = [
     ...(scope === "any" || scope === "title"
@@ -483,7 +485,7 @@ function shotMatchesSearch(
       ? storyboardKeywordSearchValues(annotation?.keywordIds, keywordNodes)
       : []),
   ];
-  return matchesTextSearch(values, query, rule);
+  return matchesTextSearch(values, query, rule, options);
 }
 
 function shotMatchesFilter(
@@ -1214,6 +1216,8 @@ export function StoryboardPanel() {
     gridSize,
     syncVideoContext,
     setQuery,
+    advancedSearch,
+    setAdvancedSearch,
     setSearchMode,
     setSearchScope,
     setSearchRule,
@@ -1402,6 +1406,7 @@ export function StoryboardPanel() {
     semanticShots,
     JSON.stringify([projectId, selection.workspaceId, videoContext]),
     () => setQuery(""),
+    advancedSearch.negativePrompts,
   );
   const showSimilarity = searchMode === "semantic" && Boolean(query.trim());
   const hasSemanticResults =
@@ -1439,6 +1444,7 @@ export function StoryboardPanel() {
       displayShots.filter(
         (shot) =>
           (!showOnlySelected || selectedShotIds.has(shot.id)) &&
+          matchesSearchDuration(shot.start_us, shot.end_us, advancedSearch) &&
           (searchMode === "semantic"
             ? !query.trim() ||
               semantic.status !== "ready" ||
@@ -1452,6 +1458,7 @@ export function StoryboardPanel() {
                 query,
                 searchScope,
                 searchRule,
+                advancedSearch,
               )) &&
           shotMatchesFilter(
             shotAnnotations[shot.id],
@@ -1469,6 +1476,7 @@ export function StoryboardPanel() {
       ),
     [
       displayShots,
+      advancedSearch,
       colorLabelFilters,
       editFilters,
       flagFilters,
@@ -1542,6 +1550,7 @@ export function StoryboardPanel() {
               query,
               searchScope,
               searchRule,
+              advancedSearch,
             )
               ? [index]
               : [],
@@ -1553,6 +1562,7 @@ export function StoryboardPanel() {
       shotCount,
       keywordNodes,
       query,
+      advancedSearch,
       searchScope,
       searchRule,
       searchMode,
@@ -1575,11 +1585,20 @@ export function StoryboardPanel() {
         ? {
             query,
             rule: searchRule,
+            advanced: advancedSearch,
             focusedId: searchFocusedShotId,
             matchingIds: new Set(matchingShotIndices.map((index) => sortedShots[index].id)),
           }
         : undefined,
-    [query, searchMode, searchRule, searchFocusedShotId, matchingShotIndices, sortedShots],
+    [
+      query,
+      advancedSearch,
+      searchMode,
+      searchRule,
+      searchFocusedShotId,
+      matchingShotIndices,
+      sortedShots,
+    ],
   );
   const footerSortLabel =
     storyboardGridSortOptions.find((option) => option.id === activeShotSort.columnId)?.label ??
@@ -3653,6 +3672,9 @@ export function StoryboardPanel() {
       </div>
 
       <PanelSearch
+        key={JSON.stringify([selection.workspaceId, videoContext])}
+        advanced={advancedSearch}
+        onAdvancedChange={setAdvancedSearch}
         label="分镜"
         historyKind="storyboard"
         semantic={
@@ -3668,7 +3690,7 @@ export function StoryboardPanel() {
         query={query}
         mode={searchMode}
         rule={searchRule}
-        scope={searchMode === "semantic" ? undefined : searchScope}
+        scope={searchScope}
         disabled={sources.length === 0}
         canNavigate={matchingShotIndices.length > 0}
         matchCount={matchingShotIndices.length}

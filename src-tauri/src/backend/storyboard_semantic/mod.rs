@@ -1103,18 +1103,21 @@ fn media_groups(sources: &[ShotSource]) -> Vec<Vec<usize>> {
 // shot decides its score, and that score is the calibrated SigLIP2 match
 // probability, which is monotone in the cosine and therefore equal to the
 // maximum probability over the shot's frames.
-fn search_completed_shots(
+fn search_completed_shots_batch(
     app: &tauri::AppHandle,
-    query: &str,
+    queries: &[String],
     sources: &[ShotSource],
     selection_root: &Path,
     semantic_root: &Path,
-) -> AppResult<Vec<StoryboardSemanticMatch>> {
-    if query.trim().is_empty() || sources.is_empty() {
-        return Ok(Vec::new());
+) -> AppResult<Vec<Vec<StoryboardSemanticMatch>>> {
+    if queries.is_empty() || sources.is_empty() {
+        return Ok(queries.iter().map(|_| Vec::new()).collect());
     }
-    let query_embedding = siglip::text_embedding(app, query)?;
-    let mut matches = Vec::with_capacity(sources.len());
+    let query_embeddings = siglip::text_embeddings(app, queries)?;
+    let mut matches: Vec<Vec<StoryboardSemanticMatch>> = queries
+        .iter()
+        .map(|_| Vec::with_capacity(sources.len()))
+        .collect();
     for group in media_groups(sources) {
         let mut requests = Vec::with_capacity(group.len());
         for &index in &group {
@@ -1130,13 +1133,15 @@ fn search_completed_shots(
         }
         let vectors = index::read(semantic_root, &sources[group[0]].identity, &requests)?;
         for (slot, &index) in group.iter().enumerate() {
-            let (frame_index, similarity) =
-                index::best_frame_similarity(&vectors[slot], &query_embedding)?;
-            matches.push(StoryboardSemanticMatch {
-                id: sources[index].shot.id.clone(),
-                similarity: siglip::match_probability(similarity),
-                frame: requests[slot].frames[frame_index],
-            });
+            for (matches, query_embedding) in matches.iter_mut().zip(&query_embeddings) {
+                let (frame_index, similarity) =
+                    index::best_frame_similarity(&vectors[slot], query_embedding)?;
+                matches.push(StoryboardSemanticMatch {
+                    id: sources[index].shot.id.clone(),
+                    similarity: siglip::match_probability(similarity),
+                    frame: requests[slot].frames[frame_index],
+                });
+            }
         }
     }
     Ok(matches)
@@ -1163,12 +1168,28 @@ pub(crate) async fn search_storyboards_semantic(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<Vec<StoryboardSemanticMatch>> {
+    if query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    search_storyboards_semantic_batch(vec![query], shots, app, state)
+        .await
+        .map(|mut results| results.pop().unwrap_or_default())
+}
+
+#[tauri::command]
+pub(crate) async fn search_storyboards_semantic_batch(
+    queries: Vec<String>,
+    shots: Vec<SemanticShot>,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> CommandResult<Vec<Vec<StoryboardSemanticMatch>>> {
+    super::semantic_prompts::validate_queries(&queries)?;
     let sources = resolve_shots(shots, &state)?;
     let preferences = preferences_clone(&state)?;
     let selection_root = cache::root(&preferences);
     let semantic_root = index::root(&preferences);
     tokio::task::spawn_blocking(move || {
-        search_completed_shots(&app, &query, &sources, &selection_root, &semantic_root)
+        search_completed_shots_batch(&app, &queries, &sources, &selection_root, &semantic_root)
     })
     .await
     .map_err(|error| {

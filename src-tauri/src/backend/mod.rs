@@ -43,6 +43,7 @@ mod native_drag_drop;
 mod onnx;
 mod proxy;
 mod rolling_pcm;
+mod semantic_prompts;
 mod semantic_search;
 mod state;
 mod still_export;

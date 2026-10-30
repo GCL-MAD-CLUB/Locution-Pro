@@ -36,6 +36,7 @@ pub(super) fn directory(app: &tauri::AppHandle) -> Option<PathBuf> {
 struct TextModel {
     runtime: OnnxModel,
     tokenizer: Tokenizer,
+    batch_capacity: usize,
 }
 static TEXT: OnceLock<Mutex<Option<TextModel>>> = OnceLock::new();
 
@@ -69,7 +70,16 @@ fn query_ids(tokenizer: &Tokenizer, query: &str) -> AppResult<Vec<i64>> {
     Ok(ids)
 }
 
+#[cfg(test)]
 fn run_text_embedding(session: &Session, input: &Tensor<i64>) -> ort::Result<Vec<f32>> {
+    run_text_embeddings(session, input, 1).map(|mut rows| rows.remove(0))
+}
+
+fn run_text_embeddings(
+    session: &Session,
+    input: &Tensor<i64>,
+    batch: usize,
+) -> ort::Result<Vec<Vec<f32>>> {
     let options =
         RunOptions::new()?.with_outputs(OutputSelector::no_default().with("pooler_output"));
     let outputs = session.run_with_options([input.view().into()], &options)?;
@@ -77,10 +87,14 @@ fn run_text_embedding(session: &Session, input: &Tensor<i64>) -> ort::Result<Vec
         .get("pooler_output")
         .ok_or_else(|| ort::Error::new("Missing SigLIP2 pooler_output"))?
         .try_extract_tensor::<f32>()?;
-    if values.shape() != [1, DIMENSIONS] {
+    if values.shape() != [batch, DIMENSIONS] {
         return Err(ort::Error::new("Unexpected SigLIP2 text embedding shape"));
     }
-    Ok(values.iter().copied().collect())
+    let values: Vec<_> = values.iter().copied().collect();
+    Ok(values
+        .chunks_exact(DIMENSIONS)
+        .map(|row| row.to_vec())
+        .collect())
 }
 
 struct QueryPriority;
@@ -110,12 +124,16 @@ fn text_model(
         // continue to use the shared accelerated provider policy.
         let runtime = OnnxModel::load_cpu(
             &directory.join("text_model_int8.onnx"),
-            &[("batch_size", 1), ("sequence_length", TOKENS as i64)],
+            &[("sequence_length", TOKENS as i64)],
             inference_error,
         )?;
         tracing::info!(provider = %runtime.provider(), "Selected SigLIP2 query provider");
         let tokenizer = text_tokenizer(directory.join("tokenizer.json"))?;
-        *guard = Some(TextModel { runtime, tokenizer });
+        *guard = Some(TextModel {
+            runtime,
+            tokenizer,
+            batch_capacity: super::super::semantic_prompts::MAX_QUERY_BATCH,
+        });
     }
     Ok(guard)
 }
@@ -125,19 +143,37 @@ pub(super) fn initialize_text_model(app: &tauri::AppHandle) -> AppResult<()> {
     Ok(())
 }
 
-pub(super) fn text_embedding(app: &tauri::AppHandle, query: &str) -> AppResult<Vec<f32>> {
+pub(super) fn text_embeddings(
+    app: &tauri::AppHandle,
+    queries: &[String],
+) -> AppResult<Vec<Vec<f32>>> {
     QUERY_WAITERS.fetch_add(1, Ordering::SeqCst);
     let _priority = QueryPriority;
-    let guard = text_model(app)?;
+    let mut guard = text_model(app)?;
     let model = guard
-        .as_ref()
+        .as_mut()
         .ok_or_else(|| inference_error("Missing SigLIP2 text model"))?;
-    let ids = query_ids(&model.tokenizer, query)?;
-    let input = Tensor::from_array(([1, TOKENS], ids)).map_err(inference_error)?;
-    let values = model
-        .runtime
-        .run(None, |session| run_text_embedding(session, &input))?;
-    normalize(&values)
+    let sequences = queries
+        .iter()
+        .map(|query| query_ids(&model.tokenizer, query))
+        .collect::<AppResult<Vec<_>>>()?;
+    super::super::semantic_prompts::infer_batches(
+        &sequences,
+        &mut model.batch_capacity,
+        &mut |batch| {
+            let ids = batch.iter().flatten().copied().collect::<Vec<_>>();
+            let input =
+                Tensor::from_array(([batch.len(), TOKENS], ids)).map_err(inference_error)?;
+            model
+                .runtime
+                .run(None, |session| {
+                    run_text_embeddings(session, &input, batch.len())
+                })?
+                .iter()
+                .map(|row| normalize(row))
+                .collect()
+        },
+    )
 }
 
 fn normalize(values: &[f32]) -> AppResult<Vec<f32>> {

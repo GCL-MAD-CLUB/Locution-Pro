@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { PopupMenu, PopupMenuItem, PopupMenuSeparator } from "../PopupMenu";
 import "./SelectDropdown.css";
 
 export type SelectDropdownItem<T extends string = string> =
@@ -26,6 +27,7 @@ interface SelectDropdownProps<T extends string> {
   disabled?: boolean;
   items: Array<SelectDropdownItem<T>>;
   menuClassName?: string;
+  menuVariant?: "dropdown" | "popup";
   menuId?: string;
   menuMinWidth?: number;
   menuWidth?: "content" | "trigger";
@@ -36,6 +38,7 @@ interface SelectDropdownProps<T extends string> {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   title?: string;
+  renderOptionLabel?: (item: Extract<SelectDropdownItem<T>, { type: "option" }>) => ReactNode;
   trigger?: ReactNode;
   triggerElement?: ReactNode;
   value: T;
@@ -64,6 +67,7 @@ export function SelectDropdown<T extends string>({
   disabled = false,
   items,
   menuClassName,
+  menuVariant = "dropdown",
   menuId,
   menuMinWidth = 0,
   menuWidth = "trigger",
@@ -74,6 +78,7 @@ export function SelectDropdown<T extends string>({
   open: controlledOpen,
   onOpenChange,
   title,
+  renderOptionLabel,
   trigger,
   triggerElement,
   value,
@@ -99,8 +104,12 @@ export function SelectDropdown<T extends string>({
     }
     const rect = root.getBoundingClientRect();
     const gap = 4;
-    const menuHeight = menuRef.current?.offsetHeight ?? 0;
-    const measuredMenuWidth = menuRef.current?.getBoundingClientRect().width ?? rect.width;
+    const menuElement =
+      menuVariant === "popup"
+        ? (menuRef.current?.firstElementChild as HTMLElement | null)
+        : menuRef.current;
+    const menuHeight = menuElement?.offsetHeight ?? 0;
+    const measuredMenuWidth = menuElement?.getBoundingClientRect().width ?? rect.width;
     const shouldOpenUp =
       placement === "top" ||
       (placement === "auto" &&
@@ -132,7 +141,7 @@ export function SelectDropdown<T extends string>({
     updateMenuPosition();
     const frame = window.requestAnimationFrame(updateMenuPosition);
     return () => window.cancelAnimationFrame(frame);
-  }, [open, items, menuMinWidth, menuWidth, placement]);
+  }, [open, items, menuMinWidth, menuWidth, placement, menuVariant]);
 
   useEffect(() => {
     if (!open) {
@@ -173,43 +182,79 @@ export function SelectDropdown<T extends string>({
     setOpen(false);
   }
 
-  const menu = (
-    <div
-      ref={menuRef}
-      id={menuId}
-      className={`select-dropdown-menu ${showCheck ? "" : "without-checks"} ${menuClassName ?? ""}`}
-      role="listbox"
-      aria-label={ariaLabel}
-      aria-multiselectable={selectedValues ? true : undefined}
-      style={menuStyle}
-    >
-      {items.map((item, index) =>
-        item.type === "separator" ? (
-          <div key={`separator-${index}`} className="select-dropdown-separator" />
-        ) : (
-          <button
-            key={item.value}
-            id={menuId ? `${menuId}-${index}` : undefined}
-            type="button"
-            className={`select-dropdown-option ${resolvedSelectedValues.has(item.value) ? "selected" : ""}`}
-            title={item.label}
-            onPointerDown={(event) => event.preventDefault()}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => selectValue(item.value)}
-            role="option"
-            aria-selected={resolvedSelectedValues.has(item.value)}
-          >
-            {showCheck && (
-              <span className="select-dropdown-check">
-                {resolvedSelectedValues.has(item.value) ? "✓" : ""}
+  const menu =
+    menuVariant === "popup" ? (
+      <div ref={menuRef} style={{ display: "contents" }}>
+        <PopupMenu
+          ariaLabel={ariaLabel}
+          className={menuClassName}
+          contextMenuAnchor={{
+            x: Number.parseFloat(String(menuStyle.left)) || 0,
+            y: Number.parseFloat(String(menuStyle.top)) || 0,
+          }}
+          style={{ ...menuStyle, position: "fixed" }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {items.map((item, index) =>
+            item.type === "separator" ? (
+              <PopupMenuSeparator key={`separator-${index}`} />
+            ) : (
+              <PopupMenuItem
+                key={item.value}
+                checked={showCheck ? resolvedSelectedValues.has(item.value) : undefined}
+                title={item.label}
+                onSelect={() => {
+                  selectValue(item.value);
+                  rootRef.current
+                    ?.querySelector<HTMLButtonElement>(".select-dropdown-trigger")
+                    ?.focus();
+                }}
+              >
+                {renderOptionLabel?.(item) ?? item.label}
+              </PopupMenuItem>
+            ),
+          )}
+        </PopupMenu>
+      </div>
+    ) : (
+      <div
+        ref={menuRef}
+        id={menuId}
+        className={`select-dropdown-menu ${showCheck ? "" : "without-checks"} ${menuClassName ?? ""}`}
+        role="listbox"
+        aria-label={ariaLabel}
+        aria-multiselectable={selectedValues ? true : undefined}
+        style={menuStyle}
+      >
+        {items.map((item, index) =>
+          item.type === "separator" ? (
+            <div key={`separator-${index}`} className="select-dropdown-separator" />
+          ) : (
+            <button
+              key={item.value}
+              id={menuId ? `${menuId}-${index}` : undefined}
+              type="button"
+              className={`select-dropdown-option ${resolvedSelectedValues.has(item.value) ? "selected" : ""}`}
+              title={item.label}
+              onPointerDown={(event) => event.preventDefault()}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectValue(item.value)}
+              role="option"
+              aria-selected={resolvedSelectedValues.has(item.value)}
+            >
+              {showCheck && (
+                <span className="select-dropdown-check">
+                  {resolvedSelectedValues.has(item.value) ? "✓" : ""}
+                </span>
+              )}
+              <span className="select-dropdown-option-label">
+                {renderOptionLabel?.(item) ?? item.label}
               </span>
-            )}
-            <span className="select-dropdown-option-label">{item.label}</span>
-          </button>
-        ),
-      )}
-    </div>
-  );
+            </button>
+          ),
+        )}
+      </div>
+    );
 
   return (
     <div

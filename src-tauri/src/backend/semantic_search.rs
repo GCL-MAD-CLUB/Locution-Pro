@@ -196,11 +196,23 @@ impl EmbeddingModel {
         rows.iter().map(|row| normalize_embedding(row)).collect()
     }
 
+    #[cfg(test)]
     fn embed(&self, text: &str, query: bool) -> AppResult<Vec<f32>> {
         let sequence = self.encode(text, query)?;
         self.embed_tokens(&[&sequence], sequence.len())?
             .pop()
             .ok_or_else(|| inference_error("Missing embedding"))
+    }
+
+    fn embed_queries(&self, queries: &[String]) -> AppResult<Vec<Vec<f32>>> {
+        let sequences = queries
+            .iter()
+            .enumerate()
+            .map(|(index, query)| self.encode(query.trim(), true).map(|ids| (index, ids)))
+            .collect::<AppResult<Vec<_>>>()?;
+        embed_query_sequences_with(sequences, &mut |tokens, length| {
+            self.embed_tokens(tokens, length)
+        })
     }
 
     fn publish_batch(
@@ -234,6 +246,48 @@ fn encode_text(tokenizer: &Tokenizer, text: &str, query: bool) -> AppResult<Vec<
 type DocumentBatch = Vec<(usize, Vec<f32>)>;
 type DocumentPublisher<'a> = dyn FnMut(DocumentBatch) -> AppResult<()> + 'a;
 type BatchInference<'a> = dyn FnMut(&[&[i64]], usize) -> AppResult<Vec<Vec<f32>>> + 'a;
+
+fn embed_query_sequences_with(
+    mut sequences: Vec<(usize, Vec<i64>)>,
+    infer: &mut BatchInference<'_>,
+) -> AppResult<Vec<Vec<f32>>> {
+    let mut output = vec![Vec::new(); sequences.len()];
+    sequences.sort_by_key(|(_, ids)| ids.len());
+    let mut offset = 0;
+    let mut resident_capacity = super::semantic_prompts::MAX_QUERY_BATCH;
+    while offset < sequences.len() {
+        let length = padded_index_length(sequences[offset].1.len());
+        let end = offset
+            + sequences[offset..]
+                .iter()
+                .take_while(|(_, ids)| padded_index_length(ids.len()) == length)
+                .count();
+        let mut capacity = index_batch_capacity(length).min(resident_capacity);
+        let rows = super::semantic_prompts::infer_batches(
+            &sequences[offset..end],
+            &mut capacity,
+            &mut |batch| {
+                let tokens = batch
+                    .iter()
+                    .map(|(_, ids)| ids.as_slice())
+                    .collect::<Vec<_>>();
+                let length = tokens.iter().map(|ids| ids.len()).max().unwrap_or(0);
+                let vectors = infer(&tokens, length)?;
+                Ok(batch
+                    .iter()
+                    .zip(vectors)
+                    .map(|((index, _), vector)| (*index, vector))
+                    .collect())
+            },
+        )?;
+        resident_capacity = resident_capacity.min(capacity);
+        for (index, vector) in rows {
+            output[index] = vector;
+        }
+        offset = end;
+    }
+    Ok(output)
+}
 
 fn publish_batch_with(
     batch: &[(usize, Vec<i64>)],
@@ -479,13 +533,29 @@ pub(crate) async fn search_subtitles_semantic(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<Vec<SemanticMatch>> {
+    if query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    search_subtitles_semantic_batch(vec![query], subtitles, app, state)
+        .await
+        .map(|mut results| results.pop().unwrap_or_default())
+}
+
+#[tauri::command]
+pub(crate) async fn search_subtitles_semantic_batch(
+    queries: Vec<String>,
+    subtitles: Vec<SemanticSubtitle>,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> CommandResult<Vec<Vec<SemanticMatch>>> {
+    super::semantic_prompts::validate_queries(&queries)?;
     let root = semantic_index_root(&state)?;
     tokio::task::spawn_blocking(move || {
-        if query.trim().is_empty() || subtitles.is_empty() {
-            return Ok(Vec::new());
+        if queries.is_empty() || subtitles.is_empty() {
+            return Ok(queries.iter().map(|_| Vec::new()).collect());
         }
         let cancel = AtomicBool::new(false);
-        let query_embedding = {
+        let query_embeddings = {
             let _priority = QueryPriority::new();
             let mut guard = model_guard(&cancel, false)?;
             if guard.is_none() {
@@ -494,9 +564,9 @@ pub(crate) async fn search_subtitles_semantic(
             let model = guard
                 .as_ref()
                 .ok_or_else(|| inference_error("Embedding model was not initialized"))?;
-            model.embed(query.trim(), true)?
+            model.embed_queries(&queries)?
         };
-        let mut matches = Vec::new();
+        let mut matches: Vec<Vec<SemanticMatch>> = queries.iter().map(|_| Vec::new()).collect();
         for file in subtitle_files(&subtitles) {
             let index = read_file_index(&root, &file).ok_or_else(|| {
                 inference_error(
@@ -505,15 +575,17 @@ pub(crate) async fn search_subtitles_semantic(
             })?;
             for (subtitle, vector) in file.cues.iter().zip(&index.embeddings) {
                 if let Some(vector) = vector {
-                    matches.push(SemanticMatch {
-                        id: subtitle.id.clone(),
-                        similarity: vector
-                            .iter()
-                            .zip(&query_embedding)
-                            .map(|(a, b)| a * b)
-                            .sum::<f32>()
-                            .clamp(-1.0, 1.0),
-                    });
+                    for (matches, query_embedding) in matches.iter_mut().zip(&query_embeddings) {
+                        matches.push(SemanticMatch {
+                            id: subtitle.id.clone(),
+                            similarity: vector
+                                .iter()
+                                .zip(query_embedding)
+                                .map(|(a, b)| a * b)
+                                .sum::<f32>()
+                                .clamp(-1.0, 1.0),
+                        });
+                    }
                 }
             }
         }
@@ -532,6 +604,44 @@ pub(crate) async fn search_subtitles_semantic(
 mod tests {
     use super::index::{write_file_index, SubtitleFileIndex};
     use super::*;
+
+    #[test]
+    fn query_batches_restore_prompt_order_and_bound_token_memory() {
+        let sequences: Vec<_> = [
+            600, 40, 20, 50, 21, 1000, 30, 45, 46, 47, 48, 49, 51, 52, 53, 54, 55, 56, 57, 58,
+        ]
+        .iter()
+        .enumerate()
+        .map(|(i, &length)| (i, vec![i as i64; length]))
+        .collect();
+        let mut calls = Vec::new();
+        let result = embed_query_sequences_with(sequences, &mut |tokens, length| {
+            assert!(tokens.len() <= super::super::semantic_prompts::MAX_QUERY_BATCH);
+            assert!(tokens.len() == 1 || tokens.len() * length <= INDEX_TOKEN_BUDGET);
+            calls.push(tokens.len());
+            Ok(tokens.iter().map(|row| vec![row[0] as f32]).collect())
+        })
+        .unwrap();
+        assert_eq!(result, (0..20).map(|i| vec![i as f32]).collect::<Vec<_>>());
+        assert!(calls.iter().any(|&count| count > 1));
+    }
+
+    #[test]
+    fn query_batches_reuse_single_inference_after_batch_failure() {
+        let sequences = (0..12).map(|i| (i, vec![i as i64; 20])).collect();
+        let mut calls = Vec::new();
+        let result = embed_query_sequences_with(sequences, &mut |tokens, _| {
+            calls.push(tokens.len());
+            if tokens.len() > 1 {
+                return Err(inference_error("batch not supported"));
+            }
+            Ok(vec![vec![tokens[0][0] as f32]])
+        })
+        .unwrap();
+        assert_eq!(result, (0..12).map(|i| vec![i as f32]).collect::<Vec<_>>());
+        assert_eq!(&calls[..3], [8, 4, 2]);
+        assert!(calls[3..].iter().all(|&size| size == 1));
+    }
 
     #[test]
     fn subtitle_cache_uses_new_directory_without_reusing_legacy_files() {

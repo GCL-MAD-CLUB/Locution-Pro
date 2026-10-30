@@ -1,5 +1,5 @@
 import { Search } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { SelectDropdown, selectDropdownItems } from "../SelectDropdown";
 import {
   filterSearchHistory,
@@ -14,14 +14,23 @@ export function SearchHistoryInput({
   query,
   disabled,
   onQueryChange,
+  invalid = false,
+  normalizeQuery = (value) => value,
 }: {
   label: string;
   kind: SearchHistoryKind;
   query: string;
   disabled: boolean;
   onQueryChange: (query: string) => void;
+  invalid?: boolean;
+  normalizeQuery?: (value: string) => string;
 }) {
   const listId = useId();
+  const [draft, setDraft] = useState<string | null>(null);
+  const lastEditedQuery = useRef<string | null>(null);
+  useEffect(() => {
+    if (query !== lastEditedQuery.current) setDraft(null);
+  }, [query]);
   const [history, setHistory] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string | null>(null);
@@ -30,6 +39,8 @@ export function SearchHistoryInput({
   const activeIndex = suggestions.findIndex((entry) => entry === active);
 
   function select(value: string) {
+    setDraft(null);
+    lastEditedQuery.current = null;
     onQueryChange(value);
     setActive(null);
     setOpen(false);
@@ -52,7 +63,8 @@ export function SearchHistoryInput({
         <>
           <Search aria-hidden="true" />
           <input
-            value={query}
+            aria-invalid={invalid}
+            value={draft ?? query}
             placeholder={`搜索${label}`}
             aria-label={`搜索${label}`}
             disabled={disabled}
@@ -72,12 +84,15 @@ export function SearchHistoryInput({
             onClick={() => setOpen(true)}
             onChange={(event) => {
               const value = event.currentTarget.value;
+              lastEditedQuery.current = normalizeQuery(value);
+              setDraft(value);
               onQueryChange(value);
               setActive(null);
               setOpen(true);
             }}
             onBlur={(event) => {
-              setHistory(rememberSearch(kind, event.currentTarget.value));
+              setHistory(rememberSearch(kind, normalizeQuery(event.currentTarget.value)));
+              setDraft(null);
               setOpen(false);
               setActive(null);
             }}

@@ -1,8 +1,10 @@
 import { AdvancedSearchDialog } from "./AdvancedSearchDialog";
 import {
   defaultAdvancedSearch,
-  searchPatternError,
+  advancedSearchErrors,
   searchLines,
+  searchQueryToMultiline,
+  searchQueryToSingleLine,
   type AdvancedSearchOptions,
 } from "../../../core/editor/textSearch";
 import { ChevronLeft, ChevronRight, ChevronsUpDown, SlidersHorizontal } from "lucide-react";
@@ -81,12 +83,13 @@ export function PanelSearch({
 }: PanelSearchProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const advancedActive =
-    advanced.minDuration !== "" ||
-    advanced.maxDuration !== "" ||
+    Boolean(advanced.minDuration.trim()) ||
+    Boolean(advanced.maxDuration.trim()) ||
     (mode === "semantic"
-      ? Boolean(advanced.negativePrompts.trim()) || searchLines(query).length > 1
-      : advanced.caseSensitive || Boolean(advanced.excludedText.trim()) || rule === "equals");
-  const patternError = mode !== "semantic" ? searchPatternError(query, rule) : null;
+      ? Boolean(advanced.negativePrompts.trim())
+      : advanced.caseSensitive || Boolean(advanced.excludedText.trim()));
+  const errors = advancedSearchErrors(query, mode, rule, advanced);
+  const patternError = [...new Set(Object.values(errors))].join("；");
   const [menu, setMenu] = useState<{
     kind: "mode" | "scope" | "rule";
     x: number;
@@ -164,14 +167,16 @@ export function PanelSearch({
   return (
     <div className="panel-search-row">
       <SearchHistoryInput
+        invalid={Boolean(errors.query)}
         label={label}
         kind={historyKind}
-        query={mode === "semantic" ? query.split(/\r?\n/)[0] : query}
+        query={searchQueryToSingleLine(query, mode)}
+        normalizeQuery={(value) => searchQueryToSingleLine(value, mode)}
         onQueryChange={(value) =>
           onQueryChange(
-            mode === "semantic" && value.trim() && query.includes("\n")
-              ? [value, ...query.split(/\r?\n/).slice(1)].join("\n")
-              : value,
+            mode === "semantic"
+              ? searchQueryToMultiline(value, mode)
+              : searchQueryToSingleLine(value, mode),
           )
         }
         disabled={disabled}
@@ -314,7 +319,7 @@ export function PanelSearch({
           <AdvancedSearchDialog
             label={label}
             initial={{
-              query,
+              query: searchQueryToMultiline(query, mode),
               mode,
               rule,
               scope,
@@ -329,7 +334,9 @@ export function PanelSearch({
               if (draft.scope !== undefined) onScopeChange?.(draft.scope);
               semantic?.onThresholdChange(draft.threshold);
               onQueryChange(
-                draft.mode === "semantic" ? searchLines(draft.query).join("\n") : draft.query,
+                draft.mode === "semantic"
+                  ? searchLines(searchQueryToMultiline(draft.query, draft.mode)).join("\n")
+                  : searchQueryToSingleLine(draft.query, draft.mode),
               );
               onAdvancedChange(draft.options);
               setAdvancedOpen(false);

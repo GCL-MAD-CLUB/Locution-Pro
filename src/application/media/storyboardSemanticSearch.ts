@@ -1,5 +1,9 @@
 import { searchSemanticPrompts } from "../../core/editor/semanticPrompts";
-import { searchLines } from "../../core/editor/textSearch";
+import {
+  searchLines,
+  searchQueryToMultiline,
+  semanticPromptErrors,
+} from "../../core/editor/textSearch";
 import { Channel } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invokeCommand, runOperation } from "../../errors";
@@ -186,7 +190,10 @@ export function useStoryboardSemanticSearch(
   const indexKey = useMemo(() => JSON.stringify([scope, shots]), [scope, shots]);
   const requestKey = useMemo(
     () =>
-      enabled && query.trim() && shots.length
+      enabled &&
+      query.trim() &&
+      shots.length &&
+      !Object.keys(semanticPromptErrors(query, negativePrompts)).length
         ? JSON.stringify([indexKey, query, negativePrompts])
         : "",
     [enabled, query, negativePrompts, indexKey, shots.length],
@@ -289,7 +296,7 @@ export function useStoryboardSemanticSearch(
             }
             if (!mounted.current || latest.current.requestKey !== current.requestKey) return null;
             return searchSemanticPrompts(
-              searchLines(current.query),
+              searchLines(searchQueryToMultiline(current.query, "semantic")),
               searchLines(current.negativePrompts),
               (query) =>
                 invokeCommand<SemanticMatch[]>("search_storyboards_semantic", {
@@ -297,6 +304,11 @@ export function useStoryboardSemanticSearch(
                   shots: current.shots,
                 }),
               () => mounted.current && latest.current.requestKey === current.requestKey,
+              (queries) =>
+                invokeCommand<SemanticMatch[][]>("search_storyboards_semantic_batch", {
+                  queries,
+                  shots: current.shots,
+                }),
             );
           });
           if (!mounted.current || latest.current.requestKey !== current.requestKey) return;

@@ -55,7 +55,24 @@ export function searchLines(value: string) {
   ];
 }
 
+export function searchQueryToMultiline(query: string, mode: SearchMode) {
+  return mode === "semantic"
+    ? query
+        .split(/[|\r\n\u2028\u2029]+/u)
+        .map((prompt) => prompt.trim())
+        .filter(Boolean)
+        .join("\n")
+    : query.trim().replace(/\s+/gu, "\n");
+}
+
+export function searchQueryToSingleLine(query: string, mode: SearchMode) {
+  return mode === "semantic"
+    ? searchQueryToMultiline(query, mode).split("\n").join("|")
+    : query.trim().replace(/\s+/gu, " ");
+}
+
 export function searchPatternError(query: string, rule: SearchRule): string | null {
+  query = searchQueryToSingleLine(query, "filter");
   if (rule !== "regex" || !query.trim()) return null;
   try {
     new RegExp(query.trim(), "u");
@@ -65,6 +82,90 @@ export function searchPatternError(query: string, rule: SearchRule): string | nu
   }
 }
 
+export const MAX_SEMANTIC_PROMPTS = 10;
+export const MAX_PROMPT_CHARACTERS = 1000;
+
+/** ASCII counts as one character; other Unicode code points count as two. */
+export function promptCharacterCount(value: string) {
+  return Array.from(value).reduce(
+    (count, character) => count + (character.codePointAt(0)! <= 0x7f ? 1 : 2),
+    0,
+  );
+}
+
+export type AdvancedSearchErrors = Partial<
+  Record<"query" | "negativePrompts" | "minDuration" | "maxDuration", string>
+>;
+
+function promptItems(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Semantic prompt limits and role conflicts. Independent of rule and duration
+ * options, so dispatching a semantic request only needs the prompts themselves.
+ */
+export function semanticPromptErrors(query: string, negativePrompts: string): AdvancedSearchErrors {
+  const errors: AdvancedSearchErrors = {};
+  const positive = promptItems(searchQueryToMultiline(query, "semantic"));
+  const negative = promptItems(negativePrompts);
+  for (const [field, label, prompts] of [
+    ["query", "正向描述", positive],
+    ["negativePrompts", "反向描述", negative],
+  ] as const) {
+    if (prompts.length > MAX_SEMANTIC_PROMPTS)
+      errors[field] = `${label}最多 ${MAX_SEMANTIC_PROMPTS} 项。`;
+    else {
+      const index = prompts.findIndex(
+        (prompt) => promptCharacterCount(prompt) > MAX_PROMPT_CHARACTERS,
+      );
+      if (index >= 0)
+        errors[field] =
+          `${label}第 ${index + 1} 项超过 ${MAX_PROMPT_CHARACTERS} 字符（中文计 2）。`;
+    }
+  }
+  if (positive.some((prompt) => negative.includes(prompt))) {
+    errors.query ??= "正向与反向描述有重复项。";
+    errors.negativePrompts ??= "正向与反向描述有重复项。";
+  }
+  if (!positive.length && negative.length) errors.query = "请至少填写一条正向描述。";
+  return errors;
+}
+
+export function advancedSearchErrors(
+  query: string,
+  mode: SearchMode,
+  rule: SearchRule,
+  options: AdvancedSearchOptions,
+): AdvancedSearchErrors {
+  const errors: AdvancedSearchErrors = {};
+  if (mode === "semantic") {
+    Object.assign(errors, semanticPromptErrors(query, options.negativePrompts));
+  } else {
+    const error = searchPatternError(query, rule);
+    if (error) errors.query = error;
+  }
+  for (const field of ["minDuration", "maxDuration"] as const) {
+    const value = options[field].trim();
+    const label = `${field === "minDuration" ? "最短" : "最长"}时长`;
+    if (value && !Number.isFinite(Number(value))) errors[field] = `${label}必须为数字。`;
+    else if (value && Number(value) < 0) errors[field] = `${label}必须为非负数。`;
+  }
+  if (
+    !errors.minDuration &&
+    !errors.maxDuration &&
+    options.minDuration.trim() &&
+    options.maxDuration.trim() &&
+    Number(options.minDuration) > Number(options.maxDuration)
+  ) {
+    errors.minDuration = errors.maxDuration = "最短时长不能大于最长时长。";
+  }
+  return errors;
+}
+
 export function matchesSearchDuration(
   startUs: number,
   endUs: number,
@@ -72,8 +173,8 @@ export function matchesSearchDuration(
 ) {
   const seconds = Math.max(0, endUs - startUs) / 1_000_000;
   return (
-    (!options.minDuration || seconds >= Number(options.minDuration)) &&
-    (!options.maxDuration || seconds <= Number(options.maxDuration))
+    (!options.minDuration.trim() || seconds >= Number(options.minDuration)) &&
+    (!options.maxDuration.trim() || seconds <= Number(options.maxDuration))
   );
 }
 
@@ -83,6 +184,7 @@ export function matchesTextSearch(
   rule: SearchRule,
   options: Pick<AdvancedSearchOptions, "caseSensitive" | "excludedText"> = defaultAdvancedSearch,
 ) {
+  query = searchQueryToSingleLine(query, "filter");
   const normalize = (value: string) =>
     options.caseSensitive ? value.trim() : value.trim().toLocaleLowerCase();
   const populated = values.map(normalize).filter(Boolean);
@@ -134,6 +236,7 @@ export function textSearchRanges(
   fields: readonly SearchRange[] = [{ start: 0, end: text.length }],
   options: Pick<AdvancedSearchOptions, "caseSensitive"> = defaultAdvancedSearch,
 ): SearchRange[] {
+  query = searchQueryToSingleLine(query, "highlight");
   if (!query.trim() || !canHighlightSearchRule(rule)) return [];
   const ranges: SearchRange[] = [];
   if (rule === "regex" || rule === "equals") {

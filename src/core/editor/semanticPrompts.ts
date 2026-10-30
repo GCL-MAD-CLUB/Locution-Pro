@@ -1,3 +1,5 @@
+import { clientError } from "../../errors/model";
+
 export interface PromptMatch {
   id: string;
   similarity: number;
@@ -30,17 +32,42 @@ export function combinePromptMatches<T extends PromptMatch>(
   }));
 }
 
-/** Sequential requests share the native model; stale work stops before the next prompt. */
+/**
+ * Batch requests share one native model and index read; stale results are discarded.
+ * Prompts are deduplicated across both lists so a description repeated as positive and
+ * negative is only sent to the model once.
+ */
 export async function searchSemanticPrompts<T extends PromptMatch>(
   positive: readonly string[],
   negative: readonly string[],
   search: (prompt: string) => Promise<T[]>,
   isCurrent: () => boolean,
+  searchBatch?: (prompts: readonly string[]) => Promise<T[][]>,
 ) {
-  const results: T[][] = [];
-  for (const prompt of [...positive, ...negative]) {
+  const positivePrompts = [...new Set(positive)];
+  const negativePrompts = [...new Set(negative)];
+  const positiveSet = new Set(positivePrompts);
+  const prompts = [
+    ...positivePrompts,
+    ...negativePrompts.filter((prompt) => !positiveSet.has(prompt)),
+  ];
+  const results = new Map<string, T[]>();
+  if (!isCurrent()) return [];
+  if (prompts.length > 1 && searchBatch) {
+    const batches = await searchBatch(prompts);
     if (!isCurrent()) return [];
-    results.push(await search(prompt));
+    if (batches.length !== prompts.length)
+      throw clientError("UNEXPECTED_ERROR", "Incomplete semantic prompt batch");
+    prompts.forEach((prompt, index) => results.set(prompt, batches[index]));
+  } else {
+    for (const prompt of prompts) {
+      if (!isCurrent()) return [];
+      results.set(prompt, await search(prompt));
+    }
   }
-  return combinePromptMatches(results.slice(0, positive.length), results.slice(positive.length));
+  if (!isCurrent()) return [];
+  return combinePromptMatches(
+    positivePrompts.map((prompt) => results.get(prompt) ?? []),
+    negativePrompts.map((prompt) => results.get(prompt) ?? []),
+  );
 }

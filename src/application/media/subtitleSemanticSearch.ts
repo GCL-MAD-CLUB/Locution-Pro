@@ -1,5 +1,9 @@
 import { searchSemanticPrompts } from "../../core/editor/semanticPrompts";
-import { searchLines } from "../../core/editor/textSearch";
+import {
+  searchLines,
+  searchQueryToMultiline,
+  semanticPromptErrors,
+} from "../../core/editor/textSearch";
 import { Channel } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { invokeCommand, runOperation } from "../../errors";
@@ -139,7 +143,10 @@ export function useSubtitleSemanticSearch(
   const indexKey = useMemo(() => JSON.stringify([scope, subtitles]), [scope, subtitles]);
   const requestKey = useMemo(
     () =>
-      enabled && query.trim() && subtitles.length
+      enabled &&
+      query.trim() &&
+      subtitles.length &&
+      !Object.keys(semanticPromptErrors(query, negativePrompts)).length
         ? JSON.stringify([indexKey, query, negativePrompts])
         : "",
     [enabled, query, negativePrompts, indexKey, subtitles.length],
@@ -236,7 +243,7 @@ export function useSubtitleSemanticSearch(
             return;
           const outcome = await runOperation("subtitle.semanticSearch", () =>
             searchSemanticPrompts(
-              searchLines(current.query),
+              searchLines(searchQueryToMultiline(current.query, "semantic")),
               searchLines(current.negativePrompts),
               (query) =>
                 invokeCommand<SemanticMatch[]>("search_subtitles_semantic", {
@@ -244,6 +251,11 @@ export function useSubtitleSemanticSearch(
                   subtitles: current.subtitles,
                 }),
               () => mounted.current && latest.current.requestKey === current.requestKey,
+              (queries) =>
+                invokeCommand<SemanticMatch[][]>("search_subtitles_semantic_batch", {
+                  queries,
+                  subtitles: current.subtitles,
+                }),
             ),
           );
           if (!mounted.current || latest.current.requestKey !== current.requestKey) return;

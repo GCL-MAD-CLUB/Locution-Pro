@@ -68,9 +68,11 @@
 
 .advanced-search-body textarea {
   height: 64px;
-  min-height: 0;
+  min-height: 64px;
+  max-height: 90px;
   padding: 4px 4px;
-  resize: vertical;
+  resize: none;
+  overflow-y: hidden;
   line-height: 16px;
 }
 
@@ -162,6 +164,12 @@
   margin-left: 88px;
   color: var(--color-danger);
   font-size: 11px;
+}
+.advanced-search-body input[aria-invalid="true"],
+.advanced-search-body textarea[aria-invalid="true"],
+.advanced-search-body input[aria-invalid="true"]:focus,
+.advanced-search-body textarea[aria-invalid="true"]:focus {
+  border-bottom-color: var(--color-danger);
 }
 .advanced-search-reset {
   margin-right: auto;

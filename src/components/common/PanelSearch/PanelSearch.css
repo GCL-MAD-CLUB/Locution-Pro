@@ -40,6 +40,10 @@
   border-radius: 0;
 }
 
+.panel-search-input input[aria-invalid="true"] {
+  border-bottom-color: var(--color-danger);
+}
+
 .panel-search-separator {
   flex: 0 0 1px;
   width: 1px;

@@ -1,8 +1,8 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
   canHighlightSearchRule,
   defaultAdvancedSearch,
-  searchPatternError,
+  advancedSearchErrors,
   type AdvancedSearchOptions,
   type SearchMode,
   type SearchRule,
@@ -39,6 +39,31 @@ export function AdvancedSearchDialog({
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const fieldId = useId();
   const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const inputs = Array.from(ref.current?.querySelectorAll("textarea") ?? []);
+    function resize(input: HTMLTextAreaElement) {
+      const style = getComputedStyle(input);
+      const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+      input.style.overflowY = "hidden";
+      input.style.height = "0px";
+      input.style.height = `${Math.min(parseFloat(style.maxHeight), Math.max(parseFloat(style.minHeight), input.scrollHeight + border))}px`;
+      input.style.overflowY = input.scrollHeight > input.clientHeight ? "auto" : "hidden";
+    }
+    const widths = new Map(inputs.map((input) => [input, input.getBoundingClientRect().width]));
+    inputs.forEach(resize);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const input = entry.target as HTMLTextAreaElement;
+        const width = input.getBoundingClientRect().width;
+        if (widths.get(input) !== width) {
+          widths.set(input, width);
+          resize(input);
+        }
+      }
+    });
+    inputs.forEach((input) => observer.observe(input));
+    return () => observer.disconnect();
+  }, [draft.query, draft.options.negativePrompts, draft.options.excludedText, draft.mode]);
   useEffect(() => {
     const previous = document.activeElement;
     ref.current?.querySelector<HTMLTextAreaElement>("textarea:not(:disabled)")?.focus();
@@ -49,21 +74,14 @@ export function AdvancedSearchDialog({
   const update = (options: Partial<AdvancedSearchOptions>) =>
     setDraft((value) => ({ ...value, options: { ...value.options, ...options } }));
   const semantic = draft.mode === "semantic";
-  const error =
-    (!semantic && searchPatternError(draft.query, draft.rule)) ||
-    ([draft.options.minDuration, draft.options.maxDuration].some(
-      (value) => value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0),
-    )
-      ? "时长须为非负数。"
-      : null) ||
-    (draft.options.minDuration !== "" &&
-    draft.options.maxDuration !== "" &&
-    Number(draft.options.minDuration) > Number(draft.options.maxDuration)
-      ? "最短时长不能大于最长时长。"
-      : null) ||
-    (semantic && !draft.query.trim() && draft.options.negativePrompts.trim()
-      ? "请至少填写一条正向描述。"
-      : null);
+  const errors = advancedSearchErrors(draft.query, draft.mode, draft.rule, draft.options);
+  const error = [...new Set(Object.values(errors))].join("；");
+  function validation(field: keyof typeof errors) {
+    return {
+      "aria-invalid": Boolean(errors[field]),
+      "aria-describedby": errors[field] ? `${fieldId}-error` : undefined,
+    };
+  }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     event.stopPropagation();
@@ -186,14 +204,14 @@ export function AdvancedSearchDialog({
               ...(semanticAvailable ? [[["semantic", "语义"]] as const] : []),
             ],
             (mode) =>
-              setDraft({
-                ...draft,
+              setDraft((current) => ({
+                ...current,
                 mode,
                 rule:
-                  mode === "highlight" && !canHighlightSearchRule(draft.rule)
+                  mode === "highlight" && !canHighlightSearchRule(current.rule)
                     ? "contains"
-                    : draft.rule,
-              }),
+                    : current.rule,
+              })),
           )}
         </div>
         {!semantic && draft.scope !== undefined && (
@@ -231,6 +249,7 @@ export function AdvancedSearchDialog({
           <label htmlFor={`${fieldId}-query`}>{semantic ? "正向描述" : "搜索内容"}</label>
           <textarea
             id={`${fieldId}-query`}
+            {...validation("query")}
             aria-label={semantic ? "正向描述" : "搜索内容"}
             rows={3}
             value={draft.query}
@@ -248,6 +267,7 @@ export function AdvancedSearchDialog({
               <label htmlFor={`${fieldId}-negative`}>反向描述</label>
               <textarea
                 id={`${fieldId}-negative`}
+                {...validation("negativePrompts")}
                 rows={3}
                 value={draft.options.negativePrompts}
                 placeholder="每行一条，可留空"
@@ -283,9 +303,9 @@ export function AdvancedSearchDialog({
           <div className="advanced-search-range">
             <input
               aria-label="最短时长"
-              type="number"
-              min={0}
-              step="any"
+              {...validation("minDuration")}
+              type="text"
+              inputMode="decimal"
               value={draft.options.minDuration}
               placeholder="最短"
               onChange={(event) => update({ minDuration: event.target.value })}
@@ -293,9 +313,9 @@ export function AdvancedSearchDialog({
             <span>—</span>
             <input
               aria-label="最长时长"
-              type="number"
-              min={0}
-              step="any"
+              {...validation("maxDuration")}
+              type="text"
+              inputMode="decimal"
               value={draft.options.maxDuration}
               placeholder="最长"
               onChange={(event) => update({ maxDuration: event.target.value })}
@@ -303,7 +323,7 @@ export function AdvancedSearchDialog({
           </div>
         </div>
         {error && (
-          <div className="advanced-search-error" role="alert">
+          <div id={`${fieldId}-error`} className="advanced-search-error" role="alert">
             {error}
           </div>
         )}

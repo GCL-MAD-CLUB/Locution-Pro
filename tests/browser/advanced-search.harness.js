@@ -73,6 +73,7 @@ export function mountAdvancedSearchWithPanelState(label) {
       onNavigate: () => {},
       semantic: {
         threshold: state.semanticThreshold,
+        thresholdDecimals: label === "分镜" ? 3 : 2,
         available: true,
         onThresholdChange: state.setSemanticThreshold,
       },

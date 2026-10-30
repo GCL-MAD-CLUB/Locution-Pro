@@ -1,7 +1,7 @@
 import { AdvancedSearchDialog } from "./AdvancedSearchDialog";
 import {
   defaultAdvancedSearch,
-  advancedSearchErrors,
+  defaultSemanticThreshold,
   searchLines,
   searchQueryToMultiline,
   searchQueryToSingleLine,
@@ -25,7 +25,12 @@ import {
 } from "../PopupMenu";
 import "./PanelSearch.css";
 import { SearchHistoryInput } from "./SearchHistoryInput";
-import type { SearchHistoryKind } from "./searchHistory";
+import {
+  hasAdvancedSearch,
+  rememberSearch,
+  type SearchConfiguration,
+  type SearchHistoryKind,
+} from "./searchHistory";
 import { searchRuleGroups, searchRuleLabels as ruleLabels } from "./searchRules";
 
 const scopeLabels = { any: "任何可搜索的字段", title: "标题", keywords: "关键字" };
@@ -82,14 +87,30 @@ export function PanelSearch({
   semantic,
 }: PanelSearchProps) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const advancedActive =
-    Boolean(advanced.minDuration.trim()) ||
-    Boolean(advanced.maxDuration.trim()) ||
-    (mode === "semantic"
-      ? Boolean(advanced.negativePrompts.trim())
-      : advanced.caseSensitive || Boolean(advanced.excludedText.trim()));
-  const errors = advancedSearchErrors(query, mode, rule, advanced);
-  const patternError = [...new Set(Object.values(errors))].join("；");
+  const configuration: SearchConfiguration = {
+    query,
+    mode,
+    rule,
+    scope,
+    threshold: semantic?.threshold ?? defaultSemanticThreshold[historyKind],
+    options: advanced,
+  };
+  const advancedActive = hasAdvancedSearch(configuration);
+  function recordConfiguration(next: SearchConfiguration) {
+    rememberSearch(historyKind, next);
+  }
+  function applyConfiguration(next: SearchConfiguration) {
+    onModeChange(next.mode);
+    onRuleChange(next.rule);
+    if (next.scope !== undefined) onScopeChange?.(next.scope);
+    semantic?.onThresholdChange(next.threshold);
+    onQueryChange(next.query);
+    onAdvancedChange({ ...next.options });
+  }
+  function changeThreshold(value: number) {
+    semantic?.onThresholdChange(value);
+    recordConfiguration({ ...configuration, threshold: value });
+  }
   const [menu, setMenu] = useState<{
     kind: "mode" | "scope" | "rule";
     x: number;
@@ -107,7 +128,7 @@ export function PanelSearch({
     if (thresholdDraft !== null && thresholdDraft.trim()) {
       const value = Number(thresholdDraft);
       if (Number.isFinite(value))
-        semantic.onThresholdChange(
+        changeThreshold(
           Math.round(Math.min(1, Math.max(0, value)) * thresholdScale) / thresholdScale,
         );
     }
@@ -167,18 +188,20 @@ export function PanelSearch({
   return (
     <div className="panel-search-row">
       <SearchHistoryInput
-        invalid={Boolean(errors.query)}
         label={label}
         kind={historyKind}
+        configuration={configuration}
+        onConfigurationSelect={applyConfiguration}
         query={searchQueryToSingleLine(query, mode)}
         normalizeQuery={(value) => searchQueryToSingleLine(value, mode)}
-        onQueryChange={(value) =>
-          onQueryChange(
+        onQueryChange={(value) => {
+          const nextQuery =
             mode === "semantic"
               ? searchQueryToMultiline(value, mode)
-              : searchQueryToSingleLine(value, mode),
-          )
-        }
+              : searchQueryToSingleLine(value, mode);
+          onQueryChange(nextQuery);
+          if (!nextQuery) onAdvancedChange({ ...defaultAdvancedSearch });
+        }}
         disabled={disabled}
       />
       <span className="panel-search-separator" aria-hidden="true" />
@@ -212,7 +235,7 @@ export function PanelSearch({
             aria-label="调整语义匹配度阈值"
             onChange={(event) => {
               setThresholdDraft(null);
-              semantic.onThresholdChange(Number(event.currentTarget.value));
+              changeThreshold(Number(event.currentTarget.value));
             }}
           />
           <input
@@ -309,11 +332,6 @@ export function PanelSearch({
           {dropdown("rule", "规则", ruleLabels[rule])}
         </>
       )}
-      {patternError && (
-        <span className="panel-search-validation" role="alert">
-          {patternError}
-        </span>
-      )}
       {advancedOpen &&
         createPortal(
           <AdvancedSearchDialog
@@ -323,22 +341,22 @@ export function PanelSearch({
               mode,
               rule,
               scope,
-              threshold: semantic?.threshold ?? 0,
+              threshold: semantic?.threshold ?? defaultSemanticThreshold[historyKind],
               options: advanced,
             }}
             semanticAvailable={Boolean(semantic)}
+            defaultThreshold={defaultSemanticThreshold[historyKind]}
             onClose={() => setAdvancedOpen(false)}
             onApply={(draft) => {
-              onModeChange(draft.mode);
-              onRuleChange(draft.rule);
-              if (draft.scope !== undefined) onScopeChange?.(draft.scope);
-              semantic?.onThresholdChange(draft.threshold);
-              onQueryChange(
-                draft.mode === "semantic"
-                  ? searchLines(searchQueryToMultiline(draft.query, draft.mode)).join("\n")
-                  : searchQueryToSingleLine(draft.query, draft.mode),
-              );
-              onAdvancedChange(draft.options);
+              const next = {
+                ...draft,
+                query:
+                  draft.mode === "semantic"
+                    ? searchLines(searchQueryToMultiline(draft.query, draft.mode)).join("\n")
+                    : searchQueryToSingleLine(draft.query, draft.mode),
+              };
+              recordConfiguration(next);
+              applyConfiguration(next);
               setAdvancedOpen(false);
             }}
           />,
@@ -363,6 +381,14 @@ export function PanelSearch({
                       checked={mode === value}
                       onSelect={() => {
                         onModeChange(value);
+                        recordConfiguration({
+                          ...configuration,
+                          mode: value,
+                          rule:
+                            value === "highlight" && !canHighlightSearchRule(rule)
+                              ? "contains"
+                              : rule,
+                        });
                         setMenu(null);
                       }}
                     >
@@ -377,6 +403,7 @@ export function PanelSearch({
                         checked={scope === value}
                         onSelect={() => {
                           onScopeChange?.(value);
+                          recordConfiguration({ ...configuration, scope: value });
                           setMenu(null);
                         }}
                       >
@@ -395,6 +422,7 @@ export function PanelSearch({
                           disabled={mode === "highlight" && !canHighlightSearchRule(value)}
                           onSelect={() => {
                             onRuleChange(value);
+                            recordConfiguration({ ...configuration, rule: value });
                             setMenu(null);
                           }}
                         >

@@ -1,4 +1,8 @@
-import { defaultAdvancedSearch, type AdvancedSearchOptions } from "../../../core/editor/textSearch";
+import {
+  defaultAdvancedSearch,
+  defaultSemanticThreshold,
+  type AdvancedSearchOptions,
+} from "../../../core/editor/textSearch";
 import { useLayoutEffect, useMemo } from "react";
 import { panelSessionForContext } from "../../../core/editor/panelSourceSelection";
 import { scopedSubtitles } from "../../../core/editor/multiSource";
@@ -81,7 +85,7 @@ function defaultTrackSessionState(): SubtitleTrackSessionState {
     advancedSearch: { ...defaultAdvancedSearch },
     searchMode: "filter",
     searchRule: "contains",
-    semanticThreshold: 0,
+    semanticThreshold: defaultSemanticThreshold.subtitle,
     showOnlySelected: false,
     minimumRating: 0,
     ratingComparator: "gte",
@@ -157,7 +161,11 @@ const useSubtitlePanelUiState = createPanelState<SubtitlePanelUiState>(() => (se
   setQuery: (query) => set({ query }),
   setAdvancedSearch: (advancedSearch) => set({ advancedSearch }),
   setSemanticThreshold: (value) =>
-    set({ semanticThreshold: Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0 }),
+    set({
+      semanticThreshold: Number.isFinite(value)
+        ? Math.min(1, Math.max(0, value))
+        : defaultSemanticThreshold.subtitle,
+    }),
   setSearchMode: (searchMode) =>
     set((state) => ({
       searchMode,

@@ -7,6 +7,23 @@
   padding: 6px 12px 8px;
 }
 
+.panel-search-history-menu .select-dropdown-option-label {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.panel-search-history-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-search-history-advanced {
+  flex: none;
+  color: #4096f3;
+}
+
 .panel-search-input {
   position: relative;
   display: block;
@@ -38,10 +55,6 @@
   background: #0e0e0e;
   border: 1px solid #373737;
   border-radius: 0;
-}
-
-.panel-search-input input[aria-invalid="true"] {
-  border-bottom-color: var(--color-danger);
 }
 
 .panel-search-separator {

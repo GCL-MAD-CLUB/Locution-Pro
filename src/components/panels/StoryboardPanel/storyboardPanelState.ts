@@ -1,4 +1,8 @@
-import { defaultAdvancedSearch, type AdvancedSearchOptions } from "../../../core/editor/textSearch";
+import {
+  defaultAdvancedSearch,
+  defaultSemanticThreshold,
+  type AdvancedSearchOptions,
+} from "../../../core/editor/textSearch";
 import {
   scopedStoryboard,
   sourceContexts,
@@ -197,7 +201,7 @@ function defaultVideoSessionState(): StoryboardVideoSessionState {
     query: "",
     advancedSearch: { ...defaultAdvancedSearch },
     searchMode: "filter",
-    semanticThreshold: 0,
+    semanticThreshold: defaultSemanticThreshold.storyboard,
     searchScope: "any",
     searchRule: "contains",
     showOnlySelected: false,
@@ -382,7 +386,11 @@ const useStoryboardPanelUiState = createPanelState<StoryboardPanelUiState>(() =>
   setQuery: (query) => set({ query }),
   setAdvancedSearch: (advancedSearch) => set({ advancedSearch }),
   setSemanticThreshold: (value) =>
-    set({ semanticThreshold: Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0 }),
+    set({
+      semanticThreshold: Number.isFinite(value)
+        ? Math.min(1, Math.max(0, value))
+        : defaultSemanticThreshold.storyboard,
+    }),
   setSearchMode: (searchMode) =>
     set((state) => ({
       searchMode,

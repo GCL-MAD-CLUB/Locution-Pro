@@ -1,4 +1,5 @@
 export type SearchMode = "filter" | "highlight" | "semantic";
+export const defaultSemanticThreshold = { subtitle: 0.01, storyboard: 0.001 } as const;
 export type SearchRule =
   | "contains"
   | "containsAll"

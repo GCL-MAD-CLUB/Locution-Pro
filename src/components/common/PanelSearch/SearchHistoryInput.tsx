@@ -3,26 +3,32 @@ import { useEffect, useId, useRef, useState } from "react";
 import { SelectDropdown, selectDropdownItems } from "../SelectDropdown";
 import {
   filterSearchHistory,
+  hasAdvancedSearch,
   readSearchHistory,
   rememberSearch,
+  searchHistorySpace,
+  type SearchConfiguration,
+  type SearchHistoryEntry,
   type SearchHistoryKind,
 } from "./searchHistory";
 
 export function SearchHistoryInput({
   label,
   kind,
+  configuration,
+  onConfigurationSelect,
   query,
   disabled,
   onQueryChange,
-  invalid = false,
   normalizeQuery = (value) => value,
 }: {
   label: string;
   kind: SearchHistoryKind;
+  configuration: SearchConfiguration;
+  onConfigurationSelect: (configuration: SearchConfiguration) => void;
   query: string;
   disabled: boolean;
   onQueryChange: (query: string) => void;
-  invalid?: boolean;
   normalizeQuery?: (value: string) => string;
 }) {
   const listId = useId();
@@ -31,17 +37,26 @@ export function SearchHistoryInput({
   useEffect(() => {
     if (query !== lastEditedQuery.current) setDraft(null);
   }, [query]);
-  const [history, setHistory] = useState<string[]>([]);
+  const space = searchHistorySpace(configuration.mode);
+  const [history, setHistory] = useState<SearchHistoryEntry[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const suggestions = filterSearchHistory(history, query);
   const visible = open && !disabled && suggestions.length > 0;
-  const activeIndex = suggestions.findIndex((entry) => entry === active);
+  const activeIndex = suggestions.findIndex((entry) => entry.text === active);
+
+  useEffect(() => {
+    setHistory(readSearchHistory(kind, space));
+    setActive(null);
+  }, [kind, space]);
 
   function select(value: string) {
+    const entry = suggestions.find((entry) => entry.text === value);
+    if (!entry) return;
     setDraft(null);
     lastEditedQuery.current = null;
-    onQueryChange(value);
+    setHistory(rememberSearch(kind, entry.configuration));
+    onConfigurationSelect(entry.configuration);
     setActive(null);
     setOpen(false);
   }
@@ -54,16 +69,29 @@ export function SearchHistoryInput({
       open={visible}
       onOpenChange={setOpen}
       showCheck={false}
+      menuClassName="panel-search-history-menu"
       disabled={disabled}
       placement="bottom"
       value={active ?? ""}
-      items={selectDropdownItems(suggestions.map((entry) => [entry, entry] as const))}
+      items={selectDropdownItems(suggestions.map((entry) => [entry.text, entry.text] as const))}
+      renderOptionLabel={(item) => {
+        const entry = suggestions.find((entry) => entry.text === item.value);
+        return (
+          <>
+            <span className="panel-search-history-text">{item.label}</span>
+            {entry && hasAdvancedSearch(entry.configuration) && (
+              <span className="panel-search-history-advanced" aria-hidden="true">
+                *
+              </span>
+            )}
+          </>
+        );
+      }}
       onChange={select}
       triggerElement={
         <>
           <Search aria-hidden="true" />
           <input
-            aria-invalid={invalid}
             value={draft ?? query}
             placeholder={`搜索${label}`}
             aria-label={`搜索${label}`}
@@ -77,7 +105,7 @@ export function SearchHistoryInput({
               visible && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined
             }
             onFocus={() => {
-              setHistory(readSearchHistory(kind));
+              setHistory(readSearchHistory(kind, space));
               setActive(null);
               setOpen(true);
             }}
@@ -90,8 +118,8 @@ export function SearchHistoryInput({
               setActive(null);
               setOpen(true);
             }}
-            onBlur={(event) => {
-              setHistory(rememberSearch(kind, normalizeQuery(event.currentTarget.value)));
+            onBlur={() => {
+              setHistory(rememberSearch(kind, configuration));
               setDraft(null);
               setOpen(false);
               setActive(null);
@@ -109,12 +137,12 @@ export function SearchHistoryInput({
                       : suggestions.length - 1
                     : (activeIndex + (event.key === "ArrowDown" ? 1 : -1) + suggestions.length) %
                       suggestions.length;
-                setActive(suggestions[next]);
+                setActive(suggestions[next].text);
                 setOpen(true);
               } else if (event.key === "Enter") {
                 event.preventDefault();
                 event.stopPropagation();
-                if (visible && activeIndex >= 0) select(suggestions[activeIndex]);
+                if (visible && activeIndex >= 0) select(suggestions[activeIndex].text);
                 else {
                   setOpen(false);
                   setActive(null);

@@ -26,12 +26,14 @@ export function AdvancedSearchDialog({
   label,
   initial,
   semanticAvailable,
+  defaultThreshold,
   onApply,
   onClose,
 }: {
   label: string;
   initial: AdvancedSearchDraft;
   semanticAvailable: boolean;
+  defaultThreshold: number;
   onApply: (value: AdvancedSearchDraft) => void;
   onClose: () => void;
 }) {
@@ -170,7 +172,7 @@ export function AdvancedSearchDialog({
                   mode: "filter",
                   rule: "contains",
                   scope: initial.scope === undefined ? undefined : "any",
-                  threshold: 0,
+                  threshold: defaultThreshold,
                   options: { ...defaultAdvancedSearch },
                 });
               }}

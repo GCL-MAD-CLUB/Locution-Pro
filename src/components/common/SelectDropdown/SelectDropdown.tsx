@@ -38,6 +38,7 @@ interface SelectDropdownProps<T extends string> {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   title?: string;
+  renderOptionLabel?: (item: Extract<SelectDropdownItem<T>, { type: "option" }>) => ReactNode;
   trigger?: ReactNode;
   triggerElement?: ReactNode;
   value: T;
@@ -77,6 +78,7 @@ export function SelectDropdown<T extends string>({
   open: controlledOpen,
   onOpenChange,
   title,
+  renderOptionLabel,
   trigger,
   triggerElement,
   value,
@@ -208,7 +210,7 @@ export function SelectDropdown<T extends string>({
                     ?.focus();
                 }}
               >
-                {item.label}
+                {renderOptionLabel?.(item) ?? item.label}
               </PopupMenuItem>
             ),
           )}
@@ -245,7 +247,9 @@ export function SelectDropdown<T extends string>({
                   {resolvedSelectedValues.has(item.value) ? "✓" : ""}
                 </span>
               )}
-              <span className="select-dropdown-option-label">{item.label}</span>
+              <span className="select-dropdown-option-label">
+                {renderOptionLabel?.(item) ?? item.label}
+              </span>
             </button>
           ),
         )}

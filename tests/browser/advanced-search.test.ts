@@ -1,6 +1,77 @@
 import { test, expect } from "@playwright/test";
 
 for (const label of ["字幕", "分镜"]) {
+  test(`${label}清空搜索同时复位高级条件且报错只在弹窗中显示`, async ({ page }) => {
+    await page.goto("/tests/browser/blank.html");
+    await page.evaluate(async (label) => {
+      const path = "/tests/browser/advanced-search.harness.js";
+      const module = await import(/* @vite-ignore */ path);
+      module.mountAdvancedSearchWithPanelState(label);
+    }, label);
+    const bar = page.getByRole("combobox");
+    const entry = page.getByRole("button", { name: `${label}高级搜索` });
+    const dialog = page.getByRole("dialog");
+    const options = () => page.evaluate(() => (window as any).searchSnapshot.advanced);
+    const defaults = {
+      caseSensitive: false,
+      excludedText: "",
+      negativePrompts: "",
+      minDuration: "",
+      maxDuration: "",
+    };
+    await bar.fill("sunset");
+    await entry.click();
+    await dialog.getByLabel("排除内容", { exact: true }).fill("draft");
+    await dialog.getByLabel("区分大小写", { exact: true }).check();
+    await dialog.getByLabel("最短时长", { exact: true }).fill("1");
+    await dialog.getByLabel("最长时长", { exact: true }).fill("3");
+    await dialog.getByRole("button", { name: "应用", exact: true }).click();
+    await expect(entry).toHaveClass(/active/);
+    await bar.clear();
+    expect(await options()).toEqual(defaults);
+    await expect(entry).not.toHaveClass(/active/);
+    await bar.fill("sunset");
+    await entry.click();
+    await dialog.getByLabel("排除内容", { exact: true }).fill("draft");
+    await dialog.getByLabel("区分大小写", { exact: true }).check();
+    await dialog.getByRole("button", { name: "应用", exact: true }).click();
+    await page.locator(".panel-search-mode").click();
+    await page.getByRole("menuitemcheckbox", { name: "语义", exact: true }).click();
+    await entry.click();
+    await dialog.getByLabel("反向描述", { exact: true }).fill("crowd");
+    await dialog.getByLabel("最短时长", { exact: true }).fill("1");
+    await dialog.getByRole("button", { name: "应用", exact: true }).click();
+    await bar.fill("crowd");
+    await expect(bar).not.toHaveAttribute("aria-invalid");
+    await expect(page.locator(".panel-search-row [role='alert']")).toHaveCount(0);
+    await entry.click();
+    await expect(dialog.getByRole("alert")).toBeVisible();
+    await dialog.getByRole("button", { name: "取消", exact: true }).click();
+    await bar.clear();
+    expect(await options()).toEqual(defaults);
+    await expect(entry).not.toHaveClass(/active/);
+    await expect(bar).not.toHaveAttribute("aria-invalid");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await entry.click();
+    await expect(dialog.getByLabel("反向描述", { exact: true })).toHaveValue("");
+    await expect(dialog.getByLabel("最短时长", { exact: true })).toHaveValue("");
+    await expect(dialog.getByRole("alert")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "取消", exact: true }).click();
+    await page.locator(".panel-search-mode").click();
+    await page.getByRole("menuitemcheckbox", { name: "过滤", exact: true }).click();
+    await page.locator(".panel-search-rule").click();
+    await page.getByRole("menuitemcheckbox", { name: "正则表达式", exact: true }).click();
+    await bar.fill("[");
+    await expect(bar).not.toHaveAttribute("aria-invalid");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await entry.click();
+    await expect(dialog.getByRole("alert")).toBeVisible();
+    await expect(dialog.getByLabel("搜索内容", { exact: true })).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+  });
+
   test(`${label}仅在当前模式使用快捷栏未展示的条件时启用高级入口`, async ({ page }) => {
     await page.goto("/tests/browser/blank.html");
     await page.evaluate(async (label) => {
@@ -80,6 +151,10 @@ for (const label of ["字幕", "分镜"]) {
         .getByRole("menuitemcheckbox", { name: mode, exact: true })
         .click();
       await expect(bar).toHaveValue("保留搜索|内容");
+      if (mode === "语义")
+        await expect(page.getByLabel("语义匹配度阈值，范围 0 到 1", { exact: true })).toHaveValue(
+          label === "字幕" ? "0.01" : "0.001",
+        );
       expect(await page.evaluate(() => (window as any).searchSnapshot.query)).toBe("保留搜索|内容");
     }
     await page.getByRole("button", { name: `${label}高级搜索` }).click();
@@ -421,6 +496,9 @@ for (const label of ["字幕", "分镜"]) {
     await dialog.getByRole("button", { name: "应用", exact: true }).click();
     await expect(entry).not.toHaveClass(/active/);
     expect(await page.evaluate(() => (window as any).searchSnapshot.rule)).toBe("contains");
+    expect(await page.evaluate(() => (window as any).searchSnapshot.threshold)).toBe(
+      label === "字幕" ? 0.01 : 0.001,
+    );
   });
 
   test(`${label}搜索栏与高级搜索双向转换空白和语义分隔符`, async ({ page }) => {
@@ -475,10 +553,11 @@ for (const label of ["字幕", "分镜"]) {
       "a sunny beach\nanother city",
     );
     const history = await page.evaluate(
-      (kind) => JSON.parse(localStorage.getItem(`locution-pro:search-history:${kind}`) ?? "[]"),
+      (kind) =>
+        JSON.parse(localStorage.getItem(`locution-pro:search-history:${kind}:semantic`) ?? "[]"),
       label === "字幕" ? "subtitle" : "storyboard",
     );
-    expect(history[0]).toBe("a sunny beach|another city");
+    expect(history[0].text).toBe("a sunny beach|another city");
     await dialog.getByRole("button", { name: "取消", exact: true }).click();
     await bar.fill("sunset || | city | ");
     await entry.click();

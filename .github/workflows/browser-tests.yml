@@ -9,6 +9,8 @@ on:
       - "package.json"
       - "package-lock.json"
       - "playwright.config.ts"
+      - "tsconfig.json"
+      - "src/**"
       - "tests/browser/**"
       - "tests/tsconfig.json"
   schedule:

@@ -19,9 +19,9 @@
     "npm": ">=11.7.0"
   },
   "scripts": {
-    "test": "npm run test:types && node --test --test-timeout=15000 tests/unit/*.test.mjs",
-    "test:installer": "node tests/integration/installer-components.test.mjs",
-    "test:installer-identity": "node tests/integration/installer-identity.test.mjs",
+    "test": "npm run test:types && npm run test:unit",
+    "test:installer": "node --test tests/integration/installer/components.test.mjs",
+    "test:installer-identity": "node --test tests/integration/installer/identity.test.mjs",
     "check:layout": "node scripts/check-repository-layout.mjs",
     "dev": "vite --host 127.0.0.1 --port 1420",
     "docs:check": "node scripts/check-user-guide.mjs",
@@ -46,11 +46,18 @@
     "tauri": "tauri",
     "prepare:semantic": "node scripts/prepare-semantic-assets.mjs",
     "prepare:storyboard-semantic": "node scripts/prepare-storyboard-semantic-assets.mjs",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run test:browser",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
-    "test:all": "npm test && npm run test:e2e",
-    "test:types": "tsc --project tests/tsconfig.json"
+    "test:all": "npm test && npm run test:browser",
+    "test:types": "tsc --project tests/tsconfig.json",
+    "test:unit": "node --test --test-timeout=15000 \"tests/unit/**/*.test.mjs\"",
+    "test:browser": "playwright test",
+    "test:browser:workflows": "playwright test tests/browser/workflows",
+    "test:browser:components": "playwright test tests/browser/components",
+    "test:browser:state": "playwright test tests/browser/state",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml --locked",
+    "test:rust:thumbnail": "cargo test --manifest-path src-tauri/thumbnail-provider/Cargo.toml --locked"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.10",

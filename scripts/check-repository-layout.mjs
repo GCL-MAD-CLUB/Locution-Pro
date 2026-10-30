@@ -48,6 +48,25 @@ for (const file of files) {
   if (file.startsWith("docs/user-guide/public/images/") && file.endsWith(".txt")) {
     fail(file, "publish real documentation assets, not screenshot TODO files");
   }
+  if (/\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(file)) {
+    const discovered =
+      /^tests\/unit\/[\w-]+\/[\w-]+\.test\.mjs$/u.test(file) ||
+      /^tests\/browser\/(?:workflows|components|state)\/(?:[\w-]+\/)*[\w-]+\.test\.ts$/u.test(
+        file,
+      ) ||
+      /^tests\/integration\/(?:[\w-]+\/)*[\w-]+\.test\.mjs$/u.test(file);
+    if (!discovered)
+      fail(
+        file,
+        "test files must follow the documented layer, domain and runner naming conventions",
+      );
+    if (
+      file.startsWith("tests/browser/") &&
+      /import\s*\{[^}]*\btest\b[^}]*\}\s*from\s*["']@playwright\/test["']/u.test(source())
+    ) {
+      fail(file, "browser tests must use the shared support/fixtures diagnostics");
+    }
+  }
   if (file.startsWith("scripts/")) {
     if (!/^scripts\/(?:check-[\w-]+|build-[\w-]+|prepare-[\w-]+|release)\.mjs$/u.test(file)) {
       fail(
@@ -69,8 +88,9 @@ for (const file of files) {
     if (
       !file.startsWith("scripts/") &&
       !file.startsWith("src/") &&
-      !/^tests\/(?:unit|integration)\/[\w-]+\.test\.mjs$/u.test(file) &&
-      !/^tests\/browser\/[\w-]+\.harness\.js$/u.test(file)
+      !/^tests\/unit\/[\w-]+\/[\w-]+\.test\.mjs$/u.test(file) &&
+      !/^tests\/integration\/(?:[\w-]+\/)*[\w-]+\.test\.mjs$/u.test(file) &&
+      !/^tests\/browser\/(?:components|state)\/(?:[\w-]+\/)*[\w-]+\.harness\.js$/u.test(file)
     ) {
       fail(
         file,

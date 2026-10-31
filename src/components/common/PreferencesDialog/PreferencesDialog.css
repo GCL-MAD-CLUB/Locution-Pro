@@ -14,10 +14,10 @@
 .preferences-categories {
   min-height: 0;
   overflow: auto;
-  background: var(--color-surface-field-strong);
+  background: var(--color-surface-input-inset);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
-  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+  scrollbar-color: var(--color-border-overlay-default) var(--color-transparent);
 }
 
 .preferences-categories > button {
@@ -27,7 +27,7 @@
   padding: 0 10px;
   color: var(--color-text);
   text-align: left;
-  background: transparent;
+  background: var(--color-transparent);
   cursor: pointer;
 }
 
@@ -45,11 +45,62 @@
   min-height: 0;
   overflow: auto;
   padding: 0 1px;
-  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+  scrollbar-color: var(--color-border-overlay-default) var(--color-transparent);
 }
 
 .preferences-content[hidden] {
   display: none;
+}
+
+.preferences-appearance-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 4px 0;
+}
+
+.preferences-appearance-row > span {
+  padding-top: 28px;
+  white-space: nowrap;
+}
+
+.preferences-appearance-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+}
+
+.preferences-appearance-option {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 0;
+  color: var(--color-text);
+  font: inherit;
+  background: var(--color-transparent);
+  cursor: pointer;
+}
+
+.preferences-appearance-frame {
+  display: block;
+  padding: 3px;
+  border: 2px solid var(--color-transparent);
+}
+
+.preferences-appearance-option[aria-checked="true"] .preferences-appearance-frame {
+  border-color: var(--color-text-highlight);
+}
+
+.preferences-appearance-option:hover:not(:disabled) {
+  color: var(--color-text-highlight);
+}
+
+.preferences-appearance-preview {
+  display: block;
+  width: 108px;
+  height: 72px;
+  border: 2px solid var(--color-border-control);
+  border-radius: var(--radius-xs);
 }
 
 .preferences-group {
@@ -109,7 +160,7 @@
   padding: 0 7px;
   color: var(--color-text);
   font-size: 12px;
-  background: var(--color-surface-field-strong);
+  background: var(--color-surface-input-inset);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
 }
@@ -120,7 +171,7 @@
 }
 
 .preferences-dialog input:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
+  border-color: var(--color-border-control-hover);
 }
 
 .preferences-dialog input:focus {
@@ -132,7 +183,7 @@
 }
 
 .preferences-dialog input:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-dialog-disabled);
 }
 
 .preferences-checkbox {
@@ -150,7 +201,7 @@
   margin: 0;
   padding: 0;
   accent-color: var(--color-text);
-  color-scheme: dark;
+  color-scheme: var(--theme-color-scheme);
   cursor: pointer;
 }
 
@@ -162,7 +213,7 @@
 .preferences-number-field:has(input:disabled) > label,
 .preferences-number-field:has(input:disabled) > span,
 .preferences-number-field:has(input:disabled) > small {
-  opacity: 0.5;
+  opacity: var(--opacity-dialog-disabled);
 }
 
 .preferences-button {
@@ -172,14 +223,14 @@
   color: var(--color-text);
   font-size: 12px;
   white-space: nowrap;
-  background: var(--color-surface-field-strong);
+  background: var(--color-surface-input-inset);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
   cursor: pointer;
 }
 
 .preferences-button:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
+  border-color: var(--color-border-control-hover);
 }
 
 .preferences-dialog button:focus-visible,

@@ -29,13 +29,13 @@
   padding: 0 7px;
   color: var(--color-text);
   font-size: 12px;
-  background: var(--color-surface-field-strong);
+  background: var(--color-surface-input-inset);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
 }
 
 .still-export-format {
-  background: var(--color-surface-field-strong);
+  background: var(--color-surface-input-inset);
 }
 
 .still-export-format .select-dropdown-trigger {
@@ -98,19 +98,19 @@
   margin: 0;
   padding: 0;
   flex: none;
-  border: 2px solid #b0b0b0;
+  border: 2px solid var(--color-checkbox-border);
   border-radius: 2px;
-  background: transparent center / contain no-repeat;
+  background: var(--color-transparent) center / contain no-repeat;
   cursor: pointer;
 }
 
 .still-export-destination input[type="checkbox"]:checked {
-  background-color: #b0b0b0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M1.5 6.5 5 10 10.5 2.5' fill='none' stroke='%231d1d1d' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-color: var(--color-checkbox-checked-background);
+  background-image: var(--image-checkbox-check);
 }
 
 .still-export-destination input[type="checkbox"]:hover {
-  border-color: #d0d0d0;
+  border-color: var(--color-checkbox-hover-border);
 }
 
 .still-export-destination > button {
@@ -119,13 +119,13 @@
   padding: 0 8px;
   color: var(--color-text);
   font-size: 12px;
-  background: var(--color-surface-field-strong);
+  background: var(--color-surface-input-inset);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
 }
 
 .still-export-destination > button:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
+  border-color: var(--color-border-control-hover);
 }
 
 .still-export-dialog > .modal-dialog-actions {

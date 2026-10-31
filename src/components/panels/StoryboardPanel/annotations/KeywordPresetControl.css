@@ -26,7 +26,7 @@
   padding: 0 8px;
   font-size: 12px;
   color: var(--color-text);
-  background: var(--color-surface-field);
+  background: var(--color-surface-input);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-sm);
 }
@@ -49,7 +49,7 @@
   padding: 0 4px;
   line-height: 12px;
   border: 0;
-  background-color: #2b2b2b;
+  background-color: var(--color-surface-elevated-default);
   border-bottom: 1px solid var(--color-border-default);
   border-radius: 0;
 }

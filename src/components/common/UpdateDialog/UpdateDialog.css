@@ -8,7 +8,7 @@
 
 .update-dialog-body {
   padding: 24px 24px 20px;
-  color: #e8e8e8;
+  color: var(--color-text-dialog);
 }
 
 .update-dialog .modal-dialog-actions {
@@ -47,7 +47,7 @@
 }
 
 .update-dialog-status[role="alert"] .update-dialog-visual {
-  color: #e7a1a1;
+  color: var(--color-update-error);
 }
 
 .update-dialog-status h3,
@@ -62,7 +62,7 @@
 .update-dialog-status p,
 .update-dialog-summary p {
   margin: 0;
-  color: #b7b7b7;
+  color: var(--color-text-status);
   font-size: 12px;
   line-height: 1.7;
 }
@@ -109,7 +109,7 @@
 
 .update-dialog-summary p span {
   margin-left: 10px;
-  color: #999;
+  color: var(--color-text-help);
   font-size: 11px;
   font-weight: 400;
 }
@@ -129,11 +129,11 @@
   padding: 16px 18px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  color: #cecece;
-  background: rgb(255 255 255 / 4%);
-  border: 1px solid rgb(255 255 255 / 7%);
+  color: var(--color-update-notes-text);
+  background: var(--color-update-code-surface);
+  border: 1px solid var(--color-update-content-outline);
   border-radius: var(--radius-lg);
-  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-color: var(--color-surface-active) var(--color-transparent);
   scrollbar-width: thin;
   user-select: text;
 }
@@ -176,7 +176,7 @@
 }
 
 .update-dialog-notes a {
-  color: #c9b4ee;
+  color: var(--color-update-link);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -187,8 +187,8 @@
 
 .update-dialog-notes code {
   padding: 2px 5px;
-  color: #e4d8f7;
-  background: rgb(255 255 255 / 7%);
+  color: var(--color-update-link-hover);
+  background: var(--color-update-content-outline);
   border-radius: 4px;
   font-size: 11px;
 }
@@ -196,20 +196,20 @@
 .update-dialog-notes pre {
   padding: 12px;
   overflow-x: auto;
-  background: rgb(0 0 0 / 22%);
+  background: var(--color-update-code-background);
   border-radius: var(--radius-sm);
 }
 
 .update-dialog-notes pre code {
   padding: 0;
-  background: transparent;
+  background: var(--color-transparent);
 }
 
 .update-dialog-notes blockquote {
   margin: 12px 0;
   padding-left: 12px;
-  color: #aaa;
-  border-left: 2px solid var(--color-border-strong);
+  color: var(--color-text-field);
+  border-left: 2px solid var(--color-update-content-border);
 }
 
 .update-dialog-notes img {
@@ -226,10 +226,10 @@
 .update-dialog-notes th,
 .update-dialog-notes td {
   padding: 6px 8px;
-  border: 1px solid var(--color-border-strong);
+  border: 1px solid var(--color-update-content-border);
   text-align: left;
 }
 
 .update-dialog-empty {
-  color: #999;
+  color: var(--color-text-help);
 }

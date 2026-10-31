@@ -1,3 +1,4 @@
+import { annotationColors } from "../../../../runtime/theme";
 import type { CSSProperties } from "react";
 import type { SubtitleCueColorLabel, SubtitleCueColorLabelFilter } from "../subtitlePanelState";
 
@@ -9,13 +10,7 @@ export const subtitleCueColorLabels: Array<readonly [SubtitleCueColorLabel, stri
   ["purple", "紫色"],
 ];
 
-export const subtitleCueColorLabelValues: Record<SubtitleCueColorLabel, string> = {
-  red: "#ef4444",
-  yellow: "#eab308",
-  green: "#22c55e",
-  blue: "#3b82f6",
-  purple: "#a855f7",
-};
+export const subtitleCueColorLabelValues: Record<SubtitleCueColorLabel, string> = annotationColors;
 
 export const subtitleCueColorFilterLabels: Array<readonly [SubtitleCueColorLabelFilter, string]> = [
   ...subtitleCueColorLabels,
@@ -23,11 +18,7 @@ export const subtitleCueColorFilterLabels: Array<readonly [SubtitleCueColorLabel
   ["none", "无"],
 ];
 
-const subtitleCueColorFilterValues: Record<SubtitleCueColorLabelFilter, string> = {
-  ...subtitleCueColorLabelValues,
-  custom: "#ffffff",
-  none: "#7f7f7f",
-};
+const subtitleCueColorFilterValues: Record<SubtitleCueColorLabelFilter, string> = annotationColors;
 
 interface SubtitleColorLabelButtonsProps {
   activeValues: readonly SubtitleCueColorLabelFilter[];

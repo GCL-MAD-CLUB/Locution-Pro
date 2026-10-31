@@ -24,8 +24,8 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--color-surface);
-  border: 1px solid #0d0d0d;
+  background: var(--color-surface-canvas);
+  border: 1px solid var(--color-border-frame);
   border-radius: 4px;
 }
 
@@ -33,7 +33,7 @@
   width: 100%;
   height: 100%;
   overflow: auto;
-  scrollbar-color: var(--color-scrollbar-thumb) var(--color-surface);
+  scrollbar-color: var(--color-border-overlay-default) var(--color-surface-canvas);
   scrollbar-gutter: stable;
 }
 
@@ -48,12 +48,12 @@
 
 .export-conflict-dialog-list-scroll::-webkit-scrollbar-track,
 .export-conflict-dialog-list-scroll::-webkit-scrollbar-corner {
-  background: var(--color-surface);
+  background: var(--color-surface-canvas);
 }
 
 .export-conflict-dialog-list {
   min-width: 560px;
-  background: #151515;
+  background: var(--color-surface-table-inset);
 }
 
 .export-conflict-dialog-row {
@@ -63,9 +63,9 @@
   min-height: 24px;
   align-items: center;
   padding: 0;
-  color: #b5b5b5;
+  color: var(--color-text-table-row);
   font-size: 12px;
-  border-bottom: 1px solid #101010;
+  border-bottom: 1px solid var(--color-border-divider);
 }
 
 .export-conflict-dialog-row > span {
@@ -77,7 +77,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border-right: 1px solid #1f1f1f;
+  border-right: 1px solid var(--color-border-table-cell);
 }
 
 .export-conflict-dialog-row > span:last-child {

@@ -71,8 +71,8 @@ interface CutDrag {
 
 const emptyShots: StoryboardShot[] = [];
 const CUT_LABEL_HIT_AREA_PX = 18;
-const CUT_CUSTOM_LABEL_COLOR = "#ffffff";
-const CUT_NO_LABEL_COLOR = "#b8b8b8";
+const CUT_CUSTOM_LABEL_COLOR = "var(--color-label-custom)";
+const CUT_NO_LABEL_COLOR = "var(--color-timeline-cut-marker)";
 
 function storyboardCutColor(annotation: StoryboardShotAnnotation | undefined) {
   if (annotation?.customLabel?.trim()) {
@@ -81,7 +81,7 @@ function storyboardCutColor(annotation: StoryboardShotAnnotation | undefined) {
   if (!annotation?.colorLabel) {
     return CUT_NO_LABEL_COLOR;
   }
-  return `color-mix(in srgb, ${storyboardShotColorLabelValues[annotation.colorLabel]} 68%, #9a9a9a)`;
+  return `color-mix(in srgb, ${storyboardShotColorLabelValues[annotation.colorLabel]} 68%, var(--color-timeline-cut-label-blend))`;
 }
 
 export function StoryboardTimeline({
@@ -440,12 +440,14 @@ export function StoryboardTimeline({
             const position = (shot.start_frame - timelineStartFrame) / visibleSpan;
             if (position < 0 || position > 1) return null;
             const selected = selectedIds.has(shot.id);
-            const color = storyboardCutColor(storyboard?.shotAnnotations[shot.id]);
+            const annotation = storyboard?.shotAnnotations[shot.id];
+            const color = storyboardCutColor(annotation);
             return (
               <button
                 key={shot.id}
                 type="button"
                 data-cut-id={shot.id}
+                data-custom-label={annotation?.customLabel?.trim() ? true : undefined}
                 className={`storyboard-cut-marker ${selected ? "selected" : ""} ${selectedCuts.length === 0 ? "unselected-all" : ""} ${retainedIds.has(shot.id) ? "" : "deleted"}`}
                 style={
                   {

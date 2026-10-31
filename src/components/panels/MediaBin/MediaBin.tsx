@@ -735,7 +735,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
       id: `media-bin:${random}`,
       name,
       parent_id: parentId,
-      color: defaultMediaBinFolderColor,
+      color: defaultMediaBinFolderColor(),
       hidden: false,
     };
   }

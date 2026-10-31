@@ -25,7 +25,7 @@
   padding: 18px 20px;
   min-height: 0;
   overflow-y: auto;
-  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+  scrollbar-color: var(--color-border-overlay-default) var(--color-transparent);
 }
 
 .advanced-search-field {
@@ -57,7 +57,7 @@
   height: 18px;
   min-height: 18px;
   padding: 0 4px;
-  color: #aaa;
+  color: var(--color-text-field);
   background: var(--color-surface-soft);
   border: 1px solid var(--color-border-panel);
   border-radius: 0;
@@ -79,12 +79,12 @@
 .advanced-search-body input::placeholder,
 .advanced-search-body textarea::placeholder {
   font-style: italic;
-  color: #666;
+  color: var(--color-text-disabled);
   opacity: 1;
 }
 
 .advanced-search-body :disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-dialog-disabled);
 }
 .advanced-search-body input:not([type="checkbox"]):focus,
 .advanced-search-body textarea:focus {
@@ -98,7 +98,7 @@
   background: var(--color-surface-soft);
   border: 1px solid var(--color-border-panel);
   border-radius: 0;
-  color: #aaa;
+  color: var(--color-text-field);
 }
 .advanced-search-dropdown > .select-dropdown-trigger {
   min-height: 16px;
@@ -111,7 +111,7 @@
 }
 .select-dropdown.advanced-search-dropdown:hover:not(.disabled) {
   border-color: var(--color-border-panel);
-  color: #d0d0d0;
+  color: var(--color-text-emphasis);
 }
 .advanced-search-content {
   border-top: 1px solid var(--color-border-default);
@@ -134,17 +134,17 @@
   margin: 0;
   padding: 0;
   flex: none;
-  border: 2px solid #b0b0b0;
+  border: 2px solid var(--color-checkbox-border);
   border-radius: 2px;
-  background: transparent center / contain no-repeat;
+  background: var(--color-transparent) center / contain no-repeat;
   cursor: pointer;
 }
 .advanced-search-check input:checked {
-  background-color: #b0b0b0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M1.5 6.5 5 10 10.5 2.5' fill='none' stroke='%231d1d1d' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-color: var(--color-checkbox-checked-background);
+  background-image: var(--image-checkbox-check);
 }
 .advanced-search-check input:hover {
-  border-color: #d0d0d0;
+  border-color: var(--color-checkbox-hover-border);
 }
 .advanced-search-check input:focus-visible {
   outline: 1px solid var(--color-accent);
@@ -182,7 +182,7 @@
   flex-shrink: 0;
   height: 22px;
   padding: 0;
-  background: transparent;
+  background: var(--color-transparent);
   color: var(--color-text);
   font: inherit;
 }
@@ -190,7 +190,7 @@
   color: var(--color-text);
 }
 .panel-search-row .panel-search-advanced.active svg {
-  color: #4096f3;
+  color: var(--color-accent-monitor);
 }
 .panel-search-advanced svg {
   width: 12px;

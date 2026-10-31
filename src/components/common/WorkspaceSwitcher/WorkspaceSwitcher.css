@@ -13,12 +13,12 @@
   color: var(--color-text);
   font-size: 16px;
   font-weight: 400;
-  background: transparent;
+  background: var(--color-transparent);
   cursor: pointer;
 }
 
 .workspace-switcher button:hover:not(:disabled) {
-  color: #d8d8d8;
+  color: var(--color-text-editor);
 }
 
 .workspace-switcher button.active {
@@ -26,14 +26,14 @@
 }
 
 .workspace-switcher button:disabled {
-  opacity: 0.55;
+  opacity: var(--opacity-topbar-disabled);
 }
 
 .workspace-switcher-divider {
   flex: 0 0 1px;
   width: 1px;
   height: 22px;
-  background: var(--color-border-default);
+  background: var(--color-topbar-divider);
 }
 
 .workspace-home {

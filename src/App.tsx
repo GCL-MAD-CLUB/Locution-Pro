@@ -1,7 +1,8 @@
+import { applyAppearance, defaultThemeColor } from "./runtime/theme";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   appPanelRegistry,
   initialAppPanelState,
@@ -37,7 +38,11 @@ import { ImportWorkspace } from "./components/panels/ImportWorkspace";
 import { mediaBinPanelType, type MediaBinPanelParams } from "./components/panels/MediaBin";
 import { ProjectDiscardDialog, ProjectSaveDialog } from "./components/common/ProjectSaveDialog";
 import { ExportConflictDialog } from "./components/common/ExportConflictDialog";
-import { PreferencesDialog } from "./components/common/PreferencesDialog";
+import {
+  PreferencesDialog,
+  preferencesCategories,
+  type PreferencesCategory,
+} from "./components/common/PreferencesDialog";
 import { AboutDialog } from "./components/common/AboutDialog";
 import { UpdateDialog, type UpdateDialogState } from "./components/common/UpdateDialog";
 import { ProxyCreationDialog } from "./components/common/ProxyCreationDialog";
@@ -277,7 +282,7 @@ function standaloneSubtitleItem(path: string, index: number): MediaBinItem {
     language: null,
     extracted: false,
     origin: "imported",
-    color: "#893a04",
+    color: defaultThemeColor("--color-media-subtitle"),
   };
 }
 
@@ -300,7 +305,7 @@ function AppContent() {
   const openPanel = usePanelManagerState((state) => state.openPanel);
   const closePanel = usePanelManagerState((state) => state.closePanel);
   const [projectHomeMode, setProjectHomeMode] = useState<"startup" | "manual" | null>("startup");
-  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [preferencesCategory, setPreferencesCategory] = useState<PreferencesCategory | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [updateDialogState, setUpdateDialogState] = useState<UpdateDialogState | null>(null);
   const updateRequestRef = useRef(0);
@@ -379,6 +384,9 @@ function AppContent() {
     ],
   );
   const autoSaveIntervalMinutes = preferences.auto_save_interval_minutes;
+  useLayoutEffect(() => {
+    applyAppearance(preferences.appearance ?? "darkest");
+  }, [preferences.appearance]);
   const autoSaveEnabled = preferences.auto_save_enabled;
   const isMediaBinReadOnly = mediaBinReadOnly;
   const focusedPanel = focusedPanelId ? panelInstances[focusedPanelId] : undefined;
@@ -1507,7 +1515,10 @@ function AppContent() {
       },
       preferences: {
         enabled: !isBusy,
-        execute: () => setPreferencesOpen(true),
+        items: preferencesCategories.map((category) => ({
+          ...category,
+          execute: () => setPreferencesCategory(category.id),
+        })),
       },
     },
     window: {
@@ -1613,7 +1624,7 @@ function AppContent() {
             suspended={Boolean(
               pendingDiscardMessage ||
               pendingCloseTarget ||
-              preferencesOpen ||
+              preferencesCategory !== null ||
               aboutOpen ||
               updateDialogState,
             )}
@@ -1645,7 +1656,11 @@ function AppContent() {
 
         <ProxyCreationDialog />
         <ExportConflictDialog />
-        <PreferencesDialog open={preferencesOpen} onClose={() => setPreferencesOpen(false)} />
+        <PreferencesDialog
+          open={preferencesCategory !== null}
+          initialCategory={preferencesCategory ?? "general"}
+          onClose={() => setPreferencesCategory(null)}
+        />
         {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
         {updateDialogState && (
           <UpdateDialog

@@ -1,5 +1,6 @@
 ﻿import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { mediaGridLayout } from "../../../../application/media/mediaGridLayout";
+import { mediaDisplayColor } from "../../../../runtime/theme";
 import { Captions, ChevronRight, Film, Link2, Music2, SplitSquareVertical } from "lucide-react";
 import {
   useEffect,
@@ -1893,7 +1894,11 @@ export function MediaBinTable({
                       >
                         <span
                           className="media-bin-label-color"
-                          style={{ background: folder.color || "#596b91" }}
+                          style={{
+                            background: mediaDisplayColor(
+                              folder.color || "var(--color-media-folder)",
+                            ),
+                          }}
                         />
                         <button
                           type="button"
@@ -2059,7 +2064,10 @@ export function MediaBinTable({
                         setActiveCell(null);
                       }}
                     >
-                      <span className="media-bin-label-color" style={{ background: item.color }} />
+                      <span
+                        className="media-bin-label-color"
+                        style={{ background: mediaDisplayColor(item.color) }}
+                      />
                       {boundGroup && (
                         <button
                           type="button"

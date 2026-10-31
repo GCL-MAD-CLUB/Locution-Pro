@@ -1,3 +1,4 @@
+import { defaultThemeColor } from "../../runtime/theme";
 import {
   normalizedStoryboardKeywords,
   sourceContexts,
@@ -174,14 +175,20 @@ interface ProjectSystemState {
   commands: ProjectCommands;
 }
 
-const mediaLabelColors = {
-  videoOnly: "#3e0aae",
-  videoWithAudio: "#004b67",
-  audio: "#2a5507",
-  subtitle: "#893a04",
+const mediaLabelColorTokens = {
+  videoOnly: "--color-media-video",
+  videoWithAudio: "--color-media-video-audio",
+  audio: "--color-media-audio",
+  subtitle: "--color-media-subtitle",
 } as const;
 
-export const defaultMediaBinFolderColor = "#596b91";
+function mediaLabelColor(kind: keyof typeof mediaLabelColorTokens) {
+  return defaultThemeColor(mediaLabelColorTokens[kind]);
+}
+
+export function defaultMediaBinFolderColor() {
+  return defaultThemeColor("--color-media-folder");
+}
 
 function fileName(path: string) {
   return path.split(/[\\/]/).pop() ?? path;
@@ -412,9 +419,9 @@ function projectMediaItem(project: Project): MediaBinItem {
     origin: "imported",
     color: isVideo
       ? hasAudio
-        ? mediaLabelColors.videoWithAudio
-        : mediaLabelColors.videoOnly
-      : mediaLabelColors.audio,
+        ? mediaLabelColor("videoWithAudio")
+        : mediaLabelColor("videoOnly")
+      : mediaLabelColor("audio"),
   };
 }
 
@@ -440,7 +447,7 @@ function externalSubtitleItems(project: Project): MediaBinItem[] {
       language: track.language,
       extracted: false,
       origin: "imported" as const,
-      color: mediaLabelColors.subtitle,
+      color: mediaLabelColor("subtitle"),
     }));
 }
 
@@ -651,7 +658,7 @@ function normalizedMediaFolders(folders: MediaBinFolder[] | undefined) {
         id,
         name,
         parent_id: folder.parent_id ?? null,
-        color: folder.color?.trim() || defaultMediaBinFolderColor,
+        color: folder.color?.trim() || defaultMediaBinFolderColor(),
         hidden: folder.hidden === true,
       },
     ];
@@ -745,6 +752,7 @@ function openedProjectState(workspace: ProjectWorkspace, projectId: string) {
 
 export function defaultPreferences(): Preferences {
   return {
+    appearance: "darkest",
     show_home_on_startup: true,
     auto_save_enabled: true,
     auto_save_current_project: true,
@@ -1213,7 +1221,7 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
           folderAdditions.push({
             ...folder,
             name: folder.name.trim(),
-            color: folder.color?.trim() || defaultMediaBinFolderColor,
+            color: folder.color?.trim() || defaultMediaBinFolderColor(),
             hidden: folder.hidden === true,
           });
         }
@@ -1257,7 +1265,7 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
             {
               ...folder,
               name: folder.name.trim(),
-              color: folder.color?.trim() || defaultMediaBinFolderColor,
+              color: folder.color?.trim() || defaultMediaBinFolderColor(),
               hidden: folder.hidden === true,
             },
           ],
@@ -1776,7 +1784,7 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
             language: track.language,
             extracted: false,
             origin: "decomposed" as const,
-            color: mediaLabelColors.audio,
+            color: mediaLabelColor("audio"),
           })),
           ...result.subtitle_tracks.map((track, index) => ({
             id: `demux-subtitle:${videoId}:${track.id}`,
@@ -1800,7 +1808,7 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
             language: track.language,
             extracted: false,
             origin: "decomposed" as const,
-            color: mediaLabelColors.subtitle,
+            color: mediaLabelColor("subtitle"),
           })),
         ];
         const knownIds = new Set(state.mediaItems.map((item) => item.id));
@@ -1815,7 +1823,7 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
           project: state.project?.asset.id === nextProject.asset.id ? nextProject : state.project,
           mediaItems: [
             ...state.mediaItems.map((item) =>
-              item.id === videoId ? { ...item, color: mediaLabelColors.videoOnly } : item,
+              item.id === videoId ? { ...item, color: mediaLabelColor("videoOnly") } : item,
             ),
             ...additions.filter((item) => !knownIds.has(item.id)),
           ],
@@ -1876,7 +1884,7 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
             language: track.language,
             extracted: false,
             origin: "imported" as const,
-            color: mediaLabelColors.subtitle,
+            color: mediaLabelColor("subtitle"),
           }));
         const firstUsableTrack = tracks.find((track) => track.cue_count > 0);
         const activeTrackId = firstUsableTrack?.id || state.activeTrackId || "";

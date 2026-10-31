@@ -16,8 +16,8 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--color-surface);
-  border: 1px solid #0d0d0d;
+  background: var(--color-surface-canvas);
+  border: 1px solid var(--color-border-frame);
   border-radius: 4px;
 }
 
@@ -25,7 +25,7 @@
   width: 100%;
   height: 100%;
   overflow: auto;
-  scrollbar-color: #555 var(--color-surface);
+  scrollbar-color: var(--color-border-overlay-default) var(--color-surface-canvas);
   scrollbar-gutter: stable;
 }
 
@@ -35,16 +35,16 @@
 }
 
 .media-link-dialog-table-scroll::-webkit-scrollbar-thumb {
-  background: #555;
+  background: var(--color-scrollbar-thumb);
 }
 
 .media-link-dialog-table-scroll::-webkit-scrollbar-corner {
-  background: var(--color-surface);
+  background: var(--color-surface-canvas);
 }
 
 .media-link-dialog-table {
   min-width: 960px;
-  background: #151515;
+  background: var(--color-surface-table-inset);
 }
 
 .media-link-dialog-row {
@@ -55,13 +55,13 @@
   width: 100%;
   min-height: 24px;
   padding: 0;
-  color: #b5b5b5;
+  color: var(--color-text-table-row);
   font: inherit;
   font-size: 12px;
   text-align: left;
-  background: transparent;
+  background: var(--color-transparent);
   border: 0;
-  border-bottom: 1px solid #101010;
+  border-bottom: 1px solid var(--color-border-divider);
   border-radius: 0;
   cursor: pointer;
 }
@@ -72,15 +72,15 @@
   z-index: 1;
   height: 24px;
   min-height: 24px;
-  color: #989898;
-  background: var(--color-surface);
-  border-bottom-color: #0d0d0d;
+  color: var(--color-text-table-header);
+  background: var(--color-surface-canvas);
+  border-bottom-color: var(--color-border-frame);
   cursor: default;
 }
 
 .media-link-dialog-row:not(.header):hover,
 .media-link-dialog-row.selected {
-  background: #2f2f2f;
+  background: var(--color-surface-row-selected);
 }
 
 .media-link-dialog-row:disabled {
@@ -88,7 +88,7 @@
 }
 
 .media-link-dialog-row.processed {
-  color: #8fbfa6;
+  color: var(--color-media-link-success);
 }
 
 .media-link-dialog-row > span {
@@ -100,7 +100,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border-right: 1px solid #1f1f1f;
+  border-right: 1px solid var(--color-border-table-cell);
 }
 
 .media-link-dialog-row > span:last-child {
@@ -136,7 +136,7 @@
 
 .media-link-dialog-options legend {
   padding: 0 6px;
-  color: #aaa;
+  color: var(--color-text-field);
   font-size: 12px;
 }
 
@@ -144,7 +144,7 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  color: #b7b7b7;
+  color: var(--color-text-status);
   font-size: 12px;
   line-height: 14px;
 }
@@ -173,7 +173,7 @@
 
 .media-link-dialog-status {
   margin-right: auto;
-  color: #aaa;
+  color: var(--color-text-field);
   font-size: 12px;
 }
 

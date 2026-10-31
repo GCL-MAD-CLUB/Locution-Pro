@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createModuleLoader, deferred, flush } from "../support/module-loader.ts";
+import { clientError } from "../../../src/errors/model.ts";
 import * as model from "../../../src/components/panels/ImportWorkspace/browser/importBrowserModel.ts";
 
 const load = createModuleLoader(import.meta.url);
+const theme = load("../../../src/runtime/theme.ts", {
+  "../styles.css?raw": readFileSync(new URL("../../../src/styles.css", import.meta.url), "utf8"),
+  "../errors/model": { clientError },
+});
 const scan = load(
   "../../../src/components/panels/ImportWorkspace/browser/importFolderScan.ts",
   { "./importBrowserModel": model },
@@ -109,6 +115,7 @@ function registration({ failPath, cancelled = false, hold = false } = {}) {
   const module = load(
     "../../../src/components/panels/ImportWorkspace/selection/importSelection.ts",
     {
+      "../../../../runtime/theme": theme,
       "../browser/importBrowserModel": model,
       "../../../../platform/tauri/ffmpegProgress": { createFfmpegTaskId: () => "task" },
       "../../../../errors": {
@@ -151,6 +158,7 @@ test("registration imports mixed media while subtitle files bypass native regist
   assert.equal(result.results.length, 2);
   assert.equal(result.subtitles[0].kind, "subtitle");
   assert.equal(result.subtitles[0].codec, "srt");
+  assert.equal(result.subtitles[0].color, "#893a04");
   assert.equal(result.completed.size, 3);
   assert.equal(api.calls.length, 2);
 });

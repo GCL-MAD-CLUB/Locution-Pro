@@ -1,3 +1,4 @@
+import { annotationColors } from "../../../../runtime/theme";
 import type { PanelRowSource } from "../../../../core/editor/multiSource";
 import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
 import {
@@ -444,14 +445,7 @@ export function StoryboardListView({
                       transform: `translateY(${virtualRow.start}px)`,
                       ...(visualLabel
                         ? {
-                            "--storyboard-color-label": {
-                              red: "#ef4444",
-                              yellow: "#eab308",
-                              green: "#22c55e",
-                              blue: "#3b82f6",
-                              purple: "#a855f7",
-                              custom: "#ffffff",
-                            }[visualLabel],
+                            "--storyboard-color-label": annotationColors[visualLabel],
                           }
                         : {}),
                     } as CSSProperties

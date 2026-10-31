@@ -482,7 +482,7 @@ export function VideoControls({
               viewBox="22 18 18 20"
               aria-hidden="true"
             >
-              <path d="M22 18 H40 V29 L31 38 L22 29 Z" fill="#B0B0B0" />
+              <path d="M22 18 H40 V29 L31 38 L22 29 Z" fill="var(--color-monitor-action-icon)" />
             </svg>
           </button>
         )}
@@ -503,8 +503,18 @@ export function VideoControls({
             disabled={!storyboardActions.canExportFrame}
           >
             <svg className="storyboard-action-icon" viewBox="17 16 28 22" aria-hidden="true">
-              <path d="M17 20 H24 L27 16 H35 L38 20 H45 V38 H17 Z" fill="#B0B0B0" />
-              <circle cx="30.5" cy="27.5" r="4.5" fill="none" stroke="#1D1D1D" strokeWidth="2.5" />
+              <path
+                d="M17 20 H24 L27 16 H35 L38 20 H45 V38 H17 Z"
+                fill="var(--color-monitor-action-icon)"
+              />
+              <circle
+                cx="30.5"
+                cy="27.5"
+                r="4.5"
+                fill="none"
+                stroke="var(--color-icon-cutout)"
+                strokeWidth="2.5"
+              />
             </svg>
           </button>
         )}

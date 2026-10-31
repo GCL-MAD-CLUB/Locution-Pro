@@ -64,7 +64,15 @@ export interface ApplicationMenuModel {
     duplicate: ApplicationMenuCommand;
     selectAll: ApplicationMenuCommand;
     clearSelection: ApplicationMenuCommand;
-    preferences: ApplicationMenuCommand;
+    preferences: {
+      enabled: boolean;
+      items: Array<{
+        id: string;
+        label: string;
+        mnemonic: string;
+        execute: ApplicationMenuHandler;
+      }>;
+    };
   };
   window: {
     source: ApplicationMenuWindowItem;
@@ -94,6 +102,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
   const [recentProjectMenuOpen, setRecentProjectMenuOpen] = useState(false);
   const [recentImportMenuOpen, setRecentImportMenuOpen] = useState(false);
   const [projectWindowMenuOpen, setProjectWindowMenuOpen] = useState(false);
+  const [preferencesMenuOpen, setPreferencesMenuOpen] = useState(false);
   const menuRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -131,6 +140,10 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
       setRecentImportMenuOpen(false);
     }
   }, [fileMenuOpen]);
+
+  useEffect(() => {
+    if (!editMenuOpen) setPreferencesMenuOpen(false);
+  }, [editMenuOpen]);
 
   useEffect(() => {
     if (!windowMenuOpen) {
@@ -352,7 +365,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
           编辑(E)
         </button>
         {editMenuOpen && (
-          <PopupMenu className="application-menu-popup" enableMnemonics>
+          <PopupMenu className="application-menu-popup" enableMnemonics={!preferencesMenuOpen}>
             <PopupMenuItem
               mnemonic="U"
               shortcut="Ctrl+Z"
@@ -419,12 +432,26 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
               取消全选(D)
             </PopupMenuItem>
             <PopupMenuSeparator />
-            <PopupMenuItem
+            <PopupMenuSubmenu
+              label="首选项(N)"
+              mnemonic="N"
+              open={preferencesMenuOpen}
               disabled={!edit.preferences.enabled}
-              onSelect={select(edit.preferences.execute)}
+              menuClassName="application-menu-popup"
+              enableMnemonics
+              onOpenChange={setPreferencesMenuOpen}
             >
-              首选项...
-            </PopupMenuItem>
+              {edit.preferences.items.map((item) => (
+                <PopupMenuItem
+                  key={item.id}
+                  mnemonic={item.mnemonic}
+                  disabled={!edit.preferences.enabled}
+                  onSelect={select(item.execute)}
+                >
+                  {item.label}({item.mnemonic})...
+                </PopupMenuItem>
+              ))}
+            </PopupMenuSubmenu>
           </PopupMenu>
         )}
       </div>

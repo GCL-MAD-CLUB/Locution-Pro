@@ -1,3 +1,4 @@
+import { annotationColors } from "../../../../runtime/theme";
 import type { CSSProperties } from "react";
 import type {
   StoryboardShotColorLabel,
@@ -12,23 +13,15 @@ export const storyboardShotColorLabels: Array<readonly [StoryboardShotColorLabel
   ["purple", "紫色"],
 ];
 
-export const storyboardShotColorLabelValues: Record<StoryboardShotColorLabel, string> = {
-  red: "#ef4444",
-  yellow: "#eab308",
-  green: "#22c55e",
-  blue: "#3b82f6",
-  purple: "#a855f7",
-};
+export const storyboardShotColorLabelValues: Record<StoryboardShotColorLabel, string> =
+  annotationColors;
 
 export const storyboardShotColorFilterLabels: Array<
   readonly [StoryboardShotColorLabelFilter, string]
 > = [...storyboardShotColorLabels, ["custom", "自定义"], ["none", "无"]];
 
-const storyboardShotColorFilterValues: Record<StoryboardShotColorLabelFilter, string> = {
-  ...storyboardShotColorLabelValues,
-  custom: "#ffffff",
-  none: "#7f7f7f",
-};
+const storyboardShotColorFilterValues: Record<StoryboardShotColorLabelFilter, string> =
+  annotationColors;
 
 interface StoryboardColorLabelButtonsProps {
   activeValues: readonly StoryboardShotColorLabelFilter[];

@@ -8,17 +8,12 @@ import { isTauriRuntime } from "../../../platform/tauri/runtime";
 import { defaultPreferences, useProjectPort } from "../../../systems/ProjectSystem";
 import type { Appearance, Preferences } from "../../../types";
 import { ModalDialog } from "../ModalDialog";
+import {
+  preferencesCategories as categories,
+  type PreferencesCategory,
+} from "./preferencesCategories";
 import "./PreferencesDialog.css";
 
-const categories = [
-  { id: "general", label: "常规" },
-  { id: "appearance", label: "外观" },
-  { id: "backup", label: "自动保存" },
-  { id: "cache", label: "媒体缓存" },
-  { id: "tools", label: "媒体工具" },
-] as const;
-
-type Category = (typeof categories)[number]["id"];
 type PreferencesDraft = Omit<
   Preferences,
   "auto_save_interval_minutes" | "auto_save_max_snapshots"
@@ -43,21 +38,32 @@ function validInteger(value: string, max: number) {
 
 interface PreferencesDialogProps {
   open: boolean;
+  initialCategory?: PreferencesCategory;
   onClose: () => void;
 }
 
-export function PreferencesDialog({ open: isOpen, onClose }: PreferencesDialogProps) {
-  return isOpen ? <PreferencesEditor onClose={onClose} /> : null;
+export function PreferencesDialog({
+  open: isOpen,
+  initialCategory = "general",
+  onClose,
+}: PreferencesDialogProps) {
+  return isOpen ? <PreferencesEditor initialCategory={initialCategory} onClose={onClose} /> : null;
 }
 
-function PreferencesEditor({ onClose }: { onClose: () => void }) {
+function PreferencesEditor({
+  initialCategory,
+  onClose,
+}: {
+  initialCategory: PreferencesCategory;
+  onClose: () => void;
+}) {
   const { preferences, preferencesLoaded, messagePublished } = useProjectPort(
     ["preferences"],
     ["preferencesLoaded", "messagePublished"],
   );
   const [draft, setDraft] = useState(() => createDraft(preferences));
   const savedAppearance = useRef(preferences.appearance ?? "darkest");
-  const [category, setCategory] = useState<Category>("general");
+  const [category, setCategory] = useState<PreferencesCategory>(initialCategory);
   const [isSaving, setIsSaving] = useState(false);
   const [isChoosingPath, setIsChoosingPath] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);

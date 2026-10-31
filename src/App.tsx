@@ -38,7 +38,11 @@ import { ImportWorkspace } from "./components/panels/ImportWorkspace";
 import { mediaBinPanelType, type MediaBinPanelParams } from "./components/panels/MediaBin";
 import { ProjectDiscardDialog, ProjectSaveDialog } from "./components/common/ProjectSaveDialog";
 import { ExportConflictDialog } from "./components/common/ExportConflictDialog";
-import { PreferencesDialog } from "./components/common/PreferencesDialog";
+import {
+  PreferencesDialog,
+  preferencesCategories,
+  type PreferencesCategory,
+} from "./components/common/PreferencesDialog";
 import { AboutDialog } from "./components/common/AboutDialog";
 import { UpdateDialog, type UpdateDialogState } from "./components/common/UpdateDialog";
 import { ProxyCreationDialog } from "./components/common/ProxyCreationDialog";
@@ -301,7 +305,7 @@ function AppContent() {
   const openPanel = usePanelManagerState((state) => state.openPanel);
   const closePanel = usePanelManagerState((state) => state.closePanel);
   const [projectHomeMode, setProjectHomeMode] = useState<"startup" | "manual" | null>("startup");
-  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [preferencesCategory, setPreferencesCategory] = useState<PreferencesCategory | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [updateDialogState, setUpdateDialogState] = useState<UpdateDialogState | null>(null);
   const updateRequestRef = useRef(0);
@@ -1511,7 +1515,10 @@ function AppContent() {
       },
       preferences: {
         enabled: !isBusy,
-        execute: () => setPreferencesOpen(true),
+        items: preferencesCategories.map((category) => ({
+          ...category,
+          execute: () => setPreferencesCategory(category.id),
+        })),
       },
     },
     window: {
@@ -1617,7 +1624,7 @@ function AppContent() {
             suspended={Boolean(
               pendingDiscardMessage ||
               pendingCloseTarget ||
-              preferencesOpen ||
+              preferencesCategory !== null ||
               aboutOpen ||
               updateDialogState,
             )}
@@ -1649,7 +1656,11 @@ function AppContent() {
 
         <ProxyCreationDialog />
         <ExportConflictDialog />
-        <PreferencesDialog open={preferencesOpen} onClose={() => setPreferencesOpen(false)} />
+        <PreferencesDialog
+          open={preferencesCategory !== null}
+          initialCategory={preferencesCategory ?? "general"}
+          onClose={() => setPreferencesCategory(null)}
+        />
         {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
         {updateDialogState && (
           <UpdateDialog

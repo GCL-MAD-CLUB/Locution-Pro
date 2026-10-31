@@ -8,7 +8,7 @@
 
 :root,
 [data-theme="darkest"],
-:where(.application-menubar, .popup-menu) {
+:where(.application-menubar, .popup-menu, [data-theme="dark"] .project-home) {
   color: var(--color-text);
   background: var(--color-surface-canvas);
   font-family: var(--font-song);
@@ -683,7 +683,8 @@
 }
 
 /* Workspace and brand bar palettes. The application menubar and PopupMenu
-   retain their fixed scheme; other controls adapt to the active appearance. */
+   retain their fixed scheme. Project Home uses the darkest palette in dark
+   appearance; its light palette and the surrounding workspace remain independent. */
 [data-theme="dark"] {
   --theme-color-scheme: dark;
   --opacity-control-disabled: 0.68;

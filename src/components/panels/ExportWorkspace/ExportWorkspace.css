@@ -463,7 +463,7 @@
 
 /* Disabled switches keep the off-state palette and are additionally dimmed. */
 .export-switch.is-disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-dialog-disabled);
 }
 
 .export-switch input:disabled + .export-switch-track {
@@ -566,7 +566,7 @@
 /* The 选择 button only applies to the 指定文件夹 destination. */
 .export-output-location .toolbar-button:disabled {
   cursor: not-allowed;
-  opacity: 0.48;
+  opacity: var(--opacity-control-disabled);
 }
 
 /* 存储到子文件夹 row: checkbox + underline input, aligned to the control column. */
@@ -610,7 +610,7 @@
 
 .export-rename-custom-input:disabled {
   cursor: not-allowed;
-  opacity: 0.48;
+  opacity: var(--opacity-control-disabled);
 }
 
 .export-rename-inline {

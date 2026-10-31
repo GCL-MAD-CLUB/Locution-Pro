@@ -93,6 +93,7 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
       url: "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v0.0.0",
     },
     preferences: {
+      appearance: "darkest",
       show_home_on_startup: false,
       auto_save_enabled: false,
       auto_save_current_project: false,

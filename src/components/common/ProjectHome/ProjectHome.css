@@ -234,7 +234,7 @@
   background: var(--color-surface-soft);
 }
 .project-home button:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-dialog-disabled);
   cursor: not-allowed;
 }
 .project-home button:focus-visible {

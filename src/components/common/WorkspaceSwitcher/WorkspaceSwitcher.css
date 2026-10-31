@@ -26,14 +26,14 @@
 }
 
 .workspace-switcher button:disabled {
-  opacity: 0.55;
+  opacity: var(--opacity-topbar-disabled);
 }
 
 .workspace-switcher-divider {
   flex: 0 0 1px;
   width: 1px;
   height: 22px;
-  background: var(--color-border-default);
+  background: var(--color-topbar-divider);
 }
 
 .workspace-home {

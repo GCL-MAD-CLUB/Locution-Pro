@@ -1,11 +1,12 @@
 import stylesheet from "../styles.css?raw";
 import { clientError } from "../errors/model";
+import type { Appearance } from "../types";
 
 // Non-DOM consumers (saved media defaults and standalone SVG images) read the
 // same palette as CSS. Keep literal colors exclusively in styles.css.
-const rootTheme = stylesheet.match(/:root\s*\{([^}]+)\}/)![1];
+const rootTheme = stylesheet.match(/:root[^{]*\{([^}]+)\}/)![1];
 const defaultColors = new Map(
-  Array.from(rootTheme.matchAll(/(--color-[\w-]+):\s*([^;]+);/g), ([, name, value]) => [
+  Array.from(rootTheme.matchAll(/(--(?:color|palette)-[\w-]+):\s*([^;]+);/g), ([, name, value]) => [
     name,
     value.trim(),
   ]),
@@ -14,7 +15,29 @@ const defaultColors = new Map(
 export function defaultThemeColor(name: string): string {
   const value = defaultColors.get(name);
   if (!value) throw clientError("UNEXPECTED_ERROR", `Unknown theme color: ${name}`);
-  return value.replace(/var\((--color-[\w-]+)\)/g, (_, token: string) => defaultThemeColor(token));
+  return value.replace(/var\(\s*(--(?:color|palette)-[\w-]+)\s*\)/g, (_, token: string) =>
+    defaultThemeColor(token),
+  );
+}
+
+let appearance: Appearance = "darkest";
+const appearanceListeners = new Set<() => void>();
+
+export const currentAppearance = () => appearance;
+
+export function subscribeAppearance(listener: () => void) {
+  appearanceListeners.add(listener);
+  return () => {
+    appearanceListeners.delete(listener);
+  };
+}
+
+export function applyAppearance(next: Appearance) {
+  document.documentElement.dataset.theme = next;
+  initializeThemeImages();
+  if (appearance === next) return;
+  appearance = next;
+  for (const listener of appearanceListeners) listener();
 }
 
 const mediaColorTokens = [
@@ -38,7 +61,7 @@ export function themeSvgDataUrl(svg: string): string {
   const theme =
     typeof document === "undefined" ? undefined : getComputedStyle(document.documentElement);
   const resolved = svg.replace(
-    /var\((--color-[\w-]+)\)/g,
+    /var\(\s*(--color-[\w-]+)\s*\)/g,
     (_, token: string) => theme?.getPropertyValue(token).trim() || defaultThemeColor(token),
   );
   return `data:image/svg+xml,${encodeURIComponent(resolved)}`;

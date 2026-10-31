@@ -1,8 +1,8 @@
-import { defaultThemeColor } from "./runtime/theme";
+import { applyAppearance, defaultThemeColor } from "./runtime/theme";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   appPanelRegistry,
   initialAppPanelState,
@@ -380,6 +380,9 @@ function AppContent() {
     ],
   );
   const autoSaveIntervalMinutes = preferences.auto_save_interval_minutes;
+  useLayoutEffect(() => {
+    applyAppearance(preferences.appearance ?? "darkest");
+  }, [preferences.appearance]);
   const autoSaveEnabled = preferences.auto_save_enabled;
   const isMediaBinReadOnly = mediaBinReadOnly;
   const focusedPanel = focusedPanelId ? panelInstances[focusedPanelId] : undefined;

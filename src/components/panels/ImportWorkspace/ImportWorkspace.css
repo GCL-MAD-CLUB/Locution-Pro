@@ -24,7 +24,7 @@
 }
 .import-workspace button:disabled {
   cursor: default;
-  opacity: 0.4;
+  opacity: var(--opacity-import-disabled);
 }
 .import-workspace button:focus-visible,
 .import-workspace input:focus-visible {
@@ -787,7 +787,7 @@
   justify-content: center;
   gap: 10px;
   flex: 1;
-  color: var(--color-text-on-emphasis);
+  color: var(--color-import-selection-empty-text);
 }
 .import-selection-hint {
   display: inline-flex;

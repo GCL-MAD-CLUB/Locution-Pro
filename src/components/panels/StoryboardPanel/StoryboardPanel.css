@@ -65,7 +65,7 @@
 
 .storyboard-video-trigger:disabled {
   cursor: default;
-  opacity: 0.48;
+  opacity: var(--opacity-control-disabled);
 }
 
 .storyboard-video-name {
@@ -226,7 +226,7 @@
 
 .storyboard-filter-comparator:disabled {
   cursor: not-allowed;
-  opacity: 0.48;
+  opacity: var(--opacity-control-disabled);
 }
 
 .storyboard-rating-comparator-menu {
@@ -418,7 +418,11 @@
   top: 0;
   box-sizing: border-box;
   height: 13px;
-  background: color-mix(in srgb, var(--storyboard-color-label-color) 50%, var(--color-transparent));
+  background: color-mix(
+    in srgb,
+    var(--storyboard-color-label-color) var(--label-swatch-opacity),
+    var(--color-transparent)
+  );
   border: 1px solid var(--color-label-swatch-border);
 }
 
@@ -1680,7 +1684,7 @@ body.is-resizing-storyboard-keyword-panel * {
 }
 
 .storyboard-spray-keyword-picker-footer > button:hover:not(:disabled) {
-  color: var(--color-text-on-emphasis);
+  color: var(--color-text-strong-hover);
   background: var(--color-transparent);
 }
 

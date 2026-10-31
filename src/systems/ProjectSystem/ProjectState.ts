@@ -746,6 +746,7 @@ function openedProjectState(workspace: ProjectWorkspace, projectId: string) {
 
 export function defaultPreferences(): Preferences {
   return {
+    appearance: "darkest",
     show_home_on_startup: true,
     auto_save_enabled: true,
     auto_save_current_project: true,

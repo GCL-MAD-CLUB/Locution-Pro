@@ -70,7 +70,7 @@
 }
 
 .topbar-progress-cancel:hover {
-  color: var(--color-text-on-emphasis);
+  color: var(--color-text-strong-hover);
 }
 
 .topbar-progress-cancel svg {
@@ -80,5 +80,5 @@
 
 .topbar-progress-cancel:disabled {
   cursor: default;
-  opacity: 0.5;
+  opacity: var(--opacity-dialog-disabled);
 }

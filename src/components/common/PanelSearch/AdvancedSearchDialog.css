@@ -84,7 +84,7 @@
 }
 
 .advanced-search-body :disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-dialog-disabled);
 }
 .advanced-search-body input:not([type="checkbox"]):focus,
 .advanced-search-body textarea:focus {

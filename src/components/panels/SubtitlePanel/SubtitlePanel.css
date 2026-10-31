@@ -128,7 +128,7 @@
 
 .subtitle-filter-comparator:disabled {
   cursor: not-allowed;
-  opacity: 0.48;
+  opacity: var(--opacity-control-disabled);
 }
 
 .subtitle-rating-comparator-menu {
@@ -320,7 +320,11 @@
   top: 0;
   box-sizing: border-box;
   height: 13px;
-  background: color-mix(in srgb, var(--subtitle-color-label-color) 50%, var(--color-transparent));
+  background: color-mix(
+    in srgb,
+    var(--subtitle-color-label-color) var(--label-swatch-opacity),
+    var(--color-transparent)
+  );
   border: 1px solid var(--color-label-swatch-border);
 }
 
@@ -1179,7 +1183,7 @@ body.is-resizing-subtitle-column {
 
 .subtitle-track-trigger:disabled {
   cursor: default;
-  opacity: 0.48;
+  opacity: var(--opacity-control-disabled);
 }
 
 .subtitle-footer-sort-label {

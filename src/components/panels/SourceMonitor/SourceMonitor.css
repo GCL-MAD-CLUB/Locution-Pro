@@ -180,7 +180,7 @@
 }
 
 .transport-controls button:disabled {
-  opacity: 0.45;
+  opacity: var(--opacity-media-disabled);
 }
 
 .monitor-time,

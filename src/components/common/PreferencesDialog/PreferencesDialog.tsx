@@ -1,16 +1,18 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { Loader2 } from "lucide-react";
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { applyAppearance } from "../../../runtime/theme";
 import { invokeCommand, runOperation } from "../../../errors";
 import { createFfmpegTaskId } from "../../../platform/tauri/ffmpegProgress";
 import { isTauriRuntime } from "../../../platform/tauri/runtime";
 import { defaultPreferences, useProjectPort } from "../../../systems/ProjectSystem";
-import type { Preferences } from "../../../types";
+import type { Appearance, Preferences } from "../../../types";
 import { ModalDialog } from "../ModalDialog";
 import "./PreferencesDialog.css";
 
 const categories = [
   { id: "general", label: "常规" },
+  { id: "appearance", label: "外观" },
   { id: "backup", label: "自动保存" },
   { id: "cache", label: "媒体缓存" },
   { id: "tools", label: "媒体工具" },
@@ -28,6 +30,7 @@ type PreferencesDraft = Omit<
 function createDraft(preferences: Preferences): PreferencesDraft {
   return {
     ...preferences,
+    appearance: preferences.appearance ?? "darkest",
     auto_save_interval_minutes: String(preferences.auto_save_interval_minutes),
     auto_save_max_snapshots: String(preferences.auto_save_max_snapshots),
   };
@@ -53,6 +56,7 @@ function PreferencesEditor({ onClose }: { onClose: () => void }) {
     ["preferencesLoaded", "messagePublished"],
   );
   const [draft, setDraft] = useState(() => createDraft(preferences));
+  const savedAppearance = useRef(preferences.appearance ?? "darkest");
   const [category, setCategory] = useState<Category>("general");
   const [isSaving, setIsSaving] = useState(false);
   const [isChoosingPath, setIsChoosingPath] = useState(false);
@@ -62,6 +66,12 @@ function PreferencesEditor({ onClose }: { onClose: () => void }) {
   const intervalValid = validInteger(draft.auto_save_interval_minutes, 1440);
   const snapshotsValid = validInteger(draft.auto_save_max_snapshots, 1000);
   const valid = intervalValid && snapshotsValid;
+
+  useLayoutEffect(() => {
+    applyAppearance(draft.appearance);
+  }, [draft.appearance]);
+
+  useLayoutEffect(() => () => applyAppearance(savedAppearance.current), []);
 
   useEffect(() => {
     const previousFocus = document.activeElement;
@@ -162,6 +172,7 @@ function PreferencesEditor({ onClose }: { onClose: () => void }) {
         }),
       );
       if (outcome.status === "success") {
+        savedAppearance.current = outcome.value.appearance ?? "darkest";
         preferencesLoaded(outcome.value);
         messagePublished("已保存首选项。");
         onClose();
@@ -273,6 +284,52 @@ function PreferencesEditor({ onClose }: { onClose: () => void }) {
                   此设置在下次启动时生效。你也可以随时通过顶部主页按钮打开主页。
                 </p>
               </fieldset>
+            )}
+            {item.id === "appearance" && (
+              <div className="preferences-appearance-row">
+                <span id={`${id}-appearance-label`}>颜色主题</span>
+                <div
+                  className="preferences-appearance-options"
+                  role="radiogroup"
+                  aria-labelledby={`${id}-appearance-label`}
+                >
+                  {appearanceOptions.map(([value, label], index) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={draft.appearance === value}
+                      tabIndex={draft.appearance === value ? 0 : -1}
+                      className="preferences-appearance-option"
+                      disabled={busy}
+                      onClick={() => setDraft((current) => ({ ...current, appearance: value }))}
+                      onKeyDown={(event) => {
+                        let next = index;
+                        if (event.key === "ArrowRight" || event.key === "ArrowDown")
+                          next = (index + 1) % appearanceOptions.length;
+                        else if (event.key === "ArrowLeft" || event.key === "ArrowUp")
+                          next = (index + appearanceOptions.length - 1) % appearanceOptions.length;
+                        else if (event.key === "Home") next = 0;
+                        else if (event.key === "End") next = appearanceOptions.length - 1;
+                        else return;
+                        event.preventDefault();
+                        setDraft((current) => ({
+                          ...current,
+                          appearance: appearanceOptions[next][0],
+                        }));
+                        event.currentTarget.parentElement
+                          ?.querySelectorAll<HTMLButtonElement>('[role="radio"]')
+                          [next]?.focus();
+                      }}
+                    >
+                      <span className="preferences-appearance-frame">
+                        <AppearancePreview appearance={value} />
+                      </span>
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
             {item.id === "backup" && (
               <>
@@ -418,6 +475,41 @@ function PreferencesEditor({ onClose }: { onClose: () => void }) {
         ))}
       </ModalDialog>
     </div>
+  );
+}
+
+const appearanceOptions: ReadonlyArray<readonly [Appearance, string]> = [
+  ["darkest", "最暗"],
+  ["dark", "深色"],
+  ["light", "浅色"],
+];
+
+function AppearancePreview({ appearance }: { appearance: Appearance }) {
+  return (
+    <svg
+      data-theme={appearance}
+      className="preferences-appearance-preview"
+      viewBox="0 0 120 80"
+      aria-hidden="true"
+    >
+      <rect width="120" height="80" fill="var(--color-surface-canvas)" />
+      <path d="M1 1h118v12H1z" fill="var(--color-surface-section-header)" />
+      <g fill="var(--color-text-default)">
+        <circle cx="6" cy="6" r="1.5" />
+        <circle cx="12" cy="6" r="1.5" />
+        <circle cx="18" cy="6" r="1.5" />
+        <path d="M99 5h16v1H99z" />
+      </g>
+      <path d="M1 15h13v64H1zM91 15h28v64H91z" fill="var(--color-surface-raised)" />
+      <path d="M19 20h66v51H19z" fill="var(--color-surface-thumbnail)" />
+      <path d="M28 28h48v29H28z" fill="var(--color-contrast-inverse)" />
+      <path d="m4 21 5 4-5 2zM94 22h5v2h-5z" fill="var(--color-accent-monitor)" />
+      <g stroke="var(--color-text-default)" fill="var(--color-surface-raised)" strokeWidth="1.5">
+        <path d="M103 23h10M94 34h9" />
+        <circle cx="105" cy="23" r="2.5" />
+        <circle cx="105" cy="34" r="2.5" />
+      </g>
+    </svg>
   );
 }
 

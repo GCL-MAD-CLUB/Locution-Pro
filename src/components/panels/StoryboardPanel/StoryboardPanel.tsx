@@ -811,7 +811,7 @@ function storyboardSprayBottleMarkSvg(
   if (mode === "flag" && flag !== "none") {
     const excludedMark =
       flag === "excluded"
-        ? '<path d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6" stroke="var(--color-icon-cutout)" stroke-width=".75"/>'
+        ? '<path d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6" stroke="var(--color-annotation-flag-mark)" stroke-width=".75"/>'
         : "";
     return `<path d="M7.2 11v7" stroke="var(--color-annotation-flag-pole)" stroke-width=".9"/><rect x="8" y="11.7" width="4.4" height="3.6" fill="var(--color-annotation-mark)"/>${excludedMark}`;
   }
@@ -904,7 +904,7 @@ function StoryboardSprayBottleIcon({
           {flag === "excluded" && (
             <path
               d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6"
-              stroke="var(--color-icon-cutout)"
+              stroke="var(--color-annotation-flag-mark)"
               strokeWidth="0.75"
             />
           )}

@@ -1,5 +1,5 @@
-import { themeSvgDataUrl } from "../../../runtime/theme";
-import { useEffect, useState } from "react";
+import { currentAppearance, subscribeAppearance, themeSvgDataUrl } from "../../../runtime/theme";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 function isAltKeyEvent(event: KeyboardEvent) {
   return event.key === "Alt" || event.code === "AltLeft" || event.code === "AltRight";
@@ -35,6 +35,7 @@ export function sprayEyedropperRemoveCursor() {
 }
 
 export function useSprayToolModifiers(active: boolean, blockShift: boolean) {
+  useSyncExternalStore(subscribeAppearance, currentAppearance);
   const [altPressed, setAltPressed] = useState(false);
   const [shiftPressed, setShiftPressed] = useState(false);
 

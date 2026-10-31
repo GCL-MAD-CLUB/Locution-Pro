@@ -312,7 +312,7 @@ body.system-file-drag-active .media-bin-table-scroll.system-file-drop-target * {
 }
 
 .media-bin-row.is-disabled > span:not(.media-bin-boolean-cell) {
-  opacity: 0.48;
+  opacity: var(--opacity-control-disabled);
 }
 
 .media-bin-row.binding-target,
@@ -697,7 +697,7 @@ body.is-resizing-media-column {
 .media-bin-card.is-disabled .media-bin-card-preview,
 .media-bin-card.is-disabled .media-bin-card-meta,
 .media-bin-card.is-disabled .media-bin-card-bound {
-  opacity: 0.48;
+  opacity: var(--opacity-control-disabled);
 }
 
 .media-bin-card-preview-shell {

@@ -6,9 +6,9 @@ import { clientError } from "../../../src/errors/model.ts";
 
 const sourceRoot = new URL("../../../src/", import.meta.url);
 const stylesheet = readFileSync(new URL("styles.css", sourceRoot), "utf8");
-const rootTheme = stylesheet.match(/:root\s*\{([^}]+)\}/)[1];
+const rootTheme = stylesheet.match(/:root[^{]*\{([^}]+)\}/)[1];
 const colors = new Map(
-  Array.from(rootTheme.matchAll(/(--color-[\w-]+):\s*([^;]+);/g), ([, name, value]) => [
+  Array.from(rootTheme.matchAll(/(--(?:color|palette)-[\w-]+):\s*([^;]+);/g), ([, name, value]) => [
     name,
     value.trim(),
   ]),
@@ -18,7 +18,8 @@ const theme = load("../../../src/runtime/theme.ts", {
   "../styles.css?raw": stylesheet,
   "../errors/model": { clientError },
 });
-const references = (source) => Array.from(source.matchAll(/--color-[\w-]+/g), ([token]) => token);
+const references = (source) =>
+  Array.from(source.matchAll(/--(?:color|palette)-[\w-]+/g), ([token]) => token);
 const sourceFiles = readdirSync(sourceRoot, { recursive: true }).filter((name) =>
   /\.(?:css|tsx?|svg)$/.test(name),
 );
@@ -56,7 +57,27 @@ test("theme literals are unique and all frontend colors are centralized", () => 
     assert.doesNotMatch(source, /#[\da-f]{3,8}\b|\brgba?\(|\bhsla?\(|%23[\da-f]{3,8}\b/i, name);
     if (name.endsWith(".css")) {
       assert.doesNotMatch(source, /:\s*(?:white|black|transparent)\s*[; }]/i, name);
-      assert.doesNotMatch(source, /color-scheme:\s*(?:dark|light)\s*;/, name);
+      assert.doesNotMatch(source, /(?<!theme-)color-scheme:\s*(?:dark|light)\s*;/, name);
+    }
+  }
+});
+
+test("dark and light appearances explicitly define every semantic color role", () => {
+  const roles = [...colors.keys()].filter((token) => token.startsWith("--color-"));
+  for (const appearance of ["dark", "light"]) {
+    const block = stylesheet.match(
+      new RegExp(`\\[data-theme="${appearance}"\\]\\s*\\{([^}]+)\\}`),
+    )[1];
+    const overrides = new Map(
+      Array.from(block.matchAll(/(--color-[\w-]+):\s*([^;]+);/g), ([, name, value]) => [
+        name,
+        value,
+      ]),
+    );
+    assert.deepEqual([...overrides.keys()].sort(), [...roles].sort());
+    for (const [name, value] of overrides) {
+      assert.match(value, /^var\(\s*--palette-[\w-]+\s*\)$/, name);
+      for (const token of references(value)) assert.ok(colors.has(token), token);
     }
   }
 });
@@ -86,6 +107,8 @@ test("every theme token is used, defined, and resolves without cycles", () => {
     }
   }
   for (const token of used) visit(token);
+  for (const token of colors.keys())
+    assert.doesNotMatch(theme.defaultThemeColor(token), /var\(/, token);
   assert.deepEqual(
     [...colors.keys()].filter((token) => !used.has(token)),
     [],

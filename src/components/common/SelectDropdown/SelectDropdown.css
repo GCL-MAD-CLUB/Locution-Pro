@@ -18,7 +18,11 @@
 
 .select-dropdown.disabled {
   cursor: not-allowed;
-  opacity: 0.48;
+  opacity: var(--opacity-control-disabled);
+}
+
+.select-dropdown.disabled > .select-dropdown-trigger {
+  opacity: var(--opacity-disabled-child);
 }
 
 .select-dropdown-trigger {

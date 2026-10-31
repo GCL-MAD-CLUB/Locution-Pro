@@ -226,6 +226,7 @@ pub(crate) fn normalize_preferences(preferences: Preferences) -> AppResult<Prefe
         .to_string_lossy()
         .into_owned();
     let normalized = Preferences {
+        appearance: preferences.appearance,
         show_home_on_startup: preferences.show_home_on_startup,
         auto_save_enabled: preferences.auto_save_enabled,
         auto_save_current_project: preferences.auto_save_current_project,
@@ -435,6 +436,7 @@ mod tests {
         let cache_root =
             std::env::temp_dir().join(format!("locution-pro-preferences-{}", uuid::Uuid::new_v4()));
         let preferences = normalize_preferences(Preferences {
+            appearance: crate::models::Appearance::Light,
             show_home_on_startup: false,
             auto_save_enabled: false,
             auto_save_current_project: false,
@@ -449,6 +451,7 @@ mod tests {
         let restored: Preferences =
             serde_json::from_str(&serde_json::to_string(&preferences).unwrap()).unwrap();
         assert!(!restored.show_home_on_startup);
+        assert_eq!(restored.appearance, crate::models::Appearance::Light);
         assert!(!restored.auto_save_enabled);
         assert!(!restored.auto_save_current_project);
         assert_eq!(

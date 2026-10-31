@@ -106,7 +106,7 @@
 }
 
 .media-browser-search > button:hover {
-  color: var(--color-text-on-emphasis);
+  color: var(--color-text-strong-hover);
   background: var(--color-browser-search-hover-background);
 }
 
@@ -264,7 +264,7 @@
   bottom: 6px;
   width: 19px;
   height: 19px;
-  color: var(--color-browser-action-hover-text);
+  color: var(--color-browser-thumbnail-icon);
   filter: drop-shadow(0 1px 2px var(--color-contrast-strong));
 }
 
@@ -273,7 +273,7 @@
   right: 5px;
   bottom: 4px;
   padding: 1px 3px;
-  color: var(--color-text-control-hover);
+  color: var(--color-browser-thumbnail-text);
   font-size: 10px;
   background: var(--color-browser-preview-overlay);
 }
@@ -441,7 +441,7 @@
 }
 
 .media-browser-view-controls input:disabled {
-  opacity: 0.4;
+  opacity: var(--opacity-import-disabled);
 }
 .media-browser-system-icon {
   width: 64px;

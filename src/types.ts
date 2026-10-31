@@ -336,7 +336,10 @@ export interface MediaAutoBindingBatch {
   historyLabel?: string;
 }
 
+export type Appearance = "darkest" | "dark" | "light";
+
 export interface Preferences {
+  appearance: Appearance;
   show_home_on_startup: boolean;
   auto_save_enabled: boolean;
   auto_save_current_project: boolean;

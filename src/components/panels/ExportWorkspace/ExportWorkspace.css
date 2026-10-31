@@ -4,9 +4,20 @@
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  padding: 1px;
+  padding: 2px 1px 1px;
   overflow: hidden;
   background: var(--color-surface-input);
+}
+
+.export-workspace::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--color-border-divider);
+  pointer-events: none;
+  content: "";
 }
 
 .export-workspace-empty {
@@ -18,6 +29,7 @@
 }
 
 /* No export source: keep the page visible but gray it out and block interaction. */
+.export-workspace.is-empty::before,
 .export-workspace.is-empty .export-workspace-main,
 .export-workspace.is-empty .export-action-bar {
   pointer-events: none;
@@ -57,7 +69,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   background: var(--color-surface-canvas);
-  border-bottom: 1px solid var(--color-border-section);
+  border-bottom: 1px solid var(--color-transparent);
   user-select: none;
 }
 

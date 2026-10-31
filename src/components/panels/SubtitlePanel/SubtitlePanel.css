@@ -316,6 +316,10 @@
   content: "";
 }
 
+.subtitle-color-label-buttons button:disabled {
+  opacity: var(--opacity-label-disabled);
+}
+
 .subtitle-color-label-buttons button::before {
   top: 0;
   box-sizing: border-box;
@@ -354,7 +358,7 @@
 .subtitle-color-label-buttons button.active::before {
   background: var(--subtitle-color-label-color);
   border-color: var(--color-label-swatch-active-border);
-  outline: 1px solid var(--color-annotation-active);
+  outline: 1px solid var(--color-label-outline);
   box-shadow:
     inset 1px 0 0 var(--color-label-highlight),
     inset 0 1px 0 var(--color-label-highlight);
@@ -791,8 +795,8 @@
   width: 10px;
   height: 7px;
   padding: 0;
-  background: var(--subtitle-color-label, var(--color-annotation-hover));
-  border: 1px solid var(--color-border-inset);
+  background: var(--subtitle-color-label, var(--color-label-thumbnail-placeholder));
+  border: 1px solid var(--color-label-thumbnail-border);
   border-radius: 0;
   box-shadow:
     inset 0.8px 0 0 var(--color-label-highlight-strong),
@@ -813,7 +817,7 @@
 }
 
 .cue-thumbnail-color-label:focus-visible {
-  outline: 1px solid var(--color-border-selection);
+  outline: 1px solid var(--color-label-thumbnail-focus-outline);
   outline-offset: 1px;
 }
 

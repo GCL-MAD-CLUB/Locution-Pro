@@ -440,12 +440,14 @@ export function StoryboardTimeline({
             const position = (shot.start_frame - timelineStartFrame) / visibleSpan;
             if (position < 0 || position > 1) return null;
             const selected = selectedIds.has(shot.id);
-            const color = storyboardCutColor(storyboard?.shotAnnotations[shot.id]);
+            const annotation = storyboard?.shotAnnotations[shot.id];
+            const color = storyboardCutColor(annotation);
             return (
               <button
                 key={shot.id}
                 type="button"
                 data-cut-id={shot.id}
+                data-custom-label={annotation?.customLabel?.trim() ? true : undefined}
                 className={`storyboard-cut-marker ${selected ? "selected" : ""} ${selectedCuts.length === 0 ? "unselected-all" : ""} ${retainedIds.has(shot.id) ? "" : "deleted"}`}
                 style={
                   {

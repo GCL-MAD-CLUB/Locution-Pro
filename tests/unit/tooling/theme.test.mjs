@@ -82,6 +82,51 @@ test("dark and light appearances explicitly define every semantic color role", (
   }
 });
 
+test("appearance changes preserve the grayscale or chromatic identity of every semantic color", () => {
+  function family(value) {
+    const [red, green, blue] = colorIdentity(value).split(",").map(Number);
+    return red === green && green === blue ? "grayscale" : "chromatic";
+  }
+  const changes = [];
+  for (const appearance of ["dark", "light"]) {
+    const block = stylesheet.match(
+      new RegExp(`\\[data-theme="${appearance}"\\]\\s*\\{([^}]+)\\}`),
+    )[1];
+    for (const [, role, palette] of block.matchAll(
+      /(--color-[\w-]+):\s*var\(\s*(--palette-[\w-]+)\s*\);/g,
+    )) {
+      const original = theme.defaultThemeColor(role);
+      const replacement = theme.defaultThemeColor(palette);
+      if (family(original) !== family(replacement))
+        changes.push(`${appearance} ${role}: ${original} -> ${replacement}`);
+    }
+  }
+  assert.deepEqual(changes, []);
+});
+
+test("annotation labels and cut markers keep their default palette in every appearance", () => {
+  const fixedRoles = [...colors.keys()].filter((token) =>
+    /^--color-(?:label-|timeline-(?:cut-|deleted-cut-)|monitor-cut-preview$)/.test(token),
+  );
+  for (const appearance of ["dark", "light"]) {
+    const block = stylesheet.match(
+      new RegExp(`\\[data-theme="${appearance}"\\]\\s*\\{([^}]+)\\}`),
+    )[1];
+    const overrides = new Map(
+      Array.from(
+        block.matchAll(/(--color-[\w-]+):\s*var\((--palette-[\w-]+)\);/g),
+        ([, role, palette]) => [role, palette],
+      ),
+    );
+    for (const role of fixedRoles)
+      assert.equal(
+        theme.defaultThemeColor(overrides.get(role)),
+        theme.defaultThemeColor(role),
+        `${appearance} ${role}`,
+      );
+  }
+});
+
 test("every theme token is used, defined, and resolves without cycles", () => {
   const used = new Set();
   for (const name of sourceFiles) {

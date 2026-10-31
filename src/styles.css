@@ -22,7 +22,8 @@
   --font-mono: Consolas;
   --theme-color-scheme: dark;
 
-  /* Shared immutable color values; reused by semantic roles in all appearances. */
+  /* Shared immutable color values; reused by semantic roles in all appearances.
+     Each role retains its grayscale or chromatic identity across appearances. */
   --palette-contrast-inverse: #ffffff;
   --palette-contrast-strong: #000000;
   --palette-surface-active: #4b4b4b;
@@ -240,9 +241,6 @@
   --palette-dark-history-current-marker-inset: #3c3c3c;
   --palette-dark-history-row-border: #353535;
   --palette-light-surface-active: #bfbfbf;
-  --palette-light-surface-row-primary: #b9d2ed;
-  --palette-light-surface-row-selected: #cbdcef;
-  --palette-light-surface-thumbnail-tinted: #dce1e6;
   --palette-light-danger-muted: #ac3333;
   --palette-light-icon-muted: #636363;
   --palette-light-text-description: #606060;
@@ -251,12 +249,12 @@
   --palette-light-warning-text: #895000;
   --palette-light-footer-control-hover-background: #c2c2c2;
   --palette-light-scrollbar-thumb: #a0a0a0;
-  --palette-light-selection-muted: rgb(30 70 110 / 12%);
-  --palette-light-selection-muted-outline: rgb(20 40 60 / 14%);
+  --palette-light-selection-muted: rgb(70 70 70 / 12%);
+  --palette-light-selection-muted-outline: rgb(40 40 40 / 14%);
   --palette-light-selection-overlay: rgb(32 114 200 / 20%);
   --palette-light-slider-thumb-disabled: #a4a4a4;
   --palette-light-dialog-header-divider: rgb(0 0 0 / 12%);
-  --palette-light-dock-drop-target: rgb(24 92 160 / 16%);
+  --palette-light-dock-drop-target: rgb(92 92 92 / 16%);
   --palette-light-dock-drop-target-active: rgb(45 125 205 / 32%);
   --palette-light-dock-icon-shadow: rgb(255 255 255 / 60%);
   --palette-light-home-table-border: #c6c6c6;
@@ -268,22 +266,17 @@
   --palette-light-media-audio-icon: #137b59;
   --palette-light-media-disabled: #bc3428;
   --palette-light-media-enabled: #16804e;
-  --palette-light-media-folder-drop-border: #437aad;
-  --palette-light-media-folder-drop-text: #173f68;
   --palette-light-media-folder-preview-background: #e4e4e4;
   --palette-light-media-link-success: #246e4a;
   --palette-light-media-video-icon: #7841b3;
-  --palette-light-label-custom: #525252;
-  --palette-light-label-none: #727272;
   --palette-light-spray-button-hover-overlay: rgb(100 100 100 / 20%);
   --palette-light-storyboard-duration: rgb(40 40 40 / 90%);
   --palette-light-storyboard-excluded-border: #af6666;
   --palette-light-storyboard-match: #28766d;
-  --palette-light-storyboard-row-outline: rgb(30 70 110 / 24%);
+  --palette-light-storyboard-row-outline: rgb(70 70 70 / 24%);
   --palette-light-monitor-range-border: rgb(70 70 70 / 45%);
   --palette-light-monitor-range-stripe-dark: rgb(90 90 90 / 20%);
   --palette-light-monitor-range-stripe-light: rgb(180 180 180 / 25%);
-  --palette-light-search-highlight-background: #285e9c;
   --palette-light-update-code-background: rgb(0 0 0 / 6%);
   --palette-light-update-code-surface: rgb(0 0 0 / 3%);
   --palette-light-update-error: #a42e2e;
@@ -561,18 +554,22 @@
   --color-keyword-indicator-text: var(--color-surface-canvas);
   --color-keyword-tree-arrow: var(--color-text-help);
   --color-label-blue: var(--palette-label-blue);
-  --color-label-custom: var(--color-contrast-inverse);
+  --color-label-custom: var(--palette-contrast-inverse);
   --color-label-green: var(--palette-label-green);
   --color-label-highlight: var(--palette-label-highlight);
   --color-label-highlight-strong: var(--palette-label-highlight-strong);
   --color-label-inset-shadow: var(--palette-label-inset-shadow);
   --color-label-none: var(--palette-label-none);
+  --color-label-outline: var(--palette-annotation-active);
   --color-label-purple: var(--palette-label-purple);
   --color-label-red: var(--palette-label-red);
-  --color-label-swatch-active-border: var(--color-surface-section-header);
+  --color-label-swatch-active-border: var(--palette-surface-section-header);
   --color-label-swatch-border: var(--palette-label-swatch-border);
   --color-label-swatch-divider: var(--palette-label-swatch-divider);
   --color-label-yellow: var(--palette-label-yellow);
+  --color-label-thumbnail-placeholder: var(--palette-annotation-hover);
+  --color-label-thumbnail-border: var(--palette-contrast-strong);
+  --color-label-thumbnail-focus-outline: var(--palette-contrast-inverse);
   --color-motion-plot-border: var(--palette-motion-plot-border);
   --color-spray-bottle-background: var(--palette-spray-bottle-background);
   --color-spray-bottle-detail: var(--palette-spray-bottle-detail);
@@ -605,7 +602,9 @@
   --color-monitor-range-stripe-light: var(--palette-monitor-range-stripe-light);
   --color-timeline-cut-label-blend: var(--palette-timeline-cut-label-blend);
   --color-timeline-cut-marker: var(--palette-timeline-cut-marker);
-  --color-timeline-deleted-cut-background: var(--color-surface-section-header);
+  --color-timeline-cut-custom-dim: var(--palette-annotation-flag-pole);
+  --color-timeline-cut-focus-outline: var(--palette-accent-monitor);
+  --color-timeline-deleted-cut-background: var(--palette-surface-section-header);
   --color-timeline-ruler: var(--palette-timeline-ruler);
 
   /* Search controls */
@@ -648,7 +647,7 @@
   --radius-pill: 999px;
   --control-height-sm: 24px;
   --control-height: 30px;
-  --resizer-size: 3px;
+  --resizer-size: 5px;
   --application-menubar-height: 20px;
   --secondary-topbar-height: 50px;
   --statusbar-height: 20px;
@@ -678,6 +677,8 @@
   --opacity-topbar-disabled: 0.55;
   --opacity-media-disabled: 0.45;
   --opacity-disabled-child: 0.48;
+  --opacity-label-disabled: 0.48;
+  /* Annotation labels and cut markers retain the default palette in every appearance. */
   --label-swatch-opacity: 50%;
 }
 
@@ -691,7 +692,6 @@
   --opacity-topbar-disabled: 0.68;
   --opacity-media-disabled: 0.68;
   --opacity-disabled-child: 1;
-  --label-swatch-opacity: 75%;
   --color-contrast-inverse: var(--palette-contrast-inverse);
   --color-contrast-strong: var(--palette-contrast-strong);
   --color-surface-active: var(--palette-light-import-checkbox-accent);
@@ -940,12 +940,16 @@
   --color-label-highlight-strong: var(--palette-label-highlight-strong);
   --color-label-inset-shadow: var(--palette-label-inset-shadow);
   --color-label-none: var(--palette-label-none);
+  --color-label-outline: var(--palette-annotation-active);
   --color-label-purple: var(--palette-label-purple);
   --color-label-red: var(--palette-label-red);
-  --color-label-swatch-active-border: var(--palette-dark-history-row-border);
-  --color-label-swatch-border: var(--palette-text-muted);
-  --color-label-swatch-divider: var(--palette-dark-workspace-surface-toolbar-active);
+  --color-label-swatch-active-border: var(--palette-surface-section-header);
+  --color-label-swatch-border: var(--palette-label-swatch-border);
+  --color-label-swatch-divider: var(--palette-label-swatch-divider);
   --color-label-yellow: var(--palette-label-yellow);
+  --color-label-thumbnail-placeholder: var(--palette-annotation-hover);
+  --color-label-thumbnail-border: var(--palette-contrast-strong);
+  --color-label-thumbnail-focus-outline: var(--palette-contrast-inverse);
   --color-motion-plot-border: var(--palette-dark-history-current-marker-inset);
   --color-spray-bottle-background: var(--palette-surface-hover-default);
   --color-spray-bottle-detail: var(--palette-spray-bottle-detail);
@@ -976,7 +980,9 @@
   --color-monitor-range-stripe-light: var(--palette-monitor-range-stripe-light);
   --color-timeline-cut-label-blend: var(--palette-timeline-cut-label-blend);
   --color-timeline-cut-marker: var(--palette-timeline-cut-marker);
-  --color-timeline-deleted-cut-background: var(--palette-dark-history-row-border);
+  --color-timeline-cut-custom-dim: var(--palette-annotation-flag-pole);
+  --color-timeline-cut-focus-outline: var(--palette-accent-monitor);
+  --color-timeline-deleted-cut-background: var(--palette-surface-section-header);
   --color-timeline-ruler: var(--palette-timeline-ruler);
   --color-search-control-disabled: var(--palette-text-default);
   --color-search-divider: var(--palette-annotation-inactive);
@@ -1019,7 +1025,6 @@
   --opacity-topbar-disabled: 0.68;
   --opacity-media-disabled: 0.68;
   --opacity-disabled-child: 1;
-  --label-swatch-opacity: 80%;
   --color-contrast-inverse: var(--palette-contrast-inverse);
   --color-contrast-strong: var(--palette-contrast-strong);
   --color-surface-active: var(--palette-light-surface-active);
@@ -1042,13 +1047,13 @@
   --color-surface-raised-default: var(--palette-text-title);
   --color-surface-row: var(--palette-text-title);
   --color-surface-row-hover: var(--palette-text-action);
-  --color-surface-row-primary: var(--palette-light-surface-row-primary);
-  --color-surface-row-selected: var(--palette-light-surface-row-selected);
+  --color-surface-row-primary: var(--palette-light-surface-active);
+  --color-surface-row-selected: var(--palette-text-heading);
   --color-surface-section-header: var(--palette-menu-separator);
   --color-surface-soft: var(--palette-text-control-hover);
   --color-surface-table-inset: var(--palette-text-title);
   --color-surface-thumbnail: var(--palette-surface-thumbnail);
-  --color-surface-thumbnail-tinted: var(--palette-light-surface-thumbnail-tinted);
+  --color-surface-thumbnail-tinted: var(--palette-text-row-hover);
   --color-surface-toolbar-active: var(--palette-import-favorite-active);
   --color-accent: var(--palette-contrast-dark-accent);
   --color-accent-hover: var(--palette-contrast-dark-accent-hover);
@@ -1086,7 +1091,7 @@
   --color-warning: var(--palette-light-warning);
   --color-warning-border: var(--palette-warning-border);
   --color-warning-text: var(--palette-light-warning-text);
-  --color-border-cell-active: var(--palette-accent-hover);
+  --color-border-cell-active: var(--palette-light-text-description);
   --color-border-column-resizer: var(--palette-text-muted);
   --color-border-control: var(--palette-text-muted);
   --color-border-control-default: var(--palette-text-muted);
@@ -1107,7 +1112,7 @@
   --color-border-resizer: var(--palette-text-muted);
   --color-border-section: var(--palette-text-default);
   --color-border-section-inset: var(--palette-timeline-cut-marker);
-  --color-border-selection: var(--palette-accent-hover);
+  --color-border-selection: var(--palette-light-text-description);
   --color-border-subtle: var(--palette-text-default);
   --color-border-table-cell: var(--palette-text-default);
   --color-border-workspace-section: var(--palette-timeline-cut-marker);
@@ -1215,8 +1220,8 @@
   --color-media-disabled: var(--palette-light-media-disabled);
   --color-media-enabled: var(--palette-light-media-enabled);
   --color-media-folder: var(--palette-media-folder);
-  --color-media-folder-drop-border: var(--palette-light-media-folder-drop-border);
-  --color-media-folder-drop-text: var(--palette-light-media-folder-drop-text);
+  --color-media-folder-drop-border: var(--palette-light-text-description);
+  --color-media-folder-drop-text: var(--palette-surface-soft);
   --color-media-folder-icon: var(--palette-dark-annotation-confirm-hover-background);
   --color-media-folder-preview-background: var(--palette-light-media-folder-preview-background);
   --color-media-label-outline: var(--palette-update-code-background);
@@ -1258,18 +1263,22 @@
   --color-keyword-indicator-text: var(--palette-surface-hover-default);
   --color-keyword-tree-arrow: var(--palette-light-text-description);
   --color-label-blue: var(--palette-label-blue);
-  --color-label-custom: var(--palette-light-label-custom);
+  --color-label-custom: var(--palette-contrast-inverse);
   --color-label-green: var(--palette-label-green);
   --color-label-highlight: var(--palette-label-highlight);
   --color-label-highlight-strong: var(--palette-label-highlight-strong);
   --color-label-inset-shadow: var(--palette-label-inset-shadow);
-  --color-label-none: var(--palette-light-label-none);
+  --color-label-none: var(--palette-label-none);
+  --color-label-outline: var(--palette-annotation-active);
   --color-label-purple: var(--palette-label-purple);
   --color-label-red: var(--palette-label-red);
-  --color-label-swatch-active-border: var(--palette-dark-spray-bottle-detail);
-  --color-label-swatch-border: var(--palette-dark-spray-bottle-detail);
-  --color-label-swatch-divider: var(--palette-annotation-active-hover);
+  --color-label-swatch-active-border: var(--palette-surface-section-header);
+  --color-label-swatch-border: var(--palette-label-swatch-border);
+  --color-label-swatch-divider: var(--palette-label-swatch-divider);
   --color-label-yellow: var(--palette-label-yellow);
+  --color-label-thumbnail-placeholder: var(--palette-annotation-hover);
+  --color-label-thumbnail-border: var(--palette-contrast-strong);
+  --color-label-thumbnail-focus-outline: var(--palette-contrast-inverse);
   --color-motion-plot-border: var(--palette-light-scrollbar-thumb);
   --color-spray-bottle-background: var(--palette-spray-bottle-background);
   --color-spray-bottle-detail: var(--palette-import-path-separator);
@@ -1298,15 +1307,17 @@
   --color-monitor-range-handle-disabled-border: var(--palette-light-slider-thumb-disabled);
   --color-monitor-range-stripe-dark: var(--palette-light-monitor-range-stripe-dark);
   --color-monitor-range-stripe-light: var(--palette-light-monitor-range-stripe-light);
-  --color-timeline-cut-label-blend: var(--palette-home-search-placeholder);
-  --color-timeline-cut-marker: var(--palette-home-search-placeholder);
-  --color-timeline-deleted-cut-background: var(--palette-text-emphasis);
+  --color-timeline-cut-label-blend: var(--palette-timeline-cut-label-blend);
+  --color-timeline-cut-marker: var(--palette-timeline-cut-marker);
+  --color-timeline-cut-custom-dim: var(--palette-annotation-flag-pole);
+  --color-timeline-cut-focus-outline: var(--palette-accent-monitor);
+  --color-timeline-deleted-cut-background: var(--palette-surface-section-header);
   --color-timeline-ruler: var(--palette-home-search-placeholder);
   --color-search-control-disabled: var(--palette-import-submit-disabled-text);
   --color-search-divider: var(--palette-text-default);
-  --color-search-highlight-background: var(--palette-light-search-highlight-background);
+  --color-search-highlight-background: var(--palette-light-text-description);
   --color-search-highlight-text: var(--palette-contrast-inverse);
-  --color-search-match-text: var(--palette-contrast-dark-accent-hover);
+  --color-search-match-text: var(--palette-surface-soft);
   --color-export-meta-separator: var(--palette-text-help);
   --color-export-switch-checked-thumb: var(--palette-contrast-inverse);
   --color-export-switch-thumb: var(--palette-text-placeholder);
@@ -1331,7 +1342,7 @@
   --color-text-on-accent: var(--palette-contrast-inverse);
   --color-text-strong-hover: var(--palette-surface-soft);
   --color-topbar-divider: var(--palette-text-field);
-  --color-border-control-active: var(--palette-contrast-dark-accent-hover);
+  --color-border-control-active: var(--palette-light-text-description);
   --color-import-selection-empty-text: var(--palette-dark-menu-hover-background);
 }
 
@@ -1556,8 +1567,8 @@ button:disabled {
   gap: 0;
   flex: 1 1 auto;
   min-height: 0;
-  padding: 1px;
-  background: var(--color-surface-canvas);
+  padding: 3px 1px;
+  background: var(--color-border-divider);
   overflow: hidden;
 }
 
@@ -1732,7 +1743,6 @@ select {
   color: var(--color-text);
   font-size: 12px;
   background: var(--color-surface-canvas);
-  border-top: 1px solid var(--color-border-inset);
 }
 
 .statusbar span {

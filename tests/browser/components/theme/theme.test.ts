@@ -15,6 +15,7 @@ for (const appearance of ["dark", "light"] as const) {
         "/src/components/panels/SubtitlePanel/SubtitlePanel.css",
         "/src/components/panels/StoryboardPanel/StoryboardPanel.css",
         "/src/components/panels/SourceMonitor/SourceMonitor.css",
+        "/src/components/panels/MediaBin/MediaBin.css",
       ])
         await import(/* @vite-ignore */ url);
       const url = "/src/runtime/theme.ts";
@@ -34,6 +35,7 @@ for (const appearance of ["dark", "light"] as const) {
           <div class="subtitle-list-header" id="table-header">媒体开始</div>
           <div class="cue-row is-selected" id="selected-row">选中字幕</div>
           <div class="cue-row is-primary" id="primary-row">主选字幕</div>
+          <div class="media-bin-folder-row folder-drop-target" id="folder-drop">移入文件夹</div>
           <div class="panel-search-input"><input id="field" value="字幕检索"></div>
           <div class="select-dropdown disabled"><button class="select-dropdown-trigger" id="disabled-select" disabled>不可用选项</button></div>
           <span class="monitor-time" id="timecode">00:00:12:15</span>
@@ -49,8 +51,12 @@ for (const appearance of ["dark", "light"] as const) {
     }, appearance);
     await page.mouse.move(1, 1);
 
-    async function contrast(id: string, minimum: number, border = false) {
-      const ratio = await page.locator(`#${id}`).evaluate((node, border) => {
+    async function contrast(
+      id: string,
+      minimum: number,
+      property: "color" | "borderTopColor" | "boxShadow" = "color",
+    ) {
+      const ratio = await page.locator(`#${id}`).evaluate((node, property) => {
         type RGB = [number, number, number];
         const channels = (value: string) => value.match(/[\d.]+/g)!.map(Number);
         const mix = (front: number[], back: RGB, alpha = front[3] ?? 1): RGB =>
@@ -73,14 +79,14 @@ for (const appearance of ["dark", "light"] as const) {
         for (let current: Element | null = node; current; current = current.parentElement)
           opacity *= Number(getComputedStyle(current).opacity);
         const back = background(node);
-        const front = mix(channels(border ? style.borderTopColor : style.color), back, opacity);
+        const value =
+          property === "boxShadow" ? style.boxShadow.match(/rgba?\([^)]+\)/)![0] : style[property];
+        const front = mix(channels(value), back, opacity);
         const a = luminance(front),
           b = luminance(back);
         return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-      }, border);
-      expect
-        .soft(ratio, `${appearance}: ${id}${border ? " border" : ""}`)
-        .toBeGreaterThanOrEqual(minimum);
+      }, property);
+      expect.soft(ratio, `${appearance}: ${id} ${property}`).toBeGreaterThanOrEqual(minimum);
     }
 
     for (const id of [
@@ -94,6 +100,7 @@ for (const appearance of ["dark", "light"] as const) {
       "table-header",
       "selected-row",
       "primary-row",
+      "folder-drop",
       "field",
       "timecode",
       "search-match",
@@ -107,7 +114,8 @@ for (const appearance of ["dark", "light"] as const) {
     for (const id of ["subtitle-star", "storyboard-star", "active-star", "active-tool"])
       await contrast(id, 3);
     for (const id of ["disabled-search", "disabled-select"]) await contrast(id, 2.5);
-    await contrast("field", 3, true);
+    await contrast("field", 3, "borderTopColor");
+    await contrast("folder-drop", 3, "boxShadow");
     for (const id of [
       "confirm",
       "cut-confirm",
@@ -132,6 +140,154 @@ for (const appearance of ["dark", "light"] as const) {
     await expect(page.locator("#active-tool")).not.toHaveCSS("box-shadow", "none");
   });
 }
+
+test("三种外观保持标签色块和缩略图标签的默认配色及状态", async ({ page }) => {
+  await page.goto("/tests/browser/support/blank.html");
+  const snapshots = await page.evaluate(async () => {
+    for (const url of [
+      "/src/components/panels/SubtitlePanel/SubtitlePanel.css",
+      "/src/components/panels/StoryboardPanel/StoryboardPanel.css",
+    ])
+      await import(/* @vite-ignore */ url);
+    const url = "/src/runtime/theme.ts";
+    const theme = await import(/* @vite-ignore */ url);
+    const labels = Object.entries(theme.annotationColors) as [string, string][];
+    document.body.innerHTML = labels
+      .map(([, color]) => {
+        return `
+          ${["subtitle", "storyboard"]
+            .map(
+              (panel) => `<div class="${panel}-color-label-buttons">
+                ${["", "active", "disabled"]
+                  .map(
+                    (state) => `<button class="${state}" ${state === "disabled" ? "disabled" : ""}
+                      style="--${panel}-color-label-color:${color}"></button>`,
+                  )
+                  .join("")}
+                <button class="${panel === "subtitle" ? "cue" : "shot"}-thumbnail-color-label"
+                  style="--${panel}-color-label:${color}"></button>
+              </div>`,
+            )
+            .join("")}`;
+      })
+      .join("");
+    const modes = [];
+    for (const appearance of ["darkest", "dark", "light"]) {
+      theme.applyAppearance(appearance);
+      modes.push(
+        Array.from(document.querySelectorAll("button"), (node) =>
+          [null, "::before", "::after"].map((pseudo) => {
+            const style = getComputedStyle(node, pseudo);
+            return [
+              style.backgroundColor,
+              style.backgroundImage,
+              style.borderTopStyle === "none" ? null : style.borderTopColor,
+              style.outlineStyle === "none" ? null : style.outlineColor,
+              style.boxShadow,
+              style.opacity,
+            ];
+          }),
+        ),
+      );
+    }
+    return modes;
+  });
+  expect(snapshots[1]).toEqual(snapshots[0]);
+  expect(snapshots[2]).toEqual(snapshots[0]);
+});
+
+test("浅色切点交换现有选中与未选中明暗配色，无选中时全部为亮色", async ({ page }) => {
+  await page.goto("/tests/browser/support/blank.html");
+  const snapshots = await page.evaluate(async () => {
+    const css = "/src/components/panels/SourceMonitor/SourceMonitor.css";
+    const url = "/src/runtime/theme.ts";
+    await import(/* @vite-ignore */ css);
+    const theme = await import(/* @vite-ignore */ url);
+    const labels: [string, string][] = [
+      ["fallback", ""],
+      ...(Object.entries(theme.annotationColors) as [string, string][]),
+    ];
+    const states = [
+      "selected",
+      "",
+      "deleted",
+      "unselected-all",
+      "deleted selected",
+      "deleted unselected-all",
+    ];
+    document.body.innerHTML = labels
+      .map(([label, color]) => {
+        const cutColor =
+          label === "none"
+            ? "var(--color-timeline-cut-marker)"
+            : label === "custom"
+              ? color
+              : label === "fallback"
+                ? ""
+                : `color-mix(in srgb, ${color} 68%, var(--color-timeline-cut-label-blend))`;
+        return states
+          .map(
+            (state) => `<button class="storyboard-cut-marker ${state}"
+        ${label === "custom" ? 'data-custom-label="true"' : ""}
+        ${cutColor ? `style="--storyboard-cut-color:${cutColor}"` : ""}>
+        <svg><path class="cut-fill"/><path class="cut-outline"/>
+        <rect class="deleted-cut-pattern-base"/><rect class="deleted-cut-pattern-stripe"/></svg>
+      </button>`,
+          )
+          .join("");
+      })
+      .join("");
+    return ["darkest", "dark", "light"].map((appearance) => {
+      theme.applyAppearance(appearance);
+      return labels.map(([label], index) => ({
+        label,
+        states: states.map((_, state) => {
+          const marker =
+            document.querySelectorAll(".storyboard-cut-marker")[index * states.length + state];
+          return {
+            color: getComputedStyle(marker).color,
+            fill: getComputedStyle(marker.querySelector(".cut-fill")!).fill,
+            outline: getComputedStyle(marker.querySelector(".cut-outline")!).fill,
+            deletedBackground: getComputedStyle(marker.querySelector(".deleted-cut-pattern-base")!)
+              .fill,
+            stripe: getComputedStyle(marker.querySelector(".deleted-cut-pattern-stripe")!).fill,
+          };
+        }),
+      }));
+    });
+  });
+  expect(snapshots[1]).toEqual(snapshots[0]);
+  for (const [index, original] of snapshots[0].entries()) {
+    const bright = original.states[0].color;
+    const dim = original.states[1].color;
+    expect(bright, original.label).not.toBe(dim);
+    expect(original.states.map((state) => state.color)).toEqual([
+      bright,
+      dim,
+      dim,
+      bright,
+      bright,
+      bright,
+    ]);
+    const lightDim = original.label === "custom" ? "rgb(217, 217, 217)" : dim;
+    expect(snapshots[2][index].states.map((state) => state.color)).toEqual([
+      lightDim,
+      bright,
+      bright,
+      bright,
+      lightDim,
+      bright,
+    ]);
+    for (const mode of snapshots) {
+      for (const state of mode[index].states) {
+        expect(state.fill).toBe(state.color);
+        expect(state.stripe).toBe(state.color);
+        expect(state.outline).toBe(original.states[0].outline);
+        expect(state.deletedBackground).toBe(original.states[0].deletedBackground);
+      }
+    }
+  }
+});
 
 test("品牌顶部区跟随工作区背景，菜单栏和 PopupMenu 保留固定配色", async ({ page }) => {
   await page.goto("/tests/browser/support/blank.html");

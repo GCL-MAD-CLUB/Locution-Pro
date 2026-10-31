@@ -574,6 +574,12 @@
 }
 
 .storyboard-cut-marker {
+  --storyboard-cut-bright: var(--storyboard-cut-color, var(--color-timeline-cut-marker));
+  --storyboard-cut-dim: color-mix(
+    in srgb,
+    var(--storyboard-cut-bright) 70%,
+    var(--color-stack-text)
+  );
   position: absolute;
   top: 1px;
   z-index: 4;
@@ -583,11 +589,7 @@
   border: 0;
   border-radius: 0;
   background: var(--color-transparent);
-  color: color-mix(
-    in srgb,
-    var(--storyboard-cut-color, var(--color-timeline-cut-marker)) 70%,
-    var(--color-stack-text)
-  );
+  color: var(--storyboard-cut-dim);
   transform: translateX(-50%);
   cursor: default;
   touch-action: none;
@@ -595,7 +597,19 @@
 
 .storyboard-cut-marker.selected,
 .storyboard-cut-marker.unselected-all {
-  color: var(--storyboard-cut-color, var(--color-timeline-cut-marker));
+  color: var(--storyboard-cut-bright);
+}
+
+[data-theme="light"] .storyboard-cut-marker {
+  color: var(--storyboard-cut-bright);
+}
+
+[data-theme="light"] .storyboard-cut-marker[data-custom-label="true"] {
+  --storyboard-cut-dim: var(--color-timeline-cut-custom-dim);
+}
+
+[data-theme="light"] .storyboard-cut-marker.selected:not(.unselected-all) {
+  color: var(--storyboard-cut-dim);
 }
 
 .storyboard-cut-marker svg {
@@ -637,7 +651,7 @@
 }
 
 .storyboard-cut-marker:focus-visible {
-  outline: 1px solid var(--color-accent-monitor);
+  outline: 1px solid var(--color-timeline-cut-focus-outline);
   outline-offset: 2px;
 }
 

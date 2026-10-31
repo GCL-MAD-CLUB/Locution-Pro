@@ -187,3 +187,78 @@ test("saved media defaults remain concrete colors and cursor SVGs contain resolv
     assert.match(cursor, /\) 4 (?:17|18), crosshair$/);
   }
 });
+
+function appearanceEnvironment(storage) {
+  const documentElement = {
+    dataset: {},
+    style: { setProperty: () => {} },
+  };
+  const globals = {
+    window: {
+      localStorage: {
+        getItem: (key) => storage.get(key) ?? null,
+        setItem: (key, value) => storage.set(key, value),
+      },
+    },
+    document: { documentElement },
+    getComputedStyle: () => ({ getPropertyValue: () => "" }),
+  };
+  const moduleFor = () =>
+    load(
+      "../../../src/runtime/theme.ts",
+      {
+        "../styles.css?raw": stylesheet,
+        "../errors/model": { clientError },
+      },
+      globals,
+    );
+  return { documentElement, moduleFor };
+}
+
+test("the last appearance seeds the first paint and invalid hints fall back", () => {
+  const storage = new Map();
+  const { documentElement, moduleFor } = appearanceEnvironment(storage);
+
+  moduleFor().applyAppearance("light");
+  assert.equal(storage.get("locution-pro:appearance"), "light");
+
+  const reloaded = moduleFor();
+  documentElement.dataset.theme = "";
+  reloaded.initializeAppearance();
+  assert.equal(documentElement.dataset.theme, "light");
+
+  storage.set("locution-pro:appearance", "purple");
+  documentElement.dataset.theme = "";
+  moduleFor().initializeAppearance();
+  assert.equal(documentElement.dataset.theme, "darkest");
+  assert.equal(storage.get("locution-pro:appearance"), "darkest");
+});
+
+test("unsaved appearance previews do not seed the next start", () => {
+  const storage = new Map([["locution-pro:appearance", "dark"]]);
+  const { documentElement, moduleFor } = appearanceEnvironment(storage);
+
+  moduleFor().applyAppearance("light", false);
+
+  assert.equal(documentElement.dataset.theme, "light");
+  assert.equal(storage.get("locution-pro:appearance"), "dark");
+});
+
+test("index.html seeds the same appearance key and values as the runtime", () => {
+  const html = readFileSync(new URL("../../../index.html", import.meta.url), "utf8");
+
+  assert.match(
+    html,
+    new RegExp(`localStorage\\.getItem\\(\\s*"${theme.appearanceStorageKey}"\\s*\\)`),
+  );
+  for (const appearance of theme.knownAppearances)
+    assert.match(html, new RegExp(`"${appearance}"`), appearance);
+});
+
+test("a stylesheet without :root fails at the point of use with a diagnostic", () => {
+  const broken = load("../../../src/runtime/theme.ts", {
+    "../styles.css?raw": "body { color: red; }",
+    "../errors/model": { clientError },
+  });
+  assert.throws(() => broken.defaultThemeColor("--color-text"), /:root theme block/);
+});

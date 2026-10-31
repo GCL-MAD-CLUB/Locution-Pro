@@ -113,7 +113,7 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
             id: folderId,
             name,
             parent_id: null,
-            color: defaultMediaBinFolderColor,
+            color: defaultMediaBinFolderColor(),
             hidden: false,
           });
         }

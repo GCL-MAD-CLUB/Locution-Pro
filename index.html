@@ -4,6 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Locution Pro</title>
+    <script>
+      // Seed the first paint from the cached appearance; runtime/theme.ts validates
+      // and reconciles it with the saved preferences once the frontend mounts.
+      try {
+        const appearance = localStorage.getItem("locution-pro:appearance");
+        if (appearance === "darkest" || appearance === "dark" || appearance === "light") {
+          document.documentElement.dataset.theme = appearance;
+        }
+      } catch {
+        // Unavailable storage leaves the default theme in place.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,4 +1,4 @@
-import { initializeThemeImages } from "./runtime/theme";
+import { initializeAppearance } from "./runtime/theme";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
@@ -6,7 +6,7 @@ import { disableBrowserBehaviors } from "./disable-browser-behaviors";
 import { AppErrorBoundary, ErrorOutlet, installGlobalErrorHandlers } from "./errors";
 import "./styles.css";
 
-initializeThemeImages();
+initializeAppearance();
 disableBrowserBehaviors();
 installGlobalErrorHandlers();
 

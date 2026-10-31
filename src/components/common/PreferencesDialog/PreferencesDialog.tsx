@@ -1,7 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { Loader2 } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import { applyAppearance } from "../../../runtime/theme";
+import { applyAppearance, knownAppearances } from "../../../runtime/theme";
 import { invokeCommand, runOperation } from "../../../errors";
 import { createFfmpegTaskId } from "../../../platform/tauri/ffmpegProgress";
 import { isTauriRuntime } from "../../../platform/tauri/runtime";
@@ -74,7 +74,8 @@ function PreferencesEditor({
   const valid = intervalValid && snapshotsValid;
 
   useLayoutEffect(() => {
-    applyAppearance(draft.appearance);
+    // Preview the draft without seeding the next start until it is saved.
+    applyAppearance(draft.appearance, false);
   }, [draft.appearance]);
 
   useLayoutEffect(() => () => applyAppearance(savedAppearance.current), []);
@@ -484,11 +485,15 @@ function PreferencesEditor({
   );
 }
 
-const appearanceOptions: ReadonlyArray<readonly [Appearance, string]> = [
-  ["darkest", "最暗"],
-  ["dark", "深色"],
-  ["light", "浅色"],
-];
+const appearanceLabels: Record<Appearance, string> = {
+  darkest: "最暗",
+  dark: "深色",
+  light: "浅色",
+};
+
+const appearanceOptions: ReadonlyArray<readonly [Appearance, string]> = knownAppearances.map(
+  (appearance) => [appearance, appearanceLabels[appearance]] as const,
+);
 
 function AppearancePreview({ appearance }: { appearance: Appearance }) {
   return (

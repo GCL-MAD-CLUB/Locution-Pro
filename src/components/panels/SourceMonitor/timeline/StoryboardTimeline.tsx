@@ -71,8 +71,8 @@ interface CutDrag {
 
 const emptyShots: StoryboardShot[] = [];
 const CUT_LABEL_HIT_AREA_PX = 18;
-const CUT_CUSTOM_LABEL_COLOR = "#ffffff";
-const CUT_NO_LABEL_COLOR = "#b8b8b8";
+const CUT_CUSTOM_LABEL_COLOR = "var(--color-label-custom)";
+const CUT_NO_LABEL_COLOR = "var(--color-timeline-cut-marker)";
 
 function storyboardCutColor(annotation: StoryboardShotAnnotation | undefined) {
   if (annotation?.customLabel?.trim()) {
@@ -81,7 +81,7 @@ function storyboardCutColor(annotation: StoryboardShotAnnotation | undefined) {
   if (!annotation?.colorLabel) {
     return CUT_NO_LABEL_COLOR;
   }
-  return `color-mix(in srgb, ${storyboardShotColorLabelValues[annotation.colorLabel]} 68%, #9a9a9a)`;
+  return `color-mix(in srgb, ${storyboardShotColorLabelValues[annotation.colorLabel]} 68%, var(--color-timeline-cut-label-blend))`;
 }
 
 export function StoryboardTimeline({

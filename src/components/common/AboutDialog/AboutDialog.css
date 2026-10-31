@@ -8,11 +8,11 @@
   margin: auto;
   padding: 26px 30px 28px;
   overflow: hidden;
-  color: #e8e8e8;
-  background: #000;
+  color: var(--color-text-dialog);
+  background: var(--color-about-background);
   border: 0;
   border-radius: 18px;
-  box-shadow: 0 5px 18px rgb(0 0 0 / 28%);
+  box-shadow: 0 5px 18px var(--color-about-shadow);
   font-family: var(--font-song), serif;
   font-size: 11px;
   line-height: 1.2;
@@ -25,7 +25,7 @@
 
 .about-dialog::backdrop {
   /* Keep the modal focus trap without dimming the workspace behind it. */
-  background: transparent;
+  background: var(--color-transparent);
 }
 
 .about-dialog-header {
@@ -44,7 +44,7 @@
 
 .about-dialog-header h1 {
   margin: 14px 0 15px;
-  color: #f5f5f5;
+  color: var(--color-text-title);
   font-family: var(--font-sans);
   font-size: 20px;
   font-weight: 700;
@@ -101,7 +101,7 @@
 }
 
 .about-dialog h2 {
-  color: #f5f5f5;
+  color: var(--color-text-title);
   margin: 0 0 4px;
   font-size: 13px;
   font-weight: 700;
@@ -114,12 +114,12 @@
 }
 
 .about-dialog dd a {
-  color: #f5f5f5;
+  color: var(--color-text-title);
   text-decoration: none;
 }
 
 .about-dialog dd a:focus-visible {
-  outline: 1px solid #e8e8e8;
+  outline: 1px solid var(--color-about-link-focus-outline);
   outline-offset: 3px;
 }
 
@@ -159,13 +159,13 @@
   margin-top: 16px;
   padding: 0;
   color: inherit;
-  background: transparent;
+  background: var(--color-transparent);
   text-decoration: underline;
   cursor: pointer;
 }
 
 .about-dialog-legal-link:focus-visible {
-  outline: 1px solid #e8e8e8 !important;
+  outline: 1px solid var(--color-about-link-focus-outline) !important;
   outline-offset: 3px;
 }
 
@@ -173,7 +173,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #f5f5f5;
+  color: var(--color-text-title);
   font-family: var(--font-sans);
   font-size: 15px;
   font-weight: 700;

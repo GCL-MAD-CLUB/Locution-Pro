@@ -1,3 +1,4 @@
+import { annotationColors } from "../../../../runtime/theme";
 import type { PanelRowSource } from "../../../../core/editor/multiSource";
 import { Star } from "lucide-react";
 import {
@@ -48,14 +49,7 @@ import {
 
 type StoryboardAnnotationMenuKind = "flag" | "color";
 
-const storyboardColorValues: Record<StoryboardShotVisualLabel, string> = {
-  red: "#ef4444",
-  yellow: "#eab308",
-  green: "#22c55e",
-  blue: "#3b82f6",
-  purple: "#a855f7",
-  custom: "#ffffff",
-};
+const storyboardColorValues: Record<StoryboardShotVisualLabel, string> = annotationColors;
 
 const storyboardIconMetadataOptions: Array<
   | { type: "option"; value: StoryboardIconMetadataMode; label: string }

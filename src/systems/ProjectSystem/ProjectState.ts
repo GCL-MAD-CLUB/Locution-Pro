@@ -1,3 +1,4 @@
+import { defaultThemeColor } from "../../runtime/theme";
 import {
   normalizedStoryboardKeywords,
   sourceContexts,
@@ -175,13 +176,13 @@ interface ProjectSystemState {
 }
 
 const mediaLabelColors = {
-  videoOnly: "#3e0aae",
-  videoWithAudio: "#004b67",
-  audio: "#2a5507",
-  subtitle: "#893a04",
+  videoOnly: defaultThemeColor("--color-media-video"),
+  videoWithAudio: defaultThemeColor("--color-media-video-audio"),
+  audio: defaultThemeColor("--color-media-audio"),
+  subtitle: defaultThemeColor("--color-media-subtitle"),
 } as const;
 
-export const defaultMediaBinFolderColor = "#596b91";
+export const defaultMediaBinFolderColor = defaultThemeColor("--color-media-folder");
 
 function fileName(path: string) {
   return path.split(/[\\/]/).pop() ?? path;

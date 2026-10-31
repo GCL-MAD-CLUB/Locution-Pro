@@ -1,3 +1,4 @@
+import { themeSvgDataUrl } from "../../../runtime/theme";
 import { matchesSearchDuration, type AdvancedSearchOptions } from "../../../core/editor/textSearch";
 import {
   useSemanticSearchAvailable,
@@ -606,17 +607,17 @@ function subtitleSprayBottleMarkSvg(
   customLabel: boolean,
 ) {
   if (mode === "colorLabel" && customLabel) {
-    return '<text x="10" y="17.8" fill="#fff" font-family="Arial,sans-serif" font-size="7.5" font-weight="700" text-anchor="middle">T</text>';
+    return '<text x="10" y="17.8" fill="var(--color-annotation-mark)" font-family="Arial,sans-serif" font-size="7.5" font-weight="700" text-anchor="middle">T</text>';
   }
   if (mode === "flag" && flag !== "none") {
     const excludedMark =
       flag === "excluded"
-        ? '<path d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6" stroke="#1d1d1d" stroke-width=".75"/>'
+        ? '<path d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6" stroke="var(--color-icon-cutout)" stroke-width=".75"/>'
         : "";
-    return `<path d="M7.2 11v7" stroke="#d9d9d9" stroke-width=".9"/><rect x="8" y="11.7" width="4.4" height="3.6" fill="#fff"/>${excludedMark}`;
+    return `<path d="M7.2 11v7" stroke="var(--color-annotation-flag-pole)" stroke-width=".9"/><rect x="8" y="11.7" width="4.4" height="3.6" fill="var(--color-annotation-mark)"/>${excludedMark}`;
   }
   if (mode === "rating") {
-    return `<text x="10" y="17.8" fill="#fff" font-family="Arial,sans-serif" font-size="7.5" font-weight="700" text-anchor="middle">${rating}</text>`;
+    return `<text x="10" y="17.8" fill="var(--color-annotation-mark)" font-family="Arial,sans-serif" font-size="7.5" font-weight="700" text-anchor="middle">${rating}</text>`;
   }
   return "";
 }
@@ -629,8 +630,8 @@ function subtitleSprayCursor(
   customLabel: boolean,
 ) {
   const mark = subtitleSprayBottleMarkSvg(mode, flag, rating, customLabel);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="24" viewBox="0 0 20 24"><path d="M8.25 1.5h3.5v2h-3.5zM9 3.5h2v2H9zM6.5 5.5h7v2.25h-7z" fill="#d0d0d0"/><path d="M6.25 8.25h7.5l1.5 2.25v10.25H4.75V10.5l1.5-2.25Z" fill="${fillColor}" stroke="#d0d0d0" stroke-width="1.25" stroke-linejoin="round"/><path d="M4 21.25h12v1.5H4z" fill="${fillColor}" stroke="#d0d0d0"/><path d="M6.25 11h7.5M6.25 18.75h7.5" stroke="#686868" stroke-width=".75"/>${mark}</svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 10 2, crosshair`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="24" viewBox="0 0 20 24"><path d="M8.25 1.5h3.5v2h-3.5zM9 3.5h2v2H9zM6.5 5.5h7v2.25h-7z" fill="var(--color-text-emphasis)"/><path d="M6.25 8.25h7.5l1.5 2.25v10.25H4.75V10.5l1.5-2.25Z" fill="${fillColor}" stroke="var(--color-text-emphasis)" stroke-width="1.25" stroke-linejoin="round"/><path d="M4 21.25h12v1.5H4z" fill="${fillColor}" stroke="var(--color-text-emphasis)"/><path d="M6.25 11h7.5M6.25 18.75h7.5" stroke="var(--color-spray-bottle-detail)" stroke-width=".75"/>${mark}</svg>`;
+  return `url("${themeSvgDataUrl(svg)}") 10 2, crosshair`;
 }
 
 interface SubtitleSprayBottleIconProps {
@@ -661,23 +662,45 @@ function SubtitleSprayBottleIcon({
         strokeWidth="1.25"
       />
       <path d="M4 21.25h12v1.5H4z" fill={fillColor} stroke="currentColor" />
-      <path d="M6.25 11h7.5M6.25 18.75h7.5" stroke="#686868" strokeWidth="0.75" />
+      <path
+        d="M6.25 11h7.5M6.25 18.75h7.5"
+        stroke="var(--color-spray-bottle-detail)"
+        strokeWidth="0.75"
+      />
       {mode === "colorLabel" && customLabel && (
-        <text x="10" y="17.8" fill="#fff" fontSize="7.5" fontWeight="700" textAnchor="middle">
+        <text
+          x="10"
+          y="17.8"
+          fill="var(--color-annotation-mark)"
+          fontSize="7.5"
+          fontWeight="700"
+          textAnchor="middle"
+        >
           T
         </text>
       )}
       {mode === "flag" && flag !== "none" && (
         <>
-          <path d="M7.2 11v7" stroke="#d9d9d9" strokeWidth="0.9" />
-          <rect x="8" y="11.7" width="4.4" height="3.6" fill="#fff" />
+          <path d="M7.2 11v7" stroke="var(--color-annotation-flag-pole)" strokeWidth="0.9" />
+          <rect x="8" y="11.7" width="4.4" height="3.6" fill="var(--color-annotation-mark)" />
           {flag === "excluded" && (
-            <path d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6" stroke="#1d1d1d" strokeWidth="0.75" />
+            <path
+              d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6"
+              stroke="var(--color-icon-cutout)"
+              strokeWidth="0.75"
+            />
           )}
         </>
       )}
       {mode === "rating" && (
-        <text x="10" y="17.8" fill="#fff" fontSize="7.5" fontWeight="700" textAnchor="middle">
+        <text
+          x="10"
+          y="17.8"
+          fill="var(--color-annotation-mark)"
+          fontSize="7.5"
+          fontWeight="700"
+          textAnchor="middle"
+        >
           {rating}
         </text>
       )}
@@ -1077,10 +1100,10 @@ export function SubtitlePanel() {
   const sprayBottleFillColor =
     sprayMode === "colorLabel" && sprayColorLabel
       ? subtitleCueColorLabelValues[sprayColorLabel]
-      : "#252525";
+      : "var(--color-spray-bottle-background)";
   const panelStyle = {
     "--subtitle-spray-cursor": sprayErasing
-      ? sprayEraserCursor
+      ? sprayEraserCursor()
       : subtitleSprayCursor(
           sprayBottleFillColor,
           sprayMode,

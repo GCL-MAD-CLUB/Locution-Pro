@@ -15,7 +15,7 @@
 
 .topbar-progress > span {
   overflow: hidden;
-  color: #a8a8a8;
+  color: var(--color-topbar-text);
   font-size: 12px;
   line-height: 1;
   text-overflow: ellipsis;
@@ -64,13 +64,13 @@
   min-height: var(--task-progress-height);
   place-items: center;
   padding: 0;
-  color: #d6d6d6;
-  background: transparent;
+  color: var(--color-text-action);
+  background: var(--color-transparent);
   cursor: pointer;
 }
 
 .topbar-progress-cancel:hover {
-  color: #fff;
+  color: var(--color-text-on-emphasis);
 }
 
 .topbar-progress-cancel svg {

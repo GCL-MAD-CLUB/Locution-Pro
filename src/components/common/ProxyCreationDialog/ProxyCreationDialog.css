@@ -26,7 +26,7 @@
 .proxy-dialog-select {
   min-height: 24px;
   color: var(--color-text);
-  background: black;
+  background: var(--color-surface-input-focus);
 }
 
 .proxy-dialog-select .select-dropdown-trigger {
@@ -48,7 +48,7 @@
 }
 
 .proxy-dialog-select-menu {
-  background: var(--color-surface);
+  background: var(--color-surface-canvas);
   border: 1px solid var(--color-border-default);
 }
 
@@ -88,11 +88,11 @@
   min-height: 24px;
   font-size: 12px;
   color: var(--color-text);
-  background: black;
+  background: var(--color-surface-input-focus);
 }
 
 .proxy-dialog-size-inputs input:hover {
-  border-color: var(--color-border-strong);
+  border-color: var(--color-border-control-hover);
 }
 
 .proxy-dialog-size-inputs input:disabled {

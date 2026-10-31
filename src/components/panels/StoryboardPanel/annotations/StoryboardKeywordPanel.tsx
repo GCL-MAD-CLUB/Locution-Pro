@@ -1087,7 +1087,11 @@ export function StoryboardKeywordPanel({
         <defs>
           <filter id={`quick-filter-arrow-inset-${panelInstanceId}`}>
             <feMorphology in="SourceAlpha" operator="dilate" radius="1" result="dilated" />
-            <feFlood floodColor="#000" floodOpacity="1" result="black" />
+            <feFlood
+              floodColor="var(--color-keyword-icon-outline)"
+              floodOpacity="1"
+              result="black"
+            />
             <feComposite in="black" in2="dilated" operator="in" result="outline" />
             <feMerge>
               <feMergeNode in="outline" />

@@ -12,7 +12,7 @@
   inset: 9px 0;
   width: 100%;
   height: 12px;
-  fill: #3b3b3b;
+  fill: var(--color-import-zoom-icon);
   pointer-events: none;
 }
 .import-zoom-control input[type="range"] {
@@ -25,46 +25,46 @@
   padding: 0;
   border: 0;
   border-radius: 0;
-  background: transparent;
+  background: var(--color-transparent);
   box-shadow: none;
   cursor: ew-resize;
 }
 .import-zoom-control input::-webkit-slider-runnable-track {
   height: 12px;
   border: 0;
-  background: transparent;
+  background: var(--color-transparent);
 }
 .import-zoom-control input::-webkit-slider-thumb {
   appearance: none;
   width: 12px;
   height: 12px;
   margin: 0;
-  border: 2px solid #a5a5a5;
+  border: 2px solid var(--color-import-slider-thumb-border);
   border-radius: 50%;
-  background: var(--import-bg, #1e1e1e);
+  background: var(--color-surface-canvas);
 }
 .import-zoom-control input::-moz-range-track {
   height: 12px;
   border: 0;
-  background: transparent;
+  background: var(--color-transparent);
 }
 .import-zoom-control input::-moz-range-thumb {
   box-sizing: border-box;
   width: 12px;
   height: 12px;
-  border: 2px solid #a5a5a5;
+  border: 2px solid var(--color-import-slider-thumb-border);
   border-radius: 50%;
-  background: var(--import-bg, #1e1e1e);
+  background: var(--color-surface-canvas);
 }
 .import-zoom-control input:hover::-webkit-slider-thumb,
 .import-zoom-control input:active::-webkit-slider-thumb {
-  border-color: #d0d0d0;
+  border-color: var(--color-slider-thumb-highlight);
 }
 .import-zoom-control input:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 2px var(--import-accent);
+  box-shadow: 0 0 0 2px var(--color-accent);
 }
 .import-zoom-control input:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 2px var(--import-accent);
+  box-shadow: 0 0 0 2px var(--color-accent);
 }
 @media (max-width: 1150px) {
   .import-zoom-control {

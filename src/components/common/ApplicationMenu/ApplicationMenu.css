@@ -20,16 +20,16 @@
   padding: 0 8px 0 6px;
   color: var(--color-text);
   font-size: 12px;
-  background: transparent;
+  background: var(--color-transparent);
   cursor: default;
 }
 
 .application-menu-trigger:hover,
 .application-menu-trigger.active {
   color: var(--color-text-highlight);
-  background: #f5f5f5;
+  background: var(--color-menubar-trigger-hover-background);
 }
 
 .application-menu-placeholder {
-  color: #444;
+  color: var(--color-menu-placeholder-text);
 }

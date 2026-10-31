@@ -1,3 +1,4 @@
+import { defaultThemeColor } from "./runtime/theme";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Loader2 } from "lucide-react";
@@ -277,7 +278,7 @@ function standaloneSubtitleItem(path: string, index: number): MediaBinItem {
     language: null,
     extracted: false,
     origin: "imported",
-    color: "#893a04",
+    color: defaultThemeColor("--color-media-subtitle"),
   };
 }
 

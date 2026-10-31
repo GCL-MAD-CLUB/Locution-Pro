@@ -14,10 +14,10 @@
 .preferences-categories {
   min-height: 0;
   overflow: auto;
-  background: var(--color-surface-field-strong);
+  background: var(--color-surface-input-inset);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
-  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+  scrollbar-color: var(--color-border-overlay-default) var(--color-transparent);
 }
 
 .preferences-categories > button {
@@ -27,7 +27,7 @@
   padding: 0 10px;
   color: var(--color-text);
   text-align: left;
-  background: transparent;
+  background: var(--color-transparent);
   cursor: pointer;
 }
 
@@ -45,7 +45,7 @@
   min-height: 0;
   overflow: auto;
   padding: 0 1px;
-  scrollbar-color: var(--color-scrollbar-thumb) transparent;
+  scrollbar-color: var(--color-border-overlay-default) var(--color-transparent);
 }
 
 .preferences-content[hidden] {
@@ -109,7 +109,7 @@
   padding: 0 7px;
   color: var(--color-text);
   font-size: 12px;
-  background: var(--color-surface-field-strong);
+  background: var(--color-surface-input-inset);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
 }
@@ -120,7 +120,7 @@
 }
 
 .preferences-dialog input:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
+  border-color: var(--color-border-control-hover);
 }
 
 .preferences-dialog input:focus {
@@ -150,7 +150,7 @@
   margin: 0;
   padding: 0;
   accent-color: var(--color-text);
-  color-scheme: dark;
+  color-scheme: var(--theme-color-scheme);
   cursor: pointer;
 }
 
@@ -172,14 +172,14 @@
   color: var(--color-text);
   font-size: 12px;
   white-space: nowrap;
-  background: var(--color-surface-field-strong);
+  background: var(--color-surface-input-inset);
   border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md);
   cursor: pointer;
 }
 
 .preferences-button:hover:not(:disabled) {
-  border-color: var(--color-border-strong);
+  border-color: var(--color-border-control-hover);
 }
 
 .preferences-dialog button:focus-visible,

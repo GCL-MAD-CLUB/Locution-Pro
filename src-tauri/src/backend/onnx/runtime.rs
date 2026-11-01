@@ -226,13 +226,15 @@ mod tests {
     fn runtime_resolution_requires_onnx_without_requiring_directml_or_a_model() {
         let directory = env::temp_dir().join(format!("linecut-runtime-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&directory).unwrap();
-        assert!(OnnxRuntimePaths::from_candidates(&[directory.clone()])
-            .err()
-            .unwrap()
-            .is(ErrorCode::NativeRuntimeMissing));
+        assert!(
+            OnnxRuntimePaths::from_candidates(std::slice::from_ref(&directory))
+                .err()
+                .unwrap()
+                .is(ErrorCode::NativeRuntimeMissing)
+        );
         std::fs::write(directory.join(ONNXRUNTIME_DLL_FILE), []).unwrap();
         assert_eq!(
-            OnnxRuntimePaths::from_candidates(&[directory.clone()])
+            OnnxRuntimePaths::from_candidates(std::slice::from_ref(&directory))
                 .unwrap()
                 .directory,
             directory
@@ -244,7 +246,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            OnnxRuntimePaths::from_candidates(&[directory.clone()])
+            OnnxRuntimePaths::from_candidates(std::slice::from_ref(&directory))
                 .unwrap()
                 .directory,
             directory

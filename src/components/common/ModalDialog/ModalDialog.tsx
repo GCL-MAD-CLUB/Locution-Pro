@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { captureOperationError, invokeCommand, runBackgroundOperation } from "../../../errors";
 import "./ModalDialog.css";
 
@@ -13,9 +13,24 @@ export interface ModalDialogProps {
   closeTitle?: string;
   confirmDisabled?: boolean;
   confirmLabel?: string;
+  /**
+   * Keep keyboard focus inside the dialog and restore the previously focused
+   * element on close. Opt-in so dialogs that manage their own focus keep working.
+   */
+  focusTrap?: boolean;
+  /** Control to focus when the dialog opens; defaults to the first control. */
+  initialFocusRef?: RefObject<HTMLElement | null>;
   title: string;
   onCancel: () => void;
   onConfirm: () => void;
+}
+
+function focusableControls(root: HTMLElement) {
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0);
 }
 
 async function playPromptSound() {
@@ -76,11 +91,14 @@ export function ModalDialog({
   closeTitle = "关闭",
   confirmDisabled = false,
   confirmLabel = "确定",
+  focusTrap = false,
+  initialFocusRef,
   title,
   onCancel,
   onConfirm,
 }: ModalDialogProps) {
   const titleId = useId();
+  const dialogRef = useRef<HTMLElement>(null);
   const [attentionActive, setAttentionActive] = useState(false);
   const attentionTimerRef = useRef<number | null>(null);
 
@@ -103,6 +121,57 @@ export function ModalDialog({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onCancel]);
 
+  useEffect(() => {
+    if (!focusTrap) {
+      return;
+    }
+    const dialog = dialogRef.current;
+    const previousFocus = document.activeElement;
+    if (dialog && !(previousFocus instanceof Node && dialog.contains(previousFocus))) {
+      (initialFocusRef?.current ?? focusableControls(dialog)[0])?.focus();
+    }
+    return () => {
+      if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+        previousFocus.focus();
+      }
+    };
+  }, [focusTrap, initialFocusRef]);
+
+  useEffect(() => {
+    if (!focusTrap) {
+      return;
+    }
+    // Listen on the window so focus returns to the dialog even when the
+    // previously focused control becomes disabled (for example a pending action).
+    function handleTab(event: KeyboardEvent) {
+      if (event.key !== "Tab") {
+        return;
+      }
+      const dialog = dialogRef.current;
+      if (!dialog) {
+        return;
+      }
+      const controls = focusableControls(dialog);
+      const first = controls[0];
+      const last = controls.at(-1);
+      if (!first || !last) {
+        event.preventDefault();
+        return;
+      }
+      const active = document.activeElement;
+      const inside = active instanceof Node && dialog.contains(active);
+      if (event.shiftKey && (!inside || active === first)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (!inside || active === last)) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    window.addEventListener("keydown", handleTab);
+    return () => window.removeEventListener("keydown", handleTab);
+  }, [focusTrap]);
+
   function requestAttention() {
     void playPromptSound();
     if (attentionTimerRef.current !== null) {
@@ -123,6 +192,7 @@ export function ModalDialog({
   return (
     <div className="modal-dialog-backdrop" role="presentation" onMouseDown={requestAttention}>
       <section
+        ref={dialogRef}
         className={`modal-dialog ${attentionActive ? "attention" : ""} ${className ?? ""}`}
         role="dialog"
         aria-modal="true"

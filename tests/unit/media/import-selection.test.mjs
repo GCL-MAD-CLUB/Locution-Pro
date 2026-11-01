@@ -218,3 +218,41 @@ test("cancelled registration dispatches no copy or import", async () => {
   assert.deepEqual(api.calls, []);
   assert.equal(result.completed.size, 0);
 });
+
+for (const [failed, displayName] of [
+  [["C:\\media\\failed.mkv"], "failed.mkv"],
+  [["C:\\media\\failed.mkv", "C:\\media\\also-failed.mp4"], "2 个媒体"],
+]) {
+  test(`batch import failure identifies ${displayName} in the error context`, async () => {
+    const reports = [];
+    const { runMediaImportBatchTask } = load("../../../src/application/media/mediaImportTask.ts", {
+      "../../systems/TaskSystem": {
+        createTaskProgress: async () => ({
+          cancelled: false,
+          fail: (error, context) => reports.push({ error, context }),
+        }),
+      },
+      "../../errors": {
+        clientError,
+        invokeCommand: async (_, { path }) => {
+          if (failed.includes(path)) throw new Error("import failed");
+          return { path };
+        },
+      },
+      "../../platform/tauri/ffmpegProgress": {
+        createFfmpegTaskId: () => "import-task",
+        listenToFfmpegTasksProgress: () => () => {},
+      },
+    });
+    const result = await runMediaImportBatchTask({
+      paths: [...failed, "C:\\media\\good.mp4"],
+      operation: "media.import",
+      taskIdPrefix: "import",
+    });
+    assert.equal(result.status, "partial");
+    assert.equal(result.results.length, 1);
+    assert.equal(reports.length, 1);
+    assert.equal(reports[0].context.displayName, displayName);
+    assert.equal(reports[0].context.count, failed.length);
+  });
+}

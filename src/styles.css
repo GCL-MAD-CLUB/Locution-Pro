@@ -1796,12 +1796,77 @@ select {
   width: min(368px, calc(100vw - 48px));
 }
 
+.error-dialog.error-dialog-recovery {
+  width: min(520px, calc(100vw - 48px));
+}
+
 .error-dialog-body {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
   padding: 20px;
+}
+
+.error-dialog-recovery .error-dialog-body {
+  padding: 20px;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+}
+
+.error-dialog-recovery .error-dialog-content {
+  min-width: 0;
+}
+
+.error-dialog-recovery .error-dialog-content h3 {
+  margin: 0 0 8px;
+  color: var(--color-text-highlight);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.error-dialog-recovery .error-dialog-context {
+  margin: 0 0 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.error-dialog-recovery .error-dialog-steps {
+  margin: 14px 0;
+  padding-left: 20px;
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.error-dialog-recovery .error-dialog-steps li + li {
+  margin-top: 4px;
+}
+
+.error-dialog-recovery .error-dialog-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.error-dialog-recovery .error-dialog-link-failure {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-control-hover);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-hover);
+}
+
+.error-dialog-recovery .error-dialog-link-failure span {
+  display: block;
+  margin-top: 6px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 
 .error-dialog-icon {
@@ -1824,6 +1889,10 @@ select {
   font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.35;
+}
+
+.error-dialog-recovery small {
+  overflow-wrap: anywhere;
 }
 
 .fatal-error-fallback {

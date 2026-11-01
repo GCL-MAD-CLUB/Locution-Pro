@@ -319,7 +319,7 @@ impl StoryboardConsumer {
             task,
             move || {
                 let started = Instant::now();
-                init_storyboard_ort(&runtime)?;
+                onnx::runtime::initialize_from(&runtime.onnx)?;
                 let session = OnnxModel::load(&runtime.model, &[], |detail| {
                     app_error(ErrorCode::StoryboardInferenceFailed, detail)
                 })?;

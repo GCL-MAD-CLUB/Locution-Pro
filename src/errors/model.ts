@@ -37,6 +37,7 @@ export type OperationKey =
   | "project.sync"
   | "proxy.generate"
   | "runtime.render"
+  | "runtime.recovery"
   | "runtime.resizeObserver"
   | "runtime.unhandled"
   | "storage.recentPaths"
@@ -110,6 +111,8 @@ export interface Incident {
   category: ErrorCategory;
   presentation: Exclude<IncidentPresentation, "silent">;
   title: string;
+  /** Operation-specific context kept when the shared recovery copy replaces the title. */
+  contextTitle?: string;
   message: string;
   retryable: boolean;
   createdAt: number;

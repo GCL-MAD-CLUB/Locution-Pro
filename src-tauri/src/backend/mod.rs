@@ -40,6 +40,7 @@ mod import_copy;
 mod media;
 mod media_ingest;
 mod native_drag_drop;
+mod native_runtime;
 mod onnx;
 mod proxy;
 mod rolling_pcm;

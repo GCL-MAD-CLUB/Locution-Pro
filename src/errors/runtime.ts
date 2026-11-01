@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { clientError, ERROR_CATEGORIES } from "./model";
+import { incidentRecovery } from "./recovery";
 import type {
   ErrorCategory,
   Incident,
@@ -266,6 +267,7 @@ const operationPolicies = {
   "runtime.render": modal("应用界面发生错误"),
   "runtime.resizeObserver": silent("界面尺寸测量通知延后"),
   "runtime.unhandled": modal("应用发生未处理错误"),
+  "runtime.recovery": silent("打开修复链接失败"),
   "storage.recentPaths": silent("最近记录更新失败"),
   "storyboard.semanticSearch": modal("分镜语义搜索失败"),
   "storyboard.semanticIndex": modal("分镜语义索引构建失败"),
@@ -337,10 +339,14 @@ export function captureIncident(
     return;
   }
 
-  const title = policy.title(context);
+  const recovery = incidentRecovery(error.code);
+  const operationTitle = policy.title(context);
+  const title = recovery?.title ?? operationTitle;
   const duplicate = snapshot.incidents.find(
     (incident) =>
-      incident.operation === operation && incident.code === error.code && incident.title === title,
+      incident.code === error.code &&
+      incident.title === title &&
+      (recovery !== null || incident.operation === operation),
   );
   if (duplicate) {
     return;
@@ -354,7 +360,8 @@ export function captureIncident(
     category: error.category,
     presentation: policy.presentation,
     title,
-    message: categoryMessages[error.category],
+    contextTitle: recovery ? operationTitle : undefined,
+    message: recovery?.message ?? categoryMessages[error.category],
     retryable: error.retryable,
     createdAt: Date.now(),
   };

@@ -513,6 +513,9 @@ Function ClearPendingMigration
 FunctionEnd
 
 Function .onGUIEnd
+  !ifdef LOCUTION_HAS_UPGRADE_SCAN
+    Call LocutionProCloseUpgradeScan
+  !endif
   ; Also covers error paths that exit without going through the custom page.
   Call CloseMigrationJob
 FunctionEnd

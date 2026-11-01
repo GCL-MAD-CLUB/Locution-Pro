@@ -9,6 +9,7 @@ Var LocutionProFfprobePath
 Var LocutionProBundledRadio
 Var LocutionProExternalRadio
 Var LocutionProFfmpegInput
+Var LocutionProReuseFfmpeg
 
 Function LocutionProGetFirstLine
   Exch $0
@@ -63,6 +64,11 @@ Function LocutionProFfmpegSelectionChanged
 FunctionEnd
 
 Function LocutionProFfmpegPageCreate
+  Call SkipIfPassive
+  ${If} $LocutionProReuseFfmpeg == 1
+    StrCpy $LocutionProBundleFfmpeg 1
+    Abort
+  ${EndIf}
   Call LocutionProDetectFfmpeg
   !insertmacro MUI_HEADER_TEXT "选择是否内置 FFmpeg" "选择 Locution Pro 使用 FFmpeg 的方式。"
   nsDialogs::Create 1018
@@ -94,6 +100,9 @@ Function LocutionProFfmpegPageCreate
 FunctionEnd
 
 Function LocutionProFfmpegPageLeave
+  ${If} $LocutionProReuseFfmpeg == 1
+    Return
+  ${EndIf}
   ${NSD_GetState} $LocutionProBundledRadio $0
   ${If} $0 == ${BST_CHECKED}
     StrCpy $LocutionProBundleFfmpeg 1

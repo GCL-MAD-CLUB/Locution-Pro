@@ -3,6 +3,7 @@
 
 Var LocutionProBundleSemantic
 Var LocutionProSemanticCheckbox
+Var LocutionProReuseSemantic
 
 Function LocutionProSemanticSelectionChanged
   Pop $0
@@ -10,6 +11,10 @@ Function LocutionProSemanticSelectionChanged
 FunctionEnd
 
 Function LocutionProSemanticPageCreate
+  ${If} $LocutionProReuseSemantic == 1
+    StrCpy $LocutionProBundleSemantic 1
+    Abort
+  ${EndIf}
   Call SkipIfPassive
   !insertmacro MUI_HEADER_TEXT "选择是否附带语义检索" "选择是否安装字幕与分镜语义检索组件。"
   nsDialogs::Create 1018
@@ -32,5 +37,8 @@ Function LocutionProSemanticPageCreate
 FunctionEnd
 
 Function LocutionProSemanticPageLeave
+  ${If} $LocutionProReuseSemantic == 1
+    Return
+  ${EndIf}
   ${NSD_GetState} $LocutionProSemanticCheckbox $LocutionProBundleSemantic
 FunctionEnd

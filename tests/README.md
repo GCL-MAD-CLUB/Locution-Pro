@@ -39,7 +39,7 @@ npm run test:all
 | `npm run test:all`                | 类型检查、单元和全部浏览器测试                          |
 | `npm run test:rust`               | 主 Rust crate 的默认测试                                |
 | `npm run test:rust:thumbnail`     | 缩略图提供程序的默认测试                                |
-| `npm run test:installer`          | Windows / NSIS 组件复制与可选资源场景                   |
+| `npm run test:installer`          | Windows / NSIS 组件复用、损坏修复、清理和可选资源场景   |
 | `npm run test:installer-identity` | Windows / NSIS 安装身份、迁移和向导场景                 |
 
 按域或单个场景运行：

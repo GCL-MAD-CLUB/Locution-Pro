@@ -1015,7 +1015,7 @@
   --color-text-strong-hover: var(--palette-contrast-inverse);
   --color-topbar-divider: var(--palette-import-submit-disabled-text);
   --color-border-control-active: var(--palette-text-default);
-  --color-import-selection-empty-text: var(--palette-text-emphasis);
+  --color-import-selection-empty-text: var(--palette-contrast-inverse);
 }
 
 [data-theme="light"] {
@@ -1344,7 +1344,7 @@
   --color-text-strong-hover: var(--palette-surface-soft);
   --color-topbar-divider: var(--palette-text-field);
   --color-border-control-active: var(--palette-light-text-description);
-  --color-import-selection-empty-text: var(--palette-dark-menu-hover-background);
+  --color-import-selection-empty-text: var(--palette-contrast-inverse);
 }
 
 input[type="number"]::-webkit-inner-spin-button,

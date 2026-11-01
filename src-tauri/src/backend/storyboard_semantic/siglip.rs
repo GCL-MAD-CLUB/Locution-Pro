@@ -118,7 +118,7 @@ fn text_model(
                 "SigLIP2 assets are missing; run npm run prepare:storyboard-semantic",
             )
         })?;
-        storyboard::init_shared_ort(app)?;
+        crate::backend::onnx::runtime::initialize(app)?;
         // Use CPU for the quantized text graph because DirectML can produce
         // inconsistent embeddings without an inference error. Vision batches
         // continue to use the shared accelerated provider policy.
@@ -322,7 +322,7 @@ fn embed_attempt(
                 "SigLIP2 is missing; run npm run prepare:storyboard-semantic",
             )
         })?;
-        storyboard::init_shared_ort(app)?;
+        crate::backend::onnx::runtime::initialize(app)?;
         let dimensions = [
             ("batch_size", size as i64),
             ("num_channels", 3),
@@ -479,9 +479,7 @@ mod tests {
     fn siglip2_query_encoder_provider_diagnostics() {
         let resources = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources");
         let runtime = resources.join("transnetv2");
-        let current = env::var_os("PATH").unwrap_or_default();
-        let paths = std::iter::once(runtime.clone()).chain(env::split_paths(&current));
-        env::set_var("PATH", env::join_paths(paths).unwrap());
+        crate::backend::onnx::runtime::configure_dll_search(&runtime).unwrap();
         ort::init_from(
             runtime
                 .join("onnxruntime.dll")

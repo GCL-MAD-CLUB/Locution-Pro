@@ -258,7 +258,7 @@ fn embed_attempt(
                 "DINOv3 is missing; run npm run prepare:storyboard-semantic",
             )
         })?;
-        storyboard::init_shared_ort(app)?;
+        crate::backend::onnx::runtime::initialize(app)?;
         let dimensions = [
             ("s99", size as i64),
             ("s100", SIDE as i64),
@@ -1506,9 +1506,7 @@ mod tests {
     fn dinov3_directml_matches_cpu() {
         let resources = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources");
         let runtime = resources.join("transnetv2");
-        let current = env::var_os("PATH").unwrap_or_default();
-        let paths = std::iter::once(runtime.clone()).chain(env::split_paths(&current));
-        env::set_var("PATH", env::join_paths(paths).unwrap());
+        crate::backend::onnx::runtime::configure_dll_search(&runtime).unwrap();
         ort::init_from(
             runtime
                 .join("onnxruntime.dll")

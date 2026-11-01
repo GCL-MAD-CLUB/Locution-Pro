@@ -218,7 +218,8 @@ export async function runMediaImportBatchTask({
   task.fail(
     firstFailure?.reason ?? clientError("UNEXPECTED_ERROR", "One or more media imports failed"),
     {
-      displayName: `${failedPaths.length} 个媒体`,
+      displayName:
+        failedPaths.length === 1 ? fileName(failedPaths[0]) : `${failedPaths.length} 个媒体`,
       count: failedPaths.length,
       resourceKind: "media",
     },

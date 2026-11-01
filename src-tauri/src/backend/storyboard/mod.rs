@@ -1,4 +1,7 @@
 use std::collections::VecDeque;
+#[cfg(test)]
+use std::env;
+use std::fmt;
 use std::fs;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
@@ -7,21 +10,21 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex as StdMutex, OnceLock,
 };
-use std::{env, fmt};
 
 use ort::{
     session::run_options::{HasSelectedOutputs, OutputSelector, RunOptions},
     value::Tensor,
 };
-use tauri::path::BaseDirectory;
 use uuid::Uuid;
 
+#[cfg(test)]
+use super::onnx::runtime::{configure_dll_search, ONNXRUNTIME_DLL_FILE};
 #[cfg(test)]
 pub(super) use super::onnx::{
     cpu_thread_budget as storyboard_cpu_thread_budget, create_cpu_model_session,
     create_directml_model_session, create_model_session,
 };
-use super::onnx::{OnnxModel, SessionProvider};
+use super::onnx::{runtime::OnnxRuntimePaths, OnnxModel, SessionProvider};
 use super::*;
 #[cfg(test)]
 use ort::session::Session;
@@ -33,11 +36,10 @@ use pipeline::{
     FrameBlock, FrameQueue, FrameSender, InferenceTask, ProducerMessage, StoryboardConsumer,
 };
 
+#[cfg(test)]
 const TRANSNET_RESOURCE_DIR: &str = "transnetv2";
 const TRANSNET_MODEL_FILE: &str = "transnetv2.onnx";
 const STORYBOARD_EVENT_MODEL_FILE: &str = "storyboard-event-model.json";
-const ONNXRUNTIME_DLL_FILE: &str = "onnxruntime.dll";
-const DIRECTML_DLL_FILE: &str = "DirectML.dll";
 const STORYBOARD_FRAME_WIDTH: usize = 48;
 const STORYBOARD_FRAME_HEIGHT: usize = 27;
 const STORYBOARD_FRAME_CHANNELS: usize = 3;
@@ -54,8 +56,6 @@ const DEFAULT_STORYBOARD_FRAME_RATE: f64 = 25.0;
 const STORYBOARD_MAX_CONCURRENT_EXTRACTIONS: usize = 3;
 const STORYBOARD_MAX_EXTRACTION_THREADS: usize = 16;
 
-static ORT_INIT_LOCK: StdMutex<()> = StdMutex::new(());
-static ORT_ENV_READY: OnceLock<()> = OnceLock::new();
 static STORYBOARD_CONSUMER: OnceLock<Arc<StoryboardConsumer>> = OnceLock::new();
 static STORYBOARD_EXTRACTION_SCHEDULER: OnceLock<StoryboardExtractionScheduler> = OnceLock::new();
 
@@ -146,9 +146,7 @@ impl StoryboardExtractionScheduler {
 
 #[derive(Clone)]
 struct StoryboardRuntimePaths {
-    runtime_dir: PathBuf,
-    onnxruntime: PathBuf,
-    directml: PathBuf,
+    onnx: OnnxRuntimePaths,
     model: PathBuf,
     event_model: Option<PathBuf>,
 }
@@ -222,130 +220,20 @@ pub(crate) async fn detect_storyboard_shots(
 }
 
 fn storyboard_runtime_paths(app: &tauri::AppHandle) -> AppResult<StoryboardRuntimePaths> {
-    resolve_runtime_paths(app, true)
-}
-
-fn resolve_runtime_paths(
-    app: &tauri::AppHandle,
-    require_transnet: bool,
-) -> AppResult<StoryboardRuntimePaths> {
-    let mut candidates = Vec::new();
-    if let Ok(path) = app
-        .path()
-        .resolve(TRANSNET_RESOURCE_DIR, BaseDirectory::Resource)
-    {
-        candidates.push(path);
+    let onnx = OnnxRuntimePaths::resolve(app)?;
+    let model = onnx.directory.join(TRANSNET_MODEL_FILE);
+    if !model.is_file() {
+        return Err(app_error(
+            ErrorCode::StoryboardModelMissing,
+            format!("TransNetV2 model is missing: {}", model.display()),
+        ));
     }
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(dir) = current_exe.parent() {
-            candidates.push(dir.join(TRANSNET_RESOURCE_DIR));
-            candidates.push(dir.join("resources").join(TRANSNET_RESOURCE_DIR));
-        }
-    }
-    if let Ok(current_dir) = env::current_dir() {
-        candidates.push(
-            current_dir
-                .join("src-tauri")
-                .join("resources")
-                .join(TRANSNET_RESOURCE_DIR),
-        );
-        candidates.push(current_dir.join("resources").join(TRANSNET_RESOURCE_DIR));
-    }
-
-    let mut inspected = Vec::new();
-    for dir in candidates {
-        if inspected.iter().any(|known: &PathBuf| known == &dir) {
-            continue;
-        }
-        inspected.push(dir.clone());
-        let onnxruntime = dir.join(ONNXRUNTIME_DLL_FILE);
-        let directml = dir.join(DIRECTML_DLL_FILE);
-        let model = dir.join(TRANSNET_MODEL_FILE);
-        if onnxruntime.is_file() && directml.is_file() && (!require_transnet || model.is_file()) {
-            let event_model_path = dir.join(STORYBOARD_EVENT_MODEL_FILE);
-            return Ok(StoryboardRuntimePaths {
-                runtime_dir: dir,
-                onnxruntime,
-                directml,
-                model,
-                event_model: event_model_path.is_file().then_some(event_model_path),
-            });
-        }
-    }
-
-    let searched = inspected
-        .iter()
-        .map(|path| path.display().to_string())
-        .collect::<Vec<_>>()
-        .join("; ");
-    let resource_hint = format!(
-        "Expected {ONNXRUNTIME_DLL_FILE}, {DIRECTML_DLL_FILE}, and {TRANSNET_MODEL_FILE} under one transnetv2 resource directory; searched: {searched}"
-    );
-    if inspected
-        .iter()
-        .any(|dir| dir.join(TRANSNET_MODEL_FILE).is_file())
-    {
-        Err(app_error(
-            ErrorCode::StoryboardRuntimeMissing,
-            resource_hint,
-        ))
-    } else {
-        Err(app_error(ErrorCode::StoryboardModelMissing, resource_hint))
-    }
-}
-
-pub(super) fn init_shared_ort(app: &tauri::AppHandle) -> AppResult<()> {
-    init_storyboard_ort(&resolve_runtime_paths(app, false)?)
-}
-
-fn init_storyboard_ort(runtime: &StoryboardRuntimePaths) -> AppResult<()> {
-    if ORT_ENV_READY.get().is_some() {
-        return Ok(());
-    }
-    let _guard = ORT_INIT_LOCK.lock().map_err(|_| {
-        app_error(
-            ErrorCode::StoryboardInferenceFailed,
-            "ONNX Runtime initialization lock is poisoned",
-        )
-    })?;
-    if ORT_ENV_READY.get().is_some() {
-        return Ok(());
-    }
-
-    prepend_runtime_path(&runtime.runtime_dir);
-    let onnxruntime = runtime.onnxruntime.to_string_lossy().into_owned();
-    let init_result = std::panic::catch_unwind(|| {
-        ort::init_from(onnxruntime)
-            .with_name("locution-pro-transnetv2")
-            .with_telemetry(false)
-            .commit()
-    });
-    match init_result {
-        Ok(Ok(_)) => {
-            let _ = ORT_ENV_READY.set(());
-            Ok(())
-        }
-        Ok(Err(error)) => Err(storyboard_ort_error("initialize ONNX Runtime", error)),
-        Err(_) => Err(app_error(
-            ErrorCode::StoryboardRuntimeMissing,
-            format!(
-                "Failed to load ONNX Runtime from {} with DirectML dependency {}",
-                runtime.onnxruntime.display(),
-                runtime.directml.display()
-            ),
-        )),
-    }
-}
-
-fn prepend_runtime_path(runtime_dir: &PathBuf) {
-    let current = env::var_os("PATH").unwrap_or_default();
-    let mut paths = env::split_paths(&current).collect::<Vec<_>>();
-    if !paths.iter().any(|path| path == runtime_dir) {
-        paths.insert(0, runtime_dir.clone());
-        if let Ok(joined) = env::join_paths(paths) {
-            env::set_var("PATH", joined);
-        }
-    }
+    let event_model = onnx.directory.join(STORYBOARD_EVENT_MODEL_FILE);
+    Ok(StoryboardRuntimePaths {
+        onnx,
+        model,
+        event_model: event_model.is_file().then_some(event_model),
+    })
 }
 
 fn storyboard_ort_error(error_context: &str, error: impl fmt::Display) -> AppError {
@@ -1233,7 +1121,7 @@ mod tests {
             .to_string_lossy()
             .into_owned();
 
-        prepend_runtime_path(&runtime_dir);
+        configure_dll_search(&runtime_dir).expect("packaged DLL directory must be available");
         ort::init_from(onnxruntime)
             .with_name("locution-pro-transnetv2-cpu-test")
             .with_telemetry(false)
@@ -1345,7 +1233,7 @@ mod tests {
             .to_string_lossy()
             .into_owned();
 
-        prepend_runtime_path(&runtime_dir);
+        configure_dll_search(&runtime_dir).expect("packaged DLL directory must be available");
         ort::init_from(onnxruntime)
             .with_name("locution-pro-transnetv2-directml-test")
             .with_telemetry(false)

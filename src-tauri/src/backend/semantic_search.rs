@@ -105,7 +105,7 @@ pub(crate) fn semantic_search_available(app: tauri::AppHandle) -> CommandResult<
 impl EmbeddingModel {
     fn load(app: &tauri::AppHandle) -> AppResult<Self> {
         let directory = resource_directory(app)?;
-        storyboard::init_shared_ort(app)?;
+        super::onnx::runtime::initialize(app)?;
         let session = OnnxModel::load(
             &directory.join("model_quantized.onnx"),
             &[],
@@ -962,9 +962,7 @@ mod tests {
     fn packaged_int8_retrieval_smoke() {
         let resources = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources");
         let runtime = resources.join("transnetv2");
-        let current = env::var_os("PATH").unwrap_or_default();
-        let paths = std::iter::once(runtime.clone()).chain(env::split_paths(&current));
-        env::set_var("PATH", env::join_paths(paths).unwrap());
+        super::onnx::runtime::configure_dll_search(&runtime).unwrap();
         ort::init_from(
             runtime
                 .join("onnxruntime.dll")

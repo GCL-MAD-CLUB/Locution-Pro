@@ -1,4 +1,5 @@
 //! Shared ONNX provider selection and recovery for every production model.
+pub(super) mod runtime;
 use super::{available_cpu_threads, check_optional_cancel, AppError, AppResult};
 use ort::{
     execution_providers::DirectMLExecutionProvider,

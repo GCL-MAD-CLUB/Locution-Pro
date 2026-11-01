@@ -130,9 +130,9 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
   !include MultiUser.nsh
 !endif
 
+!include "${LOCUTION_INSTALLER_SOURCE_DIR}\upgrade-files.nsh"
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\migration-page.nsh"
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\independent-install.nsh"
-!include "${LOCUTION_INSTALLER_SOURCE_DIR}\upgrade-files.nsh"
 
 ; Installer icon
 !if "${INSTALLERICON}" != ""
@@ -194,6 +194,10 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 ; 5. Choose install directory page
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
 !insertmacro MUI_PAGE_DIRECTORY
+
+; Scan once per chosen install location before the optional component pages.
+!insertmacro MUI_PAGE_INIT
+Page custom LocutionProScanPageCreate LocutionProScanPageLeave
 
 ; 6. Choose whether FFmpeg sidecars are installed
 !insertmacro MUI_PAGE_INIT

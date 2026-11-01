@@ -48,6 +48,7 @@ test("NSIS installer components", { timeout: 300000 }, async (t) => {
   const nsis = (value) => value.replaceAll("$", () => "$$").replaceAll('"', '$\\"');
   const resourceNames = [
     "LICENSE",
+    "locution_pro_thumbnail_provider.dll",
     "transnetv2\\onnxruntime.dll",
     "semantic-search\\model_quantized.onnx",
     "semantic-search\\model_quantized.onnx_data",
@@ -151,11 +152,39 @@ SectionEnd
     { name: "repair", semantic: true, ffmpeg: true, args: [], corrupt: true },
     { name: "remove-old-ffmpeg", semantic: true, ffmpeg: false, args: ["/FFMPEG=0"], reuse: true },
     { name: "relocate", semantic: true, ffmpeg: true, args: [], reuse: true, relocate: true },
+    { name: "fresh-existing-directory", semantic: true, ffmpeg: true, args: [], foreign: true },
+    {
+      name: "fresh-without-semantic",
+      semantic: false,
+      ffmpeg: true,
+      args: ["/SEMANTIC=0"],
+      foreign: true,
+    },
+    {
+      name: "relocate-existing-directory",
+      semantic: true,
+      ffmpeg: true,
+      args: [],
+      reuse: true,
+      relocate: true,
+      foreign: true,
+    },
+  ];
+  const foreignFiles = [
+    "foreign.dll",
+    "other.exe",
+    "uninstall.exe",
+    "licenses/foreign.txt",
+    "transnetv2/foreign.bin",
+    "semantic-search/unrelated.bin",
+    "storyboard-semantic/unrelated.bin",
+    "cache/user.bin",
+    "preferences.json",
   ];
   for (const entry of cases) {
     await t.test(entry.name, async () => {
       const install = join(temporary, entry.name);
-      const old = entry.relocate ? join(temporary, "previous-location") : install;
+      const old = entry.relocate ? join(temporary, `${entry.name}-previous-location`) : install;
       const oldTimestamp = new Date("2020-01-01T00:00:00Z");
       if (entry.reuse || entry.corrupt) {
         for (const name of [...resourceNames, ...binaries]) {
@@ -176,10 +205,19 @@ SectionEnd
         mkdirSync(join(install, "semantic-search"), { recursive: true });
         writeFileSync(join(install, "semantic-search/stale-model.bin"), "old-model");
       }
+      if (entry.foreign) {
+        for (const name of foreignFiles) {
+          const file = join(install, name);
+          mkdirSync(dirname(file), { recursive: true });
+          writeFileSync(file, `unrelated: ${name}`);
+        }
+      }
       run(executable, [
         "/S",
         ...entry.args,
-        ...(entry.relocate ? [`/PREVIOUS=${old}`] : []),
+        ...(entry.relocate || entry.old || entry.reuse || entry.corrupt
+          ? [`/PREVIOUS=${old}`]
+          : []),
         `/D=${install}`,
       ]);
       for (const name of resourceNames) {
@@ -189,16 +227,17 @@ SectionEnd
           `${entry.name}: ${name}`,
         );
       }
-      assert.equal(existsSync(join(install, "semantic-search")), entry.semantic, entry.name);
+      assert.equal(
+        existsSync(join(install, "semantic-search")),
+        entry.semantic || Boolean(entry.foreign),
+        entry.name,
+      );
       for (const name of binaries) {
         assert.equal(existsSync(join(install, name)), entry.ffmpeg, `${entry.name}: ${name}`);
       }
       assert(!existsSync(join(install, "semantic-search/stale-model.bin")), "Old models removed");
       if (entry.reuse || entry.corrupt) {
-        for (const name of [
-          ...resourceNames.filter((name) => name !== "LICENSE"),
-          ...(entry.ffmpeg ? binaries : []),
-        ]) {
+        for (const name of [...resourceNames, ...(entry.ffmpeg ? binaries : [])]) {
           assert.equal(readFileSync(join(install, name), "utf8"), "component-test-payload");
           assert.equal(
             statSync(join(install, name)).mtimeMs === oldTimestamp.getTime(),
@@ -216,6 +255,11 @@ SectionEnd
         }
         assert.equal(readFileSync(join(old, "cache/user-data.bin"), "utf8"), "keep user data");
         assert.equal(readFileSync(join(old, "preferences.json"), "utf8"), "keep settings");
+      }
+      if (entry.foreign) {
+        for (const name of foreignFiles) {
+          assert.equal(readFileSync(join(install, name), "utf8"), `unrelated: ${name}`, name);
+        }
       }
     });
   }
@@ -272,20 +316,30 @@ Var PassiveMode
 Name "Reuse page fixture"
 OutFile "${nsis(pageExecutable)}"
 RequestExecutionLevel user
+Page custom LocutionProScanPageCreate LocutionProScanPageLeave
 Page custom LocutionProFfmpegPageCreate LocutionProFfmpegPageLeave
 Page custom LocutionProSemanticPageCreate LocutionProSemanticPageLeave
 Page custom Finished
 !insertmacro MUI_LANGUAGE "English"
-Function SkipIfPassive
-FunctionEnd
+${template.match(/Function SkipIfPassive\r?\n[\s\S]*?FunctionEnd/u)[0]}
 Function .onInit
   StrCpy $LocutionProBundleFfmpeg 0
   StrCpy $LocutionProBundleSemantic 0
+  StrCpy $LocutionProScanComplete 0
+  \${GetOptions} $CMDLINE "/P" $0
+  \${IfNot} \${Errors}
+    StrCpy $PassiveMode 1
+  \${EndIf}
 FunctionEnd
 Function Finished
   WriteINIStr "${nsis(result)}" "Choice" "Ffmpeg" "$LocutionProBundleFfmpeg"
   WriteINIStr "${nsis(result)}" "Choice" "Semantic" "$LocutionProBundleSemantic"
+  WriteINIStr "${nsis(result)}" "Scan" "Complete" "$LocutionProScanComplete"
+  WriteINIStr "${nsis(result)}" "Scan" "Plan" "$LocutionProReusePlan"
   Quit
+FunctionEnd
+Function .onGUIEnd
+  Call LocutionProCloseUpgradeScan
 FunctionEnd
 Section
 SectionEnd
@@ -297,6 +351,16 @@ SectionEnd
     const choices = readFileSync(result, "utf8");
     assert.match(choices, /Ffmpeg=1/u);
     assert.match(choices, /Semantic=1/u);
+    assert.match(choices, /Complete=1/u);
+    assert.match(choices, /Plan=.+reuse-plan.ini/u);
+    // Passive mode keeps the initial component choices and never starts the
+    // pre-option worker or extracts its tools/plan. Prepare still runs at install.
+    run(pageExecutable, ["/P", `/D=${reuseInstall}`]);
+    const passiveChoices = readFileSync(result, "utf8");
+    assert.match(passiveChoices, /Ffmpeg=0/u);
+    assert.match(passiveChoices, /Semantic=0/u);
+    assert.match(passiveChoices, /Complete=0/u);
+    assert.match(passiveChoices, /Plan=\r?\n/u);
   });
   await t.test("scan is read-only and component flags require matching model files", () => {
     writeFileSync(join(reuseInstall, "locution-pro.exe"), "old core");
@@ -322,18 +386,21 @@ SectionEnd
     assert.match(plan, /Ffmpeg=0/u);
     assert.match(plan, /Semantic=0/u);
   });
-  await t.test("locked core aborts before deletion and invalidates a previous plan", async () => {
-    const locked = join(reuseInstall, "locution-pro.exe");
+  const withLock = async (locked, share, callback) => {
     const holder = spawn(
       powershell,
       [
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        "$stream = [IO.File]::Open($env:LOCUTION_TEST_LOCK, 'Open', 'ReadWrite', 'None'); [Console]::WriteLine('locked'); [Console]::ReadLine() | Out-Null; $stream.Dispose()",
+        "$stream = [IO.File]::Open($env:LOCUTION_TEST_LOCK, 'Open', 'Read', $env:LOCUTION_TEST_SHARE); [Console]::WriteLine('locked'); [Console]::ReadLine() | Out-Null; $stream.Dispose()",
       ],
-      { windowsHide: true, env: { ...process.env, LOCUTION_TEST_LOCK: locked } },
+      {
+        windowsHide: true,
+        env: { ...process.env, LOCUTION_TEST_LOCK: locked, LOCUTION_TEST_SHARE: share },
+      },
     );
+    const exited = new Promise((done) => holder.once("exit", done));
     try {
       await new Promise((resolveReady, reject) => {
         const timer = setTimeout(() => reject(new Error("Lock holder did not start")), 10000);
@@ -346,6 +413,42 @@ SectionEnd
           reject(error);
         });
       });
+      await callback();
+    } finally {
+      if (holder.exitCode === null) holder.stdin.end("release\n");
+      await exited;
+    }
+  };
+  await t.test(
+    "matching core DLL held by Explorer is reused without deleting or rewriting",
+    async () => {
+      const install = join(temporary, "locked-provider");
+      mkdirSync(install);
+      const provider = join(install, "locution_pro_thumbnail_provider.dll");
+      writeFileSync(provider, "component-test-payload");
+      const timestamp = new Date("2020-01-01T00:00:00Z");
+      utimesSync(provider, timestamp, timestamp);
+      writeFileSync(join(install, "locution-pro.exe"), "old core");
+      await withLock(provider, "Read", () => {
+        run(executable, ["/S", `/PREVIOUS=${install}`, `/D=${install}`]);
+        assert.equal(readFileSync(provider, "utf8"), "component-test-payload");
+        assert.equal(statSync(provider).mtimeMs, timestamp.getTime());
+        assert(!existsSync(join(install, "locution-pro.exe")), "Main executable still replaced");
+      });
+      // A changed, locked provider must still fail before removing the executable.
+      writeFileSync(provider, "component-test-payloae");
+      writeFileSync(join(install, "locution-pro.exe"), "old core");
+      await withLock(provider, "Read", () => {
+        helper("Prepare", install, planPath, 2);
+        assert.equal(readFileSync(join(install, "locution-pro.exe"), "utf8"), "old core");
+        assert.equal(readFileSync(provider, "utf8"), "component-test-payloae");
+      });
+    },
+  );
+  await t.test("locked core aborts before deletion and invalidates a previous plan", async () => {
+    const locked = join(reuseInstall, "locution-pro.exe");
+    helper("Scan", reuseInstall, planPath);
+    await withLock(locked, "None", () => {
       helper("Prepare", reuseInstall, planPath, 2);
       assert(existsSync(locked));
       assert(!existsSync(planPath), "Failed preparation cannot retain a successful plan");
@@ -353,10 +456,7 @@ SectionEnd
         readFileSync(join(reuseInstall, "ffprobe.exe"), "utf8"),
         "component-test-payloae",
       );
-    } finally {
-      holder.stdin.end("release\n");
-      await new Promise((done) => holder.once("exit", done));
-    }
+    });
   });
   await t.test("junction in managed resources is rejected without touching its target", () => {
     const install = join(temporary, "linked-install");

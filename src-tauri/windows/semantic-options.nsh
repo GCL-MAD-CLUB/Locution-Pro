@@ -11,11 +11,11 @@ Function LocutionProSemanticSelectionChanged
 FunctionEnd
 
 Function LocutionProSemanticPageCreate
+  Call SkipIfPassive
   ${If} $LocutionProReuseSemantic == 1
     StrCpy $LocutionProBundleSemantic 1
     Abort
   ${EndIf}
-  Call SkipIfPassive
   !insertmacro MUI_HEADER_TEXT "选择是否附带语义检索" "选择是否安装字幕与分镜语义检索组件。"
   nsDialogs::Create 1018
   Pop $0

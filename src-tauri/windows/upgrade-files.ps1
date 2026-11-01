@@ -88,7 +88,9 @@ try {
         $entries[$entry.path] = $entry
         # Check every destination, including missing leaves below existing junctions.
         foreach ($base in $roots) { Assert-PlainPath (Join-Path $base $entry.path) }
-        if ($entry.group -eq 'core') { continue }
+        # The executable and uninstaller are always replaced. Other core resources,
+        # including the Explorer thumbnail provider, can safely keep matching bytes.
+        if ($entry.path -in @($MainBinary, 'uninstall.exe')) { continue }
         foreach ($base in $roots) {
             $candidate = Join-Path $base $entry.path
             if (Test-Match $entry $candidate) { $reuse[$entry.path] = $candidate; break }
@@ -109,17 +111,24 @@ try {
         }
         $deletions = @{}
         foreach ($base in $roots) {
-            # These directories contain bundled code/models only. Unknown old files
-            # inside them must disappear so removed DLLs cannot survive an upgrade.
+            # Only the registry-identified previous installation owns whole trees
+            # and root DLLs. A fresh or relocated target can contain unrelated files;
+            # an executable/uninstall.exe by itself does not prove ownership.
+            $recognized = $PreviousRoot -and $base -eq $PreviousRoot
             $owned = @()
-            foreach ($directory in @('transnetv2', 'semantic-search', 'storyboard-semantic', 'licenses')) {
-                $owned += @(Get-TreeFiles (Join-Path $base $directory))
+            if ($recognized) {
+                foreach ($directory in @('transnetv2', 'semantic-search', 'storyboard-semantic', 'licenses')) {
+                    $owned += @(Get-TreeFiles (Join-Path $base $directory))
+                }
+                if (Test-Path -LiteralPath $base) {
+                    $owned += @(Get-ChildItem -LiteralPath $base -File -Force | Where-Object {
+                        $_.Extension -eq '.dll' -or $_.Name -in @($MainBinary, 'uninstall.exe', 'ffmpeg.exe', 'ffprobe.exe')
+                    } | ForEach-Object { $_.FullName })
+                }
             }
-            if (Test-Path -LiteralPath $base) {
-                $owned += @(Get-ChildItem -LiteralPath $base -File -Force | Where-Object {
-                    $_.Extension -eq '.dll' -or $_.Name -in @($MainBinary, 'uninstall.exe', 'ffmpeg.exe', 'ffprobe.exe')
-                } | ForEach-Object { $_.FullName })
-            }
+            # The main executable is a reserved install destination as well.
+            $main = Join-Path $base $MainBinary
+            if (Test-Path -LiteralPath $main -PathType Leaf) { $owned += $main }
             foreach ($entry in $payload.files) {
                 $path = Join-Path $base $entry.path
                 if (Test-Path -LiteralPath $path -PathType Leaf) { $owned += $path }
@@ -160,6 +169,7 @@ try {
         # Empty directories are harmless; remove deselected trees without touching data.
         if (!$Semantic) {
             foreach ($base in $roots) {
+                if (!$PreviousRoot -or $base -ne $PreviousRoot) { continue }
                 foreach ($directory in @('semantic-search', 'storyboard-semantic')) {
                     $path = Join-Path $base $directory
                     if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force }

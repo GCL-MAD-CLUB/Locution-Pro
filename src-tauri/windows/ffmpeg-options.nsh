@@ -64,12 +64,11 @@ Function LocutionProFfmpegSelectionChanged
 FunctionEnd
 
 Function LocutionProFfmpegPageCreate
-  Call LocutionProScanUpgrade
+  Call SkipIfPassive
   ${If} $LocutionProReuseFfmpeg == 1
     StrCpy $LocutionProBundleFfmpeg 1
     Abort
   ${EndIf}
-  Call SkipIfPassive
   Call LocutionProDetectFfmpeg
   !insertmacro MUI_HEADER_TEXT "选择是否内置 FFmpeg" "选择 Locution Pro 使用 FFmpeg 的方式。"
   nsDialogs::Create 1018

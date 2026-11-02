@@ -1,4 +1,4 @@
-; Maintenance UI restored from 93c5a0c; cleanup stays inside this installer.
+; Choices are reversible until the user confirms the final review page.
 !include "LogicLib.nsh"
 !include "nsDialogs.nsh"
 
@@ -6,7 +6,6 @@ Var ReinstallPageCheck
 Var LocutionProVersionRelation
 Var LocutionProFreshInstall
 Var LocutionProRetainedInstallDir
-Var LocutionProUninstallOnly
 Var LocutionProUninstallComplete
 Var LocutionProInitialInstallDir
 Var LocutionProPreviousSemanticChoice
@@ -40,31 +39,36 @@ Function PageReinstall
 FunctionEnd
 
 Function LocutionProPrepareMaintenanceText
-  ; Preserve the original version-specific maintenance text and header.
-  StrCpy $R4 "$(older)"
-  ReadRegStr $R0 SHCTX "$PreviousUninstallKey" "DisplayVersion"
-  ${IfThen} $R0 == "" ${|} StrCpy $R4 "$(unknown)" ${|}
-
   Call LocutionProComparePreviousVersion
+  !if "${ALLOWDOWNGRADES}" == "false"
+    ${If} $LocutionProVersionRelation == -1
+      IfSilent +2
+        MessageBox MB_ICONEXCLAMATION|MB_OK "已安装更新版本。此安装包不允许降级，请使用当前版本或更新的安装包。"
+      SetErrorLevel 2
+      Quit
+    ${EndIf}
+  !endif
+  ReadRegStr $R4 SHCTX "$PreviousUninstallKey" "DisplayVersion"
+  StrCpy $R1 "已安装 Locution Pro $R4，请选择操作。"
+  ${If} $R4 == ""
+    StrCpy $R1 "已安装 Locution Pro，请选择操作。"
+  ${EndIf}
   StrCpy $R0 $LocutionProVersionRelation
   ; Reinstalling the same version
   ${If} $R0 = 0
-    StrCpy $R1 "$(alreadyInstalledLong)"
-    StrCpy $R2 "$(addOrReinstall)"
-    StrCpy $R3 "$(uninstallApp)"
+    StrCpy $R2 "修复或调整已安装组件"
+    StrCpy $R3 "卸载 Locution Pro（保留用户数据）"
     !insertmacro MUI_HEADER_TEXT "$(alreadyInstalled)" "$(chooseMaintenanceOption)"
   ; Upgrading
   ${ElseIf} $R0 = 1
-    StrCpy $R1 "$(olderOrUnknownVersionInstalled)"
-    StrCpy $R2 "$(uninstallBeforeInstalling)"
-    StrCpy $R3 "$(dontUninstall)"
+    StrCpy $R2 "更新现有安装（保留用户数据）"
+    StrCpy $R3 "保留旧程序，另选目录安装"
     !insertmacro MUI_HEADER_TEXT "$(alreadyInstalled)" "$(choowHowToInstall)"
   ; Downgrading
   ${ElseIf} $R0 = -1
-    StrCpy $R1 "$(newerVersionInstalled)"
-    StrCpy $R2 "$(uninstallBeforeInstalling)"
+    StrCpy $R2 "替换为此版本（保留用户数据）"
     !if "${ALLOWDOWNGRADES}" == "true"
-      StrCpy $R3 "$(dontUninstall)"
+      StrCpy $R3 "保留旧程序，另选目录安装"
     !else
       StrCpy $R3 "$(dontUninstallDowngrade)"
     !endif
@@ -77,6 +81,10 @@ FunctionEnd
 Function LocutionProShowMaintenanceDialog
   nsDialogs::Create 1018
   Pop $R4
+  ${If} $R4 == error
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
   ${IfThen} $(^RTL) = 1 ${|} nsDialogs::SetRTL $(^RTL) ${|}
 
   ${NSD_CreateLabel} 0 0 100% 24u $R1
@@ -84,7 +92,7 @@ Function LocutionProShowMaintenanceDialog
 
   ${NSD_CreateRadioButton} 30u 50u -30u 8u $R2
   Pop $R2
-  ${NSD_OnClick} $R2 PageReinstallUpdateSelection
+  ${NSD_OnClick} $R2 PageReinstallSelectionClicked
 
   ${NSD_CreateRadioButton} 30u 70u -30u 8u $R3
   Pop $R3
@@ -92,7 +100,7 @@ Function LocutionProShowMaintenanceDialog
   !if "${ALLOWDOWNGRADES}" == "false"
     ${IfThen} $R0 = -1 ${|} EnableWindow $R3 0 ${|}
   !endif
-  ${NSD_OnClick} $R3 PageReinstallUpdateSelection
+  ${NSD_OnClick} $R3 PageReinstallSelectionClicked
 
   ; Check the first radio button if this the first time
   ; we enter this page or if the second button wasn't
@@ -148,12 +156,18 @@ Function LocutionProApplyMaintenanceChoice
   ${EndIf}
   ${If} $LocutionProFreshInstall == 1
     StrCpy $INSTDIR $PreviousInstallDir
+    StrCpy $LocutionProBundleFfmpeg $LocutionProPreviousFfmpegChoice
+    StrCpy $LocutionProBundleSemantic $LocutionProPreviousSemanticChoice
+    StrCpy $LocutionProScanComplete 0
   ${EndIf}
   StrCpy $LocutionProFreshInstall 0
-  StrCpy $LocutionProBundleSemantic $LocutionProPreviousSemanticChoice
 FunctionEnd
 
 Function LocutionProChooseFreshInstall
+  ${If} $LocutionProFreshInstall == 1
+    StrCpy $PreviousInstallDir ""
+    Return
+  ${EndIf}
   StrCpy $LocutionProRetainedInstallDir $PreviousInstallDir
   StrCpy $LocutionProFreshInstall 1
   Call LocutionProFreshInstallBase
@@ -162,7 +176,7 @@ Function LocutionProChooseFreshInstall
     ; Keep the previous installation intact if no new directory can be offered.
     StrCpy $LocutionProFreshInstall 0
     StrCpy $INSTDIR $PreviousInstallDir
-    MessageBox MB_ICONEXCLAMATION|MB_OK "无法自动选择新的安装目录。请选择“安装前卸载”，或退出后更换安装位置重试。"
+    MessageBox MB_ICONEXCLAMATION|MB_OK "无法自动选择新的安装目录。请选择更新现有安装，或退出后更换安装位置重试。"
     Abort
   ${EndIf}
   StrCpy $PreviousInstallDir ""
@@ -267,16 +281,20 @@ Function LocutionProCheckFreshInstallLocation
 FunctionEnd
 
 Function LocutionProDirectoryLeave
+  Call EnsureIndependentInstallLocation
   Call LocutionProCheckFreshInstallLocation
   ${If} $LocutionProFreshLocationAllowed != 1
-    MessageBox MB_ICONEXCLAMATION|MB_OK "已选择“请勿卸载”，请为全新安装选择旧安装目录之外的位置。"
+    MessageBox MB_ICONEXCLAMATION|MB_OK "已选择保留旧程序，请为新副本选择旧安装目录之外的位置，两个目录不能互相包含。"
     Abort
   ${EndIf}
 FunctionEnd
 
 Function LocutionProUninstallPageCreate
   Call SkipIfPassive
-  ${If} $PreviousInstallDir == ""
+  ; Upgrades are prepared in Install, after dependency setup. Only an explicit
+  ; uninstall runs a destructive worker on a wizard page.
+  ${If} $LocutionProUninstallOnly != 1
+  ${OrIf} $PreviousInstallDir == ""
   ${OrIf} $LocutionProHasMaintenance != 1
   ${OrIf} $LocutionProFreshInstall == 1
   ${OrIf} $LocutionProUninstallComplete == 1
@@ -292,6 +310,15 @@ Function LocutionProUninstallPageCreate
   GetFunctionAddress $LocutionProWorkerCompletedCallback LocutionProFinishEmbeddedUninstall
   Call LocutionProUpgradeProgressPageCreate
 FunctionEnd
+
+Function LocutionProInstallOptionsPre
+  Call SkipIfPassive
+  ${If} $LocutionProUninstallOnly == 1
+    Abort
+  ${EndIf}
+FunctionEnd
+
+
 
 Function LocutionProUninstallPageLeave
   ${If} $LocutionProUninstallComplete != 1
@@ -309,4 +336,9 @@ Function PageReinstallUpdateSelection
   ${Else}
     StrCpy $ReinstallPageCheck 2
   ${EndIf}
+FunctionEnd
+
+Function PageReinstallSelectionClicked
+  Pop $0
+  Call PageReinstallUpdateSelection
 FunctionEnd

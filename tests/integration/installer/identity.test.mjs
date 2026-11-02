@@ -289,6 +289,10 @@ Var PreviousInstallDir
 Var LocutionProPreviousSemanticChoice
 Var PreviousMainBinaryName
 Var LocutionProBundleSemantic
+Var LocutionProBundleFfmpeg
+Var LocutionProPreviousFfmpegChoice
+Var LocutionProFfmpegPath
+Var LocutionProFfprobePath
 Var PassiveMode
 !include "${nsis(isolatedIndependent)}"
 !include "${nsis(join(root, "src-tauri/windows/migration-page.nsh"))}"
@@ -324,7 +328,7 @@ ${componentChoice}
   FileWrite $5 $LocutionProBundleSemantic
   FileClose $5
 ${registration}
-  !insertmacro LOCUTION_ASSOCIATE "lcp" "LocutionPro.Project" "Locution project" "own.ico" "Open" "own-command"
+  !insertmacro LOCUTION_ASSOCIATE "lcp" "LocutionPro.Project" "Locution project" "own.ico" "Open" '$\\"$INSTDIR\\locution-pro.exe$\\" $\\"%1$\\"'
   ReadRegStr $0 SHCTX "${registry}\\Classes\\.lcp" ""
   FileOpen $5 "${nsis(join(logs, "association.txt"))}" w
   FileWrite $5 $0

@@ -15,6 +15,7 @@ Var LocutionProWorkerCompletedCallback
 Var LocutionProProgressLabel
 Var LocutionProProgressFileLabel
 Var LocutionProPreparedInstallDir
+Var LocutionProTransactionActive
 
 !ifndef LOCUTION_PAYLOAD_MANIFEST
   !define LOCUTION_PAYLOAD_MANIFEST "${LOCUTION_INSTALLER_SOURCE_DIR}\..\target\installer\payload-manifest.json"
@@ -33,7 +34,7 @@ Function LocutionProExtractUpgradeTools
 FunctionEnd
 
 !macro LOCUTION_UPGRADE_COMMAND OUTPUT
-  StrCpy ${OUTPUT} '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\upgrade-files.ps1" -Mode "$LocutionProUpgradeMode" -Root "$LocutionProWorkerRoot" -PreviousRoot "$LocutionProWorkerPreviousRoot" -Manifest "$PLUGINSDIR\payload-manifest.json" -Result "$LocutionProReusePlan" -MainBinary "${MAINBINARYNAME}.exe" -Ffmpeg $LocutionProBundleFfmpeg -Semantic $LocutionProBundleSemantic'
+  StrCpy ${OUTPUT} '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\upgrade-files.ps1" -Mode "$LocutionProUpgradeMode" -Root "$LocutionProWorkerRoot" -PreviousRoot "$LocutionProWorkerPreviousRoot" -Manifest "$PLUGINSDIR\payload-manifest.json" -Result "$LocutionProReusePlan" -MainBinary "${MAINBINARYNAME}.exe" -Ffmpeg $LocutionProBundleFfmpeg -Semantic $LocutionProBundleSemantic -Transactional 1'
 !macroend
 
 Function LocutionProReadUpgradePlan
@@ -60,12 +61,65 @@ Function LocutionProPlanUpgrade
     Call LocutionProUpgradeFailed
   ${EndIf}
   Call LocutionProReadUpgradePlan
+  ${If} $LocutionProUpgradeMode == "Prepare"
+    StrCpy $LocutionProTransactionActive 1
+    StrCpy $LocutionProPreparedInstallDir $INSTDIR
+  ${EndIf}
+FunctionEnd
+
+Function LocutionProRollbackInstall
+  ${If} $LocutionProTransactionActive != 1
+    Return
+  ${EndIf}
+  StrCpy $LocutionProUpgradeMode "Rollback"
+  !insertmacro LOCUTION_UPGRADE_COMMAND $0
+  nsExec::ExecToStack $0
+  Pop $0
+  Pop $1
+  ${If} $0 != 0
+    DetailPrint "自动恢复未完成，旧文件保留在安装目录中的 .locution-pro-rollback-* 文件夹：$1"
+    IfSilent +2
+      MessageBox MB_ICONSTOP|MB_OK "安装未完成，自动恢复遇到文件占用或权限问题。请保留安装目录中的 .locution-pro-rollback-* 文件夹以恢复旧文件。$\r$\n$1"
+  ${EndIf}
+  StrCpy $LocutionProTransactionActive 0
+FunctionEnd
+
+Function LocutionProCommitInstall
+  ${If} $LocutionProTransactionActive != 1
+    Return
+  ${EndIf}
+  Push $LocutionProUpgradeMode
+  StrCpy $LocutionProUpgradeMode "Commit"
+  !insertmacro LOCUTION_UPGRADE_COMMAND $0
+  nsExec::ExecToStack $0
+  Pop $0
+  Pop $1
+  ${If} $0 != 0
+  ${AndIf} $0 != 10
+    Pop $LocutionProUpgradeMode
+    SetErrorLevel 2
+    Abort "无法提交应用文件变更，正在恢复旧文件。"
+  ${EndIf}
+  ; Only cleanup failures after the durable commit boundary are non-fatal.
+  StrCpy $LocutionProTransactionActive 0
+  ${If} $0 == 10
+    DetailPrint "操作已完成，部分旧文件备份暂未清理；不影响后续更新或卸载：$1"
+    ; Silent installs have no dialogs. The worker retains a cleanup notice in
+    ; the installation directory without turning a successful operation into a failure.
+    IfSilent locution_commit_warning_done
+      MessageBox MB_ICONEXCLAMATION|MB_OK "操作已完成，部分旧备份暂未清理，不影响后续更新或卸载。" /SD IDOK
+    locution_commit_warning_done:
+  ${EndIf}
+  Pop $LocutionProUpgradeMode
 FunctionEnd
 
 ; Only the interactive wizard scans before options. Hashing runs in a hidden
 ; read-only worker so the progress page and Cancel button keep responding.
 Function LocutionProScanPageCreate
   Call SkipIfPassive
+  ${If} $LocutionProUninstallOnly == 1
+    Abort
+  ${EndIf}
   ${If} $LocutionProScanComplete == 1
   ${AndIf} $LocutionProScanRoot == $INSTDIR
   ${AndIf} $LocutionProScanPreviousRoot == $PreviousInstallDir

@@ -357,7 +357,7 @@ SectionEnd
       );
       assert(
         state.includes(
-          `SecondChoice=${entry.version === "1.0.0" ? "卸载 Locution Pro" : "请勿卸载"}`,
+          `SecondChoice=${entry.version === "1.0.0" ? "卸载 Locution Pro（保留用户数据）" : "保留旧程序，另选目录安装"}`,
         ),
       );
       assert.equal(readFileSync(join(old, "preferences.json"), "utf8"), "user data");
@@ -388,8 +388,7 @@ SectionEnd
         );
         assert.equal(readFileSync(join(`${old} (2)`, "locution-pro.exe"), "utf8"), "payload");
       } else {
-        assert.match(state, /DeleteDataControl=0/u);
-        assert.match(state, /OldMain=0/u);
+        assert.match(state, /OldMain=1/u);
         assert(!existsSync(join(old, "obsolete.dll")));
         assert.equal(readFileSync(join(old, "locution-pro.exe"), "utf8"), "payload");
         assert.equal(
@@ -601,6 +600,7 @@ SectionEnd
 Var UpdateMode
 Var DeleteAppDataCheckbox
 Var DeleteAppDataCheckboxState
+Var LocutionProOwnsRegistration
 Var TestDeleteData
 !define /ifndef WS_EX_LAYOUTRTL 0x00400000
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.TestShow
@@ -611,6 +611,7 @@ ${language}
 ${functionSource("un.ConfirmShow")}
 ${functionSource("un.ConfirmLeave")}
 Function un.onInit
+  StrCpy $LocutionProOwnsRegistration 1
   \${GetOptions} $CMDLINE "/DELETE=" $TestDeleteData
 FunctionEnd
 Function un.TestShow

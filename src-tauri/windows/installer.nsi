@@ -78,6 +78,8 @@ Var PreviousUninstallKey
 Var PreviousProductKey
 Var PreviousInstallDir
 Var PreviousMainBinaryName
+Var LocutionProOwnsRegistration
+Var LocutionProRegistrationStarted
 
 Name "${PRODUCTNAME}"
 BrandingText "${COPYRIGHT}"
@@ -130,10 +132,12 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
   !include MultiUser.nsh
 !endif
 
-!include "${LOCUTION_INSTALLER_SOURCE_DIR}\upgrade-files.nsh"
-!include "${LOCUTION_INSTALLER_SOURCE_DIR}\migration-page.nsh"
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\independent-install.nsh"
+!include "${LOCUTION_INSTALLER_SOURCE_DIR}\upgrade-files.nsh"
+!include "${LOCUTION_INSTALLER_SOURCE_DIR}\registration-state.nsh"
+!include "${LOCUTION_INSTALLER_SOURCE_DIR}\migration-page.nsh"
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\maintenance-page.nsh"
+!include "${LOCUTION_INSTALLER_SOURCE_DIR}\review-page.nsh"
 
 ; Installer icon
 !if "${INSTALLERICON}" != ""
@@ -189,13 +193,11 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
   !insertmacro MULTIUSER_PAGE_INSTALLMODE
 !endif
 
-; 4. Original maintenance choices, followed by an in-installer uninstall stage.
+; 4. Maintenance choice. No application files change while choosing options.
 Page custom PageReinstall PageLeaveReinstall
-!insertmacro MUI_PAGE_INIT
-Page custom LocutionProUninstallPageCreate LocutionProUninstallPageLeave
 
 ; 5. Choose install directory page
-!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+!define MUI_PAGE_CUSTOMFUNCTION_PRE LocutionProInstallOptionsPre
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE LocutionProDirectoryLeave
 !insertmacro MUI_PAGE_DIRECTORY
 
@@ -214,12 +216,17 @@ Page custom LocutionProSemanticPageCreate LocutionProSemanticPageLeave
 ; 8. Start menu shortcut page
 Var AppStartMenuFolder
 !if "${STARTMENUFOLDER}" != ""
-  !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+  !define MUI_PAGE_CUSTOMFUNCTION_PRE LocutionProInstallOptionsPre
   !define MUI_STARTMENUPAGE_DEFAULTFOLDER "${STARTMENUFOLDER}"
 !else
   !define MUI_PAGE_CUSTOMFUNCTION_PRE Skip
 !endif
 !insertmacro MUI_PAGE_STARTMENU Application $AppStartMenuFolder
+
+!insertmacro MUI_PAGE_INIT
+Page custom LocutionProReviewPageCreate LocutionProReviewPageLeave
+!insertmacro MUI_PAGE_INIT
+Page custom LocutionProUninstallPageCreate LocutionProUninstallPageLeave
 
 ; 9. Installation page
 !insertmacro MUI_PAGE_INSTFILES
@@ -247,8 +254,21 @@ Function LocutionProCheckRunningApp
   !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
 FunctionEnd
 
+Function LocutionProVerifyWebView2
+  File "/oname=$PLUGINSDIR\verify-webview2.ps1" "${LOCUTION_INSTALLER_SOURCE_DIR}\verify-webview2.ps1"
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\verify-webview2.ps1" -Path "$6"'
+  Pop $0
+  Pop $1
+  ${If} $0 != 0
+    SetErrorLevel 2
+    Abort "WebView2 安装程序的 Microsoft 数字签名验证失败，请重新下载安装包。"
+  ${EndIf}
+FunctionEnd
+
 Function LocutionProFinishEmbeddedUninstall
   ; Only the internal uninstall stage calls this; it never removes app data.
+  StrCpy $LocutionProTransactionActive 1
+  Call LocutionProCommitInstall
   DeleteRegKey SHCTX "$PreviousUninstallKey"
   StrCpy $LocutionProUninstallComplete 1
   ${If} $LocutionProUninstallOnly != 1
@@ -330,6 +350,9 @@ Function un.ConfirmShow ; Add add a `Delete app data` check box
   Pop $DeleteAppDataCheckbox
   SendMessage $HWNDPARENT ${WM_GETFONT} 0 0 $1
   SendMessage $DeleteAppDataCheckbox ${WM_SETFONT} $1 1
+  ${If} $LocutionProOwnsRegistration != 1
+    EnableWindow $DeleteAppDataCheckbox 0
+  ${EndIf}
 FunctionEnd
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE un.ConfirmLeave
 Function un.ConfirmLeave
@@ -351,6 +374,7 @@ FunctionEnd
 {{/each}}
 
 Function .onInit
+  !insertmacro LOCUTION_INSTALLER_MUTEX
   StrCpy $LocutionProFreshInstall 0
   StrCpy $LocutionProUninstallComplete 0
   StrCpy $LocutionProUninstallOnly 0
@@ -429,6 +453,15 @@ Function .onInit
     ${EndIf}
   ${EndIf}
   StrCpy $LocutionProPreviousSemanticChoice $LocutionProBundleSemantic
+  ClearErrors
+  ReadRegDWORD $0 SHCTX "$PreviousProductKey" "BundleFfmpeg"
+  ${IfNot} ${Errors}
+  ${AndIf} $0 == 0
+    StrCpy $LocutionProBundleFfmpeg 0
+    ReadRegStr $LocutionProFfmpegPath SHCTX "$PreviousProductKey" "FfmpegPath"
+    ReadRegStr $LocutionProFfprobePath SHCTX "$PreviousProductKey" "FfprobePath"
+  ${EndIf}
+  StrCpy $LocutionProPreviousFfmpegChoice $LocutionProBundleFfmpeg
 FunctionEnd
 
 Function .onVerifyInstDir
@@ -476,23 +509,11 @@ Section EarlyChecks
     ${EndIf}
   !endif
 
-  ; /S and /P skip all choice pages. Perform their maintenance once here,
-  ; using the final component choices, before any installation work starts.
-  ${If} ${Silent}
-  ${OrIf} $PassiveMode == 1
-    ${If} $PreviousInstallDir != ""
-    ${AndIf} $LocutionProHasMaintenance == 1
-      Call LocutionProCheckRunningApp
-      DetailPrint "正在卸载旧版本，保留应用程序数据…"
-      StrCpy $LocutionProUpgradeMode "Prepare"
-      Call LocutionProPlanUpgrade
-      Call LocutionProFinishEmbeddedUninstall
-      StrCpy $LocutionProPreparedInstallDir $INSTDIR
-    ${EndIf}
-  ${EndIf}
+  ; Dependency installation must succeed before Prepare changes old program files.
 SectionEnd
 
 Section WebView2
+  InitPluginsDir
   ; Check if Webview2 is already installed and skip this section
   ${If} ${RunningX64}
     ReadRegStr $4 HKLM "SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\${WEBVIEW2APPGUID}" "pv"
@@ -506,12 +527,11 @@ Section WebView2
   ${If} $4 == ""
     ; Webview2 installation
     ;
-    ; Skip if updating
-    ${If} $UpdateMode <> 1
+    ; An update must also repair a missing runtime before touching old app files.
       !if "${INSTALLWEBVIEW2MODE}" == "downloadBootstrapper"
-        Delete "$TEMP\MicrosoftEdgeWebview2Setup.exe"
+        Delete "$PLUGINSDIR\MicrosoftEdgeWebview2Setup.exe"
         DetailPrint "$(webview2Downloading)"
-        NSISdl::download "https://go.microsoft.com/fwlink/p/?LinkId=2124703" "$TEMP\MicrosoftEdgeWebview2Setup.exe"
+        NSISdl::download "https://go.microsoft.com/fwlink/p/?LinkId=2124703" "$PLUGINSDIR\MicrosoftEdgeWebview2Setup.exe"
         Pop $0
         ${If} $0 == "success"
           DetailPrint "$(webview2DownloadSuccess)"
@@ -519,23 +539,23 @@ Section WebView2
           DetailPrint "$(webview2DownloadError)"
           Abort "$(webview2AbortError)"
         ${EndIf}
-        StrCpy $6 "$TEMP\MicrosoftEdgeWebview2Setup.exe"
+        StrCpy $6 "$PLUGINSDIR\MicrosoftEdgeWebview2Setup.exe"
         Goto install_webview2
       !endif
 
       !if "${INSTALLWEBVIEW2MODE}" == "embedBootstrapper"
-        Delete "$TEMP\MicrosoftEdgeWebview2Setup.exe"
-        File "/oname=$TEMP\MicrosoftEdgeWebview2Setup.exe" "${WEBVIEW2BOOTSTRAPPERPATH}"
+        Delete "$PLUGINSDIR\MicrosoftEdgeWebview2Setup.exe"
+        File "/oname=$PLUGINSDIR\MicrosoftEdgeWebview2Setup.exe" "${WEBVIEW2BOOTSTRAPPERPATH}"
         DetailPrint "$(installingWebview2)"
-        StrCpy $6 "$TEMP\MicrosoftEdgeWebview2Setup.exe"
+        StrCpy $6 "$PLUGINSDIR\MicrosoftEdgeWebview2Setup.exe"
         Goto install_webview2
       !endif
 
       !if "${INSTALLWEBVIEW2MODE}" == "offlineInstaller"
-        Delete "$TEMP\MicrosoftEdgeWebView2RuntimeInstaller.exe"
-        File "/oname=$TEMP\MicrosoftEdgeWebView2RuntimeInstaller.exe" "${WEBVIEW2INSTALLERPATH}"
+        Delete "$PLUGINSDIR\MicrosoftEdgeWebView2RuntimeInstaller.exe"
+        File "/oname=$PLUGINSDIR\MicrosoftEdgeWebView2RuntimeInstaller.exe" "${WEBVIEW2INSTALLERPATH}"
         DetailPrint "$(installingWebview2)"
-        StrCpy $6 "$TEMP\MicrosoftEdgeWebView2RuntimeInstaller.exe"
+        StrCpy $6 "$PLUGINSDIR\MicrosoftEdgeWebView2RuntimeInstaller.exe"
         Goto install_webview2
       !endif
 
@@ -543,8 +563,15 @@ Section WebView2
 
       install_webview2:
         DetailPrint "$(installingWebview2)"
-        ; $6 holds the path to the webview2 installer
-        ExecWait "$6 ${WEBVIEW2INSTALLERARGS} /install" $1
+        ; Downloaded code must be trusted before execution. Use the private
+        ; extraction directory to avoid a predictable shared TEMP filename.
+        Call LocutionProVerifyWebView2
+        ClearErrors
+        ExecWait '$\"$6$\" ${WEBVIEW2INSTALLERARGS} /install' $1
+        ${If} ${Errors}
+          SetErrorLevel 2
+          Abort "$(webview2AbortError)"
+        ${EndIf}
         ${If} $1 = 0
           DetailPrint "$(webview2InstallSuccess)"
         ${Else}
@@ -552,7 +579,6 @@ Section WebView2
           Abort "$(webview2AbortError)"
         ${EndIf}
       webview2_done:
-    ${EndIf}
   ${Else}
     !if "${MINIMUMWEBVIEW2VERSION}" != ""
       ${VersionCompare} "${MINIMUMWEBVIEW2VERSION}" "$4" $R0
@@ -570,14 +596,26 @@ Section WebView2
           ${If} $R1 != ""
             ; Chromium updater docs: https://source.chromium.org/chromium/chromium/src/+/main:docs/updater/user_manual.md
             ; Modified from "HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Microsoft EdgeWebView\ModifyPath"
-            ExecWait `"$R1" /install appguid=${WEBVIEW2APPGUID}&needsadmin=true` $1
-            ${If} $1 = 0
+            ${GetFileName} "$R1" $0
+            ${If} $0 != "MicrosoftEdgeUpdate.exe"
+              SetErrorLevel 2
+              Abort "WebView2 更新程序路径无效，请先修复 WebView2 Runtime 后重试。"
+            ${EndIf}
+            StrCpy $6 $R1
+            Call LocutionProVerifyWebView2
+            ClearErrors
+            ExecWait `"$6" /install appguid=${WEBVIEW2APPGUID}&needsadmin=true` $1
+            ${IfNot} ${Errors}
+            ${AndIf} $1 = 0
               DetailPrint "$(webview2InstallSuccess)"
             ${Else}
-              MessageBox MB_ICONEXCLAMATION|MB_ABORTRETRYIGNORE "$(webview2InstallError)" IDIGNORE ignore IDRETRY update_webview
+              MessageBox MB_ICONEXCLAMATION|MB_RETRYCANCEL "$(webview2InstallError)" /SD IDCANCEL IDRETRY update_webview
+              SetErrorLevel 2
               Quit
-              ignore:
             ${EndIf}
+          ${Else}
+            SetErrorLevel 2
+            Abort "找不到 WebView2 更新程序，请先安装或修复 WebView2 Runtime 后重试。"
           ${EndIf}
       ${EndIf}
     !endif
@@ -634,17 +672,28 @@ Section Install
 
   ; Publish the executable only after all required components installed successfully.
   ClearErrors
-  File "${MAINBINARYSRCPATH}"
+  File "/oname=${MAINBINARYNAME}.exe" "${MAINBINARYSRCPATH}"
   ${If} ${Errors}
     Delete "$INSTDIR\${MAINBINARYNAME}.exe"
     SetErrorLevel 2
     Abort "无法安装主程序。"
   ${EndIf}
 
+  ; Write the uninstaller before publishing associations and registration.
+  ClearErrors
+  WriteUninstaller "$INSTDIR\uninstall.exe"
+  ${If} ${Errors}
+    SetErrorLevel 2
+    Abort "无法写入卸载程序，请检查目录权限后重试。"
+  ${EndIf}
+
+  Call LocutionProSnapshotRegistration
+  Call RecordMigrationOptOut
   ; Create file associations
+  ClearErrors
   {{#each file_associations as |association| ~}}
     {{#each association.ext as |ext| ~}}
-       !insertmacro LOCUTION_ASSOCIATE "{{ext}}" "{{or association.name ext}}" "{{association-description association.description ext}}" "$INSTDIR\${MAINBINARYNAME}.exe,0" "Open with ${PRODUCTNAME}" "$INSTDIR\${MAINBINARYNAME}.exe $\"%1$\""
+       !insertmacro LOCUTION_ASSOCIATE "{{ext}}" "{{or association.name ext}}" "{{association-description association.description ext}}" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\",0" "Open with ${PRODUCTNAME}" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
     {{/each}}
   {{/each}}
 
@@ -667,18 +716,12 @@ Section Install
     WriteRegStr SHCTX "Software\Classes\\{{protocol}}\shell\open\command" "" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" $\"%1$\""
   {{/each}}
 
-  ; Create uninstaller
-  ClearErrors
-  WriteUninstaller "$INSTDIR\uninstall.exe"
-  ${If} ${Errors}
-    Delete "$INSTDIR\${MAINBINARYNAME}.exe"
-    SetErrorLevel 2
-    Abort "无法写入卸载程序，请检查目录权限后重试。"
-  ${EndIf}
-
   ; Save $INSTDIR in registry for future installations
   WriteRegStr SHCTX "${MANUPRODUCTKEY}" "" $INSTDIR
   WriteRegDWORD SHCTX "${MANUPRODUCTKEY}" "BundleSemanticSearch" $LocutionProBundleSemantic
+  WriteRegDWORD SHCTX "${MANUPRODUCTKEY}" "BundleFfmpeg" $LocutionProBundleFfmpeg
+  WriteRegStr SHCTX "${MANUPRODUCTKEY}" "FfmpegPath" $LocutionProFfmpegPath
+  WriteRegStr SHCTX "${MANUPRODUCTKEY}" "FfprobePath" $LocutionProFfprobePath
 
   !if "${INSTALLMODE}" == "both"
     ; Save install mode to be selected by default for the next installation such as updating
@@ -710,6 +753,15 @@ Section Install
     WriteRegStr SHCTX "${UNINSTKEY}" "HelpLink" "${HOMEPAGE}"
   !endif
 
+  ; Required maintenance registration must be usable before committing files.
+  ReadRegStr $0 SHCTX "${MANUPRODUCTKEY}" ""
+  ReadRegStr $1 SHCTX "${UNINSTKEY}" "UninstallString"
+  ${If} $0 != $INSTDIR
+  ${OrIf} $1 != '$\"$INSTDIR\uninstall.exe$\"'
+    SetErrorLevel 2
+    Abort "无法登记安装或卸载信息，正在恢复旧文件。请检查权限后重试。"
+  ${EndIf}
+
   ; Create start menu shortcut
   !insertmacro MUI_STARTMENU_WRITE_BEGIN Application
     Call CreateOrUpdateStartMenuShortcut
@@ -726,6 +778,10 @@ Section Install
     !insertmacro NSIS_HOOK_POSTINSTALL
   !endif
 
+  Call LocutionProCommitInstall
+
+  StrCpy $LocutionProRegistrationStarted 0
+
   ${If} $PassiveMode = 1
   ${OrIf} ${Silent}
     Call MigrateLegacyData
@@ -735,12 +791,19 @@ Section Install
   SetAutoClose true
 SectionEnd
 
+Function .onInstFailed
+  Call LocutionProRollbackInstall
+  Call LocutionProRestoreRegistration
+  SetErrorLevel 2
+FunctionEnd
+
 Function .onInstSuccess
   ; Check for `/R` flag only in silent and passive installers because
   ; GUI installer has a toggle for the user to (re)start the app
   ${If} $PassiveMode = 1
   ${OrIf} ${Silent}
     ${If} $MigrationComplete != 1
+    ${AndIf} $MigrationSkipped != 1
       Return
     ${EndIf}
     ${GetOptions} $CMDLINE "/R" $R0
@@ -752,6 +815,7 @@ Function .onInstSuccess
 FunctionEnd
 
 Function un.onInit
+  !insertmacro LOCUTION_INSTALLER_MUTEX
   !insertmacro SetContext
 
   !if "${INSTALLMODE}" == "both"
@@ -759,6 +823,12 @@ Function un.onInit
   !endif
 
   !insertmacro MUI_UNGETLANGUAGE
+  StrCpy $DeleteAppDataCheckboxState 0
+  StrCpy $LocutionProOwnsRegistration 0
+  ReadRegStr $0 SHCTX "${MANUPRODUCTKEY}" ""
+  ${If} $0 == $INSTDIR
+    StrCpy $LocutionProOwnsRegistration 1
+  ${EndIf}
 
   ${GetOptions} $CMDLINE "/P" $PassiveMode
   ${IfNot} ${Errors}
@@ -771,27 +841,175 @@ Function un.onInit
   ${EndIf}
 FunctionEnd
 
+Function un.CheckDataTree
+  Exch $R0
+  Push $R1
+  Push $R2
+  Push $R3
+  Push $R0
+  Call un.CheckPlainPath
+  ${If} $LocutionProPathSafe != 1
+    Goto uninstall_data_tree_done
+  ${EndIf}
+  IfFileExists "$R0" 0 uninstall_data_tree_done
+  ClearErrors
+  FindFirst $R1 $R2 "$R0\*.*"
+  ${If} ${Errors}
+    StrCpy $LocutionProPathSafe 0
+    Goto uninstall_data_tree_close
+  ${EndIf}
+  uninstall_data_tree_loop:
+    ${If} $R2 == ""
+      Goto uninstall_data_tree_close
+    ${EndIf}
+    ${If} $R2 != "."
+    ${AndIf} $R2 != ".."
+      Push "$R0\$R2"
+      Call un.CheckPlainPath
+      ${If} $LocutionProPathSafe != 1
+        Goto uninstall_data_tree_close
+      ${EndIf}
+      StrCpy $R3 $R2 23
+      ${If} $R3 == ".locution-pro-rollback-"
+        nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\upgrade-files.ps1" -Mode CheckBackup -Root "$R0" -BackupDirectory "$R0\$R2" -Manifest "$PLUGINSDIR\payload-manifest.json" -Result "$PLUGINSDIR\uninstall-check.ini" -MainBinary "${MAINBINARYNAME}.exe"'
+        Pop $0
+        Pop $1
+        ${If} $0 != 0
+          StrCpy $LocutionProPathSafe 0
+          Goto uninstall_data_tree_close
+        ${EndIf}
+      ${EndIf}
+      IfFileExists "$R0\$R2\*.*" 0 +3
+        Push "$R0\$R2"
+        Call un.CheckDataTree
+      ${If} $LocutionProPathSafe != 1
+        Goto uninstall_data_tree_close
+      ${EndIf}
+    ${EndIf}
+    FindNext $R1 $R2
+    Goto uninstall_data_tree_loop
+  uninstall_data_tree_close:
+    FindClose $R1
+  uninstall_data_tree_done:
+  Pop $R3
+  Pop $R2
+  Pop $R1
+  Pop $R0
+FunctionEnd
+
 Section Uninstall
+
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\upgrade-files.ps1" "${LOCUTION_INSTALLER_SOURCE_DIR}\upgrade-files.ps1"
+  File "/oname=$PLUGINSDIR\payload-manifest.json" "${LOCUTION_PAYLOAD_MANIFEST}"
+
+  ; Validate the complete set before deleting even the first program file.
+  Push $INSTDIR
+  Call un.CheckPlainPath
+  ${If} $LocutionProPathSafe != 1
+    SetErrorLevel 2
+    Abort "卸载目录包含链接或无法访问的路径，未删除应用文件。"
+  ${EndIf}
+  {{#each resources}}
+    Push "$INSTDIR\\{{this.[1]}}"
+    Call un.CheckPlainPath
+    ${If} $LocutionProPathSafe != 1
+      SetErrorLevel 2
+      Abort "应用组件路径包含链接或无法访问，未删除应用文件。"
+    ${EndIf}
+  {{/each}}
+  StrCpy $LocutionProOwnsRegistration 0
+  ReadRegStr $0 SHCTX "${MANUPRODUCTKEY}" ""
+  ${If} $0 == $INSTDIR
+    StrCpy $LocutionProOwnsRegistration 1
+  ${EndIf}
+
+  ${If} $DeleteAppDataCheckboxState == 1
+  ${AndIf} $UpdateMode != 1
+  ${AndIf} $LocutionProOwnsRegistration == 1
+    SetShellVarContext current
+    Push "$APPDATA\${BUNDLEID}"
+    Call un.CheckDataTree
+    ${If} $LocutionProPathSafe != 1
+      SetErrorLevel 2
+      Abort "数据目录含链接、未恢复的旧文件备份或无法访问的路径。请取消删除应用数据后重试。"
+    ${EndIf}
+    Push "$LOCALAPPDATA\${BUNDLEID}"
+    Call un.CheckDataTree
+    ${If} $LocutionProPathSafe != 1
+      SetErrorLevel 2
+      Abort "数据目录含链接、未恢复的旧文件备份或无法访问的路径。请取消删除应用数据后重试。"
+    ${EndIf}
+    Push "$LOCALAPPDATA\${PRODUCTNAME}"
+    Call un.CheckDataTree
+    ${If} $LocutionProPathSafe != 1
+      SetErrorLevel 2
+      Abort "数据目录含链接、未恢复的旧文件备份或无法访问的路径。请取消删除应用数据后重试。"
+    ${EndIf}
+    !insertmacro SetContext
+  ${EndIf}
 
   !ifmacrodef NSIS_HOOK_PREUNINSTALL
     !insertmacro NSIS_HOOK_PREUNINSTALL
   !endif
 
-  !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  ${If} $LocutionProOwnsRegistration == 1
+    !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  ${EndIf}
+
+  ; Preflight all managed files and locks before deleting the first file. This
+  ; also keeps locked Explorer providers from producing a false success result.
+  nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\upgrade-files.ps1" -Mode CheckUninstall -Root "$INSTDIR" -PreviousRoot "$INSTDIR" -Manifest "$PLUGINSDIR\payload-manifest.json" -Result "$PLUGINSDIR\uninstall-check.ini" -MainBinary "${MAINBINARYNAME}.exe"'
+  Pop $0
+  Pop $1
+  ${If} $0 != 0
+    DetailPrint "$1"
+    SetErrorLevel 2
+    Abort "无法安全卸载。请关闭 Locution Pro 和占用组件的程序，检查目录权限及待恢复备份后重试。"
+  ${EndIf}
+
+  ; Loaded image files can often be renamed even while Explorer holds them.
+  ; Only the unique tombstone may be queued for reboot, so a reinstall at the
+  ; original DLL path is never removed by an older uninstall operation.
+  IfFileExists "$INSTDIR\${LCP_THUMBNAIL_PROVIDER_FILE}" 0 uninstall_provider_ready
+    ClearErrors
+    GetTempFileName $R8 "$INSTDIR"
+    ${If} ${Errors}
+      SetErrorLevel 2
+      Abort "无法为缩略图组件创建安全的卸载临时文件，未删除应用文件。"
+    ${EndIf}
+    Delete "$R8"
+    ClearErrors
+    Rename "$INSTDIR\${LCP_THUMBNAIL_PROVIDER_FILE}" "$R8"
+    ${If} ${Errors}
+      SetErrorLevel 2
+      Abort "无法移走缩略图组件，未删除应用文件。请重启文件资源管理器或系统后重试。"
+    ${EndIf}
+    Delete /REBOOTOK "$R8"
+  uninstall_provider_ready:
 
   ; Delete the app directory and its content from disk
   ; Copy main executable
-  Delete "$INSTDIR\${MAINBINARYNAME}.exe"
+  ClearErrors
+  IfFileExists "$INSTDIR\${MAINBINARYNAME}.exe" 0 +2
+    Delete "$INSTDIR\${MAINBINARYNAME}.exe"
 
   ; Delete resources
   {{#each resources}}
-    Delete "$INSTDIR\\{{this.[1]}}"
+    IfFileExists "$INSTDIR\\{{this.[1]}}" 0 +2
+      Delete "$INSTDIR\\{{this.[1]}}"
   {{/each}}
 
   ; Delete external binaries
   {{#each binaries}}
-    Delete "$INSTDIR\\{{this}}"
+    IfFileExists "$INSTDIR\\{{this}}" 0 +2
+      Delete "$INSTDIR\\{{this}}"
   {{/each}}
+
+  ${If} ${Errors}
+    SetErrorLevel 2
+    Abort "部分应用文件无法删除。请关闭占用组件的程序后重试；安装登记和应用数据已保留。"
+  ${EndIf}
 
   ; Delete app associations
   {{#each file_associations as |association| ~}}
@@ -800,15 +1018,15 @@ Section Uninstall
     {{/each}}
   {{/each}}
 
-  ; Remove only the COM registration owned by this installation. Explorer can temporarily keep
-  ; the DLL loaded, so schedule its deletion at reboot if a direct deletion is not possible.
+  ; Remove only the COM registration owned by this installation.
   ReadRegStr $R7 SHCTX "Software\Classes\CLSID\${LCP_THUMBNAIL_PROVIDER_CLSID}\InprocServer32" ""
   ${If} $R7 == "$INSTDIR\${LCP_THUMBNAIL_PROVIDER_FILE}"
     DeleteRegKey SHCTX "Software\Classes\LocutionPro.Project\shellex\${ITHUMBNAIL_PROVIDER_IID}"
     DeleteRegValue SHCTX "Software\Classes\LocutionPro.Project" "TypeOverlay"
     DeleteRegKey SHCTX "Software\Classes\CLSID\${LCP_THUMBNAIL_PROVIDER_CLSID}"
   ${EndIf}
-  Delete /REBOOTOK "$INSTDIR\${LCP_THUMBNAIL_PROVIDER_FILE}"
+  ; Never queue a reusable installation pathname for deletion after a reinstall.
+  Delete "$INSTDIR\${LCP_THUMBNAIL_PROVIDER_FILE}"
   Call un.RefreshShellAssociations
 
   ; Delete deep links
@@ -824,12 +1042,13 @@ Section Uninstall
   Delete "$INSTDIR\uninstall.exe"
 
   {{#each resources_ancestors}}
-  RMDir /REBOOTOK "$INSTDIR\\{{this}}"
+  RMDir "$INSTDIR\\{{this}}"
   {{/each}}
   RMDir "$INSTDIR"
 
   ; Remove shortcuts if not updating
   ${If} $UpdateMode <> 1
+  ${AndIf} $LocutionProOwnsRegistration == 1
     !insertmacro DeleteAppUserModelId
 
     ; Remove start menu shortcut
@@ -858,6 +1077,7 @@ Section Uninstall
   ${EndIf}
 
   ; Remove registry information for add/remove programs
+  ${If} $LocutionProOwnsRegistration == 1
   !if "${INSTALLMODE}" == "both"
     DeleteRegKey SHCTX "${UNINSTKEY}"
   !else if "${INSTALLMODE}" == "perMachine"
@@ -865,12 +1085,14 @@ Section Uninstall
   !else
     DeleteRegKey HKCU "${UNINSTKEY}"
   !endif
+  ${EndIf}
 
   ; Removes the Autostart entry for ${PRODUCTNAME} from the HKCU Run key if it exists.
   ; This ensures the program does not launch automatically after uninstallation if it exists.
   ; If it doesn't exist, it does nothing.
   ; We do this when not updating (to preserve the registry value on updates)
   ${If} $UpdateMode <> 1
+  ${AndIf} $LocutionProOwnsRegistration == 1
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
   ${EndIf}
 
@@ -878,6 +1100,7 @@ Section Uninstall
   ; and if not updating
   ${If} $DeleteAppDataCheckboxState = 1
   ${AndIf} $UpdateMode <> 1
+  ${AndIf} $LocutionProOwnsRegistration == 1
     ; Clear the install location $INSTDIR from registry
     DeleteRegKey SHCTX "${MANUPRODUCTKEY}"
     DeleteRegKey /ifempty SHCTX "${MANUKEY}"
@@ -888,9 +1111,17 @@ Section Uninstall
     DeleteRegKey /ifempty HKCU "${MANUKEY}"
 
     SetShellVarContext current
-    RmDir /r "$APPDATA\${BUNDLEID}"
-    RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
-    RmDir /r "$LOCALAPPDATA\${PRODUCTNAME}"
+    ClearErrors
+    IfFileExists "$APPDATA\${BUNDLEID}\*.*" 0 +2
+      RmDir /r "$APPDATA\${BUNDLEID}"
+    IfFileExists "$LOCALAPPDATA\${BUNDLEID}\*.*" 0 +2
+      RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
+    IfFileExists "$LOCALAPPDATA\${PRODUCTNAME}\*.*" 0 +2
+      RmDir /r "$LOCALAPPDATA\${PRODUCTNAME}"
+    ${If} ${Errors}
+      SetErrorLevel 2
+      Abort "应用已移除，但部分默认位置的数据无法删除。请检查文件占用和目录权限。"
+    ${EndIf}
   ${EndIf}
 
   !ifmacrodef NSIS_HOOK_POSTUNINSTALL
@@ -929,6 +1160,9 @@ Function ReadPreviousInstallLocation
   ${EndIf}
   Push $4
   Call StripPathQuotes
+  Pop $4
+  Push $4
+  Call NormalizeInstallPath
   Pop $4
   StrCpy $PreviousInstallDir $4
   StrCpy $PreviousMainBinaryName "${MAINBINARYNAME}.exe"

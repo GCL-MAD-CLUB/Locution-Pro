@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('Scan', 'Prepare')][string]$Mode,
+    [Parameter(Mandatory = $true)][ValidateSet('Scan', 'Prepare', 'Upgrade', 'Uninstall')][string]$Mode,
     [Parameter(Mandatory = $true)][string]$Root,
     [string]$PreviousRoot = '',
     [Parameter(Mandatory = $true)][string]$Manifest,
@@ -56,6 +56,17 @@ function Get-TreeFiles([string]$Path) {
     }
 }
 
+function Publish-Progress([string]$Phase, [string]$File) {
+    # NSIS polls this file with ReadINIStr (the Windows profile API), which can
+    # briefly lock it. Progress is cosmetic: a failed write must never abort
+    # the scan, upgrade, or uninstall worker.
+    try {
+        [IO.File]::WriteAllLines("$Result.progress", @('[Progress]', "Phase=$Phase", "File=$File"), [Text.Encoding]::Unicode)
+    } catch {
+        # The installer holds the file while polling; the next update will land.
+    }
+}
+
 try {
     # A failure must never leave a previous successful reuse plan behind.
     if (Test-Path -LiteralPath $Result) { Remove-Item -LiteralPath $Result -Force }
@@ -72,11 +83,21 @@ try {
         }
     }
     if ($MainBinary -notmatch '^[\w.-]+\.exe$') { throw 'Invalid main executable name' }
+    if ($Mode -in @('Upgrade', 'Uninstall') -and (!$PreviousRoot -or $Root -ne $PreviousRoot)) {
+        throw 'Embedded uninstall requires the identified previous installation as its root'
+    }
+    if ($Mode -eq 'Upgrade') {
+        # Choices follow this stage. Keep every matching optional component until
+        # the final Prepare pass applies the choices made in the wizard.
+        $Ffmpeg = 1
+        $Semantic = 1
+    }
     $payload = Get-Content -LiteralPath $Manifest -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($payload.version -ne 1) { throw 'Unsupported installer manifest' }
     $entries = @{}
     $reuse = @{}
     foreach ($entry in $payload.files) {
+        Publish-Progress 'hashing' $entry.path
         $parts = $entry.path.Split('\')
         if ($entry.path -match '[\x00-\x1f<>:"|?*\[\]=/]' -or
             @($parts | Where-Object { !$_ -or $_ -in @('.', '..') -or $_ -match '[. ]$' }).Count -gt 0 -or
@@ -102,7 +123,14 @@ try {
     })
     $reuseFfmpeg = [int]($ffmpegEntries.Count -eq 2 -and @($ffmpegEntries | Where-Object { !$reuse.ContainsKey($_.path) }).Count -eq 0)
     $reuseSemantic = [int]($models.Count -gt 0 -and @($models | Where-Object { !$reuse.ContainsKey($_.path) }).Count -eq 0)
-    if ($Mode -eq 'Prepare') {
+    if ($Mode -eq 'Uninstall') {
+        $reuse.Clear()
+        $reuseFfmpeg = 0
+        $reuseSemantic = 0
+        $Ffmpeg = 0
+        $Semantic = 0
+    }
+    if ($Mode -in @('Prepare', 'Upgrade', 'Uninstall')) {
         $selected = @{}
         foreach ($entry in $payload.files) {
             $selected[$entry.path] = !(($entry.group -eq 'ffmpeg' -and !$Ffmpeg) -or
@@ -144,6 +172,7 @@ try {
         $handles = [Collections.Generic.List[IDisposable]]::new()
         try {
             foreach ($path in $deletions.Keys) {
+                Publish-Progress 'checking-locks' $path
                 $handles.Add([IO.File]::Open($path, 'Open', 'ReadWrite', 'None'))
             }
         } finally {
@@ -153,11 +182,15 @@ try {
         foreach ($base in $roots) {
             $main = Join-Path $base $MainBinary
             if ($deletions.ContainsKey($main)) {
+                Publish-Progress 'removing' $main
                 Remove-Item -LiteralPath $main -Force
                 $deletions.Remove($main)
             }
         }
-        foreach ($path in @($deletions.Keys)) { Remove-Item -LiteralPath $path -Force }
+        foreach ($path in @($deletions.Keys)) {
+            Publish-Progress 'removing' $path
+            Remove-Item -LiteralPath $path -Force
+        }
         foreach ($relative in @($reuse.Keys)) {
             $destination = Join-Path $Root $relative
             if ($reuse[$relative] -ne $destination) {

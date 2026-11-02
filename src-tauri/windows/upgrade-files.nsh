@@ -9,6 +9,12 @@ Var LocutionProScanComplete
 Var LocutionProScanRoot
 Var LocutionProScanPreviousRoot
 Var LocutionProScanBar
+Var LocutionProWorkerRoot
+Var LocutionProWorkerPreviousRoot
+Var LocutionProWorkerCompletedCallback
+Var LocutionProProgressLabel
+Var LocutionProProgressFileLabel
+Var LocutionProPreparedInstallDir
 
 !ifndef LOCUTION_PAYLOAD_MANIFEST
   !define LOCUTION_PAYLOAD_MANIFEST "${LOCUTION_INSTALLER_SOURCE_DIR}\..\target\installer\payload-manifest.json"
@@ -21,10 +27,13 @@ Function LocutionProExtractUpgradeTools
   File "/oname=$PLUGINSDIR\upgrade-files.ps1" "${LOCUTION_INSTALLER_SOURCE_DIR}\upgrade-files.ps1"
   File "/oname=$PLUGINSDIR\payload-manifest.json" "${LOCUTION_PAYLOAD_MANIFEST}"
   StrCpy $LocutionProReusePlan "$PLUGINSDIR\reuse-plan.ini"
+  Delete "$LocutionProReusePlan.progress"
+  StrCpy $LocutionProWorkerRoot $INSTDIR
+  StrCpy $LocutionProWorkerPreviousRoot $PreviousInstallDir
 FunctionEnd
 
 !macro LOCUTION_UPGRADE_COMMAND OUTPUT
-  StrCpy ${OUTPUT} '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\upgrade-files.ps1" -Mode "$LocutionProUpgradeMode" -Root "$INSTDIR" -PreviousRoot "$PreviousInstallDir" -Manifest "$PLUGINSDIR\payload-manifest.json" -Result "$LocutionProReusePlan" -MainBinary "${MAINBINARYNAME}.exe" -Ffmpeg $LocutionProBundleFfmpeg -Semantic $LocutionProBundleSemantic'
+  StrCpy ${OUTPUT} '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\upgrade-files.ps1" -Mode "$LocutionProUpgradeMode" -Root "$LocutionProWorkerRoot" -PreviousRoot "$LocutionProWorkerPreviousRoot" -Manifest "$PLUGINSDIR\payload-manifest.json" -Result "$LocutionProReusePlan" -MainBinary "${MAINBINARYNAME}.exe" -Ffmpeg $LocutionProBundleFfmpeg -Semantic $LocutionProBundleSemantic'
 !macroend
 
 Function LocutionProReadUpgradePlan
@@ -67,7 +76,16 @@ Function LocutionProScanPageCreate
   StrCpy $LocutionProReuseSemantic 0
   StrCpy $LocutionProUpgradeMode "Scan"
   Call LocutionProExtractUpgradeTools
-  !insertmacro MUI_HEADER_TEXT "检查可复用组件" "正在校验已有文件，完成后自动继续。"
+  StrCpy $LocutionProWorkerCompletedCallback 0
+  Call LocutionProUpgradeProgressPageCreate
+FunctionEnd
+
+Function LocutionProUpgradeProgressPageCreate
+  ${If} $LocutionProUpgradeMode == "Scan"
+    !insertmacro MUI_HEADER_TEXT "检查可复用组件" "正在校验已有文件，完成后自动继续。"
+  ${Else}
+    !insertmacro MUI_HEADER_TEXT "正在卸载旧版本" "在当前安装程序中卸载旧应用，保留应用程序数据。"
+  ${EndIf}
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
@@ -75,11 +93,21 @@ Function LocutionProScanPageCreate
     Call LocutionProUpgradeFailed
   ${EndIf}
   ${NSD_CreateLabel} 0 0 100% 24u "正在校验 FFmpeg、模型和依赖库。大文件较多时需要一些时间，可以取消安装。"
-  Pop $0
+  Pop $LocutionProProgressLabel
+  ${If} $LocutionProUpgradeMode != "Scan"
+    ${NSD_SetText} $LocutionProProgressLabel "正在校验并卸载旧应用。可复用的组件和应用程序数据将保留，请等待此步骤完成。"
+    ${If} $LocutionProUpgradeMode == "Uninstall"
+      ${NSD_SetText} $LocutionProProgressLabel "正在卸载应用程序及其内置组件。应用程序数据将保留，请等待此步骤完成。"
+    ${EndIf}
+    GetDlgItem $0 $HWNDPARENT 2
+    EnableWindow $0 0
+  ${EndIf}
   ${NSD_CreateProgressBar} 0 32u 100% 12u ""
   Pop $LocutionProScanBar
   ${NSD_AddStyle} $LocutionProScanBar 0x8 ; PBS_MARQUEE
   SendMessage $LocutionProScanBar ${PBM_SETMARQUEE} 1 40
+  ${NSD_CreateLabel} 0 54u 100% 36u ""
+  Pop $LocutionProProgressFileLabel
   GetDlgItem $0 $HWNDPARENT 1
   EnableWindow $0 0
   GetDlgItem $0 $HWNDPARENT 3
@@ -122,6 +150,19 @@ Function LocutionProCloseUpgradeScan
 FunctionEnd
 
 Function LocutionProPollUpgradeScan
+  ReadINIStr $0 "$LocutionProReusePlan.progress" "Progress" "Phase"
+  ${If} $0 == "hashing"
+    StrCpy $0 "正在校验已有组件…"
+  ${ElseIf} $0 == "checking-locks"
+    StrCpy $0 "正在检查待卸载文件是否被占用…"
+  ${ElseIf} $0 == "removing"
+    StrCpy $0 "正在卸载旧应用…"
+  ${EndIf}
+  ${If} $0 != ""
+    ${NSD_SetText} $LocutionProProgressLabel "$0"
+  ${EndIf}
+  ReadINIStr $0 "$LocutionProReusePlan.progress" "Progress" "File"
+  ${NSD_SetText} $LocutionProProgressFileLabel "$0"
   System::Call 'kernel32::GetExitCodeProcess(p $LocutionProScanProcess, *i.r0) i.r1'
   ${If} $1 != 0
   ${AndIf} $0 == 259
@@ -131,21 +172,37 @@ Function LocutionProPollUpgradeScan
   ${If} $1 == 0
   ${OrIf} $0 != 0
     Call LocutionProCloseUpgradeScan
-    StrCpy $1 "组件校验未完成。请检查安装目录及文件访问权限。"
+    StrCpy $1 "文件校验或旧版本卸载未完成。请检查安装目录及文件访问权限。"
     Call LocutionProUpgradeFailed
   ${EndIf}
   System::Call 'kernel32::CloseHandle(p $LocutionProScanProcess)'
   StrCpy $LocutionProScanProcess 0
   Call LocutionProReadUpgradePlan
-  StrCpy $LocutionProScanRoot $INSTDIR
-  StrCpy $LocutionProScanPreviousRoot $PreviousInstallDir
+  StrCpy $LocutionProScanRoot $LocutionProWorkerRoot
+  StrCpy $LocutionProScanPreviousRoot $LocutionProWorkerPreviousRoot
   StrCpy $LocutionProScanComplete 1
   SendMessage $LocutionProScanBar ${PBM_SETMARQUEE} 0 0
+  SendMessage $LocutionProScanBar ${PBM_SETPOS} 100 0
   GetDlgItem $0 $HWNDPARENT 1
   EnableWindow $0 1
-  GetDlgItem $0 $HWNDPARENT 3
+  GetDlgItem $0 $HWNDPARENT 2
   EnableWindow $0 1
-  System::Call 'user32::PostMessageW(p $HWNDPARENT, i ${WM_COMMAND}, p1, p0)'
+  ${If} $LocutionProUpgradeMode == "Scan"
+    GetDlgItem $0 $HWNDPARENT 3
+    EnableWindow $0 1
+    System::Call 'user32::PostMessageW(p $HWNDPARENT, i ${WM_COMMAND}, p1, p0)'
+  ${Else}
+    ${If} $LocutionProWorkerCompletedCallback != 0
+      Call $LocutionProWorkerCompletedCallback
+    ${EndIf}
+    ${NSD_SetText} $LocutionProProgressLabel "旧版本卸载完成。应用程序数据已保留。"
+    ${NSD_SetText} $LocutionProProgressFileLabel "点击下一步，继续选择安装位置和组件。"
+    ${If} $LocutionProUpgradeMode == "Uninstall"
+      GetDlgItem $0 $HWNDPARENT 1
+      SendMessage $0 ${WM_SETTEXT} 0 "STR:完成"
+      ${NSD_SetText} $LocutionProProgressFileLabel "点击完成以退出。"
+    ${EndIf}
+  ${EndIf}
 FunctionEnd
 
 !macro LOCUTION_INSTALL_FILE SOURCE DESTINATION

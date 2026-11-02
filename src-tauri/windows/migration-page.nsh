@@ -689,6 +689,14 @@ Function CancelMigration
 FunctionEnd
 
 Function MigrationUserAbort
+  !ifdef LOCUTION_HAS_UPGRADE_SCAN
+    ${If} $LocutionProScanProcess != 0
+    ${AndIf} $LocutionProScanProcess != ""
+    ${AndIf} $LocutionProUpgradeMode != "Scan"
+      MessageBox MB_ICONINFORMATION|MB_OK "正在卸载旧版本，请等待此步骤完成后再退出安装。"
+      Abort
+    ${EndIf}
+  !endif
   ${If} $MigrationProcess != 0
   ${AndIf} $MigrationProcess != ""
     StrCpy $MigrationQuitRequested 1

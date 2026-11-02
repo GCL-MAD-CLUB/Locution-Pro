@@ -286,6 +286,7 @@ SectionEnd`,
 Var PreviousUninstallKey
 Var PreviousProductKey
 Var PreviousInstallDir
+Var LocutionProPreviousSemanticChoice
 Var PreviousMainBinaryName
 Var LocutionProBundleSemantic
 Var PassiveMode

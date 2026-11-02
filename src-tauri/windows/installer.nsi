@@ -133,6 +133,7 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\upgrade-files.nsh"
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\migration-page.nsh"
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\independent-install.nsh"
+!include "${LOCUTION_INSTALLER_SOURCE_DIR}\maintenance-page.nsh"
 
 ; Installer icon
 !if "${INSTALLERICON}" != ""
@@ -188,11 +189,14 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
   !insertmacro MULTIUSER_PAGE_INSTALLMODE
 !endif
 
-; Existing installations are maintained in this installer, after final choices.
-; There is no external uninstaller or separate data-deletion workflow.
+; 4. Original maintenance choices, followed by an in-installer uninstall stage.
+Page custom PageReinstall PageLeaveReinstall
+!insertmacro MUI_PAGE_INIT
+Page custom LocutionProUninstallPageCreate LocutionProUninstallPageLeave
 
 ; 5. Choose install directory page
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE LocutionProDirectoryLeave
 !insertmacro MUI_PAGE_DIRECTORY
 
 ; Scan once per chosen install location before the optional component pages.
@@ -239,8 +243,98 @@ Function RunMainBinary
   nsis_tauri_utils::RunAsUser "$INSTDIR\${MAINBINARYNAME}.exe" ""
 FunctionEnd
 
+Function LocutionProCheckRunningApp
+  !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+FunctionEnd
+
+Function LocutionProFinishEmbeddedUninstall
+  ; Only the internal uninstall stage calls this; it never removes app data.
+  DeleteRegKey SHCTX "$PreviousUninstallKey"
+  StrCpy $LocutionProUninstallComplete 1
+  ${If} $LocutionProUninstallOnly != 1
+    Return
+  ${EndIf}
+  {{#each file_associations as |association| ~}}
+    {{#each association.ext as |ext| ~}}
+      !insertmacro LOCUTION_UNASSOCIATE "{{ext}}" "{{or association.name ext}}"
+    {{/each}}
+  {{/each}}
+  ReadRegStr $0 SHCTX "Software\Classes\CLSID\${LCP_THUMBNAIL_PROVIDER_CLSID}\InprocServer32" ""
+  ${If} $0 == "$PreviousInstallDir\${LCP_THUMBNAIL_PROVIDER_FILE}"
+    DeleteRegKey SHCTX "Software\Classes\LocutionPro.Project\shellex\${ITHUMBNAIL_PROVIDER_IID}"
+    DeleteRegValue SHCTX "Software\Classes\LocutionPro.Project" "TypeOverlay"
+    DeleteRegKey SHCTX "Software\Classes\CLSID\${LCP_THUMBNAIL_PROVIDER_CLSID}"
+  ${EndIf}
+  {{#each deep_link_protocols as |protocol| ~}}
+    ReadRegStr $0 SHCTX "Software\Classes\\{{protocol}}\shell\open\command" ""
+    ${If} $0 == "$\"$PreviousInstallDir\${MAINBINARYNAME}.exe$\" $\"%1$\""
+      DeleteRegKey SHCTX "Software\Classes\\{{protocol}}"
+    ${EndIf}
+  {{/each}}
+  !insertmacro MUI_STARTMENU_GETFOLDER Application $AppStartMenuFolder
+  !insertmacro IsShortcutTarget "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk" "$PreviousInstallDir\${MAINBINARYNAME}.exe"
+  Pop $0
+  ${If} $0 == 1
+    !insertmacro UnpinShortcut "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk"
+    Delete "$SMPROGRAMS\$AppStartMenuFolder\${PRODUCTNAME}.lnk"
+    RMDir "$SMPROGRAMS\$AppStartMenuFolder"
+  ${EndIf}
+  !insertmacro IsShortcutTarget "$SMPROGRAMS\${PRODUCTNAME}.lnk" "$PreviousInstallDir\${MAINBINARYNAME}.exe"
+  Pop $0
+  ${If} $0 == 1
+    !insertmacro UnpinShortcut "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+    Delete "$SMPROGRAMS\${PRODUCTNAME}.lnk"
+  ${EndIf}
+  !insertmacro IsShortcutTarget "$DESKTOP\${PRODUCTNAME}.lnk" "$PreviousInstallDir\${MAINBINARYNAME}.exe"
+  Pop $0
+  ${If} $0 == 1
+    !insertmacro UnpinShortcut "$DESKTOP\${PRODUCTNAME}.lnk"
+    Delete "$DESKTOP\${PRODUCTNAME}.lnk"
+  ${EndIf}
+  !insertmacro DeleteAppUserModelId
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
+  Call RefreshShellAssociations
+FunctionEnd
+
 ; Uninstaller Pages
 ; 1. Confirm uninstall page
+Var DeleteAppDataCheckbox
+Var DeleteAppDataCheckboxState
+!define /ifndef WS_EX_LAYOUTRTL         0x00400000
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW un.ConfirmShow
+Function un.ConfirmShow ; Add add a `Delete app data` check box
+  ; $1 inner dialog HWND
+  ; $2 window DPI
+  ; $3 style
+  ; $4 x
+  ; $5 y
+  ; $6 width
+  ; $7 height
+  FindWindow $1 "#32770" "" $HWNDPARENT ; Find inner dialog
+  System::Call "user32::GetDpiForWindow(p r1) i .r2"
+  ${If} $(^RTL) = 1
+    StrCpy $3 "${__NSD_CheckBox_EXSTYLE} | ${WS_EX_LAYOUTRTL}"
+    IntOp $4 50 * $2
+  ${Else}
+    StrCpy $3 "${__NSD_CheckBox_EXSTYLE}"
+    IntOp $4 0 * $2
+  ${EndIf}
+  IntOp $5 100 * $2
+  IntOp $6 400 * $2
+  IntOp $7 25 * $2
+  IntOp $4 $4 / 96
+  IntOp $5 $5 / 96
+  IntOp $6 $6 / 96
+  IntOp $7 $7 / 96
+  System::Call 'user32::CreateWindowEx(i r3, w "${__NSD_CheckBox_CLASS}", w "$(deleteAppData)", i ${__NSD_CheckBox_STYLE}, i r4, i r5, i r6, i r7, p r1, i0, i0, i0) i .s'
+  Pop $DeleteAppDataCheckbox
+  SendMessage $HWNDPARENT ${WM_GETFONT} 0 0 $1
+  SendMessage $DeleteAppDataCheckbox ${WM_SETFONT} $1 1
+FunctionEnd
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE un.ConfirmLeave
+Function un.ConfirmLeave
+  SendMessage $DeleteAppDataCheckbox ${BM_GETCHECK} 0 0 $DeleteAppDataCheckboxState
+FunctionEnd
 !define MUI_PAGE_CUSTOMFUNCTION_PRE un.SkipIfPassive
 !insertmacro MUI_UNPAGE_CONFIRM
 
@@ -257,6 +351,10 @@ FunctionEnd
 {{/each}}
 
 Function .onInit
+  StrCpy $LocutionProFreshInstall 0
+  StrCpy $LocutionProUninstallComplete 0
+  StrCpy $LocutionProUninstallOnly 0
+  StrCpy $ReinstallPageCheck 1
   StrCpy $MigrationProcess 0
   StrCpy $MigrationComplete 0
   ; Bundled FFmpeg is the default, including passive installs.
@@ -289,7 +387,9 @@ Function .onInit
   !insertmacro SetContext
   Call FindPreviousInstallation
   Call ReadPreviousInstallLocation
+  Call LocutionProDetectMaintenance
 
+  StrCpy $LocutionProInitialInstallDir $INSTDIR
   ${If} $INSTDIR == "${PLACEHOLDER_INSTALL_DIR}"
     ; Set default install location
     !if "${INSTALLMODE}" == "perMachine"
@@ -308,6 +408,7 @@ Function .onInit
       StrCpy $INSTDIR "$LOCALAPPDATA\${PRODUCTNAME}"
     !endif
 
+    StrCpy $LocutionProInitialInstallDir $INSTDIR
     Call RestorePreviousInstallLocation
   ${EndIf}
 
@@ -327,6 +428,7 @@ Function .onInit
       StrCpy $LocutionProBundleSemantic 0
     ${EndIf}
   ${EndIf}
+  StrCpy $LocutionProPreviousSemanticChoice $LocutionProBundleSemantic
 FunctionEnd
 
 Function .onVerifyInstDir
@@ -337,12 +439,20 @@ Function .onVerifyInstDir
   ${If} $IndependentInstallLocation != 1
     Abort
   ${EndIf}
+  Call LocutionProCheckFreshInstallLocation
+  ${If} $LocutionProFreshLocationAllowed != 1
+    Abort
+  ${EndIf}
 FunctionEnd
 
 
 
 
 Section EarlyChecks
+  ; /S and /P bypass the directory page. Validate before maintenance can stop
+  ; the application, delete files, or transfer reusable components.
+  Call EnsureIndependentInstallLocation
+  Call LocutionProDirectoryLeave
   ; Version checks must also run for /S and /P, whose wizard pages are skipped.
   StrCpy $R0 1
   ReadRegStr $0 SHCTX "$PreviousUninstallKey" "DisplayVersion"
@@ -366,6 +476,20 @@ Section EarlyChecks
     ${EndIf}
   !endif
 
+  ; /S and /P skip all choice pages. Perform their maintenance once here,
+  ; using the final component choices, before any installation work starts.
+  ${If} ${Silent}
+  ${OrIf} $PassiveMode == 1
+    ${If} $PreviousInstallDir != ""
+    ${AndIf} $LocutionProHasMaintenance == 1
+      Call LocutionProCheckRunningApp
+      DetailPrint "正在卸载旧版本，保留应用程序数据…"
+      StrCpy $LocutionProUpgradeMode "Prepare"
+      Call LocutionProPlanUpgrade
+      Call LocutionProFinishEmbeddedUninstall
+      StrCpy $LocutionProPreparedInstallDir $INSTDIR
+    ${EndIf}
+  ${EndIf}
 SectionEnd
 
 Section WebView2
@@ -462,16 +586,19 @@ SectionEnd
 
 Section Install
   Call EnsureIndependentInstallLocation
+  Call LocutionProDirectoryLeave
   Call PrepareMigrationInstall
   SetOutPath $INSTDIR
 
   !ifmacrodef NSIS_HOOK_PREINSTALL
     !insertmacro NSIS_HOOK_PREINSTALL
   !endif
-  !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  Call LocutionProCheckRunningApp
   ; Recompute hashes after closing the app, before changing any program files.
-  StrCpy $LocutionProUpgradeMode "Prepare"
-  Call LocutionProPlanUpgrade
+  ${If} $LocutionProPreparedInstallDir != $INSTDIR
+    StrCpy $LocutionProUpgradeMode "Prepare"
+    Call LocutionProPlanUpgrade
+  ${EndIf}
   SetOutPath $INSTDIR
 
   ; Copy resources
@@ -747,7 +874,24 @@ Section Uninstall
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
   ${EndIf}
 
-  ; User settings, caches, projects and browser data are always retained.
+  ; Delete app data if the checkbox is selected
+  ; and if not updating
+  ${If} $DeleteAppDataCheckboxState = 1
+  ${AndIf} $UpdateMode <> 1
+    ; Clear the install location $INSTDIR from registry
+    DeleteRegKey SHCTX "${MANUPRODUCTKEY}"
+    DeleteRegKey /ifempty SHCTX "${MANUKEY}"
+
+    ; Clear the install language from registry
+    DeleteRegValue HKCU "${MANUPRODUCTKEY}" "Installer Language"
+    DeleteRegKey /ifempty HKCU "${MANUPRODUCTKEY}"
+    DeleteRegKey /ifempty HKCU "${MANUKEY}"
+
+    SetShellVarContext current
+    RmDir /r "$APPDATA\${BUNDLEID}"
+    RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
+    RmDir /r "$LOCALAPPDATA\${PRODUCTNAME}"
+  ${EndIf}
 
   !ifmacrodef NSIS_HOOK_POSTUNINSTALL
     !insertmacro NSIS_HOOK_POSTUNINSTALL

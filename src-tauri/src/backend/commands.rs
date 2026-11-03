@@ -874,7 +874,7 @@ pub(crate) fn open_external_url(url: String) -> CommandResult<()> {
 
 #[tauri::command]
 pub(crate) fn open_user_guide() -> CommandResult<()> {
-    const USER_GUIDE_URL: &str = "https://linecut.lycoreco.dpdns.org/";
+    const USER_GUIDE_URL: &str = "https://helpx.locution.dpdns.org/";
 
     spawn_system_opener(system_url_command(USER_GUIDE_URL)).map_err(|error| {
         app_error(

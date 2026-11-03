@@ -73,6 +73,11 @@ replaceVersion(
   /(^\[\[package\]\]\r?\nname = "locution-pro"\r?\nversion = )"[^"]+"/m,
 );
 updateJsonVersion(join(root, "src-tauri", "tauri.conf.json"));
+const siteIndex = join(root, "site", "index.html");
+const siteHtml = read(siteIndex);
+const siteVersionPattern = /V\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\s*\/\s*WINDOWS/u;
+if (!siteVersionPattern.test(siteHtml)) throw new Error("Could not find the site release version");
+write(siteIndex, siteHtml.replace(siteVersionPattern, `V${version} / WINDOWS`));
 
 run(process.execPath, [
   prettierCli,
@@ -80,6 +85,7 @@ run(process.execPath, [
   "package.json",
   "package-lock.json",
   "src-tauri/tauri.conf.json",
+  "site/index.html",
 ]);
 run("cargo", ["fmt", "--manifest-path", "src-tauri/Cargo.toml"]);
 run(process.execPath, [join(root, "scripts", "check-version-consistency.mjs")]);

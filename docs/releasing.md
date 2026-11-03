@@ -12,7 +12,7 @@
 
 ## 统一版本与检查
 
-从最新 main 创建发布准备分支。检查 package、锁文件、Cargo 主包和 Tauri 配置的应用版本一致；缩略图提供程序的独立版本不随主应用同步。
+从最新 main 创建发布准备分支。检查 package、锁文件、Cargo 主包、Tauri 配置和官网 `site/index.html` 下载区域的应用版本一致；缩略图提供程序的独立版本不随主应用同步。`release:build` 会同步这些版本，手动准备版本时也须更新官网显示。
 
 ```powershell
 npm ci

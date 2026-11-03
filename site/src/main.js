@@ -206,7 +206,8 @@ window.addEventListener(
   "touchstart",
   () => {
     pointerDown = true;
-    armScroll();
+    manualScroll = false;
+    cancelSnap();
   },
   { passive: true },
 );
@@ -230,6 +231,7 @@ window.addEventListener(
   "pointerdown",
   () => {
     pointerDown = true;
+    manualScroll = false;
     cancelSnap();
   },
   { passive: true },

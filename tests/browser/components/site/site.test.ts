@@ -130,6 +130,31 @@ test("manual settling approaches the next section without pulling back after an 
   expect(await page.evaluate(() => scrollY)).toBeGreaterThan(boundary + 80);
 });
 
+test("touch gestures stay free on a desktop viewport with a fine primary pointer", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/site/");
+  await page.evaluate(() => document.fonts.ready);
+  const boundary = await page
+    .locator("#features")
+    .evaluate(
+      (section) =>
+        section.getBoundingClientRect().top +
+        scrollY -
+        document.querySelector("header")!.getBoundingClientRect().height,
+    );
+  await page.dispatchEvent("body", "touchstart");
+  await page.evaluate(
+    (target) => window.scrollTo({ top: target - 30, behavior: "instant" }),
+    boundary,
+  );
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(boundary - 30, 0);
+  await page.dispatchEvent("body", "touchend");
+  await page.waitForTimeout(800);
+  expect(await page.evaluate(() => scrollY)).toBeCloseTo(boundary - 30, 0);
+});
+
 test("reduced motion keeps the user's scroll position and FAQ expansion remains readable", async ({
   page,
 }) => {

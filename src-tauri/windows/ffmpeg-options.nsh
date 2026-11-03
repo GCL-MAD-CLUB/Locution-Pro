@@ -1,5 +1,6 @@
 !include "LogicLib.nsh"
 !include "nsDialogs.nsh"
+Var LocutionProUninstallOnly
 !include "${__FILEDIR__}\semantic-options.nsh"
 !define LOCUTION_INSTALLER_SOURCE_DIR "${__FILEDIR__}"
 
@@ -10,32 +11,47 @@ Var LocutionProBundledRadio
 Var LocutionProExternalRadio
 Var LocutionProFfmpegInput
 Var LocutionProReuseFfmpeg
+Var LocutionProPreviousFfmpegChoice
+Var LocutionProFfmpegError
+Var LocutionProFfmpegErrorLabel
 
-Function LocutionProGetFirstLine
-  Exch $0
-  StrCpy $1 0
-locution_pro_first_line_loop:
-  StrCpy $2 $0 1 $1
-  StrCmp $2 "" locution_pro_first_line_done
-  StrCmp $2 "$\r" locution_pro_first_line_done
-  StrCmp $2 "$\n" locution_pro_first_line_done
-  IntOp $1 $1 + 1
-  Goto locution_pro_first_line_loop
-locution_pro_first_line_done:
-  StrCpy $0 $0 $1
-  Exch $0
+Function LocutionProFindPathFfmpeg
+  Push $R0
+  Push $R1
+  Push $R2
+  StrCpy $LocutionProFfmpegPath ""
+  ; Pass the full environment PATH directly to Win32; NSIS strings can be
+  ; shorter than PATH. An explicit search list also avoids searching CWD.
+  System::Call 'kernel32::GetEnvironmentVariableW(w "PATH", p0, i0) i.R0'
+  ${If} $R0 <= 1
+    Goto locution_find_ffmpeg_done
+  ${EndIf}
+  IntOp $R1 $R0 * 2
+  System::Alloc $R1
+  Pop $R2
+  ${If} $R2 == 0
+    Goto locution_find_ffmpeg_done
+  ${EndIf}
+  System::Call 'kernel32::GetEnvironmentVariableW(w "PATH", p R2, i R0) i.R1'
+  ${If} $R1 > 0
+  ${AndIf} $R1 < $R0
+    System::Call 'kernel32::SearchPathW(p R2, w "ffmpeg.exe", p0, i ${NSIS_MAX_STRLEN}, w .R1, p0) i.R0'
+    ${If} $R0 > 0
+    ${AndIf} $R0 < ${NSIS_MAX_STRLEN}
+      StrCpy $LocutionProFfmpegPath $R1
+    ${EndIf}
+  ${EndIf}
+  System::Free $R2
+locution_find_ffmpeg_done:
+  Pop $R2
+  Pop $R1
+  Pop $R0
 FunctionEnd
 
 Function LocutionProDetectFfmpeg
-  StrCpy $LocutionProFfmpegPath "ffmpeg"
-  nsExec::ExecToStack '"$SYSDIR\where.exe" ffmpeg.exe'
-  Pop $0
-  Pop $1
-  ${If} $0 == 0
-    Push $1
-    Call LocutionProGetFirstLine
-    Pop $LocutionProFfmpegPath
-  ${Else}
+  Call LocutionProFindPathFfmpeg
+  ${If} $LocutionProFfmpegPath == ""
+    StrCpy $LocutionProFfmpegPath "ffmpeg"
     IfFileExists "$PROGRAMFILES\ffmpeg\bin\ffmpeg.exe" 0 +3
       StrCpy $LocutionProFfmpegPath "$PROGRAMFILES\ffmpeg\bin\ffmpeg.exe"
       Goto locution_pro_detect_done
@@ -55,6 +71,8 @@ Function LocutionProUpdateFfmpegControls
     SendMessage $LocutionProFfmpegInput ${EM_SETSEL} 0 -1
   ${Else}
     EnableWindow $LocutionProFfmpegInput 0
+    ${NSD_SetText} $LocutionProFfmpegErrorLabel ""
+    StrCpy $LocutionProFfmpegError ""
   ${EndIf}
 FunctionEnd
 
@@ -65,34 +83,37 @@ FunctionEnd
 
 Function LocutionProFfmpegPageCreate
   Call SkipIfPassive
-  ${If} $LocutionProReuseFfmpeg == 1
-    StrCpy $LocutionProBundleFfmpeg 1
+  ${If} $LocutionProUninstallOnly == 1
     Abort
   ${EndIf}
-  Call LocutionProDetectFfmpeg
-  !insertmacro MUI_HEADER_TEXT "选择是否内置 FFmpeg" "选择 Locution Pro 使用 FFmpeg 的方式。"
+  ${If} $LocutionProFfmpegPath == ""
+    Call LocutionProDetectFfmpeg
+  ${EndIf}
+  !insertmacro MUI_HEADER_TEXT "媒体工具" "选择 FFmpeg 与 ffprobe 的来源。"
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
     Abort
   ${EndIf}
 
-  ${NSD_CreateLabel} 0 0 100% 20u "请选择 FFmpeg 的安装方式："
-  Pop $0
-  ${NSD_CreateGroupBox} 0 26u 100% 118u "FFmpeg 设置"
-  Pop $0
-  ${NSD_CreateRadioButton} 12u 42u 88% 12u "内置 FFmpeg（推荐，默认）"
+  ${NSD_CreateRadioButton} 0 8u 100% 12u "使用内置工具（推荐）"
   Pop $LocutionProBundledRadio
-  ${NSD_CreateRadioButton} 12u 62u 88% 12u "不内置 FFmpeg，使用电脑中已有的 FFmpeg"
+  ${NSD_CreateRadioButton} 0 30u 100% 12u "使用已有 FFmpeg"
   Pop $LocutionProExternalRadio
-  ${NSD_CreateLabel} 24u 84u 76% 18u "已从 PATH 环境变量自动查找；你可以修改："
+  ${NSD_CreateLabel} 12u 54u 88% 12u "ffmpeg.exe 路径："
   Pop $0
-  ${NSD_CreateText} 24u 104u 76% 12u "$LocutionProFfmpegPath"
+  ${NSD_CreateText} 12u 72u 88% 14u "$LocutionProFfmpegPath"
   Pop $LocutionProFfmpegInput
-  ${NSD_CreateLabel} 24u 124u 76% 12u "FFprobe 默认使用同目录下的 ffprobe.exe；填写 ffmpeg 时从 PATH 查找。"
+  ${NSD_CreateLabel} 12u 94u 88% 22u "同目录需有 ffprobe.exe。填写 ffmpeg 可从 PATH 查找。"
   Pop $0
+  ${NSD_CreateLabel} 12u 122u 88% 18u ""
+  Pop $LocutionProFfmpegErrorLabel
 
-  ${NSD_Check} $LocutionProBundledRadio
+  ${If} $LocutionProBundleFfmpeg == 1
+    ${NSD_Check} $LocutionProBundledRadio
+  ${Else}
+    ${NSD_Check} $LocutionProExternalRadio
+  ${EndIf}
   ${NSD_OnClick} $LocutionProBundledRadio LocutionProFfmpegSelectionChanged
   ${NSD_OnClick} $LocutionProExternalRadio LocutionProFfmpegSelectionChanged
   Call LocutionProUpdateFfmpegControls
@@ -100,9 +121,11 @@ Function LocutionProFfmpegPageCreate
 FunctionEnd
 
 Function LocutionProFfmpegPageLeave
-  ${If} $LocutionProReuseFfmpeg == 1
+  ${If} $LocutionProUninstallOnly == 1
     Return
   ${EndIf}
+  StrCpy $LocutionProFfmpegError ""
+  ${NSD_SetText} $LocutionProFfmpegErrorLabel ""
   ${NSD_GetState} $LocutionProBundledRadio $0
   ${If} $0 == ${BST_CHECKED}
     StrCpy $LocutionProBundleFfmpeg 1
@@ -110,17 +133,52 @@ Function LocutionProFfmpegPageLeave
   ${EndIf}
 
   ${NSD_GetText} $LocutionProFfmpegInput $LocutionProFfmpegPath
-  ${If} $LocutionProFfmpegPath == ""
-    MessageBox MB_ICONEXCLAMATION|MB_OK "请输入 FFmpeg 路径，或填写 ffmpeg 以从 PATH 查找。"
-    Abort
+  ${If} $LocutionProFfmpegPath == "ffmpeg"
+  ${OrIf} $LocutionProFfmpegPath == "ffmpeg.exe"
+    Call LocutionProFindPathFfmpeg
+    ${If} $LocutionProFfmpegPath == ""
+      StrCpy $LocutionProFfmpegError "PATH 中未找到 ffmpeg.exe。"
+      Goto locution_pro_ffmpeg_invalid
+    ${EndIf}
+  ${EndIf}
+  ; Validate syntax before NSIS can sanitize it, and derive the sibling by
+  ; directory rather than blindly stripping ten characters from user input.
+  Push $LocutionProFfmpegPath
+  Call NormalizeInstallPath
+  Pop $0
+  StrCpy $LocutionProFfmpegError "请选择 ffmpeg.exe 文件。"
+  ${If} $0 == ""
+    Goto locution_pro_ffmpeg_invalid
+  ${EndIf}
+  ${GetFileName} "$0" $1
+  ${If} $1 != "ffmpeg.exe"
+    Goto locution_pro_ffmpeg_invalid
+  ${EndIf}
+  StrCpy $LocutionProFfmpegPath $0
+  ${GetParent} "$0" $1
+  StrCpy $LocutionProFfprobePath "$1\ffprobe.exe"
+  StrCpy $LocutionProFfmpegError "找不到 ffmpeg.exe，请检查路径。"
+  IfFileExists "$LocutionProFfmpegPath" 0 locution_pro_ffmpeg_invalid
+  StrCpy $LocutionProFfmpegError "同目录未找到 ffprobe.exe。"
+  IfFileExists "$LocutionProFfprobePath" 0 locution_pro_ffmpeg_invalid
+  StrCpy $LocutionProFfmpegError "请选择 ffmpeg.exe 文件。"
+  System::Call 'kernel32::GetFileAttributesW(w "$LocutionProFfmpegPath") i.r0'
+  IntOp $0 $0 & 0x10
+  ${If} $0 != 0
+    Goto locution_pro_ffmpeg_invalid
+  ${EndIf}
+  StrCpy $LocutionProFfmpegError "同目录的 ffprobe.exe 不是可用文件。"
+  System::Call 'kernel32::GetFileAttributesW(w "$LocutionProFfprobePath") i.r0'
+  IntOp $0 $0 & 0x10
+  ${If} $0 != 0
+    Goto locution_pro_ffmpeg_invalid
   ${EndIf}
   StrCpy $LocutionProBundleFfmpeg 0
-
-  StrCpy $LocutionProFfprobePath "ffprobe"
-  StrCpy $0 $LocutionProFfmpegPath -10
-  StrCmp $0 "" locution_pro_ffmpeg_page_done
-  StrCpy $LocutionProFfprobePath "$0ffprobe.exe"
-locution_pro_ffmpeg_page_done:
+  StrCpy $LocutionProFfmpegError ""
+  Return
+locution_pro_ffmpeg_invalid:
+  ${NSD_SetText} $LocutionProFfmpegErrorLabel "$LocutionProFfmpegError"
+  Abort
 FunctionEnd
 
 !macro LocutionProWriteMediaPath TEXT

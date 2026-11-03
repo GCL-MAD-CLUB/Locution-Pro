@@ -21,7 +21,13 @@ export async function prepareInstallerManifest(
       win32.isAbsolute(path) ||
       path.split("\\").some((part) => !part || part === "." || part === "..") ||
       /[\x00-\x1f<>:"|?*\[\]=]/u.test(path) ||
-      path.split("\\").some((part) => /[. ]$/u.test(part))
+      path
+        .split("\\")
+        .some(
+          (part) =>
+            /[. ]$/u.test(part) ||
+            /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(part),
+        )
     )
       throw new Error(`Unsafe installer destination: ${destination}`);
     const metadata = await lstat(source);
@@ -44,7 +50,7 @@ export async function prepareInstallerManifest(
     throw new Error("Installer hashing requires explicit resource destination mappings");
   }
   for (const [source, destination] of Object.entries(config.bundle.resources)) {
-    const prefix = destination.replaceAll("/", "\\").split("\\")[0];
+    const prefix = destination.replaceAll("/", "\\").split("\\")[0].toLowerCase();
     const group = reusableRoots.includes(prefix) ? prefix : "core";
     await add(resolve(tauri, source), destination, group);
   }

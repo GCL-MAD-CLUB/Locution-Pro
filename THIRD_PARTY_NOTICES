@@ -35,6 +35,14 @@ FFmpeg and FFprobe
    https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz
    https://github.com/FFmpeg/FFmpeg/tree/n8.0.1
 
+   macOS bundles do not download a pinned FFmpeg. npm run prepare:ffmpeg
+   copies the ffmpeg and ffprobe executables found on PATH, or in
+   LOCUTION_PRO_FFMPEG_DIR, as ffmpeg-<target> and ffprobe-<target>. Their
+   license and corresponding source are those of the copied build; check
+   them with ffmpeg -L and ffmpeg -buildconf before redistributing a bundle.
+   The Homebrew build is GPLv3-or-later (--enable-gpl and --enable-version3)
+   and links Homebrew libraries, so a bundle made from it is for local use.
+
 TransNetV2 storyboard detection assets
 
    The optional bundled transnetv2/transnetv2.onnx model is an ONNX
@@ -52,6 +60,17 @@ TransNetV2 storyboard detection assets
 
    https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime.DirectML
    https://www.nuget.org/packages/Microsoft.AI.DirectML
+
+   On macOS the optional bundled transnetv2/libonnxruntime.dylib comes from
+   the official onnxruntime-osx-arm64 (or onnxruntime-osx-x86_64) release
+   archive of the same ONNX Runtime version, which includes the CoreML
+   execution provider. ONNX Runtime is copyright Microsoft Corporation and
+   is licensed under the MIT License. The asset preparation script copies
+   the archive's LICENSE and ThirdPartyNotices.txt beside the library as
+   onnxruntime-LICENSE and onnxruntime-ThirdPartyNotices.txt, and the macOS
+   bundle installs them with it. DirectML is not used on macOS.
+
+   https://github.com/microsoft/onnxruntime/releases/tag/v1.24.4
 
 Jina subtitle semantic search assets
 

@@ -11,6 +11,7 @@ on:
       - "playwright.config.ts"
       - "tsconfig.json"
       - "src/**"
+      - "site/**"
       - "tests/browser/**"
       - "tests/tsconfig.json"
   schedule:

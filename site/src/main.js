@@ -1,3 +1,5 @@
+import { findActiveSection, findSnapTarget } from "./scroll.js";
+
 const queryExamples = {
   coast: {
     query: "“黄昏时的海岸线”",
@@ -43,10 +45,12 @@ const searchStatus = document.querySelector("#search-status");
 const queryButtons = document.querySelectorAll(".query-option");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 let updateTimer;
+let currentQuery = "coast";
 
 function renderQuery(key) {
   const example = queryExamples[key];
-  if (!example) return;
+  if (!example || key === currentQuery) return;
+  currentQuery = key;
 
   window.clearTimeout(updateTimer);
   queryButtons.forEach((button) => {
@@ -57,6 +61,7 @@ function renderQuery(key) {
 
   queryText.textContent = example.query;
   resultsContainer.classList.add("is-updating");
+  resultsContainer.setAttribute("aria-busy", "true");
 
   updateTimer = window.setTimeout(
     () => {
@@ -71,6 +76,7 @@ function renderQuery(key) {
       resultCount.textContent = `${String(example.results.length).padStart(2, "0")} 个视觉参考`;
       searchStatus.textContent = `已切换到${example.label}示例，显示三幅官方视觉参考画面。`;
       resultsContainer.classList.remove("is-updating");
+      resultsContainer.setAttribute("aria-busy", "false");
     },
     reducedMotion.matches ? 0 : 160,
   );
@@ -81,29 +87,40 @@ queryButtons.forEach((button) => {
 });
 
 const progressBar = document.querySelector(".reading-progress");
-const navLinks = [...document.querySelectorAll('.main-nav a[href^="#"]')];
+const header = document.querySelector(".site-header");
+const mobileMenu = document.querySelector(".mobile-menu");
+const navLinks = [...document.querySelectorAll('nav a[href^="#"]')];
+const sections = [...document.querySelectorAll("main > section")];
+const motionQuery = window.matchMedia("(pointer: fine) and (min-width: 960px)");
 let scrollFrame = 0;
+let layoutFrame = 0;
 let activeSection = "";
+let sectionPositions = [];
+let headerHeight = 73;
+let previousPosition = window.scrollY;
+let scrollDirection = 0;
+let settleTimer;
+let snapTimer;
+let manualScroll = false;
+let pointerDown = false;
+let snapping = false;
 
 function updateScrollUI() {
   scrollFrame = 0;
   const scrollRange = document.documentElement.scrollHeight - window.innerHeight;
   const progress = scrollRange > 0 ? Math.min(1, Math.max(0, window.scrollY / scrollRange)) : 0;
   progressBar.style.transform = `scaleX(${progress})`;
-
-  let nextSection = "";
-  navLinks.forEach((link) => {
-    const section = document.querySelector(link.getAttribute("href"));
-    const bounds = section.getBoundingClientRect();
-    if (bounds.top <= window.innerHeight * 0.38 && bounds.bottom > 73) {
-      nextSection = link.getAttribute("href");
-    }
-  });
+  const nextSection = findActiveSection(
+    sectionPositions,
+    window.scrollY,
+    headerHeight,
+    window.innerHeight,
+  );
 
   if (nextSection !== activeSection) {
     activeSection = nextSection;
     navLinks.forEach((link) => {
-      if (link.getAttribute("href") === activeSection) {
+      if (link.getAttribute("href") === `#${activeSection}`) {
         link.setAttribute("aria-current", "location");
       } else {
         link.removeAttribute("aria-current");
@@ -116,9 +133,178 @@ function requestScrollUI() {
   if (!scrollFrame) scrollFrame = window.requestAnimationFrame(updateScrollUI);
 }
 
-window.addEventListener("scroll", requestScrollUI, { passive: true });
-window.addEventListener("resize", requestScrollUI);
-updateScrollUI();
+function measureLayout() {
+  layoutFrame = 0;
+  const measuredHeight = Math.ceil(header.getBoundingClientRect().height);
+  if (headerHeight !== measuredHeight) {
+    headerHeight = measuredHeight;
+    document.documentElement.style.setProperty("--header-height", `${headerHeight}px`);
+  }
+  sectionPositions = sections.map((section) => ({
+    id: section.id,
+    top: section.getBoundingClientRect().top + window.scrollY,
+  }));
+  requestScrollUI();
+}
+
+function requestLayout() {
+  if (!layoutFrame) layoutFrame = window.requestAnimationFrame(measureLayout);
+}
+
+function cancelSnap() {
+  window.clearTimeout(settleTimer);
+  window.clearTimeout(snapTimer);
+  if (snapping) window.scrollTo({ top: window.scrollY, behavior: "instant" });
+  snapping = false;
+}
+
+function settleScroll() {
+  if (
+    !manualScroll ||
+    snapping ||
+    pointerDown ||
+    reducedMotion.matches ||
+    !motionQuery.matches ||
+    mobileMenu.open ||
+    document.hidden ||
+    !window.getSelection()?.isCollapsed ||
+    document.activeElement?.closest("input, textarea, select, summary, [contenteditable], dialog")
+  )
+    return;
+
+  manualScroll = false;
+  const target = findSnapTarget(
+    sectionPositions.map((section) => section.top),
+    {
+      position: window.scrollY,
+      direction: scrollDirection,
+      viewportHeight: window.innerHeight,
+      headerHeight,
+    },
+  );
+  if (target === null) return;
+  snapping = true;
+  window.scrollTo({ top: target, behavior: "smooth" });
+  snapTimer = window.setTimeout(() => {
+    snapping = false;
+  }, 600);
+}
+
+function armScroll() {
+  cancelSnap();
+  manualScroll = true;
+}
+
+window.addEventListener(
+  "wheel",
+  (event) => {
+    if (!event.ctrlKey && Math.abs(event.deltaY) > Math.abs(event.deltaX)) armScroll();
+  },
+  { passive: true },
+);
+window.addEventListener(
+  "touchstart",
+  () => {
+    pointerDown = true;
+    armScroll();
+  },
+  { passive: true },
+);
+window.addEventListener(
+  "touchend",
+  () => {
+    pointerDown = false;
+  },
+  { passive: true },
+);
+window.addEventListener(
+  "touchcancel",
+  () => {
+    pointerDown = false;
+    manualScroll = false;
+    cancelSnap();
+  },
+  { passive: true },
+);
+window.addEventListener(
+  "pointerdown",
+  () => {
+    pointerDown = true;
+    cancelSnap();
+  },
+  { passive: true },
+);
+window.addEventListener(
+  "pointerup",
+  () => {
+    pointerDown = false;
+  },
+  { passive: true },
+);
+window.addEventListener(
+  "pointercancel",
+  () => {
+    pointerDown = false;
+    manualScroll = false;
+    cancelSnap();
+  },
+  { passive: true },
+);
+window.addEventListener("keydown", (event) => {
+  if (
+    ["ArrowDown", "ArrowUp", "PageDown", "PageUp", " "].includes(event.key) &&
+    !event.target.closest("button, a, summary, input, textarea, select, [contenteditable]")
+  )
+    armScroll();
+  if (["Home", "End", "Escape"].includes(event.key)) {
+    manualScroll = false;
+    cancelSnap();
+  }
+  if (event.key === "Escape" && mobileMenu.open) {
+    mobileMenu.open = false;
+    mobileMenu.querySelector("summary").focus();
+  }
+});
+window.addEventListener(
+  "scroll",
+  () => {
+    const difference = window.scrollY - previousPosition;
+    if (manualScroll && !snapping && Math.abs(difference) > 0.5)
+      scrollDirection = Math.sign(difference);
+    previousPosition = window.scrollY;
+    requestScrollUI();
+    window.clearTimeout(settleTimer);
+    if (manualScroll && !snapping) settleTimer = window.setTimeout(settleScroll, 180);
+  },
+  { passive: true },
+);
+
+document.addEventListener("click", (event) => {
+  const anchor = event.target.closest('a[href^="#"]');
+  if (anchor) {
+    manualScroll = false;
+    cancelSnap();
+    mobileMenu.open = false;
+  } else if (!mobileMenu.contains(event.target)) mobileMenu.open = false;
+});
+
+document.addEventListener("toggle", requestLayout, true);
+window.addEventListener("resize", () => {
+  manualScroll = false;
+  cancelSnap();
+  if (window.innerWidth >= 960) mobileMenu.open = false;
+  requestLayout();
+});
+window.addEventListener("hashchange", () => {
+  manualScroll = false;
+  cancelSnap();
+});
+if ("ResizeObserver" in window) {
+  const layoutObserver = new ResizeObserver(requestLayout);
+  [header, ...sections].forEach((element) => layoutObserver.observe(element));
+}
+document.fonts.ready.then(requestLayout);
+measureLayout();
 
 const revealItems = document.querySelectorAll("[data-reveal]");
 if (!reducedMotion.matches && "IntersectionObserver" in window) {
@@ -142,3 +328,9 @@ if (!reducedMotion.matches && "IntersectionObserver" in window) {
     revealItems.forEach((item) => item.classList.add("is-visible"));
   });
 }
+
+reducedMotion.addEventListener("change", () => {
+  manualScroll = false;
+  cancelSnap();
+  requestLayout();
+});

@@ -29,7 +29,7 @@
       crossorigin
     />
     <link rel="stylesheet" href="./src/style.css" />
-    <script defer src="./src/main.js"></script>
+    <script type="module" src="./src/main.js"></script>
   </head>
   <body id="top">
     <a class="skip-link" href="#main">跳至主要内容</a>
@@ -46,6 +46,18 @@
           <a href="#local">本地处理</a>
         </nav>
         <div class="header-actions">
+          <details class="mobile-menu">
+            <summary aria-label="页面目录">目录 <span aria-hidden="true">+</span></summary>
+            <nav aria-label="移动端页面目录">
+              <a href="#workspace"><span>01</span> 实际工作区</a>
+              <a href="#features"><span>02</span> 核心能力</a>
+              <a href="#search"><span>03</span> 画面检索</a>
+              <a href="#workflow"><span>04</span> 创作工作流</a>
+              <a href="#local"><span>05</span> 本地处理</a>
+              <a href="#faq"><span>06</span> 常见问题</a>
+              <a href="#download"><span>07</span> 下载开始</a>
+            </nav>
+          </details>
           <a
             class="github-link"
             href="https://github.com/GCL-MAD-CLUB/Locution-Pro"
@@ -65,8 +77,38 @@
       <div class="reading-progress" aria-hidden="true"></div>
     </header>
 
+    <nav class="chapter-nav" aria-label="页面章节">
+      <a href="#intro" aria-label="00 首页"
+        ><span class="chapter-index">00</span><span class="chapter-label">首页</span></a
+      >
+      <a href="#workspace" aria-label="01 工作区"
+        ><span class="chapter-index">01</span><span class="chapter-label">工作区</span></a
+      >
+      <a href="#features" aria-label="02 核心能力"
+        ><span class="chapter-index">02</span><span class="chapter-label">核心能力</span></a
+      >
+      <a href="#search" aria-label="03 画面检索"
+        ><span class="chapter-index">03</span><span class="chapter-label">画面检索</span></a
+      >
+      <a href="#workflow" aria-label="04 工作流"
+        ><span class="chapter-index">04</span><span class="chapter-label">工作流</span></a
+      >
+      <a href="#local" aria-label="05 本地处理"
+        ><span class="chapter-index">05</span><span class="chapter-label">本地处理</span></a
+      >
+      <a href="#faq" aria-label="06 常见问题"
+        ><span class="chapter-index">06</span><span class="chapter-label">常见问题</span></a
+      >
+      <a href="#download" aria-label="07 下载"
+        ><span class="chapter-index">07</span><span class="chapter-label">下载</span></a
+      >
+    </nav>
+
     <main id="main">
-      <section class="hero page-shell" aria-labelledby="hero-title">
+      <section class="hero page-shell" id="intro" aria-labelledby="hero-title">
+        <div class="hero-topline mono">
+          <span>LOCUTION PRO / CREATIVE WORKSPACE</span><span>本地素材 · 无限灵感</span>
+        </div>
         <div class="hero-layout">
           <div class="hero-title-block">
             <p class="hero-kicker">面向视频创作者的镜头工作软件</p>
@@ -141,6 +183,7 @@
               width="3120"
               height="1940"
             />
+            <span class="workspace-expand mono" aria-hidden="true">查看完整工作区 ↗</span>
           </a>
           <figcaption>
             <span>真实应用界面 · 浅色外观</span>
@@ -162,7 +205,7 @@
         aria-labelledby="features-title"
       >
         <div class="section-intro" data-reveal>
-          <p class="section-number" aria-hidden="true">01</p>
+          <p class="section-number" aria-hidden="true">02</p>
           <h2 id="features-title">一个工作空间，<br />四个关键动作。</h2>
           <p>
             从海量拍摄素材到精选镜头，让查找更直观，让整理更有序。每一项能力都服务于下一次创作决定。
@@ -207,7 +250,7 @@
       <section class="search-section section-space" id="search" aria-labelledby="search-title">
         <div class="page-shell">
           <div class="search-heading" data-reveal>
-            <p class="search-label mono">VISUAL SEARCH / 交互示意</p>
+            <p class="search-label mono">03 / VISUAL SEARCH · 交互示意</p>
             <h2 id="search-title">你记得画面，<br />不必记住文件名。</h2>
             <p>
               安装语义检索组件后，用一句自然语言描述人物、动作或环境，即可在本机素材中查找相关画面。无需先准备字幕。
@@ -293,7 +336,7 @@
       <section class="workflow section-space" id="workflow" aria-labelledby="workflow-title">
         <div class="page-shell">
           <div class="workflow-heading" data-reveal>
-            <p class="section-number" aria-hidden="true">02</p>
+            <p class="section-number" aria-hidden="true">04</p>
             <h2 id="workflow-title">从导入到交付，<br />不打断创作思路。</h2>
             <p>素材从进入项目开始，始终处于清晰、可接续的工作流中。</p>
           </div>
@@ -329,7 +372,7 @@
       >
         <div class="local-grid">
           <div class="local-copy" data-reveal>
-            <p class="section-number" aria-hidden="true">03</p>
+            <p class="section-number" aria-hidden="true">05</p>
             <h2 id="local-title">素材留在本机。<br />创作不必等待。</h2>
             <p>
               媒体分析、镜头检测、语义检索、预览和导出均在本机完成。日常素材处理无需上传文件，也不必等待远端队列。
@@ -375,9 +418,9 @@
         </dl>
       </section>
 
-      <section class="faq-section page-shell section-space" aria-labelledby="faq-title">
+      <section class="faq-section page-shell section-space" id="faq" aria-labelledby="faq-title">
         <div class="faq-heading" data-reveal>
-          <p class="section-number" aria-hidden="true">04</p>
+          <p class="section-number" aria-hidden="true">06</p>
           <h2 id="faq-title">开始之前。</h2>
           <p>关于素材、项目与运行环境，你可能想了解这些。</p>
         </div>
@@ -425,7 +468,7 @@
       <section class="download-section" id="download" aria-labelledby="download-title">
         <div class="page-shell">
           <div class="download-topline mono">
-            <span>READY WHEN YOU ARE</span><span>V0.4.1 / WINDOWS</span>
+            <span>07 / READY WHEN YOU ARE</span><span>V0.4.1 / WINDOWS</span>
           </div>
           <div class="download-content" data-reveal>
             <div>

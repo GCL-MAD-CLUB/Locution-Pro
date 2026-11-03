@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { clientError, ERROR_CATEGORIES } from "./model";
+import { clientError, ERROR_CATEGORIES, errorDiagnostic } from "./model";
 import { incidentRecovery } from "./recovery";
 import type {
   ErrorCategory,
@@ -57,7 +57,7 @@ function serializedError(error: unknown): Partial<PublicCommandError> | null {
 
 function diagnosticDetail(error: unknown) {
   if (error instanceof Error) {
-    return error.stack || error.message;
+    return errorDiagnostic(error, `${error.name}: ${error.message}`);
   }
   if (typeof error === "string") {
     return error;
@@ -304,6 +304,7 @@ const listeners = new Set<() => void>();
 let snapshot: IncidentSnapshot = { incidents: [] };
 
 function publish(next: IncidentSnapshot) {
+ 
   snapshot = next;
   for (const listener of listeners) {
     listener();

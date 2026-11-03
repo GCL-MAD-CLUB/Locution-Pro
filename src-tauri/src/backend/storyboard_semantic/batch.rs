@@ -4,6 +4,11 @@ pub(super) const MAX_BATCH: usize = 32;
 // All five tuned shapes, plus the one-row recovery shape. Keeping this finite
 // set avoids recompiling either a challenger or a frequently used tail shape.
 pub(super) const RESIDENT_SHAPES: usize = SIZES.len() + 1;
+// CoreML compiles every new input shape (about 25 s for DINOv3 and 90 s for
+// SigLIP2 on Apple silicon), far more than tuning gains; 16 was fastest for
+// both. Tails are padded into the resident shape like any other short batch.
+#[cfg(target_os = "macos")]
+const APPLE_GPU_BATCH: usize = 16;
 
 #[derive(Default)]
 pub(super) struct BatchPolicy {
@@ -30,6 +35,18 @@ impl BatchPolicy {
         } else {
             chosen
         }
+    }
+
+    /// The single shape to use on the Apple GPU, until it fails or the model
+    /// falls back to CPU; elsewhere, and after that, sizes are tuned.
+    pub(super) fn fixed_gpu_size(&self, cpu: bool) -> Option<usize> {
+        #[cfg(target_os = "macos")]
+        if !cpu {
+            let index = SIZES.iter().position(|&size| size == APPLE_GPU_BATCH)?;
+            return (!self.blocked[index]).then_some(APPLE_GPU_BATCH);
+        }
+        let _ = cpu;
+        None
     }
 
     pub(super) fn best(&self) -> usize {
@@ -100,6 +117,17 @@ impl BatchPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn apple_gpu_uses_one_shape_until_it_fails() {
+        let mut policy = BatchPolicy::default();
+        assert_eq!(policy.fixed_gpu_size(false), Some(16));
+        assert_eq!(policy.fixed_gpu_size(true), None);
+        policy.failed(16);
+        assert_eq!(policy.fixed_gpu_size(false), None);
+        assert_eq!(policy.choose(64), 8);
+    }
 
     #[test]
     fn first_real_run_counts_once_without_timing_or_duplicate_warmup_work() {

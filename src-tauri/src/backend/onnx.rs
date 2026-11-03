@@ -1,4 +1,6 @@
 //! Shared ONNX provider selection and recovery for every production model.
+#[cfg(target_os = "macos")]
+mod coreml;
 pub(super) mod runtime;
 use super::{available_cpu_threads, check_optional_cancel, AppError, AppResult};
 use ort::{
@@ -9,13 +11,25 @@ use std::{
     fmt,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, AtomicI32, Ordering},
+        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
 };
 
+#[cfg(not(target_os = "macos"))]
 const MAX_DIRECTML_ADAPTERS: i32 = 8;
-static PREFERRED_ADAPTER: AtomicI32 = AtomicI32::new(-1);
+#[cfg(not(target_os = "macos"))]
+static PREFERRED_ADAPTER: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+
+/// GPU providers a model may use. DirectML accelerates every production
+/// model, while CoreML lacks 3D convolutions and most quantized operators; a
+/// partially supported graph splits into CPU/GPU partitions and runs slower
+/// than plain CPU, so CoreML is opt-in per model.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Accelerators {
+    All,
+    DirectMlOnly,
+}
 
 // Clones observe a runtime fallback too, so task completion reports the provider
 // actually used rather than the provider selected at initialization.
@@ -64,10 +78,13 @@ impl OnnxModel {
     pub fn load(
         path: &Path,
         dimensions: &[(&str, i64)],
+        accelerators: Accelerators,
         make_error: fn(String) -> AppError,
     ) -> AppResult<Self> {
-        let (session, provider) = create_model_session_with_dimensions(path, dimensions)
-            .map_err(|error| make_error(format!("Load ONNX model {}: {error}", path.display())))?;
+        let (session, provider) =
+            create_model_session_with_dimensions(path, dimensions, accelerators).map_err(
+                |error| make_error(format!("Load ONNX model {}: {error}", path.display())),
+            )?;
         Ok(Self {
             session: Mutex::new(session),
             provider: provider.into(),
@@ -227,9 +244,39 @@ fn run_with_fallback<S, T>(
     Ok(result)
 }
 
+#[cfg(target_os = "macos")]
 pub(super) fn create_model_session_with_dimensions(
     path: &Path,
     dimensions: &[(&str, i64)],
+    accelerators: Accelerators,
+) -> ort::Result<(Session, String)> {
+    let coreml = match accelerators {
+        Accelerators::All => coreml::create_session(path, dimensions),
+        Accelerators::DirectMlOnly => Err(ort::Error::new("CoreML does not accelerate this model")),
+    };
+    match coreml {
+        Ok(session) => {
+            tracing::info!(provider = "CoreML", model_path = %path.display(), "Selected ONNX inference provider");
+            Ok((session, "CoreML".to_string()))
+        }
+        Err(error) => {
+            tracing::info!(model_path = %path.display(), %error, "Using CPU ONNX inference provider instead of CoreML");
+            create_cpu_model_session_with_dimensions(path, dimensions)
+                .map(|session| (session, "CPU".to_string()))
+                .map_err(|cpu| {
+                    ort::Error::new(format!(
+                        "CoreML unavailable ({error}); CPU initialization failed: {cpu}"
+                    ))
+                })
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(super) fn create_model_session_with_dimensions(
+    path: &Path,
+    dimensions: &[(&str, i64)],
+    _accelerators: Accelerators,
 ) -> ort::Result<(Session, String)> {
     let preferred = PREFERRED_ADAPTER.load(Ordering::Relaxed);
     let adapters = (preferred >= 0)
@@ -259,6 +306,7 @@ pub(super) fn create_model_session_with_dimensions(
         .map_err(|error| ort::Error::new(format!("DirectML initialization failed ({}); CPU initialization failed: {error}", errors.join("; "))))
 }
 
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(super) fn create_directml_model_session_with_dimensions(
     path: &Path,
     adapter: i32,
@@ -287,13 +335,22 @@ pub(super) fn create_cpu_model_session_with_dimensions(
 ) -> ort::Result<Session> {
     let threads = cpu_thread_budget(available_cpu_threads());
     tracing::info!(threads, "Configured ONNX CPU inference threads");
-    let mut builder = Session::builder()?
-        .with_optimization_level(GraphOptimizationLevel::Level3)?
-        .with_intra_threads(threads)?;
-    for &(name, size) in dimensions {
-        builder = builder.with_dimension_override(name, size)?;
-    }
-    builder.commit_from_file(path)
+    let session = |level| {
+        let mut builder = Session::builder()?
+            .with_optimization_level(level)?
+            .with_intra_threads(threads)?;
+        for &(name, size) in dimensions {
+            builder = builder.with_dimension_override(name, size)?;
+        }
+        builder.commit_from_file(path)
+    };
+    // Extended fusions can fail on some graphs and CPUs (on Apple silicon, the
+    // fp16 SigLIP2 vision model breaks SimplifiedLayerNormFusion); basic
+    // optimizations still give a correct, slower session.
+    session(GraphOptimizationLevel::Level3).or_else(|error| {
+        tracing::warn!(model_path = %path.display(), %error, "ONNX CPU graph optimization failed; retrying with basic optimizations");
+        session(GraphOptimizationLevel::Level1)
+    })
 }
 
 // Reserve CPU capacity for decoding and UI work.
@@ -303,7 +360,7 @@ pub(super) fn cpu_thread_budget(available: usize) -> usize {
 
 #[cfg(test)]
 pub(super) fn create_model_session(path: &Path) -> ort::Result<(Session, String)> {
-    create_model_session_with_dimensions(path, &[])
+    create_model_session_with_dimensions(path, &[], Accelerators::All)
 }
 
 #[cfg(test)]
@@ -311,9 +368,16 @@ pub(super) fn create_cpu_model_session(path: &Path) -> ort::Result<Session> {
     create_cpu_model_session_with_dimensions(path, &[])
 }
 
+/// The platform GPU provider without CPU recovery, for parity tests.
 #[cfg(test)]
-pub(super) fn create_directml_model_session(path: &Path, adapter: i32) -> ort::Result<Session> {
-    create_directml_model_session_with_dimensions(path, adapter, &[])
+pub(super) fn create_gpu_model_session_with_dimensions(
+    path: &Path,
+    dimensions: &[(&str, i64)],
+) -> ort::Result<Session> {
+    #[cfg(target_os = "macos")]
+    return coreml::create_session(path, dimensions);
+    #[cfg(not(target_os = "macos"))]
+    create_directml_model_session_with_dimensions(path, 0, dimensions)
 }
 
 #[cfg(test)]

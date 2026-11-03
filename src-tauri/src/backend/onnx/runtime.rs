@@ -8,9 +8,14 @@ use std::{
 };
 use tauri::{path::BaseDirectory, Manager};
 
-// The installer currently packages the shared DLLs alongside TransNetV2.
+// The installer currently packages the shared libraries alongside TransNetV2.
 const RESOURCE_DIR: &str = "transnetv2";
+#[cfg(windows)]
 pub(crate) const ONNXRUNTIME_DLL_FILE: &str = "onnxruntime.dll";
+#[cfg(target_os = "macos")]
+pub(crate) const ONNXRUNTIME_DLL_FILE: &str = "libonnxruntime.dylib";
+#[cfg(not(any(windows, target_os = "macos")))]
+pub(crate) const ONNXRUNTIME_DLL_FILE: &str = "libonnxruntime.so";
 static INIT_LOCK: Mutex<()> = Mutex::new(());
 static READY: OnceLock<()> = OnceLock::new();
 

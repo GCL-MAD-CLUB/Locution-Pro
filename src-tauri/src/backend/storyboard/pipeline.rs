@@ -320,9 +320,14 @@ impl StoryboardConsumer {
             move || {
                 let started = Instant::now();
                 onnx::runtime::initialize_from(&runtime.onnx)?;
-                let session = OnnxModel::load(&runtime.model, &[], |detail| {
-                    app_error(ErrorCode::StoryboardInferenceFailed, detail)
-                })?;
+                // CoreML has no 3D convolutions, so TransNetV2 would mostly
+                // run on CPU with GPU transfers between partitions.
+                let session = OnnxModel::load(
+                    &runtime.model,
+                    &[],
+                    onnx::Accelerators::DirectMlOnly,
+                    |detail| app_error(ErrorCode::StoryboardInferenceFailed, detail),
+                )?;
                 let provider = session.provider();
                 let model = TransnetSession::new(session)?;
                 tracing::info!(

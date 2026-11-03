@@ -1,4 +1,12 @@
-import { createWriteStream, existsSync, mkdirSync, rmSync, copyFileSync, statSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  rmSync,
+  copyFileSync,
+  statSync,
+  readdirSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -15,6 +23,10 @@ const directMlVersion = "1.15.4";
 const maxDownloadAttempts = 4;
 const requestTimeoutMs = 60_000;
 
+const isMac = process.platform === "darwin";
+const macArch = process.arch === "arm64" ? "arm64" : "x86_64";
+const onnxRuntimeLibrary = isMac ? "libonnxruntime.dylib" : "onnxruntime.dll";
+
 const downloads = {
   model: {
     url: "https://huggingface.co/elya5/transnetv2/resolve/main/transnetv2.onnx",
@@ -23,6 +35,11 @@ const downloads = {
   onnxRuntime: {
     url: `https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime.directml/${onnxRuntimeVersion}/microsoft.ml.onnxruntime.directml.${onnxRuntimeVersion}.nupkg`,
     path: join(cacheDir, `microsoft.ml.onnxruntime.directml.${onnxRuntimeVersion}.nupkg`),
+  },
+  // The macOS build bundles the CoreML execution provider (Metal GPU / ANE).
+  onnxRuntimeMac: {
+    url: `https://github.com/microsoft/onnxruntime/releases/download/v${onnxRuntimeVersion}/onnxruntime-osx-${macArch}-${onnxRuntimeVersion}.tgz`,
+    path: join(cacheDir, `onnxruntime-osx-${macArch}-${onnxRuntimeVersion}.tgz`),
   },
   directMl: {
     url: `https://api.nuget.org/v3-flatcontainer/microsoft.ai.directml/${directMlVersion}/microsoft.ai.directml.${directMlVersion}.nupkg`,
@@ -172,6 +189,20 @@ function prepareOnnxRuntime(extracted) {
   );
 }
 
+function prepareOnnxRuntimeMac(extracted) {
+  const [root] = readdirSync(extracted);
+  const packageDir = join(extracted, root);
+  copyRequired(
+    join(packageDir, "lib", `libonnxruntime.${onnxRuntimeVersion}.dylib`),
+    join(resourcesDir, onnxRuntimeLibrary),
+  );
+  copyIfPresent(join(packageDir, "LICENSE"), join(resourcesDir, "onnxruntime-LICENSE"));
+  copyIfPresent(
+    join(packageDir, "ThirdPartyNotices.txt"),
+    join(resourcesDir, "onnxruntime-ThirdPartyNotices.txt"),
+  );
+}
+
 function prepareDirectMl(extracted) {
   copyRequired(
     join(extracted, "bin", "x64-win", "DirectML.dll"),
@@ -192,19 +223,24 @@ async function main() {
   ensureDirectory(cacheDir);
   ensureDirectory(resourcesDir);
   await prepareModel();
-  await downloadWithRetry(downloads.onnxRuntime.url, downloads.onnxRuntime.path);
-  await downloadWithRetry(downloads.directMl.url, downloads.directMl.path);
+  if (isMac) {
+    await downloadWithRetry(downloads.onnxRuntimeMac.url, downloads.onnxRuntimeMac.path);
+    prepareOnnxRuntimeMac(extractNuget("onnxruntime-osx", downloads.onnxRuntimeMac.path));
+  } else {
+    await downloadWithRetry(downloads.onnxRuntime.url, downloads.onnxRuntime.path);
+    await downloadWithRetry(downloads.directMl.url, downloads.directMl.path);
 
-  const onnxRuntimeExtracted = extractNuget("onnxruntime-directml", downloads.onnxRuntime.path);
-  const directMlExtracted = extractNuget("directml", downloads.directMl.path);
-  prepareOnnxRuntime(onnxRuntimeExtracted);
-  prepareDirectMl(directMlExtracted);
+    const onnxRuntimeExtracted = extractNuget("onnxruntime-directml", downloads.onnxRuntime.path);
+    const directMlExtracted = extractNuget("directml", downloads.directMl.path);
+    prepareOnnxRuntime(onnxRuntimeExtracted);
+    prepareDirectMl(directMlExtracted);
+  }
 
   for (const file of [
     "transnetv2.onnx",
     "storyboard-event-model.json",
-    "onnxruntime.dll",
-    "DirectML.dll",
+    onnxRuntimeLibrary,
+    ...(isMac ? [] : ["DirectML.dll"]),
   ]) {
     const path = join(resourcesDir, file);
     if (!existsSync(path)) {

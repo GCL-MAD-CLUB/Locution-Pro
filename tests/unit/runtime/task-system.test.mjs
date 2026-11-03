@@ -11,7 +11,13 @@ function taskSystem() {
   const jsx = (type, props) => ({ type, props });
   const exports = loadModule("../../../src/systems/TaskSystem/TaskSystem.tsx", (name) => {
     if (name === "react") {
-      return { useMemo: (build) => build(), useSyncExternalStore: (_, snapshot) => snapshot() };
+      return {
+        useMemo: (build) => build(),
+        useState: (initial) => [typeof initial === "function" ? initial() : initial, () => {}],
+        useEffect: () => {},
+        // Forced synchronous re-renders overflow React's update depth on macOS.
+        useSyncExternalStore: () => assert.fail("progress must not use useSyncExternalStore"),
+      };
     }
     if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
     if (name === "lucide-react" || name.endsWith(".css")) return {};

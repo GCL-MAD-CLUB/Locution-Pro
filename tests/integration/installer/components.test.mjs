@@ -113,6 +113,7 @@ Var PreviousInstallDir
 Var PassiveMode
 !include "${nsis(join(root, "src-tauri/windows/ffmpeg-options.nsh"))}"
 !include "${nsis(join(root, "src-tauri/windows/upgrade-files.nsh"))}"
+!include "${nsis(join(root, "src-tauri/windows/independent-install.nsh"))}"
 Name "Locution Pro component test"
 OutFile "${nsis(executable)}"
 RequestExecutionLevel user
@@ -173,7 +174,7 @@ SectionEnd
   const foreignFiles = [
     "foreign.dll",
     "other.exe",
-    "uninstall.exe",
+    "foreign-uninstaller.exe",
     "licenses/foreign.txt",
     "transnetv2/foreign.bin",
     "semantic-search/unrelated.bin",
@@ -265,7 +266,7 @@ SectionEnd
   }
 
   const powershell = join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe");
-  const helper = (mode, install, result, expected = 0) => {
+  const helper = (mode, install, result, expected = 0, extra = []) => {
     const processResult = spawnSync(
       powershell,
       [
@@ -285,6 +286,7 @@ SectionEnd
         result,
         "-MainBinary",
         "locution-pro.exe",
+        ...extra,
       ],
       { encoding: "utf8", windowsHide: true, timeout: 20000 },
     );
@@ -298,10 +300,24 @@ SectionEnd
   };
   const planPath = join(temporary, "scan.ini");
   const reuseInstall = join(temporary, "reuse old files");
-  await t.test("verified bundled components skip the real option pages", () => {
+  await t.test("verified components remain configurable in the real option pages", () => {
     const pageExecutable = join(temporary, "reuse-pages.exe");
     const pageScript = join(temporary, "reuse-pages.nsi");
     const result = join(temporary, "skipped-pages.ini");
+    for (const name of ["ffmpeg-options.nsh", "semantic-options.nsh"]) {
+      writeFileSync(
+        join(temporary, name),
+        readFileSync(join(root, "src-tauri/windows", name), "utf8")
+          .replace(
+            '!define LOCUTION_INSTALLER_SOURCE_DIR "${__FILEDIR__}"',
+            `!define LOCUTION_INSTALLER_SOURCE_DIR "${nsis(join(root, "src-tauri/windows"))}"`,
+          )
+          .replace(
+            "  nsDialogs::Show",
+            "  ${NSD_CreateTimer} SelectComponents 100\n  nsDialogs::Show",
+          ),
+      );
+    }
     writeFileSync(
       pageScript,
       `Unicode true
@@ -311,14 +327,16 @@ SectionEnd
 !define LOCUTION_PAYLOAD_MANIFEST "${nsis(manifest)}"
 Var PreviousInstallDir
 Var PassiveMode
-!include "${nsis(join(root, "src-tauri/windows/ffmpeg-options.nsh"))}"
+Var TestPage
+!include "${nsis(join(temporary, "ffmpeg-options.nsh"))}"
 !include "${nsis(join(root, "src-tauri/windows/upgrade-files.nsh"))}"
+!include "${nsis(join(root, "src-tauri/windows/independent-install.nsh"))}"
 Name "Reuse page fixture"
 OutFile "${nsis(pageExecutable)}"
 RequestExecutionLevel user
 Page custom LocutionProScanPageCreate LocutionProScanPageLeave
-Page custom LocutionProFfmpegPageCreate LocutionProFfmpegPageLeave
-Page custom LocutionProSemanticPageCreate LocutionProSemanticPageLeave
+Page custom TestFfmpeg LocutionProFfmpegPageLeave
+Page custom TestSemantic LocutionProSemanticPageLeave
 Page custom Finished
 !insertmacro MUI_LANGUAGE "English"
 ${template.match(/Function SkipIfPassive\r?\n[\s\S]*?FunctionEnd/u)[0]}
@@ -330,6 +348,25 @@ Function .onInit
   \${IfNot} \${Errors}
     StrCpy $PassiveMode 1
   \${EndIf}
+FunctionEnd
+Function TestFfmpeg
+  StrCpy $TestPage "ffmpeg"
+  Call LocutionProFfmpegPageCreate
+FunctionEnd
+Function TestSemantic
+  StrCpy $TestPage "semantic"
+  Call LocutionProSemanticPageCreate
+FunctionEnd
+Function SelectComponents
+  \${NSD_KillTimer} SelectComponents
+  \${If} $TestPage == "ffmpeg"
+    WriteINIStr "${nsis(result)}" "Shown" "Ffmpeg" "1"
+    SendMessage $LocutionProBundledRadio \${BM_CLICK} 0 0
+  \${Else}
+    WriteINIStr "${nsis(result)}" "Shown" "Semantic" "1"
+    \${NSD_Uncheck} $LocutionProSemanticCheckbox
+  \${EndIf}
+  System::Call 'user32::PostMessageW(p $HWNDPARENT, i \${WM_COMMAND}, p1, p0)'
 FunctionEnd
 Function Finished
   WriteINIStr "${nsis(result)}" "Choice" "Ffmpeg" "$LocutionProBundleFfmpeg"
@@ -350,7 +387,8 @@ SectionEnd
     run(pageExecutable, [`/D=${reuseInstall}`]);
     const choices = readFileSync(result, "utf8");
     assert.match(choices, /Ffmpeg=1/u);
-    assert.match(choices, /Semantic=1/u);
+    assert.match(choices, /\[Choice\]\r?\nFfmpeg=1\r?\nSemantic=0/u);
+    assert.match(choices, /\[Shown\]\r?\nFfmpeg=1\r?\nSemantic=1/u);
     assert.match(choices, /Complete=1/u);
     assert.match(choices, /Plan=.+reuse-plan.ini/u);
     // Passive mode keeps the initial component choices and never starts the
@@ -458,6 +496,54 @@ SectionEnd
       );
     });
   });
+  await t.test(
+    "standalone uninstall moves a held provider away from the reusable DLL path",
+    async () => {
+      const install = join(temporary, "provider-tombstone");
+      mkdirSync(install);
+      const provider = join(install, "locution_pro_thumbnail_provider.dll");
+      writeFileSync(provider, "old provider");
+      writeFileSync(join(install, "locution-pro.exe"), "old main");
+      const providerScript = join(temporary, "provider-uninstall.nsi");
+      const providerExecutable = join(temporary, "provider-uninstall.exe");
+      const record = join(temporary, "provider-tombstone.txt");
+      const block = template.slice(
+        template.indexOf("  ; Loaded image files can often be renamed"),
+        template.indexOf("  ; Delete the app directory"),
+      );
+      assert(block.includes('Delete /REBOOTOK "$R8"'));
+      assert(!block.includes('Delete /REBOOTOK "$INSTDIR'));
+      writeFileSync(
+        providerScript,
+        `Unicode true
+!include LogicLib.nsh
+Name "Provider uninstall fixture"
+OutFile "${nsis(providerExecutable)}"
+RequestExecutionLevel user
+SilentInstall silent
+!define LCP_THUMBNAIL_PROVIDER_FILE "locution_pro_thumbnail_provider.dll"
+Section
+${block.replace('Delete /REBOOTOK "$R8"', 'Delete "$R8"')}
+  FileOpen $0 "${nsis(record)}" w
+  FileWriteUTF16LE /BOM $0 "$R8"
+  FileClose $0
+  SetOutPath $INSTDIR
+  File "/oname=locution_pro_thumbnail_provider.dll" "${nsis(fixture)}"
+SectionEnd
+`,
+      );
+      run(compiler, ["/V2", "/INPUTCHARSET", "UTF8", providerScript]);
+      await withLock(provider, "Read, Delete", () => {
+        helper("CheckUninstall", install, planPath, 0, ["-PreviousRoot", install]);
+        run(providerExecutable, ["/S", `/D=${install}`]);
+        const tombstone = readFileSync(record, "utf16le").replace(/^\ufeff/u, "");
+        assert.notEqual(tombstone.toLowerCase(), provider.toLowerCase());
+        assert.equal(dirname(tombstone).toLowerCase(), install.toLowerCase());
+        assert.equal(readFileSync(provider, "utf8"), "component-test-payload");
+        assert.equal(readFileSync(join(install, "locution-pro.exe"), "utf8"), "old main");
+      });
+    },
+  );
   await t.test("junction in managed resources is rejected without touching its target", () => {
     const install = join(temporary, "linked-install");
     const outside = join(temporary, "foreign-resources");

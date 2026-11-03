@@ -36,6 +36,25 @@ Var MigrationBar
 Var MigrationActionButton
 Var MigrationSkipButton
 Var MigrationNextButton
+Var MigrationReviewCheckbox
+Var MigrationOptOut
+
+Function RecordMigrationOptOut
+  ${If} $MigrationOptOut != 1
+    Return
+  ${EndIf}
+  ClearErrors
+  WriteRegDWORD SHCTX "${MANUPRODUCTKEY}" "MigrationSkipped" 1
+  ReadRegDWORD $0 SHCTX "${MANUPRODUCTKEY}" "MigrationSkipped"
+  ${If} ${Errors}
+  ${OrIf} $0 != 1
+    SetErrorLevel 2
+    Abort "无法保存不迁移数据的选择，请检查权限后重试。"
+  ${EndIf}
+  Call ClearPendingMigration
+  StrCpy $MigrationSkipped 1
+  StrCpy $MigrationEligible 0
+FunctionEnd
 
 !ifndef LOCUTION_MIGRATION_CANCEL_GRACE_MS
   !define LOCUTION_MIGRATION_CANCEL_GRACE_MS 15000
@@ -423,6 +442,51 @@ Function RecordPendingMigration
 FunctionEnd
 
 Function PrepareMigrationInstall
+  Push $MigrationDataRoot
+  Call NormalizeInstallPath
+  Pop $0
+  Push $MigrationLegacyRoot
+  Call NormalizeInstallPath
+  Pop $1
+  ${If} $0 == ""
+  ${OrIf} $1 == ""
+    SetErrorLevel 2
+    Abort "应用数据目录必须使用有效的本地绝对路径。"
+  ${EndIf}
+  StrLen $2 "$0\"
+  StrCpy $3 "$1\" $2
+  ${If} $3 == "$0\"
+    SetErrorLevel 2
+    Abort "Locution Pro 与 LineCut 的数据目录不能相同或互相包含，未写入设置。"
+  ${EndIf}
+  StrLen $2 "$1\"
+  StrCpy $3 "$0\" $2
+  ${If} $3 == "$1\"
+    SetErrorLevel 2
+    Abort "Locution Pro 与 LineCut 的数据目录不能相同或互相包含，未写入设置。"
+  ${EndIf}
+  StrCpy $MigrationDataRoot $0
+  StrCpy $MigrationLegacyRoot $1
+  ; The media-option hook and migration admission write here even when copying
+  ; is not needed. Validate those destinations before opening either file.
+  Push $MigrationDataRoot
+  Call CheckPlainPath
+  ${If} $LocutionProPathSafe != 1
+    SetErrorLevel 2
+    Abort "应用数据目录包含链接或不是独立目录，请检查 LOCUTION_PRO_DATA_DIR 设置。"
+  ${EndIf}
+  Push "$MigrationDataRoot\installer-media-paths.ini"
+  Call CheckPlainPath
+  ${If} $LocutionProPathSafe != 1
+    SetErrorLevel 2
+    Abort "媒体工具设置文件包含链接或无法访问，未写入设置。"
+  ${EndIf}
+  Push "$MigrationDataRoot\.locution-pro-install-session"
+  Call CheckPlainPath
+  ${If} $LocutionProPathSafe != 1
+    SetErrorLevel 2
+    Abort "迁移会话文件包含链接或无法访问，未写入设置。"
+  ${EndIf}
   ${If} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
     Push $INSTDIR
     Call NormalizeInstallPath
@@ -450,6 +514,11 @@ FunctionEnd
 ; Write admission only immediately before launching the migration worker.
 Function BeginMigrationSession
   InitPluginsDir
+  Push "$MigrationDataRoot\.locution-pro-install-session"
+  Call CheckPlainPath
+  ${If} $LocutionProPathSafe != 1
+    Goto migration_session_failed
+  ${EndIf}
   CreateDirectory "$MigrationDataRoot"
   ClearErrors
   FileOpen $0 "$MigrationDataRoot\.locution-pro-install-session" w
@@ -515,6 +584,10 @@ FunctionEnd
 Function .onGUIEnd
   !ifdef LOCUTION_HAS_UPGRADE_SCAN
     Call LocutionProCloseUpgradeScan
+    Call LocutionProRollbackInstall
+    !ifdef LOCUTION_HAS_REGISTRATION_SNAPSHOT
+      Call LocutionProRestoreRegistration
+    !endif
   !endif
   ; Also covers error paths that exit without going through the custom page.
   Call CloseMigrationJob
@@ -689,6 +762,14 @@ Function CancelMigration
 FunctionEnd
 
 Function MigrationUserAbort
+  !ifdef LOCUTION_HAS_UPGRADE_SCAN
+    ${If} $LocutionProScanProcess != 0
+    ${AndIf} $LocutionProScanProcess != ""
+    ${AndIf} $LocutionProUpgradeMode != "Scan"
+      MessageBox MB_ICONINFORMATION|MB_OK "正在卸载旧版本，请等待此步骤完成后再退出安装。"
+      Abort
+    ${EndIf}
+  !endif
   ${If} $MigrationProcess != 0
   ${AndIf} $MigrationProcess != ""
     StrCpy $MigrationQuitRequested 1

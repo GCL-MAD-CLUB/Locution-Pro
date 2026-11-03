@@ -12,32 +12,27 @@ FunctionEnd
 
 Function LocutionProSemanticPageCreate
   Call SkipIfPassive
-  ${If} $LocutionProReuseSemantic == 1
-    StrCpy $LocutionProBundleSemantic 1
+  ${If} $LocutionProUninstallOnly == 1
     Abort
   ${EndIf}
-  !insertmacro MUI_HEADER_TEXT "选择是否附带语义检索" "选择是否安装字幕与分镜语义检索组件。"
+  !insertmacro MUI_HEADER_TEXT "语义检索" "按画面描述或对白含义搜索。"
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
     Abort
   ${EndIf}
 
-  ${NSD_CreateLabel} 0 0 100% 24u "包含字幕与分镜语义检索组件，模型在本机运行。"
-  Pop $0
-  ${NSD_CreateGroupBox} 0 30u 100% 90u "字幕与分镜语义检索"
-  Pop $0
-  ${NSD_CreateCheckbox} 12u 48u 88% 12u "附带语义检索组件（默认勾选）"
+  ${NSD_CreateCheckbox} 0 8u 100% 12u "安装语义检索组件"
   Pop $LocutionProSemanticCheckbox
   ${NSD_SetState} $LocutionProSemanticCheckbox $LocutionProBundleSemantic
   ${NSD_OnClick} $LocutionProSemanticCheckbox LocutionProSemanticSelectionChanged
-  ${NSD_CreateLabel} 12u 70u 88% 36u "组件包含语义模型，需要额外磁盘空间。不勾选时，程序的搜索模式中不会出现“语义”选项。"
+  ${NSD_CreateLabel} 0 34u 100% 32u "模型在本机运行，需要额外磁盘空间。不安装时不显示“语义”搜索。"
   Pop $0
   nsDialogs::Show
 FunctionEnd
 
 Function LocutionProSemanticPageLeave
-  ${If} $LocutionProReuseSemantic == 1
+  ${If} $LocutionProUninstallOnly == 1
     Return
   ${EndIf}
   ${NSD_GetState} $LocutionProSemanticCheckbox $LocutionProBundleSemantic

@@ -77,7 +77,15 @@ const siteIndex = join(root, "site", "index.html");
 const siteHtml = read(siteIndex);
 const siteVersionPattern = /V\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\s*\/\s*WINDOWS/u;
 if (!siteVersionPattern.test(siteHtml)) throw new Error("Could not find the site release version");
-write(siteIndex, siteHtml.replace(siteVersionPattern, `V${version} / WINDOWS`));
+write(
+  siteIndex,
+  siteHtml
+    .replace(siteVersionPattern, `V${version} / WINDOWS`)
+    .replaceAll(
+      /https:\/\/openlist\.frameneo\.com\/sd\/YRrdPxj2\/Locution\.Pro_\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?_x64-setup\.exe/gu,
+      `https://openlist.frameneo.com/sd/YRrdPxj2/Locution.Pro_${version}_x64-setup.exe`,
+    ),
+);
 
 run(process.execPath, [
   prettierCli,

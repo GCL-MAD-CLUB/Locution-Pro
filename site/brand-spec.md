@@ -5,7 +5,7 @@
 - 面向视频创作者，介绍媒体管理、画面检索、镜头整理和片段交付。字幕是可选查找方式。
 - 素材处理在本机完成；语义检索需要安装可选组件，不展示虚构性能、评分或客户证明。
 - 官网地址为 `https://locution.dpdns.org/`；用户指南为 `https://helpx.locution.dpdns.org/`。
-- 下载入口保留 `https://openlist.frameneo.com/@s/YRrdPxj2`，GitHub 指向 `GCL-MAD-CLUB/Locution-Pro`。
+- 下载入口使用安装包直链 `https://openlist.frameneo.com/sd/YRrdPxj2/Locution.Pro_<版本>_x64-setup.exe`，由发版脚本同步版本，不额外打开空白标签页。GitHub 指向 `GCL-MAD-CLUB/Locution-Pro`。
 - 保留 `#features`、`#workflow`、`#local` 锚点、键盘可操作的 FAQ 和检索示例。
 - 检索画面明确标注为交互示意，不作为真实检索结果。
 

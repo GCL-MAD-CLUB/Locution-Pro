@@ -46,6 +46,9 @@ jobs:
       - name: Check repository layout and script syntax
         run: npm run check:layout
 
+      - name: Check and package site
+        run: npm run site:build
+
       - name: Test frontend logic
         run: npm test
 

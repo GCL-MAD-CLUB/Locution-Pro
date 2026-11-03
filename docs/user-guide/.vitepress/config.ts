@@ -19,6 +19,7 @@ export default defineConfig({
   base: normalizeBase(process.env.DOCS_BASE),
   cleanUrls: false,
   lastUpdated: true,
+  sitemap: { hostname: "https://helpx.locution.dpdns.org" },
   head: [
     ["meta", { name: "theme-color", content: "#315efb" }],
     ["meta", { property: "og:locale", content: "zh_CN" }],
@@ -26,6 +27,7 @@ export default defineConfig({
   themeConfig: {
     siteTitle: "Locution Pro 帮助中心",
     nav: [
+      { text: "官网", link: "https://locution.dpdns.org/" },
       { text: "开始使用", link: "/getting-started/first-project" },
       { text: "按任务学习", link: "/workflows/find-visuals" },
       { text: "故障排查", link: "/troubleshooting/troubleshooting" },

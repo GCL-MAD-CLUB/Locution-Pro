@@ -23,7 +23,7 @@ concurrency:
 
 env:
   NODE_VERSION: 22.18.0
-  DOCS_BASE: ${{ vars.DOCS_BASE || format('/{0}/', github.event.repository.name) }}
+  DOCS_BASE: /
 
 jobs:
   build:

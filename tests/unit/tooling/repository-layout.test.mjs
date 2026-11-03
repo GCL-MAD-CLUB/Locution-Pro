@@ -48,6 +48,11 @@ test("layout check accepts inline Rust tests and ignores generated build output"
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("layout check accepts the separate static website JavaScript", (t) => {
+  const result = fixture(t, { "site/src/main.js": "export {};" });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 for (const name of [
   "src-tauri/tests/contract.rs",
   "src-tauri/src/onnx_tests.rs",

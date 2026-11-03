@@ -67,7 +67,9 @@ npm run docs:check
 npm run docs:build
 ```
 
-检查覆盖页面、导航、图片和用户文档边界，构建检查站内链接。自动检查不能替代逐页编辑审查。文档站通过 main 的部署工作流发布，基址可用仓库变量 `DOCS_BASE` 设置；本地构建不代表已经上线。
+检查覆盖页面、导航、图片和用户文档边界，构建检查站内链接。自动检查不能替代逐页编辑审查。文档站通过 main 的部署工作流发布到 `https://helpx.locution.dpdns.org/`，基址固定为 `/`；本地构建不代表已经上线。
+
+官网源码位于 `site/`，通过 `npm run site:build` 生成 `dist/site/`，由 Cloudflare Pages 托管于 `https://locution.dpdns.org/`。本地预览、部署开关、域名切换和 DNS 配置见 [官网维护说明](site/README.md)。
 
 ## 维护契约与发布
 

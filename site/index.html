@@ -161,30 +161,101 @@
         id="workspace"
         aria-label="Locution Pro 实际工作区"
       >
-        <figure class="workspace-figure" data-reveal>
+        <figure class="workspace-figure workspace-carousel" data-reveal>
           <div class="workspace-topline mono">
             <span>THE ACTUAL WORKSPACE</span>
             <span>导入&nbsp;&nbsp;—&nbsp;&nbsp;编辑&nbsp;&nbsp;—&nbsp;&nbsp;导出</span>
           </div>
-          <a
-            class="workspace-image"
-            href="./assets/locution-app-workspace-light.webp"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="查看 Locution Pro 实际界面大图"
-          >
-            <img
-              src="./assets/locution-app-workspace-light.webp"
-              alt="Locution Pro 浅色工作区，展示源监视器、项目媒体、分镜列表、直方图与关键字面板"
-              width="3120"
-              height="1940"
-            />
-            <span class="workspace-expand mono" aria-hidden="true">查看完整工作区 ↗</span>
-          </a>
-          <figcaption>
-            <span>真实应用界面 · 浅色外观</span>
-            <span>从原始素材到精选镜头，留在同一条工作路径上。</span>
-          </figcaption>
+          <div class="workspace-viewport" role="group" aria-label="工作区截图轮播">
+            <a
+              class="workspace-image workspace-slide"
+              data-workspace="import"
+              data-position="left"
+              data-label="导入"
+              href="./assets/locution-app-import-light.webp"
+              aria-label="切换到导入工作区"
+              tabindex="-1"
+            >
+              <img
+                src="./assets/locution-app-import-light.webp"
+                alt="Locution Pro 导入工作区，展示本地素材浏览、媒体选择和导入设置"
+                width="3120"
+                height="1940"
+                loading="lazy"
+                decoding="async"
+              />
+              <span class="workspace-expand mono" aria-hidden="true">查看完整工作区 ⤢</span>
+            </a>
+            <a
+              class="workspace-image workspace-slide"
+              data-workspace="edit"
+              data-position="center"
+              data-label="编辑"
+              href="./assets/locution-app-workspace-light.webp"
+              aria-label="查看编辑工作区完整截图"
+            >
+              <img
+                src="./assets/locution-app-workspace-light.webp"
+                alt="Locution Pro 浅色工作区，展示源监视器、项目媒体、分镜列表、直方图与关键字面板"
+                width="3120"
+                height="1940"
+              />
+              <span class="workspace-expand mono" aria-hidden="true">查看完整工作区 ⤢</span>
+            </a>
+            <a
+              class="workspace-image workspace-slide"
+              data-workspace="export"
+              data-position="right"
+              data-label="导出"
+              href="./assets/locution-app-export-light.webp"
+              aria-label="切换到导出工作区"
+              tabindex="-1"
+            >
+              <img
+                src="./assets/locution-app-export-light.webp"
+                alt="Locution Pro 导出工作区，展示分镜选择、导出设置和画面预览"
+                width="3120"
+                height="1940"
+                loading="lazy"
+                decoding="async"
+              />
+              <span class="workspace-expand mono" aria-hidden="true">查看完整工作区 ⤢</span>
+            </a>
+          </div>
+          <div class="workspace-controls" role="group" aria-label="切换工作区">
+            <button
+              type="button"
+              class="workspace-arrow"
+              data-workspace-step="-1"
+              aria-label="上一个工作区"
+            >
+              ←
+            </button>
+            <div class="workspace-choices">
+              <button type="button" data-workspace-choice="import" aria-pressed="false">
+                导入
+              </button>
+              <button type="button" data-workspace-choice="edit" aria-pressed="true">编辑</button>
+              <button type="button" data-workspace-choice="export" aria-pressed="false">
+                导出
+              </button>
+            </div>
+            <button
+              type="button"
+              class="workspace-arrow"
+              data-workspace-step="1"
+              aria-label="下一个工作区"
+            >
+              →
+            </button>
+          </div>
+          <p
+            class="visually-hidden"
+            id="workspace-status"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          ></p>
         </figure>
 
         <div class="capability-rail" aria-label="产品能力" data-reveal="late">
@@ -485,6 +556,21 @@
         </div>
       </section>
     </main>
+
+    <dialog class="workspace-dialog" id="workspace-dialog" aria-labelledby="workspace-dialog-title">
+      <span class="visually-hidden" id="workspace-dialog-title">编辑工作区</span>
+      <button type="button" class="workspace-dialog-close" aria-label="关闭工作区预览" autofocus>
+        ×
+      </button>
+      <img
+        class="workspace-dialog-image"
+        src="./assets/locution-app-workspace-light.webp"
+        alt="Locution Pro 编辑工作区完整截图"
+        width="3120"
+        height="1940"
+        loading="lazy"
+      />
+    </dialog>
 
     <footer class="site-footer">
       <div class="page-shell footer-grid">

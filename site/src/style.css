@@ -497,6 +497,10 @@ main > section {
   transform: translateY(0);
 }
 
+.product-stage {
+  --workspace-gap: 24px;
+  gap: var(--workspace-gap);
+}
 .workspace-figure {
   border-top: 2px solid var(--purple);
 }
@@ -509,6 +513,20 @@ main > section {
   color: var(--purple);
 }
 .workspace-topline span:last-child {
+  display: none;
+}
+.workspace-viewport {
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+.workspace-slide {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-width: 0;
+}
+.workspace-slide:not([data-workspace="edit"]),
+.workspace-controls {
   display: none;
 }
 .workspace-image {
@@ -543,16 +561,130 @@ main > section {
   color: var(--purple);
   background: var(--paper);
 }
-.workspace-figure figcaption {
-  display: grid;
-  padding-block: 12px 20px;
-  gap: 4px 24px;
-  color: var(--muted);
-  font-size: 14px;
+.workspace-dialog-open {
+  overflow: hidden;
 }
-.workspace-figure figcaption span:first-child {
+.workspace-dialog {
+  width: min(calc(100% - 32px), calc((100svh - 34px) * 3120 / 1940 + 2px));
+  max-width: none;
+  max-height: calc(100svh - 32px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--purple);
   color: var(--ink);
-  font-weight: 600;
+  background: var(--paper);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 30%);
+}
+.workspace-dialog::backdrop {
+  background: rgb(33 29 36 / 76%);
+}
+.workspace-dialog-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--purple) 40%, transparent);
+  color: var(--purple);
+  background: color-mix(in srgb, var(--paper) 75%, transparent);
+  font-size: 28px;
+  line-height: 1;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease;
+}
+.workspace-dialog-close:hover {
+  border-color: var(--purple);
+  color: var(--paper);
+  background: var(--purple);
+}
+.workspace-dialog-image {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+@media (orientation: landscape) {
+  .workspace-carousel.is-ready .workspace-viewport {
+    overflow: hidden;
+    padding-block: 16px var(--workspace-gap);
+  }
+  .workspace-carousel.is-ready .workspace-slide {
+    z-index: 1;
+    display: flex;
+    width: 74%;
+    max-width: calc(
+      max(
+          160px,
+          calc(var(--available-height) - 2 * var(--section-space) - 217px - var(--workspace-gap))
+        ) *
+        3120 / 1940
+    );
+    padding: 0;
+    background: var(--white);
+    box-shadow: 0 8px 20px rgb(33 29 36 / 10%);
+    transition:
+      transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 520ms ease,
+      box-shadow 520ms ease;
+  }
+  .workspace-carousel.is-ready .workspace-slide img {
+    width: 100%;
+    max-height: none;
+  }
+  .workspace-carousel.is-ready [data-position="left"] {
+    opacity: 0.65;
+    transform: translateX(-43%) scale(0.82);
+  }
+  .workspace-carousel.is-ready [data-position="right"] {
+    opacity: 0.65;
+    transform: translateX(43%) scale(0.82);
+  }
+  .workspace-carousel.is-ready [data-position="center"] {
+    z-index: 2;
+    opacity: 1;
+    transform: none;
+    box-shadow: 0 12px 24px rgb(33 29 36 / 16%);
+  }
+  .workspace-carousel.is-ready .workspace-slide:not([data-position="center"]) .workspace-expand {
+    visibility: hidden;
+  }
+  .workspace-carousel.is-ready .workspace-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(12px, 3vw, 40px);
+    padding-bottom: 0;
+  }
+  .workspace-choices {
+    display: flex;
+    gap: 4px;
+  }
+  .workspace-controls button {
+    min-width: 44px;
+    min-height: 44px;
+    border: 1px solid transparent;
+    background: transparent;
+    transition:
+      color 180ms ease,
+      background-color 180ms ease;
+  }
+  .workspace-choices button {
+    padding: 8px 16px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .workspace-choices button[aria-pressed="true"] {
+    color: var(--white);
+    background: var(--purple);
+  }
+  .workspace-controls button:hover {
+    border-color: var(--purple);
+    color: var(--purple);
+    background: var(--lilac);
+  }
 }
 .capability-rail {
   display: grid;
@@ -1073,9 +1205,6 @@ main > section {
     align-items: center;
     gap: 24px;
   }
-  .workspace-figure figcaption {
-    grid-template-columns: 1fr 1.5fr;
-  }
   .capability-rail > span {
     padding-inline: 16px;
     font-size: 14px;
@@ -1202,13 +1331,13 @@ main > section {
   .workspace-image img {
     width: auto;
     max-width: 100%;
-    max-height: max(160px, calc(var(--available-height) - 2 * var(--section-space) - 220px));
+    max-height: max(
+      160px,
+      calc(var(--available-height) - 2 * var(--section-space) - 157px - var(--workspace-gap))
+    );
   }
   .workspace-image {
     padding: 16px;
-  }
-  .product-stage {
-    gap: 8px;
   }
   .capability-rail {
     grid-template-columns: repeat(4, minmax(0, 1fr));

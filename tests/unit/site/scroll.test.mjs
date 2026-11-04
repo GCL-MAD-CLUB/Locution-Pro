@@ -1,30 +1,85 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findActiveSection, findSnapTarget } from "../../../site/src/scroll.js";
+import {
+  findActiveSection,
+  findScrollTarget,
+  sectionSnapPoints,
+} from "../../../site/src/scroll.js";
 
 const layout = { viewportHeight: 900, headerHeight: 73 };
+const screens = [
+  { id: "intro", top: 73, height: 827 },
+  { id: "workspace", top: 900, height: 827 },
+  { id: "features", top: 1727, height: 827 },
+];
+const tallScreens = [
+  screens[0],
+  { id: "long", top: 900, height: 2000 },
+  { id: "search", top: 2900, height: 827 },
+];
 
-test("settling only corrects a small remaining distance in the reading direction", () => {
-  assert.equal(findSnapTarget([73, 900, 1727], { ...layout, position: 800, direction: 1 }), 827);
-  assert.equal(findSnapTarget([73, 900, 1727], { ...layout, position: 850, direction: -1 }), 827);
+test("wheel input immediately targets the adjacent screen in either direction", () => {
+  assert.equal(findScrollTarget(screens, { ...layout, position: 0, delta: 90 }), 827);
+  assert.equal(findScrollTarget(screens, { ...layout, position: 827, delta: 1 }), 1654);
+  assert.equal(findScrollTarget(screens, { ...layout, position: 827, delta: -1 }), 0);
+  assert.equal(findScrollTarget(screens, { ...layout, position: 1654, delta: -90 }), 827);
 });
 
-test("scrolling past a boundary never pulls the reader backward", () => {
-  assert.equal(findSnapTarget([73, 900], { ...layout, position: 850, direction: 1 }), null);
-  assert.equal(findSnapTarget([73, 900], { ...layout, position: 800, direction: -1 }), null);
+test("unaligned and reversed gestures choose the next boundary in their direction", () => {
+  assert.equal(findScrollTarget(screens, { ...layout, position: 600, delta: 90 }), 827);
+  assert.equal(findScrollTarget(screens, { ...layout, position: 950, delta: -90 }), 827);
+  assert.equal(findScrollTarget(screens, { ...layout, position: 400, delta: -90 }), 0);
 });
 
-test("settling never skips intervening content or moves without a direction", () => {
-  assert.equal(findSnapTarget([73, 900, 2900], { ...layout, position: 1600, direction: 1 }), null);
-  assert.equal(findSnapTarget([73, 900], { ...layout, position: 800, direction: 0 }), null);
-  assert.equal(findSnapTarget([73, 900], { ...layout, position: 827, direction: 1 }), null);
+test("long content scrolls natively and crossing its edges stops precisely at the boundary", () => {
+  assert.equal(findScrollTarget(tallScreens, { ...layout, position: 827, delta: 90 }), null);
+  assert.equal(findScrollTarget(tallScreens, { ...layout, position: 1600, delta: 90 }), null);
+  assert.equal(findScrollTarget(tallScreens, { ...layout, position: 1950, delta: 90 }), 2000);
+  assert.equal(findScrollTarget(tallScreens, { ...layout, position: 2000, delta: -90 }), null);
+  assert.equal(findScrollTarget(tallScreens, { ...layout, position: 850, delta: -90 }), 827);
+  assert.equal(findScrollTarget(tallScreens, { ...layout, position: 2000, delta: 90 }), 2827);
+  assert.equal(findScrollTarget(tallScreens, { ...layout, position: 2827, delta: -90 }), 2000);
 });
 
-test("the correction range shrinks with a short viewport and respects the header", () => {
-  const short = { viewportHeight: 400, headerHeight: 100, direction: 1 };
-  assert.equal(findSnapTarget([500], { ...short, position: 385 }), 400);
-  assert.equal(findSnapTarget([500], { ...short, position: 370 }), null);
-  assert.equal(findSnapTarget([500], { ...short, position: 385, viewportHeight: 100 }), null);
+test("the footer scrolls freely and upward gestures only align when crossing into the last screen", () => {
+  for (const position of [1654, 1754, 2400, 2500])
+    assert.equal(findScrollTarget(screens, { ...layout, position, delta: 90 }), null);
+  assert.equal(findScrollTarget(screens, { ...layout, position: 2400, delta: -90 }), null);
+  assert.equal(findScrollTarget(screens, { ...layout, position: 1754, delta: -90 }), null);
+  assert.equal(findScrollTarget(screens, { ...layout, position: 1704, delta: -90 }), 1654);
+});
+
+test("targets use measured fractional sizes and clamp to the document scroll range", () => {
+  const sections = [
+    { id: "first", top: 72.625, height: 827.375 },
+    { id: "last", top: 900, height: 827.375 },
+  ];
+  const points = sectionSnapPoints(sections, 900, 72.625, 810);
+  assert.deepEqual(
+    points.map((point) => point.top),
+    [0, 810],
+  );
+  assert.equal(
+    findScrollTarget(sections, {
+      ...layout,
+      headerHeight: 72.625,
+      position: 500,
+      maxScroll: 810,
+      delta: 90,
+    }),
+    810,
+  );
+  assert.equal(sectionSnapPoints(sections, 72, 73).length, 0);
+});
+
+test("empty input, page limits and unusable viewports do not create targets", () => {
+  assert.equal(findScrollTarget(screens, { ...layout, position: 0, delta: -90 }), null);
+  assert.equal(findScrollTarget(screens, { ...layout, position: 800, delta: 0 }), null);
+  assert.equal(
+    findScrollTarget(screens, { ...layout, position: 800, delta: 90, viewportHeight: 73 }),
+    null,
+  );
+  assert.equal(findScrollTarget([], { ...layout, position: 800, delta: 90 }), null);
 });
 
 test("the active chapter follows the reading line, including inside long sections", () => {

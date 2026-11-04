@@ -335,10 +335,13 @@ test("footer scrolling stays at the user's position instead of returning to the 
       ),
     );
   await page.evaluate((top) => scrollTo({ top, behavior: "instant" }), start);
+  const footerPosition = await page.evaluate(
+    (top) => Math.min(top + 200, document.documentElement.scrollHeight - innerHeight),
+    start,
+  );
   await page.mouse.move(800, 450);
   await page.mouse.wheel(0, 200);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(start + 100);
-  const footerPosition = await page.evaluate(() => scrollY);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(footerPosition);
   await page.waitForTimeout(800);
   expect(await page.evaluate(() => scrollY)).toBe(footerPosition);
   await page.mouse.wheel(0, -30);

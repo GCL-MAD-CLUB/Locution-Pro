@@ -15,6 +15,7 @@ async function fixture(t, resources) {
     await rm(root, { recursive: true, force: true });
   });
   const sources = {
+    "src-tauri/target/release/locution-pro.exe": "MZ application",
     "src-tauri/resources/model/nested/模型.onnx": "model",
     "src-tauri/resources/model/onnxruntime.dll": "runtime",
     "src-tauri/bin/ffmpeg-x86_64-pc-windows-msvc.exe": "ffmpeg",
@@ -41,7 +42,7 @@ test("installer manifest hashes actual payload bytes and nested Windows destinat
   const first = await readFile(output, "utf8");
   const manifest = JSON.parse(first);
   assert.equal(manifest.version, 1);
-  assert.equal(manifest.files.length, 5);
+  assert.equal(manifest.files.length, 6);
   const model = manifest.files.find((file) => file.path.endsWith("模型.onnx"));
   assert.deepEqual(model, {
     path: "semantic-search\\nested\\模型.onnx",

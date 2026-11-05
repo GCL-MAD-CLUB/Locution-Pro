@@ -61,6 +61,9 @@ export async function prepareInstallerManifest(
     }
     await add(resolve(tauri, `${binary}-${target}.exe`), `${name}.exe`, "ffmpeg");
   }
+  // beforeBundleCommand runs after compiling the final executable.
+  const mainBinary = config.mainBinaryName ?? "locution-pro";
+  await add(resolve(tauri, `target/release/${mainBinary}.exe`), `${mainBinary}.exe`, "core");
   files.sort((left, right) => left.path.localeCompare(right.path, "en"));
   const output = join(tauri, "target", "installer", "payload-manifest.json");
   await mkdir(dirname(output), { recursive: true });

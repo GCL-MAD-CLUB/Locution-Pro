@@ -2226,6 +2226,7 @@ dependencies = [
  "quick-xml 0.42.0",
  "regex",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "sha2",

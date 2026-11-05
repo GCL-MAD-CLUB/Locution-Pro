@@ -21,6 +21,12 @@ Var LocutionProTransactionActive
   !define LOCUTION_PAYLOAD_MANIFEST "${LOCUTION_INSTALLER_SOURCE_DIR}\..\target\installer\payload-manifest.json"
 !endif
 
+!ifdef LOCUTION_UPDATE_ONLY
+  !define LOCUTION_UPDATE_ONLY_VALUE 1
+!else
+  !define LOCUTION_UPDATE_ONLY_VALUE 0
+!endif
+
 ; All hash decisions come from this installer's embedded manifest, never from
 ; metadata left by a previous installation. Scan is read-only; Prepare rehashes.
 Function LocutionProExtractUpgradeTools
@@ -34,7 +40,7 @@ Function LocutionProExtractUpgradeTools
 FunctionEnd
 
 !macro LOCUTION_UPGRADE_COMMAND OUTPUT
-  StrCpy ${OUTPUT} '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\upgrade-files.ps1" -Mode "$LocutionProUpgradeMode" -Root "$LocutionProWorkerRoot" -PreviousRoot "$LocutionProWorkerPreviousRoot" -Manifest "$PLUGINSDIR\payload-manifest.json" -Result "$LocutionProReusePlan" -MainBinary "${MAINBINARYNAME}.exe" -Ffmpeg $LocutionProBundleFfmpeg -Semantic $LocutionProBundleSemantic -Transactional 1'
+  StrCpy ${OUTPUT} '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\upgrade-files.ps1" -Mode "$LocutionProUpgradeMode" -Root "$LocutionProWorkerRoot" -PreviousRoot "$LocutionProWorkerPreviousRoot" -Manifest "$PLUGINSDIR\payload-manifest.json" -Result "$LocutionProReusePlan" -MainBinary "${MAINBINARYNAME}.exe" -Ffmpeg $LocutionProBundleFfmpeg -Semantic $LocutionProBundleSemantic -Transactional 1 -UpdateOnly ${LOCUTION_UPDATE_ONLY_VALUE}'
 !macroend
 
 Function LocutionProReadUpgradePlan
@@ -89,6 +95,18 @@ Function LocutionProCommitInstall
     Return
   ${EndIf}
   Push $LocutionProUpgradeMode
+  ; Verify the final bytes before crossing the durable commit boundary. Keep
+  ; the existing plan/transaction files intact so any failure can roll back.
+  StrCpy $LocutionProUpgradeMode "Verify"
+  !insertmacro LOCUTION_UPGRADE_COMMAND $0
+  nsExec::ExecToStack $0
+  Pop $0
+  Pop $1
+  ${If} $0 != 0
+    Pop $LocutionProUpgradeMode
+    SetErrorLevel 2
+    Abort "安装后的文件校验失败，正在恢复旧版本：$1"
+  ${EndIf}
   StrCpy $LocutionProUpgradeMode "Commit"
   !insertmacro LOCUTION_UPGRADE_COMMAND $0
   nsExec::ExecToStack $0
@@ -260,6 +278,8 @@ Function LocutionProPollUpgradeScan
 FunctionEnd
 
 !macro LOCUTION_INSTALL_FILE SOURCE DESTINATION
+  ; Update-only installers never embed dependencies. Every selected resource
+  ; must already match the new release's complete manifest before Prepare.
   ReadINIStr $0 "$LocutionProReusePlan" "Payload" "${DESTINATION}"
   ${If} $0 == ""
     SetErrorLevel 2
@@ -268,7 +288,12 @@ FunctionEnd
   ReadINIStr $0 "$LocutionProReusePlan" "Reuse" "${DESTINATION}"
   ${If} $0 != 1
     ClearErrors
-    File /a "/oname=${DESTINATION}" "${SOURCE}"
+    !ifdef LOCUTION_UPDATE_ONLY
+      SetErrorLevel 2
+      Abort "更新包无法修复依赖：${DESTINATION}。请使用完整安装包。"
+    !else
+      File /a "/oname=${DESTINATION}" "${SOURCE}"
+    !endif
     ${If} ${Errors}
       SetErrorLevel 2
       Abort "无法安装组件：${DESTINATION}"

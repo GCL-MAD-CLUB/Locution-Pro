@@ -1,4 +1,4 @@
-import { ArrowUpRight, CircleAlert, Loader2, RefreshCw } from "lucide-react";
+import { CircleAlert, Loader2, RefreshCw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { MouseEvent } from "react";
@@ -11,8 +11,7 @@ import "./UpdateDialog.css";
 const appIconUrl = new URL("../../../../src-tauri/icons/icon.ico", import.meta.url).href;
 
 export type UpdateDialogState =
-  | { status: "checking" }
-  | { status: "available"; release: ReleaseInfo }
+  | { status: "available"; release: ReleaseInfo; error?: string }
   | { status: "latest" }
   | { status: "failed" };
 
@@ -20,6 +19,10 @@ interface UpdateDialogProps {
   state: UpdateDialogState;
   onClose: () => void;
   onRetry: () => void;
+  onInstall: () => void;
+  needsSave: boolean;
+  installing: boolean;
+  blocked: boolean;
 }
 
 async function openReleaseUrl(url: string) {
@@ -30,7 +33,15 @@ async function openReleaseUrl(url: string) {
   }
 }
 
-export function UpdateDialog({ state, onClose, onRetry }: UpdateDialogProps) {
+export function UpdateDialog({
+  state,
+  onClose,
+  onRetry,
+  onInstall,
+  needsSave,
+  installing,
+  blocked,
+}: UpdateDialogProps) {
   const title = state.status === "failed" ? "检查更新失败" : "检查更新";
   const actions =
     state.status === "available" ? (
@@ -38,12 +49,18 @@ export function UpdateDialog({ state, onClose, onRetry }: UpdateDialogProps) {
         <button
           type="button"
           className="modal-dialog-confirm"
-          onClick={() => void openReleaseUrl(state.release.url)}
+          onClick={onInstall}
+          disabled={installing || blocked}
         >
-          前往发布页
-          <ArrowUpRight size={14} />
+          {installing ? "正在准备更新…" : needsSave ? "保存后更新" : "立即更新"}
+          {installing && <Loader2 className="spin" size={14} />}
         </button>
-        <button type="button" className="modal-dialog-cancel" onClick={onClose}>
+        <button
+          type="button"
+          className="modal-dialog-cancel"
+          onClick={onClose}
+          disabled={installing}
+        >
           稍后
         </button>
       </>
@@ -57,13 +74,9 @@ export function UpdateDialog({ state, onClose, onRetry }: UpdateDialogProps) {
           关闭
         </button>
       </>
-    ) : state.status === "latest" ? (
+    ) : (
       <button type="button" className="modal-dialog-confirm" onClick={onClose}>
         完成
-      </button>
-    ) : (
-      <button type="button" className="modal-dialog-cancel" onClick={onClose}>
-        取消
       </button>
     );
 
@@ -76,20 +89,10 @@ export function UpdateDialog({ state, onClose, onRetry }: UpdateDialogProps) {
       title={title}
       actions={actions}
       onCancel={onClose}
-      onConfirm={onClose}
+      cancelDisabled={installing}
+      confirmDisabled={installing || blocked}
+      onConfirm={state.status === "available" ? onInstall : onClose}
     >
-      {state.status === "checking" && (
-        <div className="update-dialog-status" role="status">
-          <div className="update-dialog-visual">
-            <Loader2 className="spin" size={28} />
-          </div>
-          <div>
-            <h3>正在检查新版本</h3>
-            <p>正在连接发布服务，请稍候…</p>
-          </div>
-        </div>
-      )}
-
       {state.status === "latest" && (
         <div className="update-dialog-status" role="status">
           <div className="update-dialog-visual">
@@ -128,6 +131,14 @@ export function UpdateDialog({ state, onClose, onRetry }: UpdateDialogProps) {
               </p>
             </div>
           </div>
+          <p role={state.error ? "alert" : "status"}>
+            {state.error ??
+              (installing
+                ? "正在校验已有安装，完成后将退出当前软件并更新。"
+                : blocked
+                  ? "更新包已下载，请等待当前任务结束后更新。"
+                  : "更新包已下载并校验，更新完成后将重新打开软件。")}
+          </p>
           <section className="update-dialog-notes" aria-label="版本更新说明">
             {state.release.body.trim() ? (
               <ReactMarkdown

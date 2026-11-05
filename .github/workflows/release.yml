@@ -155,6 +155,8 @@ jobs:
             src-tauri/resources/semantic-search
             src-tauri/resources/storyboard-semantic
           key: ${{ steps.model-cache.outputs.cache-primary-key }}
+      - name: Bundle update-only installer without recompiling
+        run: npm run build:update-installer
       - name: Generate release manifest and checksums
         run: npm run prepare:release
       - name: Verify complete release artifacts

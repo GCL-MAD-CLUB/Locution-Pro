@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { prepareReleaseManifest } from "./prepare-release-manifest.mjs";
+import { buildUpdateInstaller } from "./build-update-installer.mjs";
 import { isReleaseVersion } from "../site/src/release-contract.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -91,6 +92,7 @@ if (!existsSync(bundledInstaller)) {
 await prepareReleaseManifest({
   version,
   installer: bundledInstaller,
+  updater: await buildUpdateInstaller(root),
   outputDirectory: join(root, "dist", "release"),
 });
 console.log(`Release installer, latest.json and SHA256SUMS.txt created in dist/release`);

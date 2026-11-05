@@ -7,6 +7,7 @@ import {
   RELEASE_PLATFORM,
   RELEASE_REPOSITORY,
   installerName,
+  updaterName,
   validateRelease,
 } from "../site/src/release-contract.js";
 
@@ -14,11 +15,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export async function checkReleaseAssets({ directory, version, repository }) {
   const name = installerName(version);
-  const names = [name, "latest.json", "SHA256SUMS.txt"];
+  const updateName = updaterName(version);
+  const names = [name, updateName, "latest.json", "SHA256SUMS.txt"];
   const entries = await readdir(directory);
   if (entries.length !== names.length || names.some((entry) => !entries.includes(entry))) {
     throw new Error(
-      "Release artifacts must contain exactly the installer, latest.json and SHA256SUMS.txt",
+      "Release artifacts must contain exactly the full installer, update installer, latest.json and SHA256SUMS.txt",
     );
   }
   const sizes = new Map();
@@ -38,7 +40,9 @@ export async function checkReleaseAssets({ directory, version, repository }) {
   if (
     manifest.version !== version ||
     manifest.platforms[RELEASE_PLATFORM].url !==
-      `https://github.com/${repository}/releases/download/v${version}/${name}`
+      `https://github.com/${repository}/releases/download/v${version}/${name}` ||
+    manifest.platforms[RELEASE_PLATFORM].updater?.url !==
+      `https://github.com/${repository}/releases/download/v${version}/${updateName}`
   ) {
     throw new Error("Release manifest does not match the expected version and repository");
   }
@@ -48,18 +52,22 @@ export async function checkReleaseAssets({ directory, version, repository }) {
   const checksums = new Map();
   for (const line of lines) {
     const match = /^([a-f0-9]{64})  (.+)$/u.exec(line);
-    if (!match || checksums.has(match[2]) || ![name, "latest.json"].includes(match[2])) {
+    if (
+      !match ||
+      checksums.has(match[2]) ||
+      ![name, updateName, "latest.json"].includes(match[2])
+    ) {
       throw new Error("Invalid release checksum manifest");
     }
     checksums.set(match[2], match[1]);
   }
-  if (checksums.size !== 2) throw new Error("Missing release checksums");
+  if (checksums.size !== 3) throw new Error("Missing release checksums");
   const files = [];
   for (const entry of names) {
     const hash = createHash("sha256");
     let first = true;
     for await (const chunk of createReadStream(path.join(directory, entry))) {
-      if (entry === name && first && (chunk[0] !== 0x4d || chunk[1] !== 0x5a)) {
+      if ([name, updateName].includes(entry) && first && (chunk[0] !== 0x4d || chunk[1] !== 0x5a)) {
         throw new Error("Expected a Windows executable");
       }
       first = false;
@@ -71,6 +79,9 @@ export async function checkReleaseAssets({ directory, version, repository }) {
     }
     if (entry === name && sha256 !== manifest.platforms[RELEASE_PLATFORM].signature) {
       throw new Error("Installer checksum does not match latest.json");
+    }
+    if (entry === updateName && sha256 !== manifest.platforms[RELEASE_PLATFORM].updater.signature) {
+      throw new Error("Update installer checksum does not match latest.json");
     }
     files.push({ name: entry, size: sizes.get(entry), sha256, path: path.join(directory, entry) });
   }

@@ -12,6 +12,7 @@ function loadUpdate(release) {
     "../errors": {
       invokeCommand: (command) => {
         invocations.push(command);
+        if (command === "download_update") return Promise.resolve();
         return release === undefined ? pending.promise : Promise.resolve(release);
       },
       clientError: (code, detail) => Object.assign(new Error(detail), { code }),
@@ -57,22 +58,137 @@ test("update checks expose only newer releases and share an active request", asy
   assert.deepEqual(invocations, ["fetch_latest_release"]);
   pending.resolve(release);
   assert.equal(JSON.stringify(await first), JSON.stringify({ status: "available", release }));
+  assert.deepEqual(invocations, ["fetch_latest_release", "download_update"]);
 
   const next = update.checkForUpdate();
   assert.notEqual(next, first);
   assert.equal(JSON.stringify(await next), JSON.stringify({ status: "available", release }));
 });
 
+test("update availability waits for the download and propagates its failure", async () => {
+  const download = deferred();
+  const update = loadModule("../../../src/application/update.ts", {
+    "../../package.json": { version: "0.4.0" },
+    "../errors": {
+      invokeCommand: (command) =>
+        command === "fetch_latest_release"
+          ? Promise.resolve({ version: "0.5.0" })
+          : download.promise,
+    },
+  });
+  let available = false;
+  const request = update.checkForUpdate().then(() => {
+    available = true;
+  });
+  await flush();
+  assert.equal(available, false);
+  download.reject(new Error("Both download sources failed"));
+  await assert.rejects(request, /Both download sources failed/);
+  assert.equal(available, false);
+});
+
+test("update never launches after a cancelled save or a changed workspace", async () => {
+  const { update } = loadUpdate();
+  let workspace = "original";
+  let installations = 0;
+  const options = {
+    needsSave: true,
+    snapshot: () => workspace,
+    install: async () => {
+      installations++;
+    },
+  };
+  assert.equal(await update.saveBeforeUpdate({ ...options, save: async () => false }), "cancelled");
+  assert.equal(
+    await update.saveBeforeUpdate({
+      ...options,
+      save: async () => {
+        workspace = "changed";
+        return true;
+      },
+    }),
+    "changed",
+  );
+  assert.equal(installations, 0);
+  const order = [];
+  assert.equal(
+    await update.saveBeforeUpdate({
+      ...options,
+      save: async () => {
+        order.push("save");
+        return true;
+      },
+      install: async () => {
+        order.push("install");
+      },
+    }),
+    "started",
+  );
+  assert.deepEqual(order, ["save", "install"]);
+});
+
 test("update checks treat current and older releases as up to date", async () => {
   for (const version of ["v0.4.0", "0.3.9"]) {
-    const { update } = loadUpdate({
+    const { update, invocations } = loadUpdate({
       version,
       title: "",
       body: "",
       url: "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases",
     });
     assert.equal(JSON.stringify(await update.checkForUpdate()), '{"status":"latest"}');
+    assert.deepEqual(invocations, ["fetch_latest_release"]);
   }
+});
+
+test("clean workspaces update immediately and failed saves never install", async () => {
+  const { update } = loadUpdate();
+  let saves = 0;
+  let installs = 0;
+  const options = {
+    snapshot: () => "workspace",
+    install: async () => {
+      installs++;
+    },
+    save: async () => {
+      saves++;
+      throw new Error("Save failed");
+    },
+  };
+  assert.equal(await update.saveBeforeUpdate({ ...options, needsSave: false }), "started");
+  assert.equal(saves, 0);
+  assert.equal(installs, 1);
+  await assert.rejects(update.saveBeforeUpdate({ ...options, needsSave: true }), /Save failed/u);
+  assert.equal(installs, 1);
+});
+
+test("update waits for in-flight auto-save and writes the current snapshot last", async () => {
+  const { update } = loadUpdate();
+  const barrier = update.createUpdateWriteBarrier();
+  const write = deferred();
+  const order = [];
+  const pending = barrier.track(
+    write.promise.then(() => {
+      order.push("old auto-save");
+    }),
+  );
+  const apply = update.saveBeforeUpdate({
+    needsSave: false,
+    settle: barrier.settle,
+    snapshot: () => "current workspace",
+    save: async () => {
+      order.push("current save");
+      return true;
+    },
+    install: async () => {
+      order.push("install");
+    },
+  });
+  await flush();
+  assert.deepEqual(order, []);
+  write.resolve();
+  await pending;
+  assert.equal(await apply, "started");
+  assert.deepEqual(order, ["old auto-save", "current save", "install"]);
 });
 
 test("update checks reject invalid native version metadata", async () => {

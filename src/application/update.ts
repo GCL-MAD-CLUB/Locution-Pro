@@ -64,7 +64,7 @@ let activeCheck: Promise<UpdateCheckResult> | null = null;
 export function checkForUpdate(): Promise<UpdateCheckResult> {
   if (activeCheck) return activeCheck;
   const request = invokeCommand<ReleaseInfo>("fetch_latest_release")
-    .then((release): UpdateCheckResult => {
+    .then(async (release): Promise<UpdateCheckResult> => {
       const comparison = compareVersions(release.version, currentVersion);
       if (comparison === null) {
         throw clientError(
@@ -72,7 +72,9 @@ export function checkForUpdate(): Promise<UpdateCheckResult> {
           `Cannot compare release version ${JSON.stringify(release.version)} with ${currentVersion}`,
         );
       }
-      return comparison > 0 ? { status: "available", release } : { status: "latest" };
+      if (comparison <= 0) return { status: "latest" };
+      await invokeCommand("download_update", { version: release.version });
+      return { status: "available", release };
     })
     .finally(() => {
       if (activeCheck === request) activeCheck = null;
@@ -82,3 +84,43 @@ export function checkForUpdate(): Promise<UpdateCheckResult> {
 }
 
 export { currentVersion };
+
+export function installPreparedUpdate(version: string, projectPath: string | null) {
+  return invokeCommand<number | null>("install_update", { version, projectPath });
+}
+
+export function createUpdateWriteBarrier() {
+  const pending = new Set<Promise<unknown>>();
+  return {
+    track<T>(request: Promise<T>): Promise<T> {
+      pending.add(request);
+      return request.finally(() => pending.delete(request));
+    },
+    async settle(): Promise<boolean> {
+      const hadWrites = pending.size > 0;
+      while (pending.size > 0) await Promise.allSettled([...pending]);
+      return hadWrites;
+    },
+  };
+}
+
+export async function saveBeforeUpdate({
+  needsSave,
+  save,
+  snapshot,
+  install,
+  settle,
+}: {
+  needsSave: boolean;
+  save: () => Promise<boolean>;
+  snapshot: () => string;
+  install: () => Promise<void>;
+  settle?: () => Promise<boolean>;
+}): Promise<"cancelled" | "changed" | "started"> {
+  const before = snapshot();
+  const hadWrites = await settle?.();
+  if ((needsSave || hadWrites) && !(await save())) return "cancelled";
+  if (snapshot() !== before) return "changed";
+  await install();
+  return "started";
+}

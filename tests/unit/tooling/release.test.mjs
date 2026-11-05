@@ -23,7 +23,15 @@ async function fixture(t) {
   const installer = path.join(directory, "Locution Pro_2.1.1_x64-setup.exe");
   const bytes = Buffer.from("MZ test installer bytes");
   await writeFile(installer, bytes);
-  return { version: "2.1.1", installer, outputDirectory: path.join(directory, "release"), bytes };
+  const updater = path.join(directory, "update.exe");
+  await writeFile(updater, Buffer.from("MZ update-only fixture"));
+  return {
+    version: "2.1.1",
+    installer,
+    updater,
+    outputDirectory: path.join(directory, "release"),
+    bytes,
+  };
 }
 
 test("release artifacts contain the actual installer SHA-256 and immutable download URLs", async (t) => {
@@ -56,7 +64,14 @@ test("release artifacts contain the actual installer SHA-256 and immutable downl
       hash,
     );
   }
-  assert.equal(sums.length, 2);
+  assert.equal(sums.length, 3);
+  assert.match(platform.updater.url, /Locution\.Pro_2\.1\.1_x64-update\.exe$/u);
+  assert.equal(
+    platform.updater.signature,
+    createHash("sha256")
+      .update(await readFile(options.updater))
+      .digest("hex"),
+  );
 });
 
 test("release generation rejects missing, empty and non-executable installers", async (t) => {
@@ -69,6 +84,30 @@ test("release generation rejects missing, empty and non-executable installers", 
     await writeFile(options.installer, bytes);
     await assert.rejects(prepareReleaseManifest(options), /empty installer|Windows executable/u);
   }
+});
+
+test("update metadata cannot redirect automatic updates to the full installer", async (t) => {
+  const options = await fixture(t);
+  const manifest = await prepareReleaseManifest(options);
+  manifest.platforms[RELEASE_PLATFORM].updater.url = manifest.platforms[RELEASE_PLATFORM].url;
+  assert.throws(() => validateRelease(manifest), /update-only installer/u);
+});
+
+test("publisher refuses an update installer changed after manifest generation", async (t) => {
+  const options = await fixture(t);
+  await prepareReleaseManifest(options);
+  await writeFile(
+    path.join(options.outputDirectory, "Locution.Pro_2.1.1_x64-update.exe"),
+    "MZ corrupted update",
+  );
+  await assert.rejects(
+    checkReleaseAssets({
+      directory: options.outputDirectory,
+      version: options.version,
+      repository: "GCL-MAD-CLUB/Locution-Pro",
+    }),
+    /checksum mismatch/u,
+  );
 });
 
 test("release generation supports prerelease artifacts without accepting invalid semver or paths", async (t) => {
@@ -223,7 +262,7 @@ test("publisher creates a draft with explicit channel flags and uploads latest.j
     assert(creation.includes("--draft"));
     assert(creation.includes("--latest=false"));
     assert(creation.includes(`--prerelease=${version.includes("-")}`));
-    assert.equal(uploads.length, 3);
+    assert.equal(uploads.length, 4);
     assert.equal(path.basename(uploads.at(-1)[3]), "latest.json");
   }
 });
@@ -241,7 +280,7 @@ test("publication retries only the failed file and reuses matching server digest
   options.sleep = async (ms) => waits.push(ms);
   await prepareReleaseDraft(options);
   assert.deepEqual(waits, [5000]);
-  assert.equal(state.commands.filter((args) => args[3].endsWith(".exe")).length, 1);
+  assert.equal(state.commands.filter((args) => args[3].endsWith(".exe")).length, 2);
   assert.equal(attempts, 2);
   state.commands.length = 0;
   await prepareReleaseDraft(options);

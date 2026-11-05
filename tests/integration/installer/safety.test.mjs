@@ -60,21 +60,25 @@ test(
       manifest,
       JSON.stringify({
         version: 1,
-        files: ["LICENSE", "ffmpeg.exe", "ffprobe.exe", "semantic-search/model.onnx"].map(
-          (path) => ({
-            path: path.replaceAll("/", "\\"),
-            size: 7,
-            sha256: createHash("sha256").update("payload").digest("hex"),
-            group: path.startsWith("ff")
-              ? "ffmpeg"
-              : path.includes("/")
-                ? "semantic-search"
-                : "core",
-          }),
-        ),
+        files: [
+          "LICENSE",
+          "ffmpeg.exe",
+          "ffprobe.exe",
+          "transnetv2/model.onnx",
+          "semantic-search/model.onnx",
+        ].map((path) => ({
+          path: path.replaceAll("/", "\\"),
+          size: 7,
+          sha256: createHash("sha256").update("payload").digest("hex"),
+          group: path.startsWith("ff")
+            ? "ffmpeg"
+            : path.includes("/")
+              ? path.split("/")[0]
+              : "core",
+        })),
       }),
     );
-    const worker = (mode, install, result, extra = [], expected = 0) =>
+    const worker = (mode, install, result, extra = [], expected = 0, manifestPath = manifest) =>
       run(
         powershell,
         [
@@ -90,7 +94,7 @@ test(
           "-Root",
           install,
           "-Manifest",
-          manifest,
+          manifestPath,
           "-Result",
           result,
           "-MainBinary",
@@ -134,6 +138,62 @@ test(
         await exited;
       }
     };
+
+    await t.test(
+      "update-only validation rejects fresh, corrupt and missing dependencies without mutations",
+      () => {
+        const install = join(temporary, "update-only");
+        const result = join(temporary, "update-only.ini");
+        mkdirSync(install);
+        const extra = ["-PreviousRoot", install, "-UpdateOnly", "1", "-Transactional", "1"];
+        const updateManifest = join(temporary, "update-manifest.json");
+        const payloadManifest = JSON.parse(readFileSync(manifest, "utf8"));
+        payloadManifest.files.push({
+          path: "locution-pro.exe",
+          size: 7,
+          sha256: createHash("sha256").update("payload").digest("hex"),
+          group: "core",
+        });
+        writeFileSync(updateManifest, JSON.stringify(payloadManifest));
+        const updateWorker = (mode, extras = extra, expected = 0) =>
+          worker(mode, install, result, extras, expected, updateManifest);
+        updateWorker("Prepare", extra, 2);
+        assert.deepEqual(readdirSync(install), []);
+        writeFileSync(join(install, "locution-pro.exe"), "old executable");
+        writeFileSync(join(install, "uninstall.exe"), "old uninstaller");
+        const entries = JSON.parse(readFileSync(manifest, "utf8")).files;
+        for (const entry of entries) {
+          const path = join(install, entry.path);
+          mkdirSync(dirname(path), { recursive: true });
+          writeFileSync(path, "payload");
+        }
+        const mandatory = join(install, "transnetv2/model.onnx");
+        writeFileSync(mandatory, "damaged");
+        updateWorker("Prepare", extra, 2);
+        assert.equal(readFileSync(join(install, "locution-pro.exe"), "utf8"), "old executable");
+        assert(!existsSync(`${result}.transaction`));
+        writeFileSync(mandatory, "payload");
+        rmSync(join(install, "LICENSE"));
+        updateWorker("Prepare", extra, 2);
+        assert(!existsSync(`${result}.transaction`));
+        writeFileSync(join(install, "LICENSE"), "payload");
+        rmSync(join(install, "semantic-search/model.onnx"));
+        updateWorker("Scan", extra, 2);
+        updateWorker("Scan", [...extra, "-Semantic", "0"]);
+        rmSync(join(install, "ffmpeg.exe"));
+        updateWorker("Scan", [...extra, "-Semantic", "0"], 2);
+        updateWorker("Scan", [...extra, "-Semantic", "0", "-Ffmpeg", "0"]);
+        updateWorker("Prepare", [...extra, "-Semantic", "0", "-Ffmpeg", "0"]);
+        assert(!existsSync(join(install, "locution-pro.exe")));
+        writeFileSync(join(install, "locution-pro.exe"), "payload");
+        updateWorker("Verify", [...extra, "-Semantic", "0", "-Ffmpeg", "0"]);
+        writeFileSync(mandatory, "changed after prepare");
+        updateWorker("Verify", [...extra, "-Semantic", "0", "-Ffmpeg", "0"], 2);
+        writeFileSync(mandatory, "payload");
+        worker("Rollback", install, result);
+        assert.equal(readFileSync(join(install, "locution-pro.exe"), "utf8"), "old executable");
+      },
+    );
 
     await t.test(
       "locked committed backups warn without blocking later updates or uninstall",
@@ -295,7 +355,7 @@ test(
       );
     });
 
-    await t.test("all install scopes and dependency packaging branches compile", () => {
+    await t.test("all install scopes and dependency packaging branches compile", async () => {
       const compiler =
         process.env.NSIS_MAKENSIS ?? join(process.env.LOCALAPPDATA, "tauri/NSIS/makensis.exe");
       const support = ["debug", "release"]
@@ -358,8 +418,8 @@ test(
         const loops = {
           languages: ["SimpChinese"],
           language_files: [nsis(join(support, "SimpChinese.nsh"))],
-          resources: ["LICENSE"],
-          resources_dirs: [],
+          resources: ["LICENSE", "transnetv2\\model.onnx", "semantic-search\\model.onnx"],
+          resources_dirs: ["transnetv2", "semantic-search"],
           resources_ancestors: [],
           binaries: ["ffmpeg.exe", "ffprobe.exe"],
           deep_link_protocols: ["locutionpro"],
@@ -384,6 +444,11 @@ test(
         const file = join(temporary, `${scope}.nsi`);
         writeFileSync(file, `!define LOCUTION_PAYLOAD_MANIFEST "${nsis(manifest)}"\n${script}`);
         run(compiler, ["/V2", "/INPUTCHARSET", "UTF8", file]);
+        writeFileSync(
+          file,
+          `!define LOCUTION_UPDATE_ONLY\n!define LOCUTION_PAYLOAD_MANIFEST "${nsis(manifest)}"\n${script}`,
+        );
+        run(compiler, ["/V2", "/INPUTCHARSET", "UTF8", file]);
         if (scope === "currentUser") {
           // Execute the complete production template using only mock payloads,
           // isolated registry keys, private data roots and suppressed shortcuts.
@@ -403,6 +468,10 @@ test(
               ),
           );
           let isolated = script
+            .replace(
+              /ReadRegStr \$4 (?:HKLM|HKCU) "[^"]+" "pv"/gu,
+              `ReadRegStr $4 HKCU "${registry}\\WebView" "pv"`,
+            )
             .replace(/!define UNINSTKEY "[^"\n]+"/u, `!define UNINSTKEY "${registry}\\Uninstall"`)
             .replace(
               /!define MANUPRODUCTKEY "[^"\n]+"/u,
@@ -462,7 +531,21 @@ test(
               `${checkpoint(`before ${operation}`)}${operation}\n${checkpoint(`after ${operation}`)}`,
             );
           isolated = isolated.replace(/OutFile "[^"\n]+"/u, `OutFile "${nsis(executable)}"`);
-          const build = (manifestPath, failRegistration = false) => {
+          const build = (manifestPath, failRegistration = false, updateOnly = false) => {
+            // Compile the update flavor with nonexistent dependency sources. A
+            // retained File instruction would fail compilation immediately.
+            const source = updateOnly
+              ? isolated
+                  .replace(
+                    /(!insertmacro LOCUTION_INSTALL_FILE )"[^"]+"/gu,
+                    (_, prefix) =>
+                      `${prefix}"${nsis(join(temporary, "dependency-not-in-update.exe"))}"`,
+                  )
+                  .replace(
+                    '!define MINIMUMWEBVIEW2VERSION ""',
+                    '!define MINIMUMWEBVIEW2VERSION "100.0.0.0"',
+                  )
+              : isolated;
             const fault = failRegistration
               ? `!macro NSIS_HOOK_POSTINSTALL
   WriteRegStr SHCTX "\${MANUPRODUCTKEY}" "UnexpectedNewValue" "must disappear"
@@ -473,7 +556,7 @@ test(
               : "";
             writeFileSync(
               file,
-              `!define LOCUTION_PAYLOAD_MANIFEST "${nsis(manifestPath)}"\n!define LOCUTION_MIGRATION_LOCAL_ROOT "${nsis(join(temporary, "local"))}"\n!define LOCUTION_MIGRATION_ROAMING_ROOT "${nsis(join(temporary, "roaming"))}"\n${fault}${isolated}`,
+              `${updateOnly ? "!define LOCUTION_UPDATE_ONLY\n" : ""}!define LOCUTION_PAYLOAD_MANIFEST "${nsis(manifestPath)}"\n!define LOCUTION_MIGRATION_LOCAL_ROOT "${nsis(join(temporary, "local"))}"\n!define LOCUTION_MIGRATION_ROAMING_ROOT "${nsis(join(temporary, "roaming"))}"\n${fault}${source}`,
             );
             run(compiler, ["/V2", "/INPUTCHARSET", "UTF8", file]);
           };
@@ -578,6 +661,156 @@ $arp.Dispose(); $base.Dispose()
           );
           assert.equal(readFileSync(main, "utf8"), "previous working executable");
           assert.deepEqual(readFileSync(join(install, "uninstall.exe")), uninstaller);
+          const updateManifest = join(temporary, "update-template-manifest.json");
+          const updatePayload = JSON.parse(readFileSync(manifest, "utf8"));
+          updatePayload.files.push({
+            path: "locution-installer-safety-fixture.exe",
+            size: 7,
+            sha256: createHash("sha256").update("payload").digest("hex"),
+            group: "core",
+          });
+          writeFileSync(updateManifest, JSON.stringify(updatePayload));
+          build(updateManifest, false, true);
+          const setVersion = (version) =>
+            run("reg.exe", [
+              "add",
+              `HKCU\\${registry}\\Uninstall`,
+              "/v",
+              "DisplayVersion",
+              "/d",
+              version,
+              "/f",
+              "/reg:64",
+            ]);
+          setVersion("0.9.0");
+          const dependency = join(install, "transnetv2/model.onnx");
+          run(executable, ["/S", "/UPDATE", "/CHECKUPDATE", `/D=${install}`], 2, options);
+          const setWebViewVersion = (version) =>
+            run("reg.exe", [
+              "add",
+              `HKCU\\${registry}\\WebView`,
+              "/v",
+              "pv",
+              "/d",
+              version,
+              "/f",
+              "/reg:64",
+            ]);
+          setWebViewVersion("99.0.0.0");
+          run(executable, ["/S", "/UPDATE", "/CHECKUPDATE", `/D=${install}`], 2, options);
+          setWebViewVersion("100.0.0.0");
+          writeFileSync(dependency, "corrupt dependency");
+          const rejectedBefore = snapshotRegistration(
+            join(temporary, "update-rejected-before.json"),
+          );
+          run(executable, ["/S", "/UPDATE", `/D=${install}`], 2, options);
+          assert.equal(readFileSync(main, "utf8"), "previous working executable");
+          assert.deepEqual(
+            snapshotRegistration(join(temporary, "update-rejected-after.json")),
+            rejectedBefore,
+          );
+          writeFileSync(dependency, "payload");
+          run(executable, ["/S", "/UPDATE", "/CHECKUPDATE", `/D=${install}`], 0, options);
+          assert.equal(readFileSync(main, "utf8"), "previous working executable");
+          for (const version of ["1.0.0", "1.1.0"]) {
+            setVersion(version);
+            run(executable, ["/S", "/UPDATE", `/D=${install}`], 2, options);
+          }
+          setVersion("0.9.0");
+          const fresh = join(temporary, "fresh update target");
+          run(executable, ["/S", "/UPDATE", `/D=${fresh}`], 2, options);
+          assert(!existsSync(fresh));
+          const otherMain = join(temporary, "other-instance/locution-installer-safety-fixture.exe");
+          mkdirSync(dirname(otherMain));
+          copyFileSync(process.execPath, otherMain);
+          const other = spawn(
+            otherMain,
+            ["-e", "process.stdout.write('ready'); process.stdin.resume()"],
+            { windowsHide: true },
+          );
+          const otherExit = new Promise((resolve) => other.once("exit", resolve));
+          try {
+            await new Promise((resolve, reject) => {
+              other.stdout.once("data", resolve);
+              other.once("error", reject);
+            });
+            run(executable, ["/S", "/UPDATE", `/D=${install}`], 2, options);
+            assert.equal(
+              other.exitCode,
+              null,
+              "Update must not kill another application's workspace",
+            );
+            assert.equal(readFileSync(main, "utf8"), "previous working executable");
+          } finally {
+            other.stdin.end();
+            await otherExit;
+          }
+          run(executable, ["/S", "/UPDATE", `/D=${install}`], 0, options);
+          assert.equal(readFileSync(main, "utf8"), "payload");
+          assert.equal(readFileSync(dependency, "utf8"), "payload");
+          // The real helper waits for the old process, returns the installer's
+          // failure code and writes its report without restarting an invalid app.
+          const parent = spawn(process.execPath, ["-e", "process.stdin.resume()"], {
+            windowsHide: true,
+          });
+          const helperScript = join(temporary, "apply-update.ps1");
+          writeFileSync(
+            helperScript,
+            `\uFEFF${readFileSync(join(windows, "apply-update.ps1"), "utf8")}`,
+          );
+          const handoff = join(temporary, "handoff.json");
+          writeFileSync(
+            handoff,
+            JSON.stringify({
+              parent: parent.pid,
+              executable: process.execPath,
+              installer: executable,
+              signature: createHash("sha256").update(readFileSync(executable)).digest("hex"),
+              project: null,
+            }),
+          );
+          const helper = spawn(
+            powershell,
+            [
+              "-NoProfile",
+              "-NonInteractive",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              helperScript,
+              "-Data",
+              handoff,
+              "-NoErrorDialog",
+            ],
+            { windowsHide: true },
+          );
+          const exit = new Promise((resolve, reject) => {
+            helper.once("exit", resolve);
+            helper.once("error", reject);
+          });
+          try {
+            const deadline = Date.now() + 10000;
+            while (!existsSync(join(temporary, "ready"))) {
+              assert(
+                helper.exitCode === null && Date.now() < deadline,
+                "Update helper did not acknowledge its parent",
+              );
+              await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+            assert(
+              !existsSync(join(temporary, "result.json")),
+              "Installer must wait for the old application to exit",
+            );
+            parent.stdin.end();
+            assert.equal(await exit, 2);
+            const report = JSON.parse(
+              readFileSync(join(temporary, "result.json"), "utf8").replace(/^\ufeff/u, ""),
+            );
+            assert.equal(report.exitCode, 2);
+          } finally {
+            if (parent.exitCode === null) parent.kill();
+            if (helper.exitCode === null) helper.kill();
+          }
         }
       }
     });

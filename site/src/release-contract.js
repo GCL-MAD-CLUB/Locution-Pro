@@ -24,6 +24,10 @@ export function installerName(version) {
   return `Locution.Pro_${version}_x64-setup.exe`;
 }
 
+export function updaterName(version) {
+  return installerName(version).replace("-setup.exe", "-update.exe");
+}
+
 export function fallbackRelease() {
   const name = installerName(FALLBACK_VERSION);
   return {
@@ -66,6 +70,25 @@ export function validateRelease(document, { stable = true } = {}) {
   if (platform.cdn_url && platform.cdn_url !== `${CDN_BASE}/${name}`) {
     throw new Error("Invalid CDN installer URL");
   }
+  let updater;
+  if (platform.updater !== undefined) {
+    const candidate = platform.updater;
+    const name = updaterName(document.version);
+    if (
+      !candidate ||
+      !/^[a-f0-9]{64}$/iu.test(candidate.signature) ||
+      candidate.url !==
+        `https://github.com/${repository}/releases/download/v${document.version}/${name}` ||
+      (candidate.cdn_url && candidate.cdn_url !== `${CDN_BASE}/${name}`)
+    ) {
+      throw new Error("Invalid update-only installer metadata");
+    }
+    updater = {
+      signature: candidate.signature.toLowerCase(),
+      url: candidate.url,
+      cdn_url: candidate.cdn_url || "",
+    };
+  }
   return {
     version: document.version,
     pub_date: document.pub_date,
@@ -74,6 +97,7 @@ export function validateRelease(document, { stable = true } = {}) {
         signature: platform.signature.toLowerCase(),
         url: platform.url,
         cdn_url: platform.cdn_url || "",
+        ...(updater ? { updater } : {}),
       },
     },
   };

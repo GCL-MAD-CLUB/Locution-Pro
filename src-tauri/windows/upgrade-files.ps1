@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('Scan', 'Prepare', 'Upgrade', 'Uninstall', 'CheckUninstall', 'CheckBackup', 'Commit', 'Rollback')][string]$Mode,
+    [Parameter(Mandatory = $true)][ValidateSet('Scan', 'Prepare', 'Verify', 'Upgrade', 'Uninstall', 'CheckUninstall', 'CheckBackup', 'Commit', 'Rollback')][string]$Mode,
     [Parameter(Mandatory = $true)][string]$Root,
     [string]$PreviousRoot = '',
     [Parameter(Mandatory = $true)][string]$Manifest,
@@ -8,6 +8,7 @@ param(
     [int]$Ffmpeg = 1,
     [int]$Semantic = 1,
     [int]$Transactional = 0,
+    [ValidateSet(0, 1)][int]$UpdateOnly = 0,
     [string]$BackupDirectory = ''
 )
 
@@ -268,6 +269,13 @@ try {
         }
     }
     if ($MainBinary -notmatch '^[\w.-]+\.exe$') { throw 'Invalid main executable name' }
+    if ($UpdateOnly -and $Mode -in @('Scan', 'Prepare')) {
+        if (!$PreviousRoot -or $Root -ne $PreviousRoot -or
+            !(Test-Path -LiteralPath (Join-Path $Root $MainBinary) -PathType Leaf) -or
+            !(Test-Path -LiteralPath (Join-Path $Root 'uninstall.exe') -PathType Leaf)) {
+            throw 'The update-only installer requires an existing installation in the same directory.'
+        }
+    }
     if ($Mode -in @('Upgrade', 'Uninstall', 'CheckUninstall') -and (!$PreviousRoot -or $Root -ne $PreviousRoot)) {
         throw 'Embedded uninstall requires the identified previous installation as its root'
     }
@@ -299,6 +307,11 @@ try {
             Assert-PlainPath $destination
             if (Test-Path -LiteralPath $destination -PathType Container) { throw "A payload destination is a directory: $destination" }
         }
+        $optionalDisabled = ($entry.group -eq 'ffmpeg' -and !$Ffmpeg) -or
+            ($entry.group -in @('semantic-search', 'storyboard-semantic') -and !$Semantic)
+        if ($Mode -eq 'Verify' -and !$optionalDisabled -and !(Test-Match $entry (Join-Path $Root $entry.path))) {
+            throw "Installed payload verification failed: $($entry.path)"
+        }
         # The executable and uninstaller are always replaced. Other core resources,
         # including the Explorer thumbnail provider, can safely keep matching bytes.
         if ($entry.path -in @($MainBinary, 'uninstall.exe')) { continue }
@@ -313,6 +326,23 @@ try {
     })
     $reuseFfmpeg = [int]($ffmpegEntries.Count -eq 2 -and @($ffmpegEntries | Where-Object { !$reuse.ContainsKey($_.path) }).Count -eq 0)
     $reuseSemantic = [int]($models.Count -gt 0 -and @($models | Where-Object { !$reuse.ContainsKey($_.path) }).Count -eq 0)
+    if ($UpdateOnly -and $Mode -in @('Scan', 'Prepare')) {
+        if (!$entries.ContainsKey($MainBinary)) { throw 'The update manifest is missing the target executable hash.' }
+        foreach ($entry in $payload.files) {
+            $required = $entry.path -notin @($MainBinary, 'uninstall.exe') -and
+                !(($entry.group -eq 'ffmpeg' -and !$Ffmpeg) -or
+                ($entry.group -in @('semantic-search', 'storyboard-semantic') -and !$Semantic))
+            if ($required -and !$reuse.ContainsKey($entry.path)) {
+                throw "Update dependency is missing or differs from the target release: $($entry.path). Use the full installer to repair this installation."
+            }
+        }
+        if (@($payload.files | Where-Object { $_.group -eq 'transnetv2' }).Count -eq 0) {
+            throw 'The update dependency manifest is incomplete.'
+        }
+        if (($Ffmpeg -and $ffmpegEntries.Count -ne 2) -or ($Semantic -and $models.Count -eq 0)) {
+            throw 'The optional component dependency manifest is incomplete.'
+        }
+    }
     if ($Mode -in @('Uninstall', 'CheckUninstall')) {
         $reuse.Clear()
         $reuseFfmpeg = 0

@@ -40,6 +40,7 @@
     "prepare:transnetv2": "node scripts/prepare-transnetv2-assets.mjs",
     "prepare:ffmpeg": "node scripts/prepare-ffmpeg-assets.mjs",
     "prepare:installer": "node scripts/prepare-installer-manifest.mjs",
+    "build:update-installer": "node scripts/build-update-installer.mjs",
     "prepare:release": "node scripts/prepare-release-manifest.mjs",
     "check:release": "node scripts/check-release-assets.mjs",
     "release:draft": "node scripts/prepare-release-draft.mjs",

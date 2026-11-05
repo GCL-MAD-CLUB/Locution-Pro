@@ -74,6 +74,7 @@ ManifestDPIAwareness PerMonitorV2
 Var PassiveMode
 Var UpdateMode
 Var NoShortcutMode
+Var LocutionProCheckUpdateOnly
 Var PreviousUninstallKey
 Var PreviousProductKey
 Var PreviousInstallDir
@@ -251,7 +252,22 @@ Function RunMainBinary
 FunctionEnd
 
 Function LocutionProCheckRunningApp
+  !ifdef LOCUTION_UPDATE_ONLY
+    ; The initiating application exits through the handoff protocol. Never kill
+    ; another instance, which may own a different unsaved workspace.
+    !if "${INSTALLMODE}" == "currentUser"
+      nsis_tauri_utils::FindProcessCurrentUser "${MAINBINARYNAME}.exe"
+    !else
+      nsis_tauri_utils::FindProcess "${MAINBINARYNAME}.exe"
+    !endif
+    Pop $0
+    ${If} $0 != 1
+      SetErrorLevel 2
+      Abort "仍有 Locution Pro 进程运行，已取消更新。请保存并关闭其他窗口后重试。"
+    ${EndIf}
+  !else
   !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  !endif
 FunctionEnd
 
 Function LocutionProVerifyWebView2
@@ -375,6 +391,11 @@ FunctionEnd
 
 Function .onInit
   !insertmacro LOCUTION_INSTALLER_MUTEX
+  !ifdef LOCUTION_UPDATE_ONLY
+    ; This package has one operation. No repair, relocation or component wizard.
+    SetSilent silent
+    StrCpy $UpdateMode 1
+  !endif
   StrCpy $LocutionProFreshInstall 0
   StrCpy $LocutionProUninstallComplete 0
   StrCpy $LocutionProUninstallOnly 0
@@ -400,9 +421,11 @@ Function .onInit
   ${EndIf}
 
   !insertmacro SetContext
+  !ifndef LOCUTION_UPDATE_ONLY
   Call CaptureMigrationEligibility
   !insertmacro SetContext
   Call RecordPendingMigration
+  !endif
 
   !if "${DISPLAYLANGUAGESELECTOR}" == "true"
     !insertmacro MUI_LANGDLL_DISPLAY
@@ -462,6 +485,29 @@ Function .onInit
     ReadRegStr $LocutionProFfprobePath SHCTX "$PreviousProductKey" "FfprobePath"
   ${EndIf}
   StrCpy $LocutionProPreviousFfmpegChoice $LocutionProBundleFfmpeg
+  !ifdef LOCUTION_UPDATE_ONLY
+    StrCpy $UpdateMode 1
+    ${If} $PreviousInstallDir == ""
+    ${OrIf} $INSTDIR != $PreviousInstallDir
+      SetErrorLevel 2
+      Quit
+    ${EndIf}
+    ReadRegStr $0 SHCTX "$PreviousUninstallKey" "DisplayVersion"
+    ${If} $0 == ""
+      SetErrorLevel 2
+      Quit
+    ${EndIf}
+    nsis_tauri_utils::SemverCompare "${VERSION}" $0
+    Pop $0
+    ${If} $0 != 1
+      SetErrorLevel 2
+      Quit
+    ${EndIf}
+    ${GetOptions} $CMDLINE "/CHECKUPDATE" $LocutionProCheckUpdateOnly
+    ${IfNot} ${Errors}
+      StrCpy $LocutionProCheckUpdateOnly 1
+    ${EndIf}
+  !endif
 FunctionEnd
 
 Function .onVerifyInstDir
@@ -521,6 +567,10 @@ Section WebView2
     ReadRegStr $4 HKLM "SOFTWARE\Microsoft\EdgeUpdate\Clients\${WEBVIEW2APPGUID}" "pv"
   ${EndIf}
   ${If} $4 == ""
+    !ifdef LOCUTION_UPDATE_ONLY
+      SetErrorLevel 2
+      Abort "更新需要已安装的 WebView2 Runtime。请使用完整安装包修复。"
+    !else
     ReadRegStr $4 HKCU "SOFTWARE\Microsoft\EdgeUpdate\Clients\${WEBVIEW2APPGUID}" "pv"
   ${EndIf}
 
@@ -579,10 +629,15 @@ Section WebView2
           Abort "$(webview2AbortError)"
         ${EndIf}
       webview2_done:
+    !endif
   ${Else}
     !if "${MINIMUMWEBVIEW2VERSION}" != ""
       ${VersionCompare} "${MINIMUMWEBVIEW2VERSION}" "$4" $R0
       ${If} $R0 = 1
+        !ifdef LOCUTION_UPDATE_ONLY
+          SetErrorLevel 2
+          Abort "WebView2 Runtime 版本不满足要求。请使用完整安装包修复。"
+        !else
         update_webview:
           DetailPrint "$(installingWebview2)"
           ${If} ${RunningX64}
@@ -617,19 +672,34 @@ Section WebView2
             SetErrorLevel 2
             Abort "找不到 WebView2 更新程序，请先安装或修复 WebView2 Runtime 后重试。"
           ${EndIf}
+        !endif
       ${EndIf}
     !endif
   ${EndIf}
+  !ifdef LOCUTION_UPDATE_ONLY
+    ; Read-only preflight is callable while the old application is still alive.
+    ; The real Prepare pass hashes again after it has exited.
+    ${If} $LocutionProCheckUpdateOnly == 1
+      StrCpy $LocutionProUpgradeMode "Scan"
+      Call LocutionProPlanUpgrade
+      SetErrorLevel 0
+      Quit
+    ${EndIf}
+  !endif
 SectionEnd
 
 Section Install
   Call EnsureIndependentInstallLocation
   Call LocutionProDirectoryLeave
-  Call PrepareMigrationInstall
+  !ifndef LOCUTION_UPDATE_ONLY
+    Call PrepareMigrationInstall
+  !endif
   SetOutPath $INSTDIR
 
+  !ifndef LOCUTION_UPDATE_ONLY
   !ifmacrodef NSIS_HOOK_PREINSTALL
     !insertmacro NSIS_HOOK_PREINSTALL
+  !endif
   !endif
   Call LocutionProCheckRunningApp
   ; Recompute hashes after closing the app, before changing any program files.
@@ -784,7 +854,9 @@ Section Install
 
   ${If} $PassiveMode = 1
   ${OrIf} ${Silent}
-    Call MigrateLegacyData
+    !ifndef LOCUTION_UPDATE_ONLY
+      Call MigrateLegacyData
+    !endif
   ${EndIf}
 
   ; Continue to the migration page without asking the user to click Next.
@@ -798,14 +870,17 @@ Function .onInstFailed
 FunctionEnd
 
 Function .onInstSuccess
+  SetErrorLevel 0
   ; Check for `/R` flag only in silent and passive installers because
   ; GUI installer has a toggle for the user to (re)start the app
   ${If} $PassiveMode = 1
   ${OrIf} ${Silent}
+    !ifndef LOCUTION_UPDATE_ONLY
     ${If} $MigrationComplete != 1
     ${AndIf} $MigrationSkipped != 1
       Return
     ${EndIf}
+    !endif
     ${GetOptions} $CMDLINE "/R" $R0
     ${IfNot} ${Errors}
       ${GetOptions} $CMDLINE "/ARGS" $R0

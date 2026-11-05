@@ -8,6 +8,7 @@ import {
   RELEASE_PLATFORM,
   RELEASE_REPOSITORY,
   installerName,
+  updaterName,
   isReleaseVersion,
 } from "../site/src/release-contract.js";
 
@@ -16,6 +17,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export async function prepareReleaseManifest({
   version,
   installer,
+  updater,
   outputDirectory,
   repository = RELEASE_REPOSITORY,
   pubDate = new Date().toISOString(),
@@ -23,18 +25,23 @@ export async function prepareReleaseManifest({
   if (!isReleaseVersion(version)) throw new Error("Invalid release version");
   if (!/^[\w-]+\/[\w-][\w.-]*$/u.test(repository)) throw new Error("Invalid release repository");
   if (!Number.isFinite(Date.parse(pubDate))) throw new Error("Invalid publication date");
-  const metadata = await stat(installer);
-  if (!metadata.isFile() || metadata.size < 2) throw new Error("Missing or empty installer");
-  const hash = createHash("sha256");
-  let first = true;
-  for await (const chunk of createReadStream(installer)) {
-    if (first && (chunk[0] !== 0x4d || chunk[1] !== 0x5a))
-      throw new Error("Expected a Windows executable");
-    first = false;
-    hash.update(chunk);
+  async function inspect(installer) {
+    const metadata = await stat(installer);
+    if (!metadata.isFile() || metadata.size < 2) throw new Error("Missing or empty installer");
+    const hash = createHash("sha256");
+    let first = true;
+    for await (const chunk of createReadStream(installer)) {
+      if (first && (chunk[0] !== 0x4d || chunk[1] !== 0x5a))
+        throw new Error("Expected a Windows executable");
+      first = false;
+      hash.update(chunk);
+    }
+    return hash.digest("hex");
   }
-  const signature = hash.digest("hex");
+  const signature = await inspect(installer);
+  const updateSignature = await inspect(updater);
   const name = installerName(version);
+  const updateName = updaterName(version);
   const manifest = {
     version,
     pub_date: new Date(pubDate).toISOString(),
@@ -43,18 +50,26 @@ export async function prepareReleaseManifest({
         signature,
         url: `https://github.com/${repository}/releases/download/v${version}/${name}`,
         cdn_url: `${CDN_BASE}/${name}`,
+        updater: {
+          signature: updateSignature,
+          url: `https://github.com/${repository}/releases/download/v${version}/${updateName}`,
+          cdn_url: `${CDN_BASE}/${updateName}`,
+        },
       },
     },
   };
   await mkdir(outputDirectory, { recursive: true });
   const destination = path.join(outputDirectory, name);
   if (path.resolve(installer) !== path.resolve(destination)) await copyFile(installer, destination);
+  const updateDestination = path.join(outputDirectory, updateName);
+  if (path.resolve(updater) !== path.resolve(updateDestination))
+    await copyFile(updater, updateDestination);
   const json = `${JSON.stringify(manifest, null, 2)}\n`;
   await writeFile(path.join(outputDirectory, "latest.json"), json);
   const manifestHash = createHash("sha256").update(json).digest("hex");
   await writeFile(
     path.join(outputDirectory, "SHA256SUMS.txt"),
-    `${signature}  ${name}\n${manifestHash}  latest.json\n`,
+    `${signature}  ${name}\n${updateSignature}  ${updateName}\n${manifestHash}  latest.json\n`,
   );
   return manifest;
 }
@@ -64,6 +79,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (process.argv.length > 2) throw new Error("Usage: npm run prepare:release");
   const manifest = await prepareReleaseManifest({
     version,
+    updater: path.join(
+      root,
+      "src-tauri",
+      "target",
+      "installer",
+      `Locution Pro_${version}_x64-update.exe`,
+    ),
     installer: path.join(
       root,
       "src-tauri",
@@ -77,6 +99,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     repository: process.env.GITHUB_REPOSITORY || RELEASE_REPOSITORY,
   });
   console.log(
-    `Release ${manifest.version}: installer, latest.json and SHA256SUMS.txt ready in dist/release`,
+    `Release ${manifest.version}: full installer, update installer, latest.json and SHA256SUMS.txt ready in dist/release`,
   );
 }

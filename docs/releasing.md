@@ -26,7 +26,7 @@ npm run check
 npm run release:build -- 0.4.1
 ```
 
-该命令会修改版本文件、检查密钥、格式化相关文件、准备 FFmpeg 并启动锁定依赖的构建，不是只读检查。构建钩子还会下载并校验语义模型。安装包、`latest.json` 和 `SHA256SUMS.txt` 统一输出到 `dist/release/`。仅更新文档时不运行它。
+该命令会修改版本文件、检查密钥、格式化相关文件、准备 FFmpeg 并启动锁定依赖的构建，不是只读检查。构建钩子还会下载并校验语义模型。完整安装包、更新专用安装包、`latest.json` 和 `SHA256SUMS.txt` 统一输出到 `dist/release/`。仅更新文档时不运行它。
 
 安装器相关改动手动执行 `npm run test:installer`、`npm run test:installer-identity`、
 `npm run test:installer-maintenance`、`npm run test:installer-safety` 和 `npm run test:installer-media`。安全测试会编译完整 NSIS 模板，
@@ -57,11 +57,11 @@ git push origin v0.4.1
 
 ## 自动发布内容
 
-发布工作流分为 `validate → build-windows → publish-draft`。校验阶段按 tag 精确查询已有 Release；API 请求失败会中止，不当作“尚未创建”。Windows job 只持有仓库读取权限，使用受保护环境中的正式构建密钥构建安装包，生成并验证三份附件后保存为保留 14 天的 Actions artifact。附件名包含运行尝试次数，重跑构建不会与上一轮产物重名。
+发布工作流分为 `validate → build-windows → publish-draft`。校验阶段按 tag 精确查询已有 Release；API 请求失败会中止，不当作“尚未创建”。Windows job 只持有仓库读取权限，使用受保护环境中的正式构建密钥构建安装包，生成并验证四份附件后保存为保留 14 天的 Actions artifact。附件名包含运行尝试次数，重跑构建不会与上一轮产物重名。
 
 独立的 Ubuntu 发布 job 持有 Release 写入权限，通过构建输出的 artifact ID 下载同一次构建的产物，再核对附件集合、版本、仓库、安装包文件头与 SHA-256，确认 tag 未移动后创建或复用草稿。已有草稿的说明保留，新草稿自动生成说明；维护者也可提前创建草稿。正式版与预发布版都显式创建为草稿且 `latest=false`。已公开的 Release 或不匹配的 prerelease 标记会阻止上传。
 
-上传按文件重试，服务端已有同名且大小与 SHA-256 一致的附件会复用；`latest.json` 最后上传。上传完成后再次检查草稿状态及 GitHub 返回的三份附件大小、SHA-256，全部匹配才判定成功。发布脚本为 `npm run release:draft`，会修改 GitHub 草稿；普通测试使用模拟 API，不上传真实附件。
+上传按文件重试，服务端已有同名且大小与 SHA-256 一致的附件会复用；`latest.json` 最后上传。上传完成后再次检查草稿状态及 GitHub 返回的四份附件大小、SHA-256，全部匹配才判定成功。发布脚本为 `npm run release:draft`，会修改 GitHub 草稿；普通测试使用模拟 API，不上传真实附件。
 
 FFmpeg 下载包按准备脚本缓存，复用时仍核对固定 SHA-256；语义模型使用固定修订版本。模型准备和缩略图构建由 Tauri 钩子各执行一次。校验 job 无需安装 npm 依赖。
 
@@ -77,15 +77,26 @@ FFmpeg 下载包按准备脚本缓存，复用时仍核对固定 SHA-256；语�
     "windows-x86_64": {
       "signature": "<安装包实际 SHA-256，64 位十六进制字符串>",
       "url": "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/download/v2.1.1/Locution.Pro_2.1.1_x64-setup.exe",
-      "cdn_url": "https://openlist.frameneo.com/sd/YRrdPxj2/Locution.Pro_2.1.1_x64-setup.exe"
+      "cdn_url": "https://openlist.frameneo.com/sd/YRrdPxj2/Locution.Pro_2.1.1_x64-setup.exe",
+      "updater": {
+        "signature": "<更新包实际 SHA-256，64 位十六进制字符串>",
+        "url": "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/download/v2.1.1/Locution.Pro_2.1.1_x64-update.exe",
+        "cdn_url": "https://openlist.frameneo.com/sd/YRrdPxj2/Locution.Pro_2.1.1_x64-update.exe"
+      }
     }
   }
 }
 ```
 
-平台键恒定为 `windows-x86_64`，不追加安装器类型或版本号。`signature` 是实际安装包的 SHA-256 摘要，不是字符串 `SHA-256`，也不是 Tauri 自动更新器的签名。此清单用于网站发现下载地址，不声明自动安装或签名认证能力。`pub_date` 是附件生成时间，使用 UTC。`SHA256SUMS.txt` 包含安装包和 `latest.json` 的摘要。CI 与本地构建共用生成器；已有 Tauri 安装包可运行 `npm run prepare:release` 重新生成整套附件，运行 `npm run check:release` 只读复验。CI 中 GitHub 附件链接使用实际发布仓库。
+平台键恒定为 `windows-x86_64`，不追加安装器类型或版本号。平台顶层地址用于完整安装，`updater` 专供桌面更新。两者的 `signature` 分别是实际文件的 SHA-256 摘要，不是字符串 `SHA-256`，也不是 Tauri 自动更新器的签名。`pub_date` 是附件生成时间，使用 UTC。`SHA256SUMS.txt` 包含两个安装包和 `latest.json` 的摘要。CI 与本地构建共用生成器；已有完整 Tauri 安装包时先运行 `npm run build:update-installer`，再运行 `npm run prepare:release` 生成附件，运行 `npm run check:release` 只读复验。更新打包复用已编译的程序和完整文件清单，不重复编译、下载模型或构建缩略图组件。CI 中 GitHub 附件链接使用实际发布仓库。
 
-OpenList 后端自动同步最新正式 Release 的附件到[分享目录](https://openlist.frameneo.com/@s/YRrdPxj2)，CI 无需 OpenList Token。同步必须包含安装包与 `latest.json`，保留固定 0.4.1 回退文件；不要将预发布同步到稳定目录。CDN 清单需在对应安装包可下载后更新；同步短暂错序时官网会改用同版本 GitHub 安装包。
+桌面端先读取 CDN 清单，失败后读取 GitHub 清单。发现更高的正式版本后自动下载 `updater`，网络失败、错误响应、文件头或 SHA-256 不匹配时回退同版本 GitHub 文件。完整校验通过后才提示“立即更新”或“保存后更新”。取消保存、保存失败、保存期间工作区变化或仍有运行任务时不启动安装。旧清单缺少 `updater` 时不会自动运行完整安装器。
+
+更新包不嵌入 FFmpeg、TransNetV2、语义模型或其他依赖资源，仅替换程序和卸载器。它要求注册信息指向当前目录、主程序和卸载器存在，且目标版本严格高于当前版本。依赖按目标完整安装包清单检查路径、大小和 SHA-256；未启用的内置 FFmpeg、语义检索可以缺省，其余依赖缺失或不匹配直接返回非零退出码，须使用完整包修复。WebView2 缺失或版本过低同样拒绝更新，不下载或安装运行库。
+
+旧软件先运行 `/S /UPDATE /CHECKUPDATE /D=<安装目录>` 只读校验；失败返回安装器退出码并保留当前软件。通过后启动独立助手，助手确认旧进程退出后运行 `/S /UPDATE /D=<安装目录>`，重新校验并复用现有事务备份、注册信息恢复和回滚机制。若仍有其他软件实例运行，直接取消更新，不强制结束其他工作区。提交前复验安装结果；失败不会自动启动可能不一致的程序。助手在缓存更新目录写入 `result.json`，保留安装器退出码并以相同码退出，失败显示提示，成功重启软件并打开已保存项目。`/D` 必须是最后一个参数且不额外加引号，路径中的空格由 NSIS 处理。
+
+OpenList 后端自动同步最新正式 Release 的附件到[分享目录](https://openlist.frameneo.com/@s/YRrdPxj2)，CI 无需 OpenList Token。同步必须包含两个安装包与 `latest.json`，保留固定 0.4.1 回退文件；不要将预发布同步到稳定目录。CDN 清单需在对应安装包可下载后更新；同步短暂错序时官网会改用同版本 GitHub 安装包。
 
 官网的 `/api/release` 先读取 CDN 的 `/sd/YRrdPxj2/latest.json`，失败、超时或内容无效时读取 GitHub 的 `/releases/latest/download/latest.json`；两者都不可用时返回固定 0.4.1。GitHub 的 latest 路径以正式 Release 的最新标记为准，预发布清单也会被官网拒绝。清单读取不比较两个源的新旧，CDN 同步延迟期间可能继续提供上一个正式版本。
 
@@ -136,9 +147,9 @@ WebView2 使用安装器私有目录，执行前验证 Microsoft 签名；注册
 独立卸载先将被 Explorer 占用的缩略图组件移至唯一临时文件名，再尝试删除或安排重启删除；不安排删除原 DLL 路径。
 向导内卸载同样允许重命名已加载的缩略图 DLL，提交后无法立即删除的副本按已提交旧备份处理。
 
-核对草稿内三份附件的文件名、大小、SHA-256 与产品版本。摘要已由 CI 自动生成，不手动改写。
+核对草稿内四份附件的文件名、大小、SHA-256 与产品版本。摘要已由 CI 自动生成，不手动改写。
 
-确认工作流成功、安装包附件完整、发布说明与兼容提示正确后，由发布维护者使用自己的账号发布草稿。发布时重新比较当前稳定版的语义版本：仅将较新的正式版设为最新版本，旧版本维护发行取消最新标记；预发布保留 prerelease 标记且不设为最新。不要在附件上传完成前公开发布。发布后确认 OpenList 已同步三份附件，并检查官网版本和下载入口；无需为更新下载版本重新部署官网。
+确认工作流成功、安装包附件完整、发布说明与兼容提示正确后，由发布维护者使用自己的账号发布草稿。发布时重新比较当前稳定版的语义版本：仅将较新的正式版设为最新版本，旧版本维护发行取消最新标记；预发布保留 prerelease 标记且不设为最新。不要在附件上传完成前公开发布。发布后确认 OpenList 已同步四份附件，并检查官网版本和下载入口；无需为更新下载版本重新部署官网。
 
 应用 tag 和文档站部署分别核对。文档站由 main 上的工作流部署；本地文件变化或构建成功不表示公开站点已经更新。
 

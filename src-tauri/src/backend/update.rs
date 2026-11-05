@@ -4,7 +4,7 @@ use serde::Deserialize;
 use std::time::Duration;
 
 const LATEST_RELEASE_URL: &str =
-    "https://api.github.com/repos/GCL-MAD-CLUB/LineCut/releases/latest";
+    "https://api.github.com/repos/GCL-MAD-CLUB/Locution-Pro/releases/latest";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,7 +76,7 @@ mod tests {
                 "tag_name": "v0.5.0",
                 "name": "Locution Pro 0.5.0",
                 "body": "## Improvements\n- Faster imports",
-                "html_url": "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v0.5.0",
+                "html_url": "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v0.5.0",
                 "assets": [{"browser_download_url": "https://example.com/ignored"}]
             }"###,
         )
@@ -88,7 +88,7 @@ mod tests {
                 version: "v0.5.0".into(),
                 title: "Locution Pro 0.5.0".into(),
                 body: "## Improvements\n- Faster imports".into(),
-                url: "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v0.5.0".into(),
+                url: "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v0.5.0".into(),
             }
         );
     }
@@ -100,7 +100,7 @@ mod tests {
                 "tag_name": "v0.5.0",
                 "name": null,
                 "body": null,
-                "html_url": "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v0.5.0"
+                "html_url": "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v0.5.0"
             }"#,
         )
         .unwrap();

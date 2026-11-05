@@ -121,6 +121,18 @@ test("site checker requires the real Cloudflare 404 entry point", async (t) => {
   assert.match((await checkSite(path.join(root, "site"))).join("\n"), /404\.html/u);
 });
 
+test("site checker requires the download Worker and restricts its invocation routes", async (t) => {
+  const root = await fixture(t);
+  const site = path.join(root, "site");
+  await writeFile(
+    path.join(site, "_routes.json"),
+    JSON.stringify({ version: 1, include: ["/*"], exclude: [] }),
+  );
+  assert.match((await checkSite(site)).join("\n"), /API routes/u);
+  await rm(path.join(site, "_worker.js"));
+  assert.match((await checkSite(site)).join("\n"), /_worker\.js/u);
+});
+
 test("site origins are normalized and reject non-origin URLs", () => {
   assert.equal(normalizeSiteUrl(" https://Example.com/ "), "https://example.com");
   assert.equal(normalizeSiteUrl(""), null);

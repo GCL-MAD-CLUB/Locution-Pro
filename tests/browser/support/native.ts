@@ -90,7 +90,7 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
       version: "v0.0.0",
       title: "Locution Pro 0.0.0",
       body: "Current release",
-      url: "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v0.0.0",
+      url: "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v0.0.0",
     },
     preferences: {
       appearance: "darkest",

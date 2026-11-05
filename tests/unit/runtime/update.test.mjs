@@ -47,7 +47,7 @@ test("update checks expose only newer releases and share an active request", asy
     version: "v0.5.0",
     title: "Locution Pro 0.5.0",
     body: "New features",
-    url: "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v0.5.0",
+    url: "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v0.5.0",
   };
   const { update, invocations, pending } = loadUpdate(release);
 
@@ -69,7 +69,7 @@ test("update checks treat current and older releases as up to date", async () =>
       version,
       title: "",
       body: "",
-      url: "https://github.com/GCL-MAD-CLUB/LineCut/releases",
+      url: "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases",
     });
     assert.equal(JSON.stringify(await update.checkForUpdate()), '{"status":"latest"}');
   }
@@ -80,7 +80,7 @@ test("update checks reject invalid native version metadata", async () => {
     version: "latest",
     title: "",
     body: "",
-    url: "https://github.com/GCL-MAD-CLUB/LineCut/releases",
+    url: "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases",
   });
   await assert.rejects(update.checkForUpdate(), (error) => {
     assert.equal(error.code, "UPDATE_RESPONSE_INVALID");

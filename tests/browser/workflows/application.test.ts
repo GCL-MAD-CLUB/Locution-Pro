@@ -23,7 +23,7 @@ test("启动后台检查仅提示一次并展示发布说明和发布页入口",
       version: "v999.0.0",
       title: "Locution Pro 999.0.0",
       body: "## 本次更新\n- 更快的媒体导入\n- [完整说明](https://example.com/notes)",
-      url: "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v999.0.0",
+      url: "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v999.0.0",
     };
   });
   await page.goto("/");
@@ -51,7 +51,7 @@ test("启动后台检查仅提示一次并展示发布说明和发布页入口",
   ]);
   await update.getByRole("button", { name: "前往发布页" }).click();
   expect((await native.calls("open_external_url"))[1].args.url).toBe(
-    "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v999.0.0",
+    "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v999.0.0",
   );
   await update.getByRole("button", { name: "稍后" }).click();
   await expect(update).toHaveCount(0);

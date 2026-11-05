@@ -3,7 +3,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const requiredFiles = ["index.html", "404.html", "_headers", "_redirects", "robots.txt"];
+const requiredFiles = [
+  "index.html",
+  "404.html",
+  "_headers",
+  "_redirects",
+  "robots.txt",
+  "_worker.js",
+  "_routes.json",
+];
+const apiRoutes = new Set(["/api/release", "/api/download"]);
 
 // Only these public trees and entry points belong in the deployment.
 export async function siteFiles(siteRoot) {
@@ -34,6 +43,22 @@ export async function checkSite(siteRoot) {
     return [error.message];
   }
   const published = new Set(files);
+  try {
+    const routes = JSON.parse(await readFile(path.join(siteRoot, "_routes.json"), "utf8"));
+    if (
+      routes.version !== 1 ||
+      !Array.isArray(routes.include) ||
+      routes.include.length !== apiRoutes.size ||
+      routes.include.some((route) => !apiRoutes.has(route)) ||
+      new Set(routes.include).size !== apiRoutes.size ||
+      !Array.isArray(routes.exclude) ||
+      routes.exclude.length
+    ) {
+      errors.push("_routes.json: only the release and download API routes may invoke the Worker");
+    }
+  } catch {
+    errors.push("_routes.json: invalid routing JSON");
+  }
   const documents = new Map();
   const ids = new Map();
   for (const file of files.filter((name) => /\.(?:html|css|js|svg)$/u.test(name))) {
@@ -49,6 +74,7 @@ export async function checkSite(siteRoot) {
   }
 
   function assertReference(file, reference) {
+    if (apiRoutes.has(reference)) return;
     if (/^(?:https?:|mailto:|tel:|data:|\/\/)/iu.test(reference)) return;
     if (/^[\w+.-]+:/u.test(reference) || reference.includes("\\")) {
       errors.push(`${file}: unsupported reference: ${reference}`);

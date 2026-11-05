@@ -1,6 +1,6 @@
 # Locution Pro 官网
 
-官网为纯静态 HTML、CSS 和 JavaScript，部署在 Cloudflare Pages。页面设计和素材保存在 `site/`，不依赖桌面程序、服务端或数据库。
+官网页面为静态 HTML、CSS 和 JavaScript，部署在 Cloudflare Pages。页面设计和素材保存在 `site/`，下载入口由同一部署包内的 Pages Worker 提供，不依赖桌面程序或数据库。
 
 | 站点     | 正式地址                          | 托管             |
 | -------- | --------------------------------- | ---------------- |
@@ -24,7 +24,7 @@ npm run site:build
 npm run site:preview
 ```
 
-`site:build` 先检查所有页面的本地文件、页内锚点、辅助技术标签引用、CSS 字体和脚本中的示例图片，再将公开文件复制到 `dist/site/` 并复查产物。无需运行桌面应用构建。`site:preview` 在 1422 端口预览这份产物；Vite 预览不模拟 Cloudflare 的安全头和 404 状态。
+`site:build` 先检查所有页面的本地文件、页内锚点、辅助技术标签引用、CSS 字体和脚本中的示例图片，再将公开文件和 Worker 复制到 `dist/site/` 并复查产物。无需运行桌面应用构建。`site:preview` 在 1422 端口预览这份产物；Vite 预览不模拟 Cloudflare 的安全头、API 或 404 状态。验证下载 API 时使用 `npx wrangler pages dev dist/site --port 1422`，完成后关闭进程。
 
 只上传 `dist/site/`，不要上传仓库根目录或整个 `dist/`。构建只替换 `dist/site/`，不删除桌面构建。说明文档、品牌规范和配置文件不会进入发布包。
 
@@ -34,6 +34,7 @@ npm run site:preview
 - `assets/`：本地图标、应用截图、视觉示意和字体许可证。
 - `_headers`：安全头；使用 Pages 默认的 ETag 与重新验证缓存策略，避免未带哈希的资源更新后仍显示旧版本。
 - `_redirects`：原文档内页目录以 301 跳转到用户指南新子域名，保留后续路径。
+- `_worker.js` 和 `_routes.json`：仅让 `/api/release` 与 `/api/download` 进入 Worker，其他页面继续使用静态托管和现有安全头。
 - `robots.txt`：抓取规则。构建会加入正式站点地图地址。
 - `brand-spec.md`：维护中的品牌约束，不发布。
 
@@ -91,8 +92,8 @@ npm run docs:build
 npm run format:check
 ```
 
-确定性网站构建与校验测试在 `tests/unit/tooling/site.test.mjs`，普通 CI 会构建官网。发版脚本同步官网显示的应用版本，并由 `check:versions` 校验。不要在官网加入媒体编码、模型或 GPU 检查。
+确定性网站构建与校验测试在 `tests/unit/tooling/site.test.mjs`，下载回退测试在 `tests/unit/site/download.test.mjs`，普通 CI 会构建官网。官网先读 OpenList 的 `latest.json`，失败再读 GitHub，均失败时使用固定 0.4.1；版本标签动态更新，所有安装按钮使用同源 `/api/download` 实现 CDN 到 GitHub 的下载回退。清单和发布同步契约见[发布流程](../docs/releasing.md)。不要在官网加入媒体编码、模型或 GPU 检查。
 
-Cloudflare 参考：[Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/)、[CI 发布](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/)、[静态文件与缓存](https://developers.cloudflare.com/pages/configuration/serving-pages/)、[自定义域名](https://developers.cloudflare.com/pages/configuration/custom-domains/)。
+Cloudflare 参考：[Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/)、[CI 发布](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/)、[Worker 高级模式](https://developers.cloudflare.com/pages/functions/advanced-mode/)、[调用路由](https://developers.cloudflare.com/pages/functions/routing/)、[静态文件与缓存](https://developers.cloudflare.com/pages/configuration/serving-pages/)、[自定义域名](https://developers.cloudflare.com/pages/configuration/custom-domains/)。
 
 GitHub 参考：[自定义域名与 DNS 配置](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site)。

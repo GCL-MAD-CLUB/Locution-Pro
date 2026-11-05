@@ -4,8 +4,8 @@ version = "0.4.1"
 description = "Media management, visual search, shot organization, and clip delivery"
 authors = ["Kotodama"]
 license = "Apache-2.0"
-repository = "https://github.com/GCL-MAD-CLUB/LineCut"
-homepage = "https://github.com/GCL-MAD-CLUB/LineCut"
+repository = "https://github.com/GCL-MAD-CLUB/Locution-Pro"
+homepage = "https://github.com/GCL-MAD-CLUB/Locution-Pro"
 edition = "2021"
 rust-version = "1.85"
 

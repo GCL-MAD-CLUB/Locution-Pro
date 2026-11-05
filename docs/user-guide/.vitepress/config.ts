@@ -1,6 +1,6 @@
 import { defineConfig } from "vitepress";
 
-const repository = "GCL-MAD-CLUB/LineCut";
+const repository = "GCL-MAD-CLUB/Locution-Pro";
 
 function normalizeBase(value: string | undefined) {
   const candidate = (value ?? "/").trim();
@@ -31,7 +31,7 @@ export default defineConfig({
       { text: "开始使用", link: "/getting-started/first-project" },
       { text: "按任务学习", link: "/workflows/find-visuals" },
       { text: "故障排查", link: "/troubleshooting/troubleshooting" },
-      { text: "下载", link: `https://github.com/${repository}/releases/latest` },
+      { text: "下载", link: "https://locution.dpdns.org/#download" },
     ],
     sidebar: [
       { text: "Locution Pro 帮助中心", items: [{ text: "概览", link: "/" }] },

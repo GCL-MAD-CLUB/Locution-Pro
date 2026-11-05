@@ -1,6 +1,6 @@
 # 更新记录
 
-本文件记录产品变化与升级注意事项。使用说明见[用户指南](docs/user-guide/index.md)，安装包与实际发布状态以[下载页面](https://github.com/GCL-MAD-CLUB/LineCut/releases)为准。
+本文件记录产品变化与升级注意事项。使用说明见[用户指南](docs/user-guide/index.md)，安装包与实际发布状态以[下载页面](https://github.com/GCL-MAD-CLUB/Locution-Pro/releases)为准。
 
 ## 0.4.1（正式版）
 
@@ -57,4 +57,4 @@ README 仅介绍产品，用户指南围绕完整使用任务编写。旧版帮�
 
 提供导入浏览器、复制与校验、自动绑定、源监视器切点编辑及改进的缩略图浏览。
 
-更早发布信息请查看[历史发布页面](https://github.com/GCL-MAD-CLUB/LineCut/releases)。
+更早发布信息请查看[历史发布页面](https://github.com/GCL-MAD-CLUB/Locution-Pro/releases)。

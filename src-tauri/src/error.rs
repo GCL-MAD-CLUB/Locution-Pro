@@ -171,6 +171,7 @@ define_error_codes! {
     NativeDragRegistrationFailed => ("NATIVE_DRAG_REGISTRATION_FAILED", Platform, true),
     ProcessTerminationFailed => ("PROCESS_TERMINATION_FAILED", Platform, true),
     SystemSoundPlayFailed => ("SYSTEM_SOUND_PLAY_FAILED", Platform, true),
+    ApplicationMenuFailed => ("APPLICATION_MENU_FAILED", Platform, true),
     ExportDestinationResolveFailed => ("EXPORT_DESTINATION_RESOLVE_FAILED", Platform, true),
     BlockingTaskFailed => ("BLOCKING_TASK_FAILED", Runtime, true),
     EventEmitFailed => ("EVENT_EMIT_FAILED", Runtime, true),

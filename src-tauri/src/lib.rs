@@ -55,6 +55,8 @@ pub fn run() {
         .setup(|app| {
             init_logging(app.handle())?;
             app.manage(AppState::new());
+            #[cfg(target_os = "macos")]
+            forward_menu_events(app.handle());
             #[cfg(windows)]
             if let Some(window) = app.get_webview_window("main") {
                 window
@@ -144,6 +146,8 @@ pub fn run() {
             fetch_latest_release,
             cancel_task,
             play_system_sound,
+            set_application_menu,
+            perform_native_edit_action,
             record_frontend_incident
         ])
         .on_window_event(|window, event| {

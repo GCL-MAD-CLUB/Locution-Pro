@@ -1,6 +1,7 @@
 /** Stable operation names accepted by the application error boundary. */
 export type OperationKey =
   | "app.event"
+  | "app.menu"
   | "dragDrop.listen"
   | "dragDrop.region"
   | "export.reveal"

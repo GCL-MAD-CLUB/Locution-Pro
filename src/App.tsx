@@ -21,7 +21,11 @@ import {
   type MediaSelectionCapabilityProjection,
 } from "./runtime/state/contracts";
 import { useStableIdentity } from "./runtime/state/react";
-import { ApplicationMenu, type ApplicationMenuModel } from "./components/common/ApplicationMenu";
+import {
+  ApplicationMenu,
+  NativeApplicationMenu,
+  type ApplicationMenuModel,
+} from "./components/common/ApplicationMenu";
 import {
   DockLayout,
   PanelManagerProvider,
@@ -71,7 +75,7 @@ import {
   pruneProjectStates,
   useProjectPort,
 } from "./systems/ProjectSystem";
-import { isTauriRuntime } from "./platform/tauri/runtime";
+import { isMacOSRuntime, isTauriRuntime } from "./platform/tauri/runtime";
 import type {
   MediaBinFolder,
   MediaBinItem,
@@ -1575,9 +1579,13 @@ function AppContent() {
       }}
     >
       <div className="app-shell">
-        <header className="application-menubar">
-          <ApplicationMenu model={applicationMenuModel} />
-        </header>
+        {isMacOSRuntime() ? (
+          <NativeApplicationMenu model={applicationMenuModel} />
+        ) : (
+          <header className="application-menubar">
+            <ApplicationMenu model={applicationMenuModel} />
+          </header>
+        )}
 
         <SecondaryTopbar
           projectFilePath={projectFilePath}

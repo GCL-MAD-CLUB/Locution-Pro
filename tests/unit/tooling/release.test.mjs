@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { prepareReleaseManifest } from "../../../scripts/prepare-release-manifest.mjs";
+import { checkReleaseAssets } from "../../../scripts/check-release-assets.mjs";
+import { inspectRelease, prepareReleaseDraft } from "../../../scripts/prepare-release-draft.mjs";
 import {
   RELEASE_PLATFORM,
   isReleaseVersion,
@@ -96,4 +98,208 @@ test("the manifest links to the repository that actually owns the release", asyn
     /^https:\/\/github\.com\/release-owner\/product\/releases\/download\/v2\.1\.1\//u,
   );
   assert.deepEqual(validateRelease(manifest), manifest);
+});
+
+async function publicationFixture(t, { version = "2.1.1", absent = false } = {}) {
+  const options = {
+    ...(await fixture(t)),
+    version,
+    repository: "release-owner/product",
+    token: "test-token",
+  };
+  await prepareReleaseManifest(options);
+  options.directory = options.outputDirectory;
+  const { files } = await checkReleaseAssets(options);
+  const state = {
+    release: absent
+      ? null
+      : {
+          databaseId: 123,
+          isDraft: true,
+          isPrerelease: version.includes("-"),
+          tagName: `v${version}`,
+        },
+    commands: [],
+    assets: [],
+    files,
+  };
+  options.fetcher = async (url, init) => {
+    assert.equal(init.headers.Authorization, "Bearer test-token");
+    if (url.endsWith("/graphql")) {
+      assert.deepEqual(JSON.parse(init.body).variables, {
+        owner: "release-owner",
+        name: "product",
+        tag: `v${version}`,
+      });
+      return Response.json({ data: { repository: { release: state.release } } });
+    }
+    assert.match(url, /\/releases\/123\/assets\?per_page=100$/u);
+    return Response.json(state.assets);
+  };
+  options.run = async (args) => {
+    state.commands.push(args);
+    if (args[1] === "create") {
+      state.release = {
+        databaseId: 123,
+        isDraft: true,
+        isPrerelease: version.includes("-"),
+        tagName: `v${version}`,
+      };
+      return;
+    }
+    assert.equal(args[1], "upload");
+    const file = files.find((file) => file.path === args[3]);
+    assert(file);
+    state.assets = state.assets.filter((asset) => asset.name !== file.name);
+    state.assets.push({
+      name: file.name,
+      size: file.size,
+      digest: `sha256:${file.sha256}`,
+      state: "uploaded",
+    });
+  };
+  options.sleep = async () => {};
+  return { options, state };
+}
+
+test("publication revalidates the exact artifact file set and byte checksums", async (t) => {
+  const { options } = await publicationFixture(t);
+  await writeFile(path.join(options.directory, "unexpected.exe"), "MZ other version");
+  await assert.rejects(checkReleaseAssets(options), /exactly/u);
+  await rm(path.join(options.directory, "unexpected.exe"));
+  await writeFile(
+    path.join(options.directory, "latest.json"),
+    `${await readFile(path.join(options.directory, "latest.json"), "utf8")} `,
+  );
+  await assert.rejects(checkReleaseAssets(options), /checksum mismatch/u);
+  await assert.rejects(
+    prepareReleaseDraft({
+      ...options,
+      fetcher: () => assert.fail("Invalid artifacts must not reach GitHub"),
+    }),
+    /checksum mismatch/u,
+  );
+});
+
+test("publication rejects an artifact from another version or repository", async (t) => {
+  const { options } = await publicationFixture(t);
+  await assert.rejects(
+    checkReleaseAssets({ ...options, repository: "another/repository" }),
+    /expected version and repository/u,
+  );
+  await assert.rejects(checkReleaseAssets({ ...options, version: "2.1.2" }), /exactly/u);
+});
+
+test("precise draft lookup distinguishes an absent release from API failures", async (t) => {
+  const { options } = await publicationFixture(t, { absent: true });
+  assert.equal(await inspectRelease(options), null);
+  for (const status of [401, 403, 429, 500]) {
+    await assert.rejects(
+      inspectRelease({ ...options, fetcher: async () => new Response(null, { status }) }),
+      /API failed/u,
+    );
+  }
+  await assert.rejects(
+    inspectRelease({
+      ...options,
+      fetcher: async () => Response.json({ errors: [{ message: "failed" }] }),
+    }),
+    /query failed/u,
+  );
+  await assert.rejects(
+    inspectRelease({
+      ...options,
+      fetcher: async () => Response.json({ data: { repository: null } }),
+    }),
+    /repository/u,
+  );
+});
+
+test("publisher creates a draft with explicit channel flags and uploads latest.json last", async (t) => {
+  for (const version of ["2.1.1", "2.1.1-rc.1"]) {
+    const { options, state } = await publicationFixture(t, { version, absent: true });
+    await prepareReleaseDraft(options);
+    const [creation, ...uploads] = state.commands;
+    assert(creation.includes("--draft"));
+    assert(creation.includes("--latest=false"));
+    assert(creation.includes(`--prerelease=${version.includes("-")}`));
+    assert.equal(uploads.length, 3);
+    assert.equal(path.basename(uploads.at(-1)[3]), "latest.json");
+  }
+});
+
+test("publication retries only the failed file and reuses matching server digests on rerun", async (t) => {
+  const { options, state } = await publicationFixture(t);
+  const run = options.run;
+  let attempts = 0;
+  options.run = async (args) => {
+    if (args[3].endsWith("SHA256SUMS.txt") && attempts++ === 0)
+      throw new Error("Upload unavailable");
+    await run(args);
+  };
+  const waits = [];
+  options.sleep = async (ms) => waits.push(ms);
+  await prepareReleaseDraft(options);
+  assert.deepEqual(waits, [5000]);
+  assert.equal(state.commands.filter((args) => args[3].endsWith(".exe")).length, 1);
+  assert.equal(attempts, 2);
+  state.commands.length = 0;
+  await prepareReleaseDraft(options);
+  assert.deepEqual(state.commands, []);
+});
+
+test("published releases and mismatched prerelease flags are never overwritten", async (t) => {
+  const { options, state } = await publicationFixture(t);
+  state.release.isDraft = false;
+  await assert.rejects(prepareReleaseDraft(options), /unpublished draft/u);
+  state.release.isDraft = true;
+  state.release.isPrerelease = true;
+  await assert.rejects(prepareReleaseDraft(options), /prerelease status/u);
+  assert.deepEqual(state.commands, []);
+});
+
+test("publication stops if a maintainer publishes the draft during upload", async (t) => {
+  const { options, state } = await publicationFixture(t);
+  const run = options.run;
+  options.run = async (args) => {
+    await run(args);
+    state.release.isDraft = false;
+  };
+  await assert.rejects(prepareReleaseDraft(options), /unpublished draft/u);
+  assert.equal(state.commands.length, 1);
+});
+
+test("publication requires GitHub to acknowledge matching asset sizes and digests", async (t) => {
+  const { options, state } = await publicationFixture(t);
+  const run = options.run;
+  options.run = async (args) => {
+    await run(args);
+    state.assets.at(-1).digest = `sha256:${"0".repeat(64)}`;
+  };
+  await assert.rejects(prepareReleaseDraft(options), /verified artifact bytes/u);
+});
+
+test("publication limits upload attempts and fails cleanly for API errors before creation", async (t) => {
+  const { options, state } = await publicationFixture(t, { absent: true });
+  await assert.rejects(
+    prepareReleaseDraft({ ...options, fetcher: async () => new Response(null, { status: 503 }) }),
+    /API failed/u,
+  );
+  assert.deepEqual(state.commands, []);
+  state.release = { databaseId: 123, isDraft: true, isPrerelease: false, tagName: "v2.1.1" };
+  let attempts = 0;
+  const waits = [];
+  await assert.rejects(
+    prepareReleaseDraft({
+      ...options,
+      run: async () => {
+        attempts++;
+        throw new Error("Upload unavailable");
+      },
+      sleep: async (ms) => waits.push(ms),
+    }),
+    /Upload unavailable/u,
+  );
+  assert.equal(attempts, 3);
+  assert.deepEqual(waits, [5000, 10000]);
 });

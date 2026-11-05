@@ -38,9 +38,9 @@ export function fallbackRelease() {
 }
 
 // Restrict the download gateway to this product's immutable installer URLs.
-export function validateRelease(document) {
-  if (!document || !isReleaseVersion(document.version, { stable: true })) {
-    throw new Error("Expected a stable release version");
+export function validateRelease(document, { stable = true } = {}) {
+  if (!document || !isReleaseVersion(document.version, { stable })) {
+    throw new Error(stable ? "Expected a stable release version" : "Invalid release version");
   }
   if (typeof document.pub_date !== "string" || !Number.isFinite(Date.parse(document.pub_date))) {
     throw new Error("Invalid release publication date");

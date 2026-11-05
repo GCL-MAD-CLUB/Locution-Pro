@@ -10,9 +10,10 @@
 | 单元     | `unit/media/`                             | 导入、来源、字幕派生数据、分镜布局和播放参数       |
 | 单元     | `unit/project/`                           | 项目历史、保存状态和导出任务派发                   |
 | 单元     | `unit/runtime/`                           | 任务系统、运行环境、外部链接和更新检查             |
-| 单元     | `unit/tooling/`                           | 仓库目录和测试发现规则                             |
+| 单元     | `unit/tooling/`                           | 仓库目录、测试发现、官网链接和发布产物             |
+| 单元     | `unit/site/`                              | 官网滚动吸附边界和阅读位置                         |
 | 浏览器   | `browser/workflows/`                      | 从应用入口完成导入、编辑、导出、设置等用户流程     |
-| 浏览器   | `browser/components/`                     | 隔离组件的交互、键盘、样式和配置同步               |
+| 浏览器   | `browser/components/`                     | 隔离组件及官网的交互、键盘、响应布局和配置同步     |
 | 浏览器   | `browser/state/`                          | 真实组件与系统之间的异步状态、取消、调度和来源隔离 |
 | 外部工具 | `integration/installer/`                  | 真实 NSIS 编译与隔离安装器夹具，按需运行           |
 | Rust     | 被测实现文件内的 `#[cfg(test)] mod tests` | 原生行为；不得另建 Rust 测试文件或目录             |
@@ -27,20 +28,21 @@ npx playwright install chromium
 npm run test:all
 ```
 
-| 命令                              | 内容                                                    |
-| --------------------------------- | ------------------------------------------------------- |
-| `npm test`                        | 测试类型检查和全部确定性单元测试                        |
-| `npm run test:unit`               | `unit/*/*.test.mjs`；直接运行 Node 测试，不重复类型检查 |
-| `npm run test:types`              | 浏览器测试与 TypeScript 测试支持代码的类型检查          |
-| `npm run test:browser`            | 全部浏览器测试；`test:e2e` 保留为兼容入口               |
-| `npm run test:browser:workflows`  | 应用用户流程                                            |
-| `npm run test:browser:components` | 组件交互与样式                                          |
-| `npm run test:browser:state`      | 状态集成与异步竞态                                      |
-| `npm run test:all`                | 类型检查、单元和全部浏览器测试                          |
-| `npm run test:rust`               | 主 Rust crate 的默认测试                                |
-| `npm run test:rust:thumbnail`     | 缩略图提供程序的默认测试                                |
-| `npm run test:installer`          | Windows / NSIS 组件复用、损坏修复、清理和可选资源场景   |
-| `npm run test:installer-identity` | Windows / NSIS 安装身份、迁移和向导场景                 |
+| 命令                                 | 内容                                                    |
+| ------------------------------------ | ------------------------------------------------------- |
+| `npm test`                           | 测试类型检查和全部确定性单元测试                        |
+| `npm run test:unit`                  | `unit/*/*.test.mjs`；直接运行 Node 测试，不重复类型检查 |
+| `npm run test:types`                 | 浏览器测试与 TypeScript 测试支持代码的类型检查          |
+| `npm run test:browser`               | 全部浏览器测试；`test:e2e` 保留为兼容入口               |
+| `npm run test:browser:workflows`     | 应用用户流程                                            |
+| `npm run test:browser:components`    | 组件交互与样式                                          |
+| `npm run test:browser:state`         | 状态集成与异步竞态                                      |
+| `npm run test:all`                   | 类型检查、单元和全部浏览器测试                          |
+| `npm run test:rust`                  | 主 Rust crate 的默认测试                                |
+| `npm run test:rust:thumbnail`        | 缩略图提供程序的默认测试                                |
+| `npm run test:installer`             | Windows / NSIS 组件复用、损坏修复、清理和可选资源场景   |
+| `npm run test:installer-identity`    | Windows / NSIS 安装身份、迁移和向导场景                 |
+| `npm run test:installer-maintenance` | Windows / NSIS 维护选择、卸载顺序与独立卸载数据选项     |
 
 按域或单个场景运行：
 

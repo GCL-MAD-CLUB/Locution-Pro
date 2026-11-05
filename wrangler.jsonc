@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/wrangler@4.157.0/config-schema.json",
+  "name": "linecut-site",
+  "pages_build_output_dir": "./dist/site",
+  "compatibility_date": "2026-11-03",
+}

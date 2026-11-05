@@ -1,6 +1,7 @@
 # JavaScript dependencies and build output
 node_modules/
 dist/
+.wrangler/
 
 # Rust and Tauri build output
 target/

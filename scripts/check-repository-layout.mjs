@@ -87,6 +87,7 @@ for (const file of files) {
   if (/\.(?:mjs|js)$/u.test(file)) {
     if (
       !file.startsWith("scripts/") &&
+      !file.startsWith("site/") &&
       !file.startsWith("src/") &&
       !/^tests\/unit\/[\w-]+\/[\w-]+\.test\.mjs$/u.test(file) &&
       !/^tests\/integration\/(?:[\w-]+\/)*[\w-]+\.test\.mjs$/u.test(file) &&

@@ -37,6 +37,10 @@ const versions = new Map([
     ),
   ],
   ["src-tauri/tauri.conf.json", readJson("src-tauri/tauri.conf.json").version],
+  [
+    "site/index.html",
+    matchVersion("site/index.html", /V(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\s*\/\s*WINDOWS/u),
+  ],
 ]);
 
 const mismatches = [...versions].filter(([, version]) => version !== packageJson.version);

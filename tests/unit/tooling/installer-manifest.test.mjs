@@ -64,6 +64,9 @@ for (const destination of [
   "model\\..\\escape",
   "model\\bad=key",
   "model.\\x",
+  "model\\NUL.onnx",
+  "COM1\\x",
+  "model\\lpt¹.txt",
 ]) {
   test(`installer manifest rejects unsafe destination ${destination}`, async (t) => {
     const root = await fixture(t, { "resources/model": destination });

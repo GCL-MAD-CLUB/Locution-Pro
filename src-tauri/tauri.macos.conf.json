@@ -17,7 +17,8 @@
       "resources/transnetv2/onnxruntime-ThirdPartyNotices.txt": "transnetv2/onnxruntime-ThirdPartyNotices.txt"
     },
     "macOS": {
-      "minimumSystemVersion": "13.0"
+      "minimumSystemVersion": "13.0",
+      "entitlements": "Entitlements.plist"
     }
   }
 }

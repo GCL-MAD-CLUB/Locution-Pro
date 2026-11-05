@@ -2246,6 +2246,8 @@ dependencies = [
  "getrandom 0.2.16",
  "hkdf",
  "md-5",
+ "objc2",
+ "objc2-app-kit",
  "ort",
  "ort-sys",
  "quick-xml 0.42.0",

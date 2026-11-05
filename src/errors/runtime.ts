@@ -230,6 +230,7 @@ const modal = (title: string): OperationPolicy => ({
 
 const operationPolicies = {
   "app.event": modal("操作失败"),
+  "app.menu": silent("系统菜单更新失败"),
   "dragDrop.listen": silent("文件拖放监听失败"),
   "dragDrop.region": silent("文件拖放区域更新失败"),
   "export.reveal": silent("无法在资源管理器中显示导出文件"),

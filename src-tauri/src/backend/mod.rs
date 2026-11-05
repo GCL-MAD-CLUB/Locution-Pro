@@ -29,6 +29,7 @@ use std::{
 use tauri::{Emitter, Manager};
 use uuid::Uuid;
 
+mod application_menu;
 mod browser_visual;
 mod cache;
 mod commands;
@@ -57,6 +58,7 @@ mod thumbnail;
 mod update;
 mod workspace;
 
+pub(crate) use application_menu::*;
 pub(crate) use browser_visual::*;
 pub(crate) use commands::*;
 pub(crate) use export::*;

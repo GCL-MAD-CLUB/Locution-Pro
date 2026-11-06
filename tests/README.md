@@ -43,6 +43,8 @@ npm run test:all
 | `npm run test:installer`             | Windows / NSIS 组件复用、损坏修复、清理和可选资源场景   |
 | `npm run test:installer-identity`    | Windows / NSIS 安装身份、迁移和向导场景                 |
 | `npm run test:installer-maintenance` | Windows / NSIS 维护选择、卸载顺序与独立卸载数据选项     |
+| `npm run test:installer-safety`      | 完整 NSIS 模板、安装事务、回滚、更新交接与取消恢复      |
+| `npm run test:installer-media`       | 外部媒体工具路径与安装向导校验，不执行真实媒体处理      |
 
 按域或单个场景运行：
 

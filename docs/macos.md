@@ -1,6 +1,6 @@
 # macOS 构建
 
-本文面向在 macOS 上本地构建和调试的开发者。正式发布仍只面向 Windows；macOS 构建尚未签名、公证，也没有 CI 覆盖。
+本文面向在 macOS 上本地构建和调试的开发者。CI 在 macOS 上运行 Rust 的 clippy 与测试；发布流程在 Windows 安装包之后构建 arm64 的 `.app` 与 `.dmg`，上传到同一个草稿 release。macOS 包使用 ad-hoc 签名（`signingIdentity: "-"`），未经公证。
 
 ## 环境
 
@@ -23,11 +23,13 @@ npm run tauri dev
 
 `src-tauri/tauri.macos.conf.json` 在 macOS 上覆盖打包目标（`.app` 与 `.dmg`）、图标，并移除 Windows 缩略图提供程序。`npm run tauri build -- --debug` 可生成本地调试包；release 构建与 Windows 一样需要 `LOCUTION_PRO_PROJECT_BUILD_SECRET_V1`，否则构建会被拒绝。不要为了本地测试生成新的密钥：用不同密钥构建的应用无法打开正式版本创建的项目文件。
 
+发布流程下载固定版本、按 SHA-256 校验的静态 arm64 FFmpeg（只链接系统框架），通过 `LOCUTION_PRO_FFMPEG_DIR` 交给 `prepare:ffmpeg`，许可证见 `THIRD_PARTY_NOTICES`。包未经公证，从浏览器下载后首次打开需要在“系统设置 → 隐私与安全性”中允许；接入 Developer ID 签名与公证时，设置 `APPLE_SIGNING_IDENTITY` 等 Tauri 签名环境变量即可覆盖 ad-hoc 签名。
+
 ## 已知差异
 
 - WebKit 无法直接播放 MKV 等封装，导入时会提示创建代理；镜头检测与语义索引仍读取原始文件。
 - 程序与 FFmpeg 5.1 及以上版本兼容（已不使用 FFmpeg 9 移除的 `-vsync`）。
-- 未签名的本地构建每次重新构建后，macOS 会再次询问下载、文稿等文件夹的访问权限，确认前文件夹列表保持“正在读取”。
+- ad-hoc 签名的身份随每次构建变化，因此重新构建后，macOS 会再次询问下载、文稿等文件夹的访问权限，确认前文件夹列表保持“正在读取”。
 - 数据与缓存目录目前为 `~/.locution-pro`，尚未迁移到 `~/Library/Application Support`。
 
 ## GPU 加速

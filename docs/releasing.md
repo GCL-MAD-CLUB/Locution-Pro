@@ -128,7 +128,7 @@ OpenList 后端自动同步最新正式 Release 的附件到[分享目录](https
 
 官网的 `/api/release` 先读取 CDN 的 `/sd/YRrdPxj2/latest.json`，失败、超时或内容无效时读取 GitHub 的 `/releases/latest/download/latest.json`；两者都不可用时返回固定 0.4.1 的 GitHub 下载地址，不附带 CDN 地址。GitHub 的 latest 路径以正式 Release 的最新标记为准，预发布清单也会被官网拒绝。清单读取不比较两个源的新旧，CDN 同步延迟期间可能继续提供上一个正式版本。
 
-所有官网安装按钮统一进入 `/api/download`，由 Cloudflare Pages Worker 读取同一清单，优先请求 `cdn_url`，连接失败、超时、错误状态或非安装包响应时回退 `url`，流式返回安装包，不整包读入内存。清单有效但两个安装源都失败时返回 502，避免静默降级。响应开始后的网络中断需由浏览器重试；续传仅在客户端提供匹配的 SHA-256 ETag 时启用，版本变化会重新下载，避免拼接不同版本。网站不在下载过程中计算整包摘要，人工校验使用 `SHA256SUMS.txt`。
+所有官网安装按钮统一进入 `/api/download`，由 Cloudflare Pages Worker 读取同一清单，使用 `Range: bytes=0-1` 优先探测 `cdn_url`，连接失败、超时、错误状态或非安装包响应时探测同版本 `url`。确认 Windows 可执行文件头后停止探测，以不缓存的 302 响应让浏览器直接从该地址下载；安装包数据不经过 Worker 转发。清单有效但两个安装源都失败时返回 502，避免静默降级。重定向后的网络中断需由浏览器重试，续传由下载源处理；探测不转发客户端的凭据和续传请求头。网站不计算整包摘要，人工校验使用 `SHA256SUMS.txt`。
 
 `tauri build` 的 `beforeBuildCommand` 自动执行 `npm run prepare:semantic` 和
 `npm run prepare:storyboard-semantic`，下载并校验约 844 MiB 的模型；失败会中止构建。

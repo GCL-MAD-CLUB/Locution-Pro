@@ -116,19 +116,18 @@ test("manifest validation rejects unrelated hosts, credentials, paths and versio
   assert.equal(validateRelease(document).platforms[RELEASE_PLATFORM].cdn_url, "");
 });
 
-test("CDN installer streams immediately with an attachment name and no GitHub request", async () => {
+test("CDN probe redirects the browser without forwarding the installer", async () => {
   const calls = [];
-  const response = await downloadRelease(request(), release(), async (url) => {
+  const response = await downloadRelease(request(), release(), async (url, init) => {
     calls.push(url);
-    return binary();
+    assert.equal(init.headers.get("Range"), "bytes=0-1");
+    return binary("MZ", { status: 206 });
   });
   assert.deepEqual(calls, [release().platforms[RELEASE_PLATFORM].cdn_url]);
-  assert.match(
-    response.headers.get("Content-Disposition"),
-    /Locution\.Pro_2\.1\.1_x64-setup\.exe/u,
-  );
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), release().platforms[RELEASE_PLATFORM].cdn_url);
   assert.equal(response.headers.get("Cache-Control"), "no-store");
-  assert.equal(await response.text(), "MZ installer");
+  assert.equal(response.body, null);
 });
 
 for (const failure of [
@@ -136,11 +135,12 @@ for (const failure of [
   "network",
   "html",
   "mislabelled-html",
+  "partial-html",
   "empty",
   "truncated",
   "stream",
 ]) {
-  test(`CDN installer failure (${failure}) downloads the same release from GitHub`, async () => {
+  test(`CDN probe failure (${failure}) redirects to the same release on GitHub`, async () => {
     const calls = [];
     const response = await downloadRelease(request(), release(), async (url) => {
       calls.push(url);
@@ -152,6 +152,7 @@ for (const failure of [
       if (failure === "empty") return binary("");
       if (failure === "truncated") return binary("M");
       if (failure === "mislabelled-html") return binary("<html>error</html>");
+      if (failure === "partial-html") return binary("<html>error</html>", { status: 206 });
       return binary(
         new ReadableStream({
           start(stream) {
@@ -164,18 +165,21 @@ for (const failure of [
       release().platforms[RELEASE_PLATFORM].cdn_url,
       release().platforms[RELEASE_PLATFORM].url,
     ]);
-    assert.equal(await response.text(), "MZ installer");
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("Location"), release().platforms[RELEASE_PLATFORM].url);
+    assert.equal(response.body, null);
   });
 }
 
-test("empty CDN URL downloads directly from GitHub; two failed sources return 502", async () => {
+test("empty CDN URL redirects to GitHub; two failed sources return 502", async () => {
   const document = release();
   document.platforms[RELEASE_PLATFORM].cdn_url = "";
   const response = await downloadRelease(request(), document, async (url) => {
     assert.equal(url, document.platforms[RELEASE_PLATFORM].url);
     return binary();
   });
-  await response.body.cancel();
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), document.platforms[RELEASE_PLATFORM].url);
   const failed = await downloadRelease(
     request(),
     release(),
@@ -184,7 +188,7 @@ test("empty CDN URL downloads directly from GitHub; two failed sources return 50
   assert.equal(failed.status, 502);
 });
 
-test("resuming requires the SHA-256 ETag so release changes restart instead of mixing bytes", async () => {
+test("download probes ignore client ranges and credentials", async () => {
   const etag = `"sha256-${"a".repeat(64)}"`;
   for (const ifRange of [etag, '"older-release"']) {
     const response = await downloadRelease(
@@ -196,18 +200,73 @@ test("resuming requires the SHA-256 ETag so release changes restart instead of m
       }),
       release(),
       async (_url, init) => {
-        assert.equal(init.headers.get("Range"), ifRange === etag ? "bytes=4-" : null);
+        assert.equal(init.headers.get("Range"), "bytes=0-1");
+        assert.equal(init.headers.get("If-Range"), null);
         assert.equal(init.headers.get("Cookie"), null);
         assert.equal(init.headers.get("Authorization"), null);
-        return binary(ifRange === etag ? "installer" : "MZ installer", {
-          status: ifRange === etag ? 206 : 200,
-        });
+        return binary();
       },
     );
-    assert.equal(response.headers.get("ETag"), etag);
-    assert.equal(response.status, ifRange === etag ? 206 : 200);
-    await response.body.cancel();
+    assert.equal(response.headers.get("ETag"), null);
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("Location"), release().platforms[RELEASE_PLATFORM].cdn_url);
   }
+});
+
+test("the successful probe cancels its upstream without reading the remaining installer", async () => {
+  let reads = 0;
+  let cancelled = false;
+  const response = await downloadRelease(request(), release(), async () =>
+    binary(
+      new ReadableStream(
+        {
+          pull(stream) {
+            reads++;
+            assert.equal(reads, 1, "the worker must not read the installer body");
+            stream.enqueue(new Uint8Array([0x4d, 0x5a]));
+          },
+          cancel() {
+            cancelled = true;
+          },
+        },
+        { highWaterMark: 0 },
+      ),
+    ),
+  );
+  assert.equal(response.status, 302);
+  assert.equal(reads, 1);
+  assert.equal(cancelled, true);
+});
+
+test("a stalled CDN probe times out and redirects to GitHub", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const calls = [];
+  const pending = downloadRelease(request(), release(), async (url, init) => {
+    calls.push(url);
+    if (calls.length > 1) return binary();
+    return new Promise((_resolve, reject) =>
+      init.signal.addEventListener("abort", () => reject(new Error("timed out")), { once: true }),
+    );
+  });
+  t.mock.timers.tick(12001);
+  const response = await pending;
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), release().platforms[RELEASE_PLATFORM].url);
+  assert.deepEqual(calls, [
+    release().platforms[RELEASE_PLATFORM].cdn_url,
+    release().platforms[RELEASE_PLATFORM].url,
+  ]);
+});
+
+test("HEAD download requests expose the direct location without an installer body", async () => {
+  const response = await handleRequest(
+    new Request("https://site/api/download", { method: "HEAD" }),
+    {},
+    async (url) => (url.endsWith("latest.json") ? Response.json(release()) : binary()),
+  );
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), release().platforms[RELEASE_PLATFORM].cdn_url);
+  assert.equal(response.body, null);
 });
 
 test("API serves release JSON, rejects mutation methods and keeps static assets on Pages", async () => {
@@ -243,8 +302,9 @@ test("unavailable manifests download 0.4.1 from GitHub without the retired CDN f
     return binary();
   });
   assert.deepEqual(calls, [...MANIFEST_URLS, fallbackRelease().platforms[RELEASE_PLATFORM].url]);
-  assert.match(response.headers.get("Content-Disposition"), /0\.4\.1/u);
-  await response.body.cancel();
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), fallbackRelease().platforms[RELEASE_PLATFORM].url);
+  assert.equal(response.body, null);
 });
 
 test("website version label follows the manifest and preserves 0.4.1 when offline", async () => {

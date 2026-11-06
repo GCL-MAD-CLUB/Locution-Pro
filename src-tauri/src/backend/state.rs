@@ -39,12 +39,29 @@ impl AppState {
             projects: Mutex::new(HashMap::new()),
             preferences: Mutex::new(preferences),
             startup_preferences_error: Mutex::new(startup_preferences_error),
-            launch_project_path: Mutex::new(project_path_from_launch_args()),
+            launch_project_path: Mutex::new(
+                take_early_launch_project().or_else(project_path_from_launch_args),
+            ),
             running_tasks: Mutex::new(HashMap::new()),
             running_ffmpeg: Mutex::new(HashMap::new()),
             workspace_config_lock: Mutex::new(()),
         }
     }
+}
+
+/// A project opened from Finder before setup created [`AppState`]: on a cold
+/// launch macOS delivers the open event before the event loop is ready.
+static EARLY_LAUNCH_PROJECT: Mutex<Option<String>> = Mutex::new(None);
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn defer_launch_project(path: String) {
+    if let Ok(mut early) = EARLY_LAUNCH_PROJECT.lock() {
+        *early = Some(path);
+    }
+}
+
+fn take_early_launch_project() -> Option<String> {
+    EARLY_LAUNCH_PROJECT.lock().ok()?.take()
 }
 
 fn project_path_from_launch_args() -> Option<String> {

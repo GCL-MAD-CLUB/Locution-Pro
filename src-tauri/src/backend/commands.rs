@@ -54,6 +54,9 @@ pub(crate) fn receive_opened_files(app: &tauri::AppHandle, urls: &[tauri::Url]) 
         return;
     };
     let Some(state) = app.try_state::<AppState>() else {
+        // Cold launch: AppState picks the path up when setup creates it, and
+        // the frontend reads it at startup, so no event is needed.
+        defer_launch_project(path);
         return;
     };
     match state.launch_project_path.lock() {

@@ -21,6 +21,14 @@ export default defineConfig({
   lastUpdated: true,
   sitemap: { hostname: "https://helpx.locution.dpdns.org" },
   head: [
+    [
+      "link",
+      {
+        rel: "icon",
+        type: "image/x-icon",
+        href: `${normalizeBase(process.env.DOCS_BASE)}favicon.ico`,
+      },
+    ],
     ["meta", { name: "theme-color", content: "#315efb" }],
     ["meta", { property: "og:locale", content: "zh_CN" }],
   ],

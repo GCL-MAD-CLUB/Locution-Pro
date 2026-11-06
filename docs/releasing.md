@@ -12,18 +12,25 @@
 
 ## 统一版本与检查
 
-从最新 main 创建发布准备分支。检查 package、锁文件、Cargo 主包和 Tauri 配置的应用版本一致；缩略图提供程序的独立版本不随主应用同步。`release:build` 会同步这些版本。官网运行时读取发布清单，不再随应用版本修改源码；HTML 中的 0.4.1 是清单不可用时的固定回退版本。
+从最新 main 创建 `release/<版本>` 发布准备分支，将待发布的功能提交纳入该分支。先运行完整前端、浏览器、默认 Rust 与安装器测试，再修复问题并整理发布改动。检查 package、锁文件、Cargo 主包和 Tauri 配置的应用版本一致；缩略图提供程序的独立版本不随主应用同步。`release:build` 会同步这些版本。官网运行时读取发布清单，不再随应用版本修改源码；HTML 中的 0.4.1 是清单不可用时的固定回退版本，不能提前改成尚未公开的版本。
 
 ```powershell
 npm ci
+npm audit
+npm run test:all
+npm run test:rust
+npm run test:rust:thumbnail
 npm run check:versions
 npm run check
+npm run format:rust:check
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+cargo clippy --manifest-path src-tauri/thumbnail-provider/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
-准备正式 0.4.1 时，应在审查后的改动中统一相应版本；不能仅创建 tag 来绕过清单检查。需要本地统一版本并生成完整安装包时使用：
+准备正式 0.4.2 时，应在审查后的改动中统一 `package.json`、`package-lock.json`（含根包）、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 主包和 `src-tauri/tauri.conf.json` 的版本。仅做发布准备时直接修改这些清单，再运行检查；不能仅创建 tag 来绕过清单检查。需要本地统一版本并生成完整安装包时使用：
 
 ```powershell
-npm run release:build -- 0.4.1
+npm run release:build -- 0.4.2
 ```
 
 该命令会修改版本文件、检查密钥、格式化相关文件、准备 FFmpeg 并启动锁定依赖的构建，不是只读检查。构建钩子还会下载并校验语义模型。完整安装包、更新专用安装包、`latest.json` 和 `SHA256SUMS.txt` 统一输出到 `src-tauri/target/release-artifacts/`。仅更新文档时不运行它。
@@ -40,18 +47,21 @@ npm run release:build -- 0.4.1
 - CHANGELOG 标明发布状态与兼容注意事项；未发布时不填写虚构发布日期。
 - 资源、许可证与第三方声明和实际包内容一致。
 - 运行 `npm run docs:build`，检查导航和链接。
+- 帮助中心的 `public/favicon.ico` 复用 `src-tauri/icons/icon.ico`，由 `.vitepress/config.ts` 声明标签页图标；品牌图标变化时同步该资源，并核对构建后的首页与内页。
 - 保留旧项目读取兼容与正式密钥，说明重存后可能无法降级打开。
+
+准备分支上的 CHANGELOG 使用“待发布”，不提前填写发布日期。将修复、版本和文档提交到发布准备分支；在开始 Release 工作流前完成 PR 审查、合并，并等待合并后 main 的普通 CI 成功。仅完成发布准备时，到此停止，不创建或推送发布 tag，也不手动触发 Release 工作流。文档站和官网的上线由各自的部署工作流完成。
 
 ## 创建发布 tag
 
 版本 PR 合并后，在对应 main 提交创建 tag。以下命令仅用于已准备好正式版本的提交：
 
 ```powershell
-git tag -a v0.4.1 -m "Locution Pro 0.4.1"
-git push origin v0.4.1
+git tag -a v0.4.2 -m "Locution Pro 0.4.2"
+git push origin v0.4.2
 ```
 
-预发布 tag 应与清单完整一致，例如 `v0.4.1-preview`。包含连字符的 tag 由工作流标记为 prerelease。
+预发布 tag 应与清单完整一致，例如 `v0.4.2-preview`。包含连字符的 tag 由工作流标记为 prerelease。
 
 发布校验要求该提交已有 main 分支 push 触发的成功 CI 运行。tag 推送不经过分支保护，因此在 CI 完成前打 tag 会让发布工作流直接失败；等 CI 通过后重跑发布工作流即可。构建固定使用通过校验的提交 SHA，上传前再次确认 tag 未移动。相同 tag 的手动触发和自动触发共用并发锁。发布附件按 `Locution.Pro_<版本>_x64-setup.exe` 命名，产品名与安装路径仍为 `Locution Pro`。
 
@@ -121,6 +131,10 @@ OpenList 后端自动同步最新正式 Release 的附件到[分享目录](https
 `beforeBundleCommand` 在 TransNetV2 和缩略图提供程序准备完成后执行
 `npm run prepare:installer`，按 Tauri 的资源目标路径与 FFmpeg sidecar 文件生成 SHA-256 清单，
 并将清单封入 NSIS 安装包。缺失资源、目标路径冲突或不支持的资源映射会阻止打包。
+Tauri 会在此钩子之后改写主程序的安装器类型标记，并可能执行签名。因此，NSIS 模板在编译时
+调用同一脚本的 `--finalize-main <清单> <主程序路径> <安装文件名>`，从实际封包的主程序计算
+摘要与大小，生成独立的 `<清单>.nsis.json` 后嵌入；资源摘要和原始清单保持不变。
+完整包与更新包都必须执行这一步，不能直接用钩子阶段的主程序摘要作最终校验，也不能跳过主程序校验。
 修改资源配置时须同步维护清理范围：`transnetv2`、`semantic-search`、`storyboard-semantic`
 和 `licenses` 为已识别旧安装的管理目录；该旧安装根目录的 DLL、主程序、卸载程序及媒体工具为应用代码。
 只有注册记录识别出的旧安装目录才执行整目录及根目录 DLL 清理。全新或变更后的目标目录仅处理当前清单

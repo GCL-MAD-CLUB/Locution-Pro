@@ -1,6 +1,6 @@
 [package]
 name = "locution-pro"
-version = "0.4.1"
+version = "0.4.2"
 description = "Media management, visual search, shot organization, and clip delivery"
 authors = ["Kotodama"]
 license = "Apache-2.0"

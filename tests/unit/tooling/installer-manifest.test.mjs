@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import test from "node:test";
 
-import { prepareInstallerManifest } from "../../../scripts/prepare-installer-manifest.mjs";
+import {
+  finalizeInstallerManifest,
+  prepareInstallerManifest,
+} from "../../../scripts/prepare-installer-manifest.mjs";
 
 async function fixture(t, resources) {
   const root = await mkdtemp(join(tmpdir(), "locution-installer-manifest-"));
@@ -57,6 +60,43 @@ test("installer manifest hashes actual payload bytes and nested Windows destinat
   await writeFile(join(root, "src-tauri/resources/model/nested/模型.onnx"), "MODEL");
   await prepareInstallerManifest(root);
   assert.notEqual(await readFile(output, "utf8"), first);
+});
+
+test("NSIS finalization hashes the patched executable without changing the resource manifest", async (t) => {
+  const root = await fixture(t, { "../LICENSE": "LICENSE" });
+  const binary = join(root, "src-tauri/target/release/locution-pro.exe");
+  await writeFile(binary, "MZ __TAURI_BUNDLE_TYPE_VAR_UNK");
+  const input = await prepareInstallerManifest(root);
+  const before = await readFile(input, "utf8");
+  const patched = "MZ __TAURI_BUNDLE_TYPE_VAR_NSS";
+  await writeFile(binary, patched);
+  const output = await finalizeInstallerManifest(input, binary, "locution-pro.exe");
+  const final = JSON.parse(await readFile(output, "utf8"));
+  assert.deepEqual(
+    final.files.find((entry) => entry.path === "locution-pro.exe"),
+    {
+      path: "locution-pro.exe",
+      size: Buffer.byteLength(patched),
+      sha256: createHash("sha256").update(patched).digest("hex"),
+      group: "core",
+    },
+  );
+  const resources = (manifest) =>
+    manifest.files.filter((entry) => entry.path !== "locution-pro.exe");
+  assert.deepEqual(resources(final), resources(JSON.parse(before)));
+  assert.equal(await readFile(input, "utf8"), before);
+  assert.equal(await readFile(binary, "utf8"), patched);
+  const signature = " signed";
+  await writeFile(binary, patched + signature);
+  await finalizeInstallerManifest(input, binary, "locution-pro.exe");
+  assert.equal(
+    JSON.parse(await readFile(output, "utf8")).files.find(
+      (entry) => entry.path === "locution-pro.exe",
+    ).sha256,
+    createHash("sha256")
+      .update(patched + signature)
+      .digest("hex"),
+  );
 });
 
 for (const destination of [

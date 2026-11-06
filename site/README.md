@@ -76,7 +76,7 @@ Git 集成构建需要安装仓库的 npm 依赖。不能将桌面程序的 `npm
 官网和用户指南分别绑定各自的域名，按以下步骤配置：
 
 1. 先在 GitHub **Settings → Pages → Custom domain** 填写 `helpx.locution.dpdns.org`，然后配置该域名指向现有 GitHub Pages 站点的 DNS，完成 HTTPS 验证。CNAME 目标使用 `<GitHub 用户或组织>.github.io`，例如当前 origin 对应 `inexplicable-yl.github.io`；以实际承载文档的仓库所有者为准。当前使用自定义 Actions 发布，GitHub 的域名绑定以控制台设置为准，产物中的 `CNAME` 文件不能替代该设置。
-2. 发布用户指南并确认新域名上的首页和内页均正常。文档部署基址固定为 `/`，旧的 `DOCS_BASE` 仓库变量不再生效。
+2. 发布用户指南并确认新域名上的首页和内页均正常，浏览器标签页显示产品图标。帮助中心使用 `docs/user-guide/public/favicon.ico`，与 `src-tauri/icons/icon.ico` 保持一致。部署工作流将文档基址固定为 `/`，旧的 `DOCS_BASE` 仓库变量不再生效。
 3. 在 Cloudflare Pages 项目的 **Custom domains** 添加 `locution.dpdns.org`，然后按控制台提示添加或更新 DNS，使其指向项目实际提供的 `<项目>.pages.dev` 目标，等待域名和 HTTPS 证书激活。
 4. 验证官网首页、`/sitemap.xml`、随机不存在路径的 404，以及下载、GitHub、更新日志和用户指南入口。
 

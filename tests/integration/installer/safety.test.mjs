@@ -560,9 +560,15 @@ public class Fixture {
     });
 
     await t.test("all install scopes and dependency packaging branches compile", async () => {
+      const mainInput = join(temporary, "main-payload.exe");
+      const beforeBundling = "MZ __TAURI_BUNDLE_TYPE_VAR_UNK";
+      const bundledMain = "MZ __TAURI_BUNDLE_TYPE_VAR_NSS";
+      // Reproduce Tauri changing three executable bytes after the hook hashes it.
+      writeFileSync(mainInput, bundledMain);
       const compiler =
         process.env.NSIS_MAKENSIS ?? join(process.env.LOCALAPPDATA, "tauri/NSIS/makensis.exe");
-      const support = ["debug", "release"]
+      // A stale debug helper must not mask changes in the release toolchain.
+      const support = ["release", "debug"]
         .map((profile) => join(target, profile, "nsis/x64"))
         .find(
           (path) =>
@@ -587,7 +593,7 @@ public class Fixture {
           version_with_build: "1.0.0.0",
           install_mode: scope,
           main_binary_name: "locution-pro",
-          main_binary_path: nsis(payload),
+          main_binary_path: nsis(mainInput),
           bundle_id: "com.locutionpro.desktop",
           out_file: nsis(join(temporary, `${scope}.exe`)),
           arch: "x64",
@@ -770,6 +776,15 @@ public class Fixture {
             );
             run(compiler, ["/V2", "/INPUTCHARSET", "UTF8", file]);
           };
+          const fullManifest = join(temporary, "full-template-manifest.json");
+          const fullPayload = JSON.parse(readFileSync(manifest, "utf8"));
+          fullPayload.files.push({
+            path: "locution-installer-safety-fixture.exe",
+            size: Buffer.byteLength(beforeBundling),
+            sha256: createHash("sha256").update(beforeBundling).digest("hex"),
+            group: "core",
+          });
+          writeFileSync(fullManifest, JSON.stringify(fullPayload));
           const install = join(temporary, "full installer 测试");
           const options = {
             trace,
@@ -785,7 +800,7 @@ public class Fixture {
           const freshBefore = snapshotRegistration(
             join(temporary, "fresh-registration-before.json"),
           );
-          build(manifest, true);
+          build(fullManifest, true);
           run(executable, ["/S", "/NS", `/D=${install}`], 2, options);
           const freshAfter = snapshotRegistration(join(temporary, "fresh-registration-after.json"));
           assert.deepEqual(
@@ -795,9 +810,9 @@ public class Fixture {
           );
           assert(!existsSync(main));
           assert(!existsSync(join(install, "uninstall.exe")));
-          build(manifest);
+          build(fullManifest);
           run(executable, ["/S", "/NS", `/D=${install}`], 0, options);
-          assert.equal(readFileSync(main, "utf8"), "payload");
+          assert.equal(readFileSync(main, "utf8"), bundledMain);
           const uninstaller = readFileSync(join(install, "uninstall.exe"));
           writeFileSync(main, "previous working executable");
           const incomplete = join(temporary, "incomplete-manifest.json");
@@ -861,7 +876,7 @@ $arp.Dispose(); $base.Dispose()
             return JSON.parse(readFileSync(output, "utf8").replace(/^\ufeff/u, ""));
           }
           const before = snapshotRegistration(join(temporary, "registration-before.json"));
-          build(manifest, true);
+          build(fullManifest, true);
           run(executable, ["/S", "/NS", `/D=${install}`], 2, options);
           const after = snapshotRegistration(join(temporary, "registration-after.json"));
           assert.deepEqual(
@@ -875,8 +890,8 @@ $arp.Dispose(); $base.Dispose()
           const updatePayload = JSON.parse(readFileSync(manifest, "utf8"));
           updatePayload.files.push({
             path: "locution-installer-safety-fixture.exe",
-            size: 7,
-            sha256: createHash("sha256").update("payload").digest("hex"),
+            size: Buffer.byteLength(beforeBundling),
+            sha256: createHash("sha256").update(beforeBundling).digest("hex"),
             group: "core",
           });
           writeFileSync(updateManifest, JSON.stringify(updatePayload));
@@ -956,7 +971,7 @@ $arp.Dispose(); $base.Dispose()
             await otherExit;
           }
           run(executable, ["/S", "/UPDATE", `/D=${install}`], 0, options);
-          assert.equal(readFileSync(main, "utf8"), "payload");
+          assert.equal(readFileSync(main, "utf8"), bundledMain);
           assert.equal(readFileSync(dependency, "utf8"), "payload");
           // Run the real bootstrap, including quoted handoff arguments, the
           // embedded controller, worker mutex and failure/restart protocol.

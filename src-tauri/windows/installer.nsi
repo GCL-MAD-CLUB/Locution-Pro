@@ -26,6 +26,7 @@ ManifestDPIAwareness PerMonitorV2
 !include "utils.nsh"
 !include "Win\COM.nsh"
 !include "Win\Propkey.nsh"
+!include "Win\RestartManager.nsh"
 
 {{#if installer_hooks}}
 !include "{{installer_hooks}}"
@@ -139,6 +140,16 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
   !define MULTIUSER_EXECUTIONLEVEL Highest
   !include MultiUser.nsh
 !endif
+
+; Hash the actual executable supplied to NSIS, after Tauri's bundle-type patch
+; and code signing. The beforeBundleCommand manifest predates those changes.
+!ifndef LOCUTION_PAYLOAD_MANIFEST
+  !define LOCUTION_PAYLOAD_MANIFEST "${LOCUTION_INSTALLER_SOURCE_DIR}\..\target\installer\payload-manifest.json"
+!endif
+!define LOCUTION_FINAL_PAYLOAD_MANIFEST "${LOCUTION_PAYLOAD_MANIFEST}.nsis.json"
+!system 'node "${LOCUTION_INSTALLER_SOURCE_DIR}\..\..\scripts\prepare-installer-manifest.mjs" --finalize-main "${LOCUTION_PAYLOAD_MANIFEST}" "${MAINBINARYSRCPATH}" "${MAINBINARYNAME}.exe"' = 0
+!undef LOCUTION_PAYLOAD_MANIFEST
+!define LOCUTION_PAYLOAD_MANIFEST "${LOCUTION_FINAL_PAYLOAD_MANIFEST}"
 
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\independent-install.nsh"
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\upgrade-files.nsh"
@@ -274,7 +285,7 @@ Function LocutionProCheckRunningApp
       Abort "仍有 Locution Pro 进程运行，已取消更新。请保存并关闭其他窗口后重试。"
     ${EndIf}
   !else
-  !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
   !endif
 FunctionEnd
 
@@ -1079,7 +1090,7 @@ Section Uninstall
   !endif
 
   ${If} $LocutionProOwnsRegistration == 1
-    !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+    !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
   ${EndIf}
 
   ; Preflight all managed files and locks before deleting the first file. This

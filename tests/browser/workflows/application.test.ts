@@ -17,13 +17,46 @@ async function assertUpdateVisualAlignment(dialog: Locator) {
   expect(alignment.textOffset).toBeCloseTo(16, 1);
 }
 
-test("启动后台检查仅提示一次并展示发布说明和发布页入口", async ({ page, native }) => {
+test("启动时先展示安装错误，再展示新版本说明，确认后不重复", async ({ page, native }) => {
   await page.addInitScript(() => {
+    (window as any).__nativeTest.updateStartup = {
+      pending: null,
+      ignored: false,
+      ignoredVersions: [],
+      failure: { version: "0.5.0", error: "Dependency hash mismatch: runtime.dll", exitCode: 2 },
+      notes: {
+        version: "0.4.1",
+        title: "Locution Pro 0.4.1",
+        body: "## 更新说明\n- 新版功能",
+        url: "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v0.4.1",
+      },
+    };
+  });
+  await page.goto("/");
+  const failed = page.getByRole("dialog", { name: "更新失败", exact: true });
+  await expect(failed.getByText("Dependency hash mismatch: runtime.dll")).toBeVisible();
+  await expect(failed.getByRole("button", { name: "前往发布页下载" })).toBeVisible();
+  await failed
+    .locator(".modal-dialog-actions")
+    .getByRole("button", { name: "关闭", exact: true })
+    .click();
+  const installed = page.getByRole("dialog", { name: "版本更新", exact: true });
+  await expect(installed.getByText("已更新", { exact: true })).toBeVisible();
+  await expect(installed.getByRole("heading", { name: "更新说明" })).toBeVisible();
+  await expect.poll(async () => (await native.calls("acknowledge_update_notes")).length).toBe(1);
+  await installed.getByRole("button", { name: "完成", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("自动更新不可用时展示发布说明和原有发布页入口", async ({ page, native }) => {
+  await page.addInitScript(() => {
+    (window as any).__nativeTest.failures.download_update = "No updater in legacy release";
+    (window as any).__nativeTest.expectedFailures.push("tauri:download_update");
     (window as any).__nativeTest.latestRelease = {
       version: "v999.0.0",
       title: "Locution Pro 999.0.0",
       body: "## 本次更新\n- 更快的媒体导入\n- [完整说明](https://example.com/notes)",
-      url: "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v999.0.0",
+      url: "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v999.0.0",
     };
   });
   await page.goto("/");
@@ -51,7 +84,7 @@ test("启动后台检查仅提示一次并展示发布说明和发布页入口",
   ]);
   await update.getByRole("button", { name: "前往发布页" }).click();
   expect((await native.calls("open_external_url"))[1].args.url).toBe(
-    "https://github.com/GCL-MAD-CLUB/LineCut/releases/tag/v999.0.0",
+    "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v999.0.0",
   );
   await update.getByRole("button", { name: "稍后" }).click();
   await expect(update).toHaveCount(0);
@@ -67,6 +100,63 @@ test("启动检查失败保持静默", async ({ page, native }) => {
   await page.goto("/");
   await expect.poll(async () => (await native.calls("fetch_latest_release")).length).toBe(1);
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("更新包就绪使用12px字号，忽略选项位于版本说明与按钮之间", async ({ page, native }) => {
+  await page.addInitScript(() => {
+    (window as any).__nativeTest.latestRelease = {
+      version: "999.0.0",
+      title: "Locution Pro 999.0.0",
+      body: "## 更新内容\n- 改进更新体验",
+      url: "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v999.0.0",
+    };
+  });
+  await page.goto("/");
+  const dialog = page.getByRole("dialog", { name: "检查更新", exact: true });
+  await expect(dialog.getByRole("button", { name: "立即更新", exact: true })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "前往发布页", exact: true })).toHaveCount(0);
+  for (const selector of [
+    ".update-dialog-body",
+    "h3",
+    ".update-dialog-notes h2",
+    ".update-dialog-ignore",
+    ".modal-dialog-confirm",
+  ]) {
+    await expect(dialog.locator(selector).first()).toHaveCSS("font-size", "12px");
+  }
+  const positions = await dialog.evaluate((element) => ({
+    notes: element.querySelector(".update-dialog-notes")!.getBoundingClientRect().bottom,
+    ignoreTop: element.querySelector(".update-dialog-ignore")!.getBoundingClientRect().top,
+    ignoreBottom: element.querySelector(".update-dialog-ignore")!.getBoundingClientRect().bottom,
+    actions: element.querySelector(".modal-dialog-actions")!.getBoundingClientRect().top,
+  }));
+  expect(positions.ignoreTop).toBeGreaterThan(positions.notes);
+  expect(positions.ignoreBottom).toBeLessThan(positions.actions);
+  await dialog.getByRole("checkbox", { name: "不再提示此版本" }).check();
+  expect(await native.calls("set_update_ignored")).toHaveLength(1);
+});
+
+test("更新包无法启动时回退发布页，继续保留当前应用", async ({ page, native }) => {
+  await page.addInitScript(() => {
+    const state = (window as any).__nativeTest;
+    state.latestRelease = {
+      version: "999.0.0",
+      title: "New release",
+      body: "Release notes",
+      url: "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v999.0.0",
+    };
+    state.failures.install_update = "Cached installer is unavailable";
+    state.expectedFailures.push("tauri:install_update");
+  });
+  await page.goto("/");
+  const dialog = page.getByRole("dialog", { name: "检查更新", exact: true });
+  await dialog.getByRole("button", { name: "立即更新", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "前往发布页", exact: true })).toBeVisible();
+  await expect(dialog.getByText("Release notes", { exact: true })).toBeVisible();
+  await expect(page.getByText("暂时无法检查更新")).toHaveCount(0);
+  expect(await native.calls("install_update")).toHaveLength(1);
+  await dialog.getByRole("button", { name: "前往发布页", exact: true }).click();
+  expect((await native.calls("open_external_url"))[0].args.url).toContain("v999.0.0");
 });
 
 test("帮助菜单手动检查展示最新状态和失败反馈", async ({ app, native }) => {
@@ -95,12 +185,14 @@ test("手动检查期间不会派发重复请求", async ({ app, native }) => {
   await app.getByRole("button", { name: "帮助(H)", exact: true }).click();
   await app.getByRole("menuitem", { name: "更新(U)...", exact: true }).click();
   const checking = app.getByRole("dialog", { name: "检查更新", exact: true });
-  await expect(checking.getByText("正在检查新版本")).toBeVisible();
-  await assertUpdateVisualAlignment(checking);
-  expect(await native.calls("fetch_latest_release")).toHaveLength(2);
-  await checking.getByRole("button", { name: "取消" }).click();
-  await native.release("fetch_latest_release");
   await expect(checking).toHaveCount(0);
+  expect(await native.calls("fetch_latest_release")).toHaveLength(2);
+  await app.getByRole("button", { name: "帮助(H)", exact: true }).click();
+  await expect(app.getByRole("menuitem", { name: "更新(U)...", exact: true })).toBeDisabled();
+  expect(await native.calls("fetch_latest_release")).toHaveLength(2);
+  await app.keyboard.press("Escape");
+  await native.release("fetch_latest_release");
+  await expect(checking.getByText("当前已是最新版本")).toBeVisible();
 });
 
 test("应用菜单可打开关于，两个视图均限制焦点且拦截应用快捷键", async ({ app, native }) => {

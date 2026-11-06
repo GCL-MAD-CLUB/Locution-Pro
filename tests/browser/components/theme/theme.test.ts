@@ -11,6 +11,7 @@ for (const appearance of ["dark", "light"] as const) {
         "/src/components/common/PanelSearch/PanelSearch.css",
         "/src/components/common/SelectDropdown/SelectDropdown.css",
         "/src/components/common/ModalDialog/ModalDialog.css",
+        "/src/components/common/UpdateDialog/UpdateDialog.css",
         "/src/components/common/MediaBrowserDialog/MediaBrowserDialog.css",
         "/src/components/panels/SubtitlePanel/SubtitlePanel.css",
         "/src/components/panels/StoryboardPanel/StoryboardPanel.css",
@@ -42,6 +43,7 @@ for (const appearance of ["dark", "light"] as const) {
           <span class="panel-search-highlight" id="search-match">匹配字幕</span>
           <span class="panel-search-highlight is-focused" id="search-match-active">当前匹配</span>
           <button class="modal-dialog-confirm" id="confirm">确定</button>
+          <span class="update-dialog-badge" id="update-badge">新版本</span>
           <div class="storyboard-cut-dialog"><button class="modal-dialog-confirm" id="cut-confirm">保存切点</button></div>
           <button class="accent-button" id="accent">开始</button>
           <button class="toolbar-button active" id="active-toolbar">已选择</button>
@@ -109,6 +111,7 @@ for (const appearance of ["dark", "light"] as const) {
       "cut-confirm",
       "accent",
       "active-toolbar",
+      "update-badge",
     ])
       await contrast(id, 4.5);
     for (const id of ["subtitle-star", "storyboard-star", "active-star", "active-tool"])

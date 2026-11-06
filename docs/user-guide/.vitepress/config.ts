@@ -1,6 +1,6 @@
 import { defineConfig } from "vitepress";
 
-const repository = "GCL-MAD-CLUB/LineCut";
+const repository = "GCL-MAD-CLUB/Locution-Pro";
 
 function normalizeBase(value: string | undefined) {
   const candidate = (value ?? "/").trim();
@@ -21,6 +21,14 @@ export default defineConfig({
   lastUpdated: true,
   sitemap: { hostname: "https://helpx.locution.dpdns.org" },
   head: [
+    [
+      "link",
+      {
+        rel: "icon",
+        type: "image/x-icon",
+        href: `${normalizeBase(process.env.DOCS_BASE)}favicon.ico`,
+      },
+    ],
     ["meta", { name: "theme-color", content: "#315efb" }],
     ["meta", { property: "og:locale", content: "zh_CN" }],
   ],
@@ -31,7 +39,7 @@ export default defineConfig({
       { text: "开始使用", link: "/getting-started/first-project" },
       { text: "按任务学习", link: "/workflows/find-visuals" },
       { text: "故障排查", link: "/troubleshooting/troubleshooting" },
-      { text: "下载", link: `https://github.com/${repository}/releases/latest` },
+      { text: "下载", link: "https://locution.dpdns.org/#download" },
     ],
     sidebar: [
       { text: "Locution Pro 帮助中心", items: [{ text: "概览", link: "/" }] },

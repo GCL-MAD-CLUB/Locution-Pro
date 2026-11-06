@@ -12,6 +12,14 @@ if (process.platform !== "win32") {
 
 execFileSync(
   "cargo",
-  ["build", "--manifest-path", providerManifest, "--release", "--target-dir", targetDirectory],
+  [
+    "build",
+    "--manifest-path",
+    providerManifest,
+    "--release",
+    "--target-dir",
+    targetDirectory,
+    "--locked",
+  ],
   { cwd: root, stdio: "inherit" },
 );

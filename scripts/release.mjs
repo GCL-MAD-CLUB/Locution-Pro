@@ -1,9 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { prepareReleaseManifest } from "./prepare-release-manifest.mjs";
+import { buildUpdateInstaller } from "./build-update-installer.mjs";
+import { isReleaseVersion } from "../site/src/release-contract.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const releaseArtifacts = join(root, "src-tauri", "target", "release-artifacts");
 const localReleaseSecret = join(root, "src-tauri", ".locution-pro-project-build-secret-v1.local");
 const legacyReleaseSecret = join(root, "src-tauri", ".linecut-project-build-secret-v1.local");
 const prettierCli = join(root, "node_modules", "prettier", "bin", "prettier.cjs");
@@ -15,14 +19,8 @@ if (!version || args.length !== 1) {
   throw new Error("Usage: npm run release:build -- <semver>");
 }
 
-if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) {
+if (!isReleaseVersion(version)) {
   throw new Error(`Invalid semantic version: ${version}`);
-}
-
-if (version.includes("+")) {
-  throw new Error(
-    "Build metadata is not supported in Locution Pro release tags or installer names",
-  );
 }
 
 if (
@@ -73,19 +71,6 @@ replaceVersion(
   /(^\[\[package\]\]\r?\nname = "locution-pro"\r?\nversion = )"[^"]+"/m,
 );
 updateJsonVersion(join(root, "src-tauri", "tauri.conf.json"));
-const siteIndex = join(root, "site", "index.html");
-const siteHtml = read(siteIndex);
-const siteVersionPattern = /V\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\s*\/\s*WINDOWS/u;
-if (!siteVersionPattern.test(siteHtml)) throw new Error("Could not find the site release version");
-write(
-  siteIndex,
-  siteHtml
-    .replace(siteVersionPattern, `V${version} / WINDOWS`)
-    .replaceAll(
-      /https:\/\/openlist\.frameneo\.com\/sd\/YRrdPxj2\/Locution\.Pro_\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?_x64-setup\.exe/gu,
-      `https://openlist.frameneo.com/sd/YRrdPxj2/Locution.Pro_${version}_x64-setup.exe`,
-    ),
-);
 
 run(process.execPath, [
   prettierCli,
@@ -93,12 +78,12 @@ run(process.execPath, [
   "package.json",
   "package-lock.json",
   "src-tauri/tauri.conf.json",
-  "site/index.html",
 ]);
 run("cargo", ["fmt", "--manifest-path", "src-tauri/Cargo.toml"]);
 run(process.execPath, [join(root, "scripts", "check-version-consistency.mjs")]);
 run(process.execPath, [join(root, "scripts", "prepare-ffmpeg-assets.mjs")]);
-run(process.execPath, [tauriCli, "build"]);
+run(process.execPath, [join(root, "scripts", "build-thumbnail-provider.mjs")]);
+run(process.execPath, [tauriCli, "build", "--", "--locked"]);
 
 const bundleDirectory = join(root, "src-tauri", "target", "release", "bundle", "nsis");
 const bundledInstaller = join(bundleDirectory, `Locution Pro_${version}_x64-setup.exe`);
@@ -106,9 +91,10 @@ if (!existsSync(bundledInstaller)) {
   throw new Error(`Build completed without the expected installer: ${bundledInstaller}`);
 }
 
-// Match the name the release workflow publishes; the product name and install
-// identity stay "Locution Pro", only the file name drops the space.
-const installer = join(bundleDirectory, `Locution.Pro_${version}_x64-setup.exe`);
-renameSync(bundledInstaller, installer);
-
-console.log(`Release installer created: ${installer}`);
+await prepareReleaseManifest({
+  version,
+  installer: bundledInstaller,
+  updater: await buildUpdateInstaller(root),
+  outputDirectory: releaseArtifacts,
+});
+console.log(`Release installer, latest.json and SHA256SUMS.txt created in ${releaseArtifacts}`);

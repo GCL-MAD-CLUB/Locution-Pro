@@ -1,5 +1,5 @@
 import { version as currentVersion } from "../../package.json";
-import { clientError, invokeCommand } from "../errors";
+import { captureOperationError, clientError, invokeCommand } from "../errors";
 
 export interface ReleaseInfo {
   version: string;
@@ -8,8 +8,66 @@ export interface ReleaseInfo {
   url: string;
 }
 
+export interface UpdateFailure {
+  version: string;
+  error: string;
+  exitCode: number;
+}
+
+export interface UpdateStartup {
+  pending: ReleaseInfo | null;
+  ignored: boolean;
+  ignoredVersions: string[];
+  notes: ReleaseInfo | null;
+  failure: UpdateFailure | null;
+}
+
+let startup: Promise<UpdateStartup> | null = null;
+
+export function loadUpdateStartup() {
+  // React may mount the startup effect twice. Reading launch arguments and
+  // hashing a cached installer is a single operation for this app session.
+  return (startup ??= invokeCommand<UpdateStartup>("update_startup"));
+}
+
+export function setUpdateIgnored(version: string, ignored: boolean) {
+  return invokeCommand<void>("set_update_ignored", { version, ignored }).then(async () => {
+    const state = await loadUpdateStartup().catch(() => null);
+    if (!state) return;
+    const ignoredVersions = state.ignoredVersions.filter((entry) => entry !== version);
+    if (ignored) ignoredVersions.push(version);
+    startup = Promise.resolve({
+      ...state,
+      ignoredVersions,
+      ignored: state.pending?.version === version ? ignored : state.ignored,
+    });
+  });
+}
+
+export function acknowledgeUpdateNotes() {
+  return invokeCommand<void>("acknowledge_update_notes");
+}
+
+export function startupUpdateNotifications(
+  state: UpdateStartup,
+): Array<
+  | { status: "installFailed"; failure: UpdateFailure }
+  | { status: "installed"; release: ReleaseInfo }
+  | { status: "available"; release: ReleaseInfo; ignored: boolean }
+> {
+  const notifications: ReturnType<typeof startupUpdateNotifications> = [];
+  if (state.failure && isStableUpdateVersion(state.failure.version))
+    notifications.push({ status: "installFailed", failure: state.failure });
+  if (state.notes && isStableUpdateVersion(state.notes.version))
+    notifications.push({ status: "installed", release: state.notes });
+  if (state.pending && isStableUpdateVersion(state.pending.version) && !state.ignored) {
+    notifications.push({ status: "available", release: state.pending, ignored: false });
+  }
+  return notifications;
+}
+
 export type UpdateCheckResult =
-  { status: "available"; release: ReleaseInfo } | { status: "latest" };
+  { status: "available" | "manual"; release: ReleaseInfo } | { status: "latest" };
 
 interface ParsedVersion {
   release: [number, number, number];
@@ -61,10 +119,16 @@ export function compareVersions(left: string, right: string): number | null {
 
 let activeCheck: Promise<UpdateCheckResult> | null = null;
 
+export function isStableUpdateVersion(version: string) {
+  return /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version);
+}
+
 export function checkForUpdate(): Promise<UpdateCheckResult> {
+  if (!isStableUpdateVersion(currentVersion)) return Promise.resolve({ status: "latest" });
   if (activeCheck) return activeCheck;
   const request = invokeCommand<ReleaseInfo>("fetch_latest_release")
-    .then((release): UpdateCheckResult => {
+    .then(async (release): Promise<UpdateCheckResult> => {
+      if (parseVersion(release.version)?.prerelease.length) return { status: "latest" };
       const comparison = compareVersions(release.version, currentVersion);
       if (comparison === null) {
         throw clientError(
@@ -72,7 +136,16 @@ export function checkForUpdate(): Promise<UpdateCheckResult> {
           `Cannot compare release version ${JSON.stringify(release.version)} with ${currentVersion}`,
         );
       }
-      return comparison > 0 ? { status: "available", release } : { status: "latest" };
+      if (comparison <= 0) return { status: "latest" };
+      try {
+        await invokeCommand("download_update", { version: release.version });
+        return { status: "available", release };
+      } catch (error) {
+        captureOperationError("help.checkUpdates", error);
+        // Release discovery succeeded. Missing metadata, failed downloads and
+        // hash failures all retain the original manual update path.
+        return { status: "manual", release };
+      }
     })
     .finally(() => {
       if (activeCheck === request) activeCheck = null;
@@ -82,3 +155,67 @@ export function checkForUpdate(): Promise<UpdateCheckResult> {
 }
 
 export { currentVersion };
+
+export function installPreparedUpdate(version: string, projectPath: string | null) {
+  return invokeCommand<void>("install_update", { version, projectPath });
+}
+
+export function withUpdateTimeout<T>(operation: Promise<T>, milliseconds = 30000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    operation,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            clientError(
+              "UNEXPECTED_ERROR",
+              "Update preparation timed out; the application remains open.",
+            ),
+          ),
+        milliseconds,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+export function createUpdateWriteBarrier(timeout = 30000) {
+  const pending = new Set<Promise<unknown>>();
+  return {
+    track<T>(request: Promise<T>): Promise<T> {
+      pending.add(request);
+      return request.finally(() => pending.delete(request));
+    },
+    async settle(): Promise<boolean> {
+      const hadWrites = pending.size > 0;
+      await withUpdateTimeout(
+        (async () => {
+          while (pending.size > 0) await Promise.allSettled([...pending]);
+        })(),
+        timeout,
+      );
+      return hadWrites;
+    },
+  };
+}
+
+export async function saveBeforeUpdate({
+  needsSave,
+  save,
+  snapshot,
+  install,
+  settle,
+}: {
+  needsSave: boolean;
+  save: () => Promise<boolean>;
+  snapshot: () => string;
+  install: () => Promise<void>;
+  settle?: () => Promise<boolean>;
+}): Promise<"cancelled" | "changed" | "started"> {
+  const before = snapshot();
+  const hadWrites = await withUpdateTimeout(Promise.resolve(settle?.()));
+  if ((needsSave || hadWrites) && !(await withUpdateTimeout(save()))) return "cancelled";
+  if (snapshot() !== before) return "changed";
+  await install();
+  return "started";
+}

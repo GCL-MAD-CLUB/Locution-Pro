@@ -35,6 +35,7 @@ Function LocutionProSnapshotRegistration
   Pop $1
   ${If} $0 != 0
     SetErrorLevel 2
+    !insertmacro LOCUTION_UPDATE_ERROR "Cannot snapshot installation registration: $1"
     Abort "无法备份安装登记，未修改应用注册信息。"
   ${EndIf}
   StrCpy $LocutionProRegistrationStarted 1
@@ -51,6 +52,7 @@ Function LocutionProRestoreRegistration
   Pop $1
   StrCpy $LocutionProRegistrationStarted 0
   ${If} $0 != 0
+    !insertmacro LOCUTION_UPDATE_ERROR "Rollback registration failed: $1"
     DetailPrint "安装登记恢复未完成：$1"
     ClearErrors
     GetTempFileName $2 "$INSTDIR"

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isReleaseVersion } from "../site/src/release-contract.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -21,6 +22,7 @@ function matchVersion(path, pattern) {
 }
 
 const packageJson = readJson("package.json");
+if (!isReleaseVersion(packageJson.version)) throw new Error("Invalid release semantic version");
 const versions = new Map([
   ["package.json", packageJson.version],
   ["package-lock.json", readJson("package-lock.json").version],
@@ -37,10 +39,6 @@ const versions = new Map([
     ),
   ],
   ["src-tauri/tauri.conf.json", readJson("src-tauri/tauri.conf.json").version],
-  [
-    "site/index.html",
-    matchVersion("site/index.html", /V(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\s*\/\s*WINDOWS/u),
-  ],
 ]);
 
 const mismatches = [...versions].filter(([, version]) => version !== packageJson.version);

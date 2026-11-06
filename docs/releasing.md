@@ -6,27 +6,36 @@
 
 使用受保护的 release Environment，仅允许受信任维护者发布。配置 main 的 PR 审查与 CI required 门禁，启用私密漏洞报告和依赖安全更新。
 
+Environment 的发布来源保留 `v*` tag，并允许精确的 `main` 分支，以便从受保护的 main 手动运行发布工作流。手动运行时仍须指定已有的发布 tag；应用源码固定检出该 tag 对应的提交，并校验该提交在 main 上的 CI 已通过。
+
 正式构建使用 `LOCUTION_PRO_PROJECT_BUILD_SECRET_V1`，工作流仍支持旧名称 `LINECUT_PROJECT_BUILD_SECRET_V1`。名称迁移必须保留原值，禁止重新生成已有项目所需的密钥。具体读取优先级见[项目文件契约](../src-tauri/src/project_file/README.md)。
 
 证书和密码保存在发布环境中，不写入源码、文档或日志。
 
 ## 统一版本与检查
 
-从最新 main 创建发布准备分支。检查 package、锁文件、Cargo 主包、Tauri 配置和官网 `site/index.html` 下载区域的应用版本一致；缩略图提供程序的独立版本不随主应用同步。`release:build` 会同步这些版本，手动准备版本时也须更新官网显示。
+从最新 main 创建 `release/<版本>` 发布准备分支，将待发布的功能提交纳入该分支。先运行完整前端、浏览器、默认 Rust 与安装器测试，再修复问题并整理发布改动。检查 package、锁文件、Cargo 主包和 Tauri 配置的应用版本一致；缩略图提供程序的独立版本不随主应用同步。`release:build` 会同步这些版本。官网运行时读取发布清单，不再随应用版本修改源码；HTML 中的 0.4.1 是清单不可用时的固定回退版本，不能提前改成尚未公开的版本。
 
 ```powershell
 npm ci
+npm audit
+npm run test:all
+npm run test:rust
+npm run test:rust:thumbnail
 npm run check:versions
 npm run check
+npm run format:rust:check
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+cargo clippy --manifest-path src-tauri/thumbnail-provider/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
-准备正式 0.4.1 时，应在审查后的改动中统一相应版本；不能仅创建 tag 来绕过清单检查。需要本地统一版本并生成完整安装包时使用：
+准备正式 0.4.2 时，应在审查后的改动中统一 `package.json`、`package-lock.json`（含根包）、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 主包和 `src-tauri/tauri.conf.json` 的版本。仅做发布准备时直接修改这些清单，再运行检查；不能仅创建 tag 来绕过清单检查。需要本地统一版本并生成完整安装包时使用：
 
 ```powershell
-npm run release:build -- 0.4.1
+npm run release:build -- 0.4.2
 ```
 
-该命令会修改版本文件、检查密钥、格式化相关文件、准备 FFmpeg 并启动构建，不是只读检查。构建钩子还会下载并校验语义模型。仅更新文档时不运行它。
+该命令会修改版本文件、检查密钥、格式化相关文件、准备 FFmpeg 并启动锁定依赖的构建，不是只读检查。构建钩子还会下载并校验语义模型。完整安装包、更新专用安装包、`latest.json` 和 `SHA256SUMS.txt` 统一输出到 `src-tauri/target/release-artifacts/`。仅更新文档时不运行它。
 
 安装器相关改动手动执行 `npm run test:installer`、`npm run test:installer-identity`、
 `npm run test:installer-maintenance`、`npm run test:installer-safety` 和 `npm run test:installer-media`。安全测试会编译完整 NSIS 模板，
@@ -40,24 +49,86 @@ npm run release:build -- 0.4.1
 - CHANGELOG 标明发布状态与兼容注意事项；未发布时不填写虚构发布日期。
 - 资源、许可证与第三方声明和实际包内容一致。
 - 运行 `npm run docs:build`，检查导航和链接。
+- 帮助中心的 `public/favicon.ico` 复用 `src-tauri/icons/icon.ico`，由 `.vitepress/config.ts` 声明标签页图标；品牌图标变化时同步该资源，并核对构建后的首页与内页。
 - 保留旧项目读取兼容与正式密钥，说明重存后可能无法降级打开。
+
+准备分支上的 CHANGELOG 使用“待发布”，不提前填写发布日期。将修复、版本和文档提交到发布准备分支；在开始 Release 工作流前完成 PR 审查、合并，并等待合并后 main 的普通 CI 成功。仅完成发布准备时，到此停止，不创建或推送发布 tag，也不手动触发 Release 工作流。文档站和官网的上线由各自的部署工作流完成。
 
 ## 创建发布 tag
 
 版本 PR 合并后，在对应 main 提交创建 tag。以下命令仅用于已准备好正式版本的提交：
 
 ```powershell
-git tag -a v0.4.1 -m "Locution Pro 0.4.1"
-git push origin v0.4.1
+git tag -a v0.4.2 -m "Locution Pro 0.4.2"
+git push origin v0.4.2
 ```
 
-预发布 tag 应与清单完整一致，例如 `v0.4.1-preview`。包含连字符的 tag 由工作流标记为 prerelease。
+预发布 tag 应与清单完整一致，例如 `v0.4.2-preview`。包含连字符的 tag 由工作流标记为 prerelease。
 
-发布校验要求该提交已有成功的 CI 运行。tag 推送不经过分支保护，因此在 CI 完成前打 tag 会让发布工作流直接失败；等 CI 通过后重跑发布工作流即可。发布附件按 `Locution.Pro_<版本>_x64-setup.exe` 命名，产品名与安装路径仍为 `Locution Pro`。
+发布校验要求该提交已有 main 分支 push 触发的成功 CI 运行。tag 推送不经过分支保护，因此在 CI 完成前打 tag 会让发布工作流直接失败；等 CI 通过后重跑发布工作流即可。构建固定使用通过校验的提交 SHA，上传前再次确认 tag 未移动。相同 tag 的手动触发和自动触发共用并发锁。发布附件按 `Locution.Pro_<版本>_x64-setup.exe` 命名，产品名与安装路径仍为 `Locution Pro`。
+
+需要使用 main 上修正后的工作流重跑已有 tag 时，从受保护的 main 手动触发，并明确指定应用 tag。不要移动既有 tag 来更新工作流：
+
+```powershell
+gh workflow run release.yml --ref main -f tag=v0.4.2
+```
 
 ## 自动发布内容
 
-发布维护者使用自己的 GitHub 账号为 tag 创建 Release 草稿并填写发布说明。发布工作流先检查 tag 和版本清单，再准备媒体工具、模型与运行资源，构建缩略图提供程序和 Windows 安装包，将附件上传到 Release 草稿。FFmpeg 下载包会核对固定校验值，语义模型使用固定修订版本。
+发布工作流分为 `validate → build-windows → publish-draft`。校验阶段按 tag 精确查询已有 Release；API 请求失败会中止，不当作“尚未创建”。Windows job 只持有仓库读取权限，使用受保护环境中的正式构建密钥构建安装包，生成并验证四份附件后保存为保留 14 天的 Actions artifact。附件名包含运行尝试次数，重跑构建不会与上一轮产物重名。
+
+独立的 Ubuntu 发布 job 持有 Release 写入权限，通过构建输出的 artifact ID 下载同一次构建的产物，再核对附件集合、版本、仓库、安装包文件头与 SHA-256，确认 tag 未移动后创建或复用草稿。已有草稿的说明保留，新草稿自动生成说明；维护者也可提前创建草稿。正式版与预发布版都显式创建为草稿且 `latest=false`。已公开的 Release 或不匹配的 prerelease 标记会阻止上传。
+
+上传按文件重试，服务端已有同名且大小与 SHA-256 一致的附件会复用；`latest.json` 最后上传。上传完成后再次检查草稿状态及 GitHub 返回的四份附件大小、SHA-256，全部匹配才判定成功。发布脚本为 `npm run release:draft`，会修改 GitHub 草稿；普通测试使用模拟 API，不上传真实附件。
+
+FFmpeg 下载包按准备脚本缓存，复用时仍核对固定 SHA-256；语义模型使用固定修订版本，由 Tauri 构建钩子准备。主程序编译时会校验缩略图 DLL，因此发布命令和 CI 必须先构建该资源；打包钩子对同一产物进行增量检查。不要依赖本地已有 DLL 或将首次资源构建推迟到打包阶段。Rust 依赖缓存在构建失败后仍会保存，便于重跑。校验 job 无需安装 npm 依赖。
+
+### 下载清单契约
+
+每个 Release 附件包含固定文件名 `latest.json`，结构如下：
+
+```json
+{
+  "version": "2.1.1",
+  "pub_date": "2026-10-05T16:40:45.000Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "<安装包实际 SHA-256，64 位十六进制字符串>",
+      "url": "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/download/v2.1.1/Locution.Pro_2.1.1_x64-setup.exe",
+      "cdn_url": "https://openlist.frameneo.com/sd/YRrdPxj2/Locution.Pro_2.1.1_x64-setup.exe",
+      "updater": {
+        "signature": "<更新包实际 SHA-256，64 位十六进制字符串>",
+        "url": "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/download/v2.1.1/Locution.Pro_2.1.1_x64-update.exe",
+        "cdn_url": "https://openlist.frameneo.com/sd/YRrdPxj2/Locution.Pro_2.1.1_x64-update.exe"
+      }
+    }
+  }
+}
+```
+
+平台键恒定为 `windows-x86_64`，不追加安装器类型或版本号。平台顶层地址用于完整安装，`updater` 专供桌面更新。两者的 `signature` 分别是实际文件的 SHA-256 摘要，不是字符串 `SHA-256`，也不是 Tauri 自动更新器的签名。`pub_date` 是附件生成时间，使用 UTC。`SHA256SUMS.txt` 包含两个安装包和 `latest.json` 的摘要。CI 与本地构建共用生成器；已有完整 Tauri 安装包时先运行 `npm run build:update-installer`，再运行 `npm run prepare:release` 生成附件，运行 `npm run check:release` 只读复验。更新打包复用已编译的程序和完整文件清单，不重复编译、下载模型或构建缩略图组件。CI 中 GitHub 附件链接使用实际发布仓库。
+
+桌面端依次读取 CDN 清单、GitHub 清单和 GitHub 最新正式 Release，比较全部有效来源并选择最高正式版本，同版本优先保留 GitHub 清单中的更新包。预发布版本和标为预发布的 Release 一律忽略，不下载、不提示；预发布构建本身也跳过更新检测与首次版本提示。发现更高的正式版本后自动下载 `updater`，网络失败、错误响应、文件头或 SHA-256 不匹配时回退同版本 GitHub 文件。完整校验通过后才提示“立即更新”或“保存后更新”。取消保存、保存失败、保存期间工作区变化或仍有运行任务时不启动安装。旧清单缺少 `updater` 时不会自动运行完整安装器。
+
+CDN 仅提供版本线索和文件传输，不能独立授权自动执行。更新包摘要必须来自固定 GitHub 仓库的清单；启动安装前再次读取该版本 GitHub 附件中的 `latest.json`，确认版本和摘要后重新校验本地文件。GitHub 无法确认时回退发布页，不能使用 CDN 提供的摘要继续执行。这依赖 GitHub 发布权限及 HTTPS，不是离线公钥签名。当前更新包只支持非提权的 `currentUser` 安装，模板在其他安装模式下拒绝编译。
+
+`latest.json` 不是发现新版本的必要条件。两处清单不可用或没有更新包时，继续查询 GitHub 最新正式 Release；已读取到的有效版本信息在其他来源失败时仍保留。没有更新包、下载或校验失败、缓存不可写、更新包无法启动时，都回退到展示 Release 说明与“前往发布页”的原有手动更新弹窗。只有所有来源均无法提供有效版本信息时，手动检查才显示“检查更新失败”；启动后台检查失败保持静默。
+
+更新包携带主程序、卸载器、缩略图提供程序、许可证和模型元数据，正常的应用资源变化随版本更新；FFmpeg、模型权重和推理运行时 DLL 复用已有文件，不重复嵌入。它要求注册信息指向当前目录、主程序和卸载器存在，且目标版本严格高于当前版本。复用的依赖按目标完整安装包清单检查路径、大小和 SHA-256；未启用的内置 FFmpeg、语义检索可以缺省，其余复用依赖缺失或不匹配直接返回非零退出码，须使用完整包修复。WebView2 缺失或版本过低同样拒绝更新，不下载或安装运行库。更新包可以独立运行，手动执行前应关闭应用；不要求先启动软件。
+
+应用启动更新包前等待项目写入结束，必要时保存工作区，再次比对缓存包与 `latest.json` 的 SHA-256。更新包启动即运行，只有进度条，关闭进度窗口表示取消，无需确认或配置。它验证交接进程的可执行文件路径和句柄，收到应用的接管确认后结束旧软件，再通过静默工作进程执行安装；交接超时则撤销，不允许迟到的更新进程关闭仍在使用的软件。其他实例仍在运行时拒绝继续，避免结束其他工作区。取消使用协作式请求：校验和提交前检查取消标记，文件修改开始后等待事务回滚完成，不强行终止安装进程。提交后收到取消请求时按成功收尾。
+
+更新沿用完整包的目录检查、组件摘要校验、事务备份、注册信息恢复和回滚机制，提交前复验最终文件。成功、失败和取消都会重新启动软件，并打开已保存项目。失败通过启动参数传递详细错误，前端提示下载完整安装包并提供发布页按钮。完整结果及安装器原始退出码保存在该次交接目录的 `result.json`；更新控制器仅返回 `0`（成功）、`1`（取消）、`2`（失败）。恢复失败时保留 `.locution-pro-rollback-*` 文件，不删除恢复副本。`/D` 必须是工作进程的最后一个参数且不额外加引号。
+
+下载完成后持久化清单摘要、版本与 Release 说明；每次启动重新校验缓存包，断网时仍能提示尚未安装的更新。选择“稍后”后下次启动继续提示，“不再提示此版本”仅抑制该版本的自动提醒，不影响手动检查和后续新版本。首次展示当前版本的 Release 说明后记录已展示版本，再次启动不重复显示。更新失败提示先于其他更新通知；各通知依次展示，不相互覆盖。
+
+缓存摘要校验在阻塞任务中运行，同一会话不重复进行启动校验。启动时清理超过 30 天的已识别旧更新缓存，保留待更新版本和非托管目录。保存及等待已有写入均限制为 30 秒；更新控制器确认交接后，应用继续监视它是否完成关闭，超时撤销交接并恢复操作。无法结束旧进程时保留旧应用，不重试结束进程或启动重复实例。
+
+OpenList 后端自动同步最新正式 Release 的附件到[分享目录](https://openlist.frameneo.com/@s/YRrdPxj2)，CI 无需 OpenList Token。同步必须包含两个安装包、`latest.json` 与 `SHA256SUMS.txt`；不要将预发布同步到稳定目录。该目录只保证最新正式版附件，旧版本固定回退直接使用 GitHub，不依赖 CDN 保留历史文件。CDN 清单需在对应安装包可下载后更新；同步短暂错序时官网会改用同版本 GitHub 安装包。
+
+官网的 `/api/release` 先读取 CDN 的 `/sd/YRrdPxj2/latest.json`，失败、超时或内容无效时读取 GitHub 的 `/releases/latest/download/latest.json`；两者都不可用时返回固定 0.4.1 的 GitHub 下载地址，不附带 CDN 地址。GitHub 的 latest 路径以正式 Release 的最新标记为准，预发布清单也会被官网拒绝。清单读取不比较两个源的新旧，CDN 同步延迟期间可能继续提供上一个正式版本。
+
+所有官网安装按钮统一进入 `/api/download`，由 Cloudflare Pages Worker 读取同一清单，使用 `Range: bytes=0-1` 优先探测 `cdn_url`，连接失败、超时、错误状态或非安装包响应时探测同版本 `url`。确认 Windows 可执行文件头后停止探测，以不缓存的 302 响应让浏览器直接从该地址下载；安装包数据不经过 Worker 转发。清单有效但两个安装源都失败时返回 502，避免静默降级。重定向后的网络中断需由浏览器重试，续传由下载源处理；探测不转发客户端的凭据和续传请求头。网站不计算整包摘要，人工校验使用 `SHA256SUMS.txt`。
 
 `tauri build` 的 `beforeBuildCommand` 自动执行 `npm run prepare:semantic` 和
 `npm run prepare:storyboard-semantic`，下载并校验约 844 MiB 的模型；失败会中止构建。
@@ -68,6 +139,11 @@ git push origin v0.4.1
 `beforeBundleCommand` 在 TransNetV2 和缩略图提供程序准备完成后执行
 `npm run prepare:installer`，按 Tauri 的资源目标路径与 FFmpeg sidecar 文件生成 SHA-256 清单，
 并将清单封入 NSIS 安装包。缺失资源、目标路径冲突或不支持的资源映射会阻止打包。
+Tauri 会在此钩子之后改写主程序的安装器类型标记，并可能执行签名。因此，NSIS 模板在编译时
+调用同一脚本的 `--finalize-main <清单> <主程序路径> <安装文件名>`，从实际封包的主程序计算
+摘要与大小，生成独立的 `<清单>.nsis.json` 后嵌入；资源摘要和原始清单保持不变。
+清单中的 `bundleInUpdate` 标记区分随包更新的应用资源与只校验复用的大型依赖，同步生成 `.nsh` 供更新包选择嵌入文件；打包与安装前校验必须使用同一份策略。
+完整包与更新包都必须执行这一步，不能直接用钩子阶段的主程序摘要作最终校验，也不能跳过主程序校验。
 修改资源配置时须同步维护清理范围：`transnetv2`、`semantic-search`、`storyboard-semantic`
 和 `licenses` 为已识别旧安装的管理目录；该旧安装根目录的 DLL、主程序、卸载程序及媒体工具为应用代码。
 只有注册记录识别出的旧安装目录才执行整目录及根目录 DLL 清理。全新或变更后的目标目录仅处理当前清单
@@ -104,14 +180,16 @@ WebView2 使用安装器私有目录，执行前验证 Microsoft 签名；注册
 独立卸载先将被 Explorer 占用的缩略图组件移至唯一临时文件名，再尝试删除或安排重启删除；不安排删除原 DLL 路径。
 向导内卸载同样允许重命名已加载的缩略图 DLL，提交后无法立即删除的副本按已提交旧备份处理。
 
-下载云端安装包，核对附件大小、SHA-256 与产品版本；将实际附件名和摘要写入 `SHA256SUMS.txt` 并上传到草稿。
+核对草稿内四份附件的文件名、大小、SHA-256 与产品版本。摘要已由 CI 自动生成，不手动改写。
 
-确认工作流成功、安装包附件完整、发布说明与兼容提示正确后，由发布维护者使用自己的账号发布草稿。正式版本设为最新版本，预发布版本保留 prerelease 标记。不要在附件上传完成前公开发布。
+确认工作流成功、安装包附件完整、发布说明与兼容提示正确后，由发布维护者使用自己的账号发布草稿。发布时重新比较当前稳定版的语义版本：仅将较新的正式版设为最新版本，旧版本维护发行取消最新标记；预发布保留 prerelease 标记且不设为最新。不要在附件上传完成前公开发布。发布后确认 OpenList 已同步四份附件，并检查官网版本和下载入口；无需为更新下载版本重新部署官网。
 
 应用 tag 和文档站部署分别核对。文档站由 main 上的工作流部署；本地文件变化或构建成功不表示公开站点已经更新。
 
+正式发布成功后，将 CHANGELOG 中对应版本的“待发布”改为“正式版”，通过文档 PR 合并到 main；已有发布 tag 保持不变。
+
 ## 处理发布失败
 
-tag 与清单不一致时，在发布前修正，不对已公开 tag 强推不同源码。构建代码需要变化时使用新 tag；附件上传失败可从同一提交重试对应工作流。
+tag 与清单不一致时，在发布前修正，不对已公开 tag 强推不同源码。构建代码需要变化时使用新 tag。仅 `publish-draft` 失败时，在原工作流选择 **Re-run failed jobs**，复用原构建 artifact，无需重新编译 Windows 或下载模型；匹配的 GitHub 附件也不会重复上传。artifact 已过期或构建失败时，重新运行构建。不要以新源码重用旧版本的产物。
 
 确认安装包、可选组件、升级路径和项目兼容性后，再对外发布。不要将维护用构建步骤加入用户安装指南。

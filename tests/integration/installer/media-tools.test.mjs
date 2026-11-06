@@ -40,7 +40,7 @@ test("external media tools use the actual wizard validation", { timeout: 60000 }
   writeFileSync(ffmpeg, "must not execute");
   writeFileSync(ffprobe, "must not execute");
   const record = join(temporary, "result.ini");
-  for (const name of ["semantic-options.nsh", "independent-install.nsh"]) {
+  for (const name of ["semantic-options.nsh", "independent-install.nsh", "update-result.nsh"]) {
     writeFileSync(join(temporary, name), readFileSync(join(source, name), "utf8"));
   }
   writeFileSync(

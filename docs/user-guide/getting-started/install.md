@@ -9,7 +9,7 @@ description: 安装桌面应用和可选组件，完成首次设置并开始创�
 
 ## 安装应用
 
-1. 从[官方下载页面](https://github.com/GCL-MAD-CLUB/LineCut/releases/latest)取得 Windows 安装程序。
+1. 从[官方下载页面](https://locution.dpdns.org/#download)取得 Windows 安装程序。
 2. 运行安装程序，按提示选择安装位置。
 3. 首次使用建议选择**内置 FFmpeg**，以便直接导入、预览、生成代理和导出媒体。
 4. 在**语义检索**页保留组件勾选，以便按画面描述和对白含义搜索。该组件需要额外磁盘空间。

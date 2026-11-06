@@ -8,6 +8,7 @@ export type OperationKey =
   | "export.run"
   | "feedback.audio"
   | "help.checkUpdates"
+  | "help.installUpdate"
   | "help.openDocumentation"
   | "help.openLogDirectory"
   | "media.bindSubtitles"

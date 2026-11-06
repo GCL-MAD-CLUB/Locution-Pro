@@ -58,9 +58,20 @@ import { storyboardPanelType } from "./components/panels/StoryboardPanel";
 import { subtitlePanelType } from "./components/panels/SubtitlePanel";
 import { cancelAllTaskProgress, useTaskProgressStatus } from "./systems/TaskSystem";
 import { runMediaImportBatchTask } from "./application/media/mediaImportTask";
-import { checkForUpdate } from "./application/update";
+import {
+  checkForUpdate,
+  compareVersions,
+  createUpdateWriteBarrier,
+  installPreparedUpdate,
+  loadUpdateStartup,
+  startupUpdateNotifications,
+  setUpdateIgnored,
+  acknowledgeUpdateNotes,
+  saveBeforeUpdate,
+} from "./application/update";
 import {
   captureOperationError,
+  clientError,
   invokeCommand,
   runBackgroundOperation,
   runOperation,
@@ -314,7 +325,13 @@ function AppContent() {
   const [preferencesCategory, setPreferencesCategory] = useState<PreferencesCategory | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [updateDialogState, setUpdateDialogState] = useState<UpdateDialogState | null>(null);
+  const updateDialogQueueRef = useRef<UpdateDialogState[]>([]);
+  const startupDialogsOpenRef = useRef(false);
   const updateRequestRef = useRef(0);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateInstalling, setUpdateInstalling] = useState(false);
+  const updateInstallingRef = useRef(false);
+  const [projectWrites] = useState(createUpdateWriteBarrier);
   const [historyNavigating, setHistoryNavigating] = useState(false);
   const [recentMediaPaths, setRecentMediaPaths] = useState(() =>
     readRecentPaths(recentMediaStorageKey),
@@ -421,7 +438,8 @@ function AppContent() {
   const autoSaveProjectNameRef = useRef(autoSaveProjectName);
   autoSaveProjectNameRef.current = autoSaveProjectName;
   const { tasks: runningTasks } = useTaskProgressStatus();
-  const isBusy = runningTasks.some((task) => task.blocking) || historyNavigating;
+  const isBusy =
+    runningTasks.some((task) => task.blocking) || historyNavigating || updateInstalling;
   const hasProject = Boolean(projectFilePath || mediaItems.length > 0 || mediaFolders.length > 0);
   const canUndo =
     activeWorkspace === "export"
@@ -432,6 +450,8 @@ function AppContent() {
       ? exportHistoryCursor < exportHistoryLength
       : projectHistory.active && projectHistory.cursor < projectHistory.entries.length;
   const canCloseFocusedPanel = activeWorkspace === "edit" && Boolean(focusedPanel) && !isBusy;
+  const savedUpdateProjectPathRef = useRef(projectFilePath);
+  savedUpdateProjectPathRef.current = projectFilePath;
   const canRestoreProject = hasProject && projectDirty && !isBusy;
   const editScope = activeWorkspace === "edit" ? focusedPanel : undefined;
   const mediaEditScopeActive = editScope?.type === mediaBinPanelType;
@@ -487,17 +507,56 @@ function AppContent() {
   useEffect(() => {
     if (!isTauriRuntime()) return;
     let active = true;
-    void checkForUpdate()
-      .then((result) => {
-        if (active && result.status === "available") {
-          setUpdateDialogState({ status: "available", release: result.release });
+    void (async () => {
+      let ignoredVersions: string[] = [];
+      let cachedVersion: string | undefined;
+      try {
+        const startup = await loadUpdateStartup();
+        if (!active) return;
+        ignoredVersions = startup.ignoredVersions;
+        cachedVersion = startup.pending?.version;
+        if (updateRequestRef.current === 0) {
+          const notifications = startupUpdateNotifications(startup);
+          updateDialogQueueRef.current = notifications.slice(1);
+          startupDialogsOpenRef.current = notifications.length > 0;
+          setUpdateDialogState(notifications[0] ?? null);
         }
-      })
-      .catch((error) => captureOperationError("help.checkUpdates", error));
+      } catch (error) {
+        captureOperationError("help.checkUpdates", error);
+      }
+      if (!active) return;
+      try {
+        const result = await checkForUpdate();
+        if (
+          !active ||
+          updateRequestRef.current !== 0 ||
+          result.status === "latest" ||
+          (cachedVersion !== undefined &&
+            (compareVersions(result.release.version, cachedVersion) ?? 0) <= 0) ||
+          ignoredVersions.includes(result.release.version)
+        )
+          return;
+        const notification: UpdateDialogState = { status: result.status, release: result.release };
+        if (startupDialogsOpenRef.current) updateDialogQueueRef.current.push(notification);
+        else {
+          startupDialogsOpenRef.current = true;
+          setUpdateDialogState(notification);
+        }
+      } catch (error) {
+        captureOperationError("help.checkUpdates", error);
+      }
+    })();
     return () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (updateDialogState?.status !== "installed") return;
+    void acknowledgeUpdateNotes().catch((error) =>
+      captureOperationError("help.checkUpdates", error),
+    );
+  }, [updateDialogState]);
 
   useEffect(() => {
     if (!isTauriRuntime() || !hasProject || !autoSaveEnabled) {
@@ -506,21 +565,23 @@ function AppContent() {
 
     let snapshotRunning = false;
     const timer = window.setInterval(() => {
-      if (snapshotRunning) {
+      if (snapshotRunning || updateInstallingRef.current) {
         return;
       }
       snapshotRunning = true;
       const snapshot = captureProjectAutoSave();
       void runOperation("project.autosave", () =>
-        invokeCommand<boolean>("auto_save_project_snapshot", {
-          projectName: autoSaveProjectNameRef.current,
-          workspace: snapshot.workspace,
-          projectPath: snapshot.path,
-          // A session that only imported media has no document id yet; an empty
-          // id keeps auto-save snapshots content-deduplicated instead of minting
-          // a fresh, ever-changing id every tick.
-          projectId: snapshot.projectId ?? "",
-        }),
+        projectWrites.track(
+          invokeCommand<boolean>("auto_save_project_snapshot", {
+            projectName: autoSaveProjectNameRef.current,
+            workspace: snapshot.workspace,
+            projectPath: snapshot.path,
+            // A session that only imported media has no document id yet; an empty
+            // id keeps auto-save snapshots content-deduplicated instead of minting
+            // a fresh, ever-changing id every tick.
+            projectId: snapshot.projectId ?? "",
+          }),
+        ),
       )
         .then((outcome) => {
           if (outcome.status === "success" && outcome.value) snapshot.markSaved();
@@ -654,6 +715,10 @@ function AppContent() {
     const currentWindow = getCurrentWindow();
     runBackgroundOperation("window.closeListener", async () => {
       const unlisten = await currentWindow.onCloseRequested((event) => {
+        if (updateInstallingRef.current) {
+          event.preventDefault();
+          return;
+        }
         if (!projectDirty || closingWindowRef.current) {
           void runOperation("project.close", () => cancelAllTaskProgress());
           return;
@@ -777,26 +842,106 @@ function AppContent() {
       messagePublished("此功能仅在桌面版可用。");
       return;
     }
-    if (updateDialogState?.status === "checking") return;
+    if (updateChecking || updateInstallingRef.current) return;
     const request = ++updateRequestRef.current;
-    setUpdateDialogState({ status: "checking" });
+    updateDialogQueueRef.current = [];
+    startupDialogsOpenRef.current = false;
+    setUpdateChecking(true);
+    setUpdateDialogState(null);
+    messagePublished("正在检查更新；新版本下载完成后会通知你。");
     try {
       const result = await checkForUpdate();
       if (updateRequestRef.current !== request) return;
+      const ignored =
+        result.status === "available" &&
+        (await loadUpdateStartup().catch(() => null))?.ignoredVersions.includes(
+          result.release.version,
+        );
+      if (updateRequestRef.current !== request) return;
       setUpdateDialogState(
         result.status === "available"
-          ? { status: "available", release: result.release }
-          : { status: "latest" },
+          ? { status: "available", release: result.release, ignored: ignored || false }
+          : result.status === "manual"
+            ? { status: "manual", release: result.release }
+            : { status: "latest" },
       );
     } catch (error) {
       captureOperationError("help.checkUpdates", error);
       if (updateRequestRef.current === request) setUpdateDialogState({ status: "failed" });
+    } finally {
+      setUpdateChecking(false);
     }
   }
 
   function closeUpdateDialog() {
-    updateRequestRef.current += 1;
-    setUpdateDialogState(null);
+    if (updateInstallingRef.current) return;
+    const next = updateDialogQueueRef.current.shift() ?? null;
+    startupDialogsOpenRef.current = next !== null;
+    setUpdateDialogState(next);
+  }
+
+  async function ignoreUpdate(ignored: boolean) {
+    if (updateDialogState?.status !== "available") return;
+    const version = updateDialogState.release.version;
+    try {
+      await setUpdateIgnored(version, ignored);
+      setUpdateDialogState((state) =>
+        state?.status === "available" && state.release.version === version
+          ? { ...state, ignored }
+          : state,
+      );
+    } catch (error) {
+      captureOperationError("help.checkUpdates", error);
+      messagePublished("未能保存更新提醒设置，请重试。");
+    }
+  }
+
+  async function applyUpdate() {
+    if (
+      updateDialogState?.status !== "available" ||
+      updateInstallingRef.current ||
+      runningTasks.length > 0 ||
+      isBusy
+    )
+      return;
+    const { release, ignored } = updateDialogState;
+    updateInstallingRef.current = true;
+    setUpdateInstalling(true);
+    setUpdateDialogState({ status: "available", release, ignored });
+    try {
+      const result = await saveBeforeUpdate({
+        needsSave: projectDirty,
+        settle: async () => (await projectWrites.settle()) && hasProject,
+        save: saveProjectWithOutcome,
+        snapshot: () => JSON.stringify(getProjectWorkspaceSnapshot()),
+        install: async () => {
+          await installPreparedUpdate(release.version, savedUpdateProjectPathRef.current);
+          // A successful handoff closes this process. Returning while it is
+          // still alive must restore the manual update path.
+          throw clientError(
+            "UNEXPECTED_ERROR",
+            "The updater returned without closing the application",
+          );
+        },
+      });
+      if (result === "changed") {
+        setUpdateDialogState({
+          status: "available",
+          release,
+          ignored,
+          error: "保存期间工作区发生了变化，已取消更新。请确认并再次保存后更新。",
+        });
+      }
+    } catch (error) {
+      captureOperationError("help.installUpdate", error);
+      setUpdateDialogState({
+        status: "manual",
+        release,
+      });
+    } finally {
+      updateInstallingRef.current = false;
+      setUpdateInstalling(false);
+    }
   }
 
   async function newProject() {
@@ -918,13 +1063,22 @@ function AppContent() {
     const isNewFile = !makeCurrent || Boolean(projectFilePath && path !== projectFilePath);
     const targetId = isNewFile ? crypto.randomUUID() : (projectId ?? crypto.randomUUID());
     const previousId = projectId;
-    const savedPath = await invokeCommand<string>("save_project_file", {
-      path,
-      workspace: getProjectWorkspaceSnapshot(),
-      projectId: targetId,
-    });
+    const workspace = getProjectWorkspaceSnapshot();
+    const snapshot = JSON.stringify(workspace);
+    const savedPath = await projectWrites.track(
+      invokeCommand<string>("save_project_file", {
+        path,
+        workspace,
+        projectId: targetId,
+      }),
+    );
+    if (makeCurrent && JSON.stringify(getProjectWorkspaceSnapshot()) !== snapshot) {
+      messagePublished("已写入保存时的项目快照，期间新增的更改仍需保存。");
+      return false;
+    }
     if (makeCurrent) {
       projectSaved(savedPath, targetId);
+      savedUpdateProjectPathRef.current = savedPath;
       messagePublished(`已保存项目到 ${fileName(savedPath)}。`);
     } else {
       messagePublished(`已保存项目副本到 ${fileName(savedPath)}。`);
@@ -938,6 +1092,7 @@ function AppContent() {
       );
     }
     rememberRecentProject({ path: savedPath, projectId: targetId });
+    return true;
   }
 
   function suggestedProjectName(makeCopy = false) {
@@ -983,7 +1138,7 @@ function AppContent() {
         resourceKind: "project",
       },
     );
-    return saveOutcome.status === "success";
+    return saveOutcome.status === "success" && saveOutcome.value;
   }
 
   async function saveProjectAs(makeCurrent = true) {
@@ -1002,7 +1157,7 @@ function AppContent() {
         resourceKind: "project",
       },
     );
-    return saveOutcome.status === "success";
+    return saveOutcome.status === "success" && saveOutcome.value;
   }
 
   async function saveProject() {
@@ -1598,7 +1753,7 @@ function AppContent() {
       locutionProHelp: { enabled: true, execute: openLocutionProHelp },
       showLogFiles: { enabled: true, execute: showLogFiles },
       checkForUpdates: {
-        enabled: updateDialogState?.status !== "checking",
+        enabled: !updateChecking && !updateInstalling,
         execute: checkForUpdates,
       },
       aboutLocutionPro: { enabled: true, execute: () => setAboutOpen(true) },
@@ -1708,8 +1863,13 @@ function AppContent() {
         {updateDialogState && (
           <UpdateDialog
             state={updateDialogState}
+            needsSave={projectDirty}
+            installing={updateInstalling}
+            blocked={isBusy || runningTasks.length > 0}
+            onInstall={() => void applyUpdate()}
             onClose={closeUpdateDialog}
             onRetry={() => void checkForUpdates()}
+            onIgnore={(ignored) => void ignoreUpdate(ignored)}
           />
         )}
       </div>

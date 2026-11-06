@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-315EFB?style=flat-square" height="20" alt="支持 Windows 10 和 Windows 11" />
   <img src="https://img.shields.io/badge/Workflow-Local-6E56CF?style=flat-square" height="20" alt="本地处理素材" />
   <img src="https://img.shields.io/badge/Search-Visual-15856B?style=flat-square" height="20" alt="按画面检索镜头" />
-  <a href="https://github.com/GCL-MAD-CLUB/LineCut/releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Windows%20%E5%AE%89%E8%A3%85%E7%A8%8B%E5%BA%8F-315EFB?style=flat-square" height="20" alt="下载 Windows 安装程序" /></a>
+  <a href="https://locution.dpdns.org/#download"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Windows%20%E5%AE%89%E8%A3%85%E7%A8%8B%E5%BA%8F-315EFB?style=flat-square" height="20" alt="下载 Windows 安装程序" /></a>
   <a href="https://helpx.locution.dpdns.org/"><img src="https://img.shields.io/badge/%E9%98%85%E8%AF%BB-%E7%94%A8%E6%88%B7%E6%8C%87%E5%8D%97-6E56CF?style=flat-square" height="20" alt="阅读用户指南" /></a>
 </p>
 
@@ -18,7 +18,7 @@
   <a href="#发现每一个值得保留的镜头">产品亮点</a> ·
   <a href="#开始创作">开始使用</a> ·
   <a href="#运行环境">运行环境</a> ·
-  <a href="https://github.com/GCL-MAD-CLUB/LineCut/issues">获取支持</a>
+  <a href="https://github.com/GCL-MAD-CLUB/Locution-Pro/issues">获取支持</a>
 </p>
 
 <p align="center">

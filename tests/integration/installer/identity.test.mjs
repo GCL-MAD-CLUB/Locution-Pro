@@ -89,6 +89,10 @@ test("NSIS installer identity", { timeout: 300000 }, async (t) => {
   );
   const isolatedIndependent = join(temporary, "independent-install.nsh");
   writeFileSync(
+    join(temporary, "update-result.nsh"),
+    readFileSync(join(root, "src-tauri/windows/update-result.nsh")),
+  );
+  writeFileSync(
     isolatedIndependent,
     readFileSync(join(root, "src-tauri/windows/independent-install.nsh"), "utf8").replaceAll(
       "Software\\Classes\\",

@@ -86,6 +86,13 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
     config: { favorites: [], lastDirectory: "C:/media", settings: {} } as any,
     savedWorkspace: null as any,
     savedProjectId: "",
+    updateStartup: {
+      pending: null,
+      notes: null,
+      failure: null,
+      ignored: false,
+      ignoredVersions: [],
+    } as any,
     latestRelease: {
       version: "v0.0.0",
       title: "Locution Pro 0.0.0",
@@ -144,7 +151,7 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
       case "fetch_latest_release":
         return state.latestRelease;
       case "update_startup":
-        return { pending: null, notes: null, failure: null, ignored: false, ignoredVersions: [] };
+        return state.updateStartup;
       case "download_update":
       case "install_update":
       case "set_update_ignored":

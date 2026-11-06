@@ -652,7 +652,8 @@ public class Fixture {
           file,
           `!define LOCUTION_UPDATE_ONLY\n!define LOCUTION_PAYLOAD_MANIFEST "${nsis(manifest)}"\n${script}`,
         );
-        run(compiler, ["/V2", "/INPUTCHARSET", "UTF8", file]);
+        // Cached handoffs are only supported without an elevation boundary.
+        run(compiler, ["/V2", "/INPUTCHARSET", "UTF8", file], scope === "currentUser" ? 0 : 1);
         if (scope === "currentUser") {
           // Execute the complete production template using only mock payloads,
           // isolated registry keys, private data roots and suppressed shortcuts.
@@ -674,8 +675,8 @@ public class Fixture {
           );
           let isolated = script
             .replace(
-              /ReadRegStr \$4 (?:HKLM|HKCU) "[^"]+" "pv"/gu,
-              `ReadRegStr $4 HKCU "${registry}\\WebView" "pv"`,
+              /ReadRegStr \$4 (HKLM|HKCU) "[^"]+" "pv"/gu,
+              (_, hive) => `ReadRegStr $4 HKCU "${registry}\\WebView${hive}" "pv"`,
             )
             .replace(/!define UNINSTKEY "[^"\n]+"/u, `!define UNINSTKEY "${registry}\\Uninstall"`)
             .replace(
@@ -897,7 +898,7 @@ $arp.Dispose(); $base.Dispose()
           const setWebViewVersion = (version) =>
             run("reg.exe", [
               "add",
-              `HKCU\\${registry}\\WebView`,
+              `HKCU\\${registry}\\WebViewHKCU`,
               "/v",
               "pv",
               "/d",

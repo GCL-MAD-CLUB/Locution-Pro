@@ -8,6 +8,10 @@ export const MANIFEST_URLS = [
 ];
 export const FALLBACK_VERSION = "0.4.1";
 
+export function isReleaseRepository(repository) {
+  return typeof repository === "string" && /^[\w-]+\/[\w-][\w.-]*$/u.test(repository);
+}
+
 export function isReleaseVersion(version, { stable = false } = {}) {
   if (typeof version !== "string") return false;
   const match =
@@ -29,6 +33,7 @@ export function updaterName(version) {
 }
 
 export function fallbackRelease() {
+  // A fixed legacy download locator, not an auto-update manifest with a digest.
   const name = installerName(FALLBACK_VERSION);
   return {
     version: FALLBACK_VERSION,
@@ -42,7 +47,10 @@ export function fallbackRelease() {
 }
 
 // Restrict the download gateway to this product's immutable installer URLs.
-export function validateRelease(document, { stable = true } = {}) {
+export function validateRelease(
+  document,
+  { stable = true, repository: expectedRepository = RELEASE_REPOSITORY } = {},
+) {
   if (!document || !isReleaseVersion(document.version, { stable })) {
     throw new Error(stable ? "Expected a stable release version" : "Invalid release version");
   }
@@ -62,6 +70,7 @@ export function validateRelease(document, { stable = true } = {}) {
       : null;
   if (
     !repository ||
+    repository !== expectedRepository ||
     platform.url !==
       `https://github.com/${repository}/releases/download/v${document.version}/${name}`
   ) {

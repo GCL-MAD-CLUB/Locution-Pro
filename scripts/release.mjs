@@ -7,6 +7,7 @@ import { buildUpdateInstaller } from "./build-update-installer.mjs";
 import { isReleaseVersion } from "../site/src/release-contract.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const releaseArtifacts = join(root, "src-tauri", "target", "release-artifacts");
 const localReleaseSecret = join(root, "src-tauri", ".locution-pro-project-build-secret-v1.local");
 const legacyReleaseSecret = join(root, "src-tauri", ".linecut-project-build-secret-v1.local");
 const prettierCli = join(root, "node_modules", "prettier", "bin", "prettier.cjs");
@@ -93,6 +94,6 @@ await prepareReleaseManifest({
   version,
   installer: bundledInstaller,
   updater: await buildUpdateInstaller(root),
-  outputDirectory: join(root, "dist", "release"),
+  outputDirectory: releaseArtifacts,
 });
-console.log(`Release installer, latest.json and SHA256SUMS.txt created in dist/release`);
+console.log(`Release installer, latest.json and SHA256SUMS.txt created in ${releaseArtifacts}`);

@@ -30,7 +30,6 @@ jobs:
       contents: read
       actions: read
     outputs:
-      prerelease: ${{ steps.version.outputs.prerelease }}
       tag: ${{ steps.version.outputs.tag }}
       sha: ${{ steps.version.outputs.sha }}
     steps:
@@ -70,11 +69,6 @@ jobs:
           node scripts/check-version-consistency.mjs
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          if [[ "$RELEASE_TAG" == *-* ]]; then
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
-          fi
       - name: Check existing release state
         env:
           GH_TOKEN: ${{ github.token }}
@@ -166,7 +160,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows-release-${{ needs.validate.outputs.tag }}-${{ github.run_attempt }}
-          path: dist/release
+          path: src-tauri/target/release-artifacts
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -193,7 +187,7 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           artifact-ids: ${{ needs.build-windows.outputs.artifact-id }}
-          path: dist/release
+          path: src-tauri/target/release-artifacts
           merge-multiple: true
       - name: Recheck release tag
         env:

@@ -98,18 +98,20 @@ Function LocutionProCommitInstall
     Return
   ${EndIf}
   Push $LocutionProUpgradeMode
-  ; Verify the final bytes before crossing the durable commit boundary. Keep
-  ; the existing plan/transaction files intact so any failure can roll back.
-  StrCpy $LocutionProUpgradeMode "Verify"
-  !insertmacro LOCUTION_UPGRADE_COMMAND $0
-  nsExec::ExecToStack $0
-  Pop $0
-  Pop $1
-  ${If} $0 != 0
-    Pop $LocutionProUpgradeMode
-    SetErrorLevel 2
-    !insertmacro LOCUTION_UPDATE_ERROR "安装后的文件校验失败，正在恢复旧版本：$1"
-    Abort "安装后的文件校验失败，正在恢复旧版本：$1"
+  ${If} $LocutionProUpgradeMode != "Uninstall"
+    ; Verify the final bytes before crossing the durable commit boundary. Keep
+    ; the existing plan/transaction files intact so any failure can roll back.
+    StrCpy $LocutionProUpgradeMode "Verify"
+    !insertmacro LOCUTION_UPGRADE_COMMAND $0
+    nsExec::ExecToStack $0
+    Pop $0
+    Pop $1
+    ${If} $0 != 0
+      Pop $LocutionProUpgradeMode
+      SetErrorLevel 2
+      !insertmacro LOCUTION_UPDATE_ERROR "安装后的文件校验失败，正在恢复旧版本：$1"
+      Abort "安装后的文件校验失败，正在恢复旧版本：$1"
+    ${EndIf}
   ${EndIf}
   StrCpy $LocutionProUpgradeMode "Commit"
   !insertmacro LOCUTION_UPGRADE_COMMAND $0

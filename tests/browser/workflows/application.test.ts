@@ -17,6 +17,37 @@ async function assertUpdateVisualAlignment(dialog: Locator) {
   expect(alignment.textOffset).toBeCloseTo(16, 1);
 }
 
+test("启动时先展示安装错误，再展示新版本说明，确认后不重复", async ({ page, native }) => {
+  await page.addInitScript(() => {
+    (window as any).__nativeTest.updateStartup = {
+      pending: null,
+      ignored: false,
+      ignoredVersions: [],
+      failure: { version: "0.5.0", error: "Dependency hash mismatch: runtime.dll", exitCode: 2 },
+      notes: {
+        version: "0.4.1",
+        title: "Locution Pro 0.4.1",
+        body: "## 更新说明\n- 新版功能",
+        url: "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v0.4.1",
+      },
+    };
+  });
+  await page.goto("/");
+  const failed = page.getByRole("dialog", { name: "更新失败", exact: true });
+  await expect(failed.getByText("Dependency hash mismatch: runtime.dll")).toBeVisible();
+  await expect(failed.getByRole("button", { name: "前往发布页下载" })).toBeVisible();
+  await failed
+    .locator(".modal-dialog-actions")
+    .getByRole("button", { name: "关闭", exact: true })
+    .click();
+  const installed = page.getByRole("dialog", { name: "版本更新", exact: true });
+  await expect(installed.getByText("已更新", { exact: true })).toBeVisible();
+  await expect(installed.getByRole("heading", { name: "更新说明" })).toBeVisible();
+  await expect.poll(async () => (await native.calls("acknowledge_update_notes")).length).toBe(1);
+  await installed.getByRole("button", { name: "完成", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
 test("自动更新不可用时展示发布说明和原有发布页入口", async ({ page, native }) => {
   await page.addInitScript(() => {
     (window as any).__nativeTest.failures.download_update = "No updater in legacy release";

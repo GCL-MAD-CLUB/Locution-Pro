@@ -1,6 +1,16 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -10,6 +20,7 @@ import {
   installerName,
   updaterName,
   isReleaseVersion,
+  isReleaseRepository,
 } from "../site/src/release-contract.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -23,7 +34,7 @@ export async function prepareReleaseManifest({
   pubDate = new Date().toISOString(),
 }) {
   if (!isReleaseVersion(version)) throw new Error("Invalid release version");
-  if (!/^[\w-]+\/[\w-][\w.-]*$/u.test(repository)) throw new Error("Invalid release repository");
+  if (!isReleaseRepository(repository)) throw new Error("Invalid release repository");
   if (!Number.isFinite(Date.parse(pubDate))) throw new Error("Invalid publication date");
   async function inspect(installer) {
     const metadata = await stat(installer);
@@ -58,19 +69,41 @@ export async function prepareReleaseManifest({
       },
     },
   };
-  await mkdir(outputDirectory, { recursive: true });
-  const destination = path.join(outputDirectory, name);
-  if (path.resolve(installer) !== path.resolve(destination)) await copyFile(installer, destination);
-  const updateDestination = path.join(outputDirectory, updateName);
-  if (path.resolve(updater) !== path.resolve(updateDestination))
-    await copyFile(updater, updateDestination);
-  const json = `${JSON.stringify(manifest, null, 2)}\n`;
-  await writeFile(path.join(outputDirectory, "latest.json"), json);
-  const manifestHash = createHash("sha256").update(json).digest("hex");
-  await writeFile(
-    path.join(outputDirectory, "SHA256SUMS.txt"),
-    `${signature}  ${name}\n${updateSignature}  ${updateName}\n${manifestHash}  latest.json\n`,
-  );
+  outputDirectory = path.resolve(outputDirectory);
+  await mkdir(path.dirname(outputDirectory), { recursive: true });
+  const stage = await mkdtemp(`${outputDirectory}.stage-`);
+  const backup = `${stage}.previous`;
+  let moved = false;
+  try {
+    await copyFile(installer, path.join(stage, name));
+    await copyFile(updater, path.join(stage, updateName));
+    const json = `${JSON.stringify(manifest, null, 2)}\n`;
+    await writeFile(path.join(stage, "latest.json"), json);
+    const manifestHash = createHash("sha256").update(json).digest("hex");
+    await writeFile(
+      path.join(stage, "SHA256SUMS.txt"),
+      `${signature}  ${name}\n${updateSignature}  ${updateName}\n${manifestHash}  latest.json\n`,
+    );
+    const previous = await lstat(outputDirectory).catch((error) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (previous) {
+      if (!previous.isDirectory() || previous.isSymbolicLink())
+        throw new Error("Release output must be a real directory");
+      await rename(outputDirectory, backup);
+      moved = true;
+    }
+    try {
+      await rename(stage, outputDirectory);
+    } catch (error) {
+      if (moved) await rename(backup, outputDirectory);
+      throw error;
+    }
+    if (moved) await rm(backup, { recursive: true });
+  } finally {
+    await rm(stage, { recursive: true, force: true });
+  }
   return manifest;
 }
 
@@ -95,10 +128,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       "nsis",
       `Locution Pro_${version}_x64-setup.exe`,
     ),
-    outputDirectory: path.join(root, "dist", "release"),
+    outputDirectory: path.join(root, "src-tauri", "target", "release-artifacts"),
     repository: process.env.GITHUB_REPOSITORY || RELEASE_REPOSITORY,
   });
   console.log(
-    `Release ${manifest.version}: full installer, update installer, latest.json and SHA256SUMS.txt ready in dist/release`,
+    `Release ${manifest.version}: full installer, update installer, latest.json and SHA256SUMS.txt ready in src-tauri/target/release-artifacts`,
   );
 }

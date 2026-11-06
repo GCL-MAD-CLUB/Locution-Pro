@@ -4,12 +4,12 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { checkReleaseAssets } from "./check-release-assets.mjs";
-import { isReleaseVersion } from "../site/src/release-contract.js";
+import { isReleaseVersion, isReleaseRepository } from "../site/src/release-contract.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function validateOptions({ repository, version, token }) {
-  if (!/^[\w-]+\/[\w-][\w.-]*$/u.test(repository) || !isReleaseVersion(version) || !token) {
+  if (!isReleaseRepository(repository) || !isReleaseVersion(version) || !token) {
     throw new Error("Expected a valid repository, version and GH_TOKEN");
   }
 }
@@ -151,7 +151,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (process.env.RELEASE_TAG !== `v${version}`)
     throw new Error("RELEASE_TAG must match the checked-out version");
   const options = {
-    directory: path.join(root, "dist", "release"),
+    directory: path.join(root, "src-tauri", "target", "release-artifacts"),
     version,
     repository: process.env.GITHUB_REPOSITORY,
     token: process.env.GH_TOKEN,

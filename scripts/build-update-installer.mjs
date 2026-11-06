@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -45,7 +45,9 @@ export async function buildUpdateInstaller(repository = root, run = execFileSync
     await copyFile(installer, update);
     return update;
   } finally {
-    await copyFile(full, installer);
+    const restored = `${installer}.restore`;
+    await copyFile(full, restored);
+    await rename(restored, installer);
   }
 }
 

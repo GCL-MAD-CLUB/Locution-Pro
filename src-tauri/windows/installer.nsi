@@ -39,6 +39,11 @@ ManifestDPIAwareness PerMonitorV2
 !define VERSIONWITHBUILD "{{version_with_build}}"
 !define HOMEPAGE "{{homepage}}"
 !define INSTALLMODE "{{install_mode}}"
+!ifdef LOCUTION_UPDATE_ONLY
+  !if "${INSTALLMODE}" != "currentUser"
+    !error "Update-only installers support non-elevated currentUser installations only"
+  !endif
+!endif
 !define LICENSE "{{license}}"
 !define INSTALLERICON "{{installer_icon}}"
 !define SIDEBARIMAGE "{{sidebar_image}}"
@@ -603,15 +608,14 @@ Section WebView2
     ReadRegStr $4 HKLM "SOFTWARE\Microsoft\EdgeUpdate\Clients\${WEBVIEW2APPGUID}" "pv"
   ${EndIf}
   ${If} $4 == ""
+    ReadRegStr $4 HKCU "SOFTWARE\Microsoft\EdgeUpdate\Clients\${WEBVIEW2APPGUID}" "pv"
+  ${EndIf}
+  ${If} $4 == ""
     !ifdef LOCUTION_UPDATE_ONLY
       SetErrorLevel 2
       !insertmacro LOCUTION_UPDATE_ERROR "更新需要已安装的 WebView2 Runtime。请使用完整安装包修复。"
       Abort "更新需要已安装的 WebView2 Runtime。请使用完整安装包修复。"
     !else
-    ReadRegStr $4 HKCU "SOFTWARE\Microsoft\EdgeUpdate\Clients\${WEBVIEW2APPGUID}" "pv"
-  ${EndIf}
-
-  ${If} $4 == ""
     ; Webview2 installation
     ;
     ; An update must also repair a missing runtime before touching old app files.

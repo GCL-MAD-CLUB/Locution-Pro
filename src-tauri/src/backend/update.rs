@@ -185,7 +185,28 @@ fn launch_failure(arguments: impl IntoIterator<Item = String>) -> Option<UpdateF
 
 #[tauri::command]
 pub(crate) async fn update_startup(app: tauri::AppHandle) -> CommandResult<UpdateStartup> {
-    let failure = launch_failure(env::args());
+    if stable_version(env!("CARGO_PKG_VERSION")).is_err() {
+        return Ok(UpdateStartup {
+            pending: None,
+            notes: None,
+            failure: None,
+            ignored: false,
+            ignored_versions: Vec::new(),
+        });
+    }
+    let mut startup = tauri::async_runtime::spawn_blocking(move || startup_state(app))
+        .await
+        .map_err(|error| update_error(error.to_string()))??;
+    if let Some(release) = &mut startup.notes {
+        if let Ok(client) = release_client(Duration::from_secs(4)) {
+            fill_release_notes(&client, release).await;
+        }
+    }
+    Ok(startup)
+}
+
+fn startup_state(app: tauri::AppHandle) -> CommandResult<UpdateStartup> {
+    let failure = launch_failure(env::args_os().filter_map(|value| value.into_string().ok()));
     let (cached, ignored, seen) = update_preferences(&app, |state| {
         Ok((
             state.pending.clone(),
@@ -227,16 +248,24 @@ pub(crate) async fn update_startup(app: tauri::AppHandle) -> CommandResult<Updat
     if seen.iter().any(|version| version == current) {
         notes = None;
     } else {
-        let mut release = notes.unwrap_or_else(|| LatestRelease {
+        let release = notes.unwrap_or_else(|| LatestRelease {
             version: current.into(),
             title: format!("Locution Pro {current}"),
             body: String::new(),
             url: format!("https://github.com/{REPOSITORY}/releases/tag/v{current}"),
         });
-        if let Ok(client) = release_client(Duration::from_secs(4)) {
-            fill_release_notes(&client, &mut release).await;
-        }
         notes = Some(release);
+    }
+    if let Ok(cache) = app.path().app_cache_dir() {
+        let retained = pending
+            .as_ref()
+            .and_then(|release| prepared_update(&release.version).ok())
+            .and_then(|prepared| prepared.path);
+        prune_update_cache(
+            &cache.join("updates"),
+            retained.as_deref(),
+            std::time::SystemTime::now(),
+        );
     }
     Ok(UpdateStartup {
         ignored: pending
@@ -247,6 +276,48 @@ pub(crate) async fn update_startup(app: tauri::AppHandle) -> CommandResult<Updat
         failure,
         ignored_versions: ignored,
     })
+}
+
+fn prune_update_cache(root: &Path, retained: Option<&Path>, now: std::time::SystemTime) {
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            continue;
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            if metadata.file_attributes() & 0x400 != 0 {
+                continue;
+            }
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some((version, digest)) = name.split_once('-') else {
+            continue;
+        };
+        if stable_version(version).is_err()
+            || digest.len() != 64
+            || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            continue;
+        }
+        let old = metadata
+            .modified()
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age > Duration::from_secs(30 * 86400));
+        if old && !retained.is_some_and(|installer| installer.starts_with(&path)) {
+            if let Err(error) = fs::remove_dir_all(&path) {
+                tracing::warn!(%error, "Prune old update cache");
+            }
+        }
+    }
 }
 
 #[tauri::command]
@@ -307,6 +378,9 @@ fn decode_manifest(bytes: &[u8]) -> AppResult<(LatestRelease, Option<Installer>)
         serde_json::from_slice(bytes).map_err(|error| invalid_update(error.to_string()))?;
     let version = semver::Version::parse(&manifest.version)
         .map_err(|error| update_error(error.to_string()))?;
+    if !version.pre.is_empty() {
+        return Err(update_error("Ignored prerelease"));
+    }
     if !version.pre.is_empty()
         || !version.build.is_empty()
         || time::OffsetDateTime::parse(
@@ -400,6 +474,12 @@ fn decode_github_release(bytes: &[u8]) -> AppResult<LatestRelease> {
         .tag_name
         .strip_prefix('v')
         .unwrap_or(&release.tag_name);
+    if release.draft
+        || release.prerelease
+        || semver::Version::parse(version).is_ok_and(|version| !version.pre.is_empty())
+    {
+        return Err(update_error("Ignored prerelease"));
+    }
     stable_version(version)?;
     if release.draft
         || release.prerelease
@@ -451,40 +531,94 @@ async fn discover_release(
     github: &str,
 ) -> AppResult<(LatestRelease, Option<Installer>)> {
     let mut failures = Vec::new();
-    let mut fallback: Option<LatestRelease> = None;
-    for url in manifests {
+    let mut ignored = false;
+    let mut best: Option<(LatestRelease, Option<Installer>)> = None;
+    // CDN metadata is a discovery hint only. Only GitHub may authorize bytes.
+    for (index, url) in manifests.into_iter().enumerate() {
         match read_manifest(client, url).await {
             Ok((release, installer)) => {
-                if fallback.as_ref().is_some_and(|known| {
-                    stable_version(&known.version).unwrap()
-                        > stable_version(&release.version).unwrap()
-                }) {
-                    continue;
-                }
-                if installer.is_some() {
-                    return Ok((release, installer));
-                }
-                fallback = Some(release);
+                let installer = if index == 1 { installer } else { None };
+                select_release(&mut best, release, installer)?;
             }
-            Err(error) => failures.push(error.detail().to_string()),
+            Err(error) => {
+                ignored |= error.detail() == "Ignored prerelease";
+                failures.push(error.detail().to_string());
+            }
         }
     }
     match read_github_release(client, github).await {
-        Ok(release) => {
-            if fallback.as_ref().is_none_or(|known| {
-                stable_version(&release.version).unwrap() >= stable_version(&known.version).unwrap()
-            }) {
-                fallback = Some(release);
-            }
+        Ok(release) => select_release(&mut best, release, None)?,
+        Err(error) => {
+            ignored |= error.detail() == "Ignored prerelease";
+            failures.push(error.detail().to_string());
         }
-        Err(error) => failures.push(error.detail().to_string()),
     }
-    fallback.map(|release| (release, None)).ok_or_else(|| {
+    if best.is_none() && ignored {
+        return Ok((
+            LatestRelease {
+                version: env!("CARGO_PKG_VERSION").into(),
+                title: String::new(),
+                body: String::new(),
+                url: String::new(),
+            },
+            None,
+        ));
+    }
+    best.ok_or_else(|| {
         update_error(format!(
             "All release sources unavailable: {}",
             failures.join("; ")
         ))
     })
+}
+
+fn select_release(
+    best: &mut Option<(LatestRelease, Option<Installer>)>,
+    release: LatestRelease,
+    installer: Option<Installer>,
+) -> AppResult<()> {
+    let version = stable_version(&release.version)?;
+    if let Some((known, updater)) = best {
+        let previous = stable_version(&known.version)?;
+        if version < previous {
+            return Ok(());
+        }
+        if version == previous {
+            if installer.is_some() {
+                *updater = installer;
+            }
+            if !release.body.trim().is_empty() {
+                known.body = release.body;
+            }
+            if !release.title.trim().is_empty() {
+                known.title = release.title;
+            }
+            return Ok(());
+        }
+    }
+    *best = Some((release, installer));
+    Ok(())
+}
+
+async fn authoritative_installer(client: &reqwest::Client, version: &str) -> AppResult<Installer> {
+    stable_version(version)?;
+    let published = read_github_release(
+        client,
+        &format!("https://api.github.com/repos/{REPOSITORY}/releases/tags/v{version}"),
+    )
+    .await?;
+    if published.version != version {
+        return Err(invalid_update("GitHub release version mismatch"));
+    }
+    let (release, installer) = read_manifest(
+        client,
+        &format!("https://github.com/{REPOSITORY}/releases/download/v{version}/latest.json"),
+    )
+    .await?;
+    if release.version != version {
+        return Err(invalid_update("GitHub manifest version mismatch"));
+    }
+    installer.ok_or_else(|| invalid_update("GitHub release has no update-only installer"))
 }
 
 async fn fill_release_notes(client: &reqwest::Client, release: &mut LatestRelease) {
@@ -529,6 +663,17 @@ async fn fill_release_notes(client: &reqwest::Client, release: &mut LatestReleas
 
 #[tauri::command]
 pub(crate) async fn fetch_latest_release() -> CommandResult<LatestRelease> {
+    let current = match stable_version(env!("CARGO_PKG_VERSION")) {
+        Ok(current) => current,
+        Err(_) => {
+            return Ok(LatestRelease {
+                version: env!("CARGO_PKG_VERSION").into(),
+                title: String::new(),
+                body: String::new(),
+                url: String::new(),
+            })
+        }
+    };
     let client = release_client(Duration::from_secs(8))?;
     let (mut release, installer) = discover_release(
         &client,
@@ -540,10 +685,8 @@ pub(crate) async fn fetch_latest_release() -> CommandResult<LatestRelease> {
     )
     .await?;
     fill_release_notes(&client, &mut release).await;
-    if let Some(installer) = installer.filter(|_| {
-        stable_version(&release.version).unwrap()
-            > stable_version(env!("CARGO_PKG_VERSION")).unwrap()
-    }) {
+    let newer = stable_version(&release.version)? > current;
+    if let Some(installer) = installer.filter(|_| newer) {
         // An unavailable auto-update cache must not hide a discovered release.
         if let Ok(mut state) = updates().lock() {
             let previous = state.get(&release.version).and_then(|old| {
@@ -622,7 +765,9 @@ async fn download_from(
     {
         return Err(update_error("Update is too large"));
     }
-    let mut file = fs::File::create(path).map_err(|error| update_error(error.to_string()))?;
+    let mut file = tokio::fs::File::create(path)
+        .await
+        .map_err(|error| update_error(error.to_string()))?;
     let mut size = 0;
     while let Some(chunk) = response
         .chunk()
@@ -633,13 +778,19 @@ async fn download_from(
         if size > MAX_INSTALLER {
             return Err(update_error("Update is too large"));
         }
-        file.write_all(&chunk)
+        tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
+            .await
             .map_err(|error| update_error(error.to_string()))?;
     }
     file.sync_all()
+        .await
         .map_err(|error| update_error(error.to_string()))?;
     drop(file);
-    verify_download(path, signature)
+    let path = path.to_owned();
+    let signature = signature.to_owned();
+    tauri::async_runtime::spawn_blocking(move || verify_download(&path, &signature))
+        .await
+        .map_err(|error| update_error(error.to_string()))?
 }
 
 async fn download_installer(
@@ -669,49 +820,53 @@ async fn download_installer(
 #[tauri::command]
 pub(crate) async fn download_update(app: tauri::AppHandle, version: String) -> CommandResult<()> {
     let prepared = prepared_update(&version)?;
-    if prepared
-        .path
-        .as_ref()
-        .is_some_and(|path| verify_download(path, &prepared.installer.signature).is_ok())
-    {
-        persist_download(&app, &prepared)?;
+    // A path in memory has already been hashed during this session. The final
+    // installation boundary always checks bytes again against GitHub authority.
+    if prepared.path.is_some() {
         return Ok(());
     }
-    let path = cached_installer_path(&app, &version, &prepared.installer)?;
-    let directory = path
-        .parent()
-        .ok_or_else(|| update_error("Missing update cache directory"))?;
-    fs::create_dir_all(directory).map_err(|error| update_error(error.to_string()))?;
-    if path.is_file() && verify_download(&path, &prepared.installer.signature).is_ok() {
-        updates()
+    let app_copy = app.clone();
+    let prepared_copy = prepared.clone();
+    let (path, reused) = tauri::async_runtime::spawn_blocking(move || -> AppResult<_> {
+        let path = cached_installer_path(
+            &app_copy,
+            &prepared_copy.release.version,
+            &prepared_copy.installer,
+        )?;
+        fs::create_dir_all(
+            path.parent()
+                .ok_or_else(|| update_error("Missing cache directory"))?,
+        )
+        .map_err(|error| update_error(error.to_string()))?;
+        let reused = verify_download(&path, &prepared_copy.installer.signature).is_ok();
+        Ok((path, reused))
+    })
+    .await
+    .map_err(|error| update_error(error.to_string()))??;
+    let partial = path.with_file_name(format!("{}.part", Uuid::new_v4()));
+    if !reused {
+        let client = release_client(Duration::from_secs(180))?;
+        download_installer(&client, &prepared.installer, &partial).await?;
+    }
+    tauri::async_runtime::spawn_blocking(move || -> AppResult<()> {
+        if !reused {
+            fs::rename(&partial, &path).map_err(|error| update_error(error.to_string()))?;
+        }
+        let mut state = updates()
             .lock()
-            .map_err(|_| update_error("Update state is unavailable"))?
+            .map_err(|_| update_error("Update state is unavailable"))?;
+        let current = state
             .get_mut(&version)
-            .ok_or_else(|| update_error("Update metadata changed"))?
-            .path = Some(path);
-        persist_download(&app, &prepared)?;
-        return Ok(());
-    }
-    let partial = directory.join(format!("{}.part", Uuid::new_v4()));
-    let client = release_client(Duration::from_secs(180))?;
-    download_installer(&client, &prepared.installer, &partial).await?;
-    if path.exists() {
-        fs::remove_file(&path).map_err(|error| update_error(error.to_string()))?;
-    }
-    fs::rename(&partial, &path).map_err(|error| update_error(error.to_string()))?;
-    let mut state = updates()
-        .lock()
-        .map_err(|_| update_error("Update state is unavailable"))?;
-    let current = state
-        .get_mut(&version)
-        .ok_or_else(|| update_error("Update metadata changed"))?;
-    if current.installer.signature != prepared.installer.signature {
-        return Err(invalid_update("Release metadata changed while downloading"));
-    }
-    current.path = Some(path);
-    drop(state);
-    persist_download(&app, &prepared)?;
-    Ok(())
+            .ok_or_else(|| update_error("Update metadata changed"))?;
+        if current.installer.signature != prepared.installer.signature {
+            return Err(invalid_update("Release metadata changed while downloading"));
+        }
+        current.path = Some(path);
+        drop(state);
+        persist_download(&app, &prepared)
+    })
+    .await
+    .map_err(|error| update_error(error.to_string()))?
 }
 
 fn persist_download(app: &tauri::AppHandle, prepared: &PreparedUpdate) -> AppResult<()> {
@@ -748,7 +903,14 @@ pub(crate) async fn install_update(
     }
     #[cfg(windows)]
     {
-        let signature = prepared.installer.signature;
+        let client = release_client(Duration::from_secs(8))?;
+        let authority = authoritative_installer(&client, &version).await?;
+        if authority.signature != prepared.installer.signature {
+            return Err(invalid_update(
+                "Cached update does not match the GitHub release SHA-256",
+            ));
+        }
+        let signature = authority.signature;
         let (mut child, ready) = tauri::async_runtime::spawn_blocking(move || -> AppResult<_> {
             verify_download(&installer, &signature)?;
             let executable = env::current_exe().map_err(|error| update_error(error.to_string()))?;
@@ -782,12 +944,15 @@ pub(crate) async fn install_update(
         })
         .await
         .map_err(|error| update_error(error.to_string()))??;
+        let mut accepted = false;
         for _ in 0..600 {
-            if ready.is_file() {
-                let accepted = ready.with_file_name("accepted");
-                fs::write(accepted, b"accepted")
+            if !accepted && ready.is_file() {
+                let acceptance = ready.with_file_name("accepted");
+                fs::write(acceptance, b"accepted")
                     .map_err(|error| update_error(error.to_string()))?;
-                return Ok(());
+                accepted = true;
+                // Success terminates this process. If it remains alive, keep
+                // watching the controller and revoke a stalled handoff below.
             }
             if child
                 .try_wait()
@@ -795,7 +960,7 @@ pub(crate) async fn install_update(
                 .is_some()
             {
                 return Err(update_error(
-                    "The updater closed before accepting the handoff",
+                    "The updater exited without closing the application; use the full installer",
                 ));
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -816,6 +981,77 @@ mod tests {
             "tag_name": "v1.2.3", "name": "Release without latest.json", "body": "Legacy notes",
             "html_url": format!("https://github.com/{REPOSITORY}/releases/tag/v1.2.3")
         })
+    }
+
+    #[test]
+    fn cache_pruning_retains_pending_updates_and_unrecognized_directories() {
+        let root = env::temp_dir().join(format!("locution-cache-prune-{}", Uuid::new_v4()));
+        let obsolete = root.join(format!("1.0.0-{}", "a".repeat(64)));
+        let pending = root.join(format!("1.1.0-{}", "b".repeat(64)));
+        let unrelated = root.join("user-files");
+        for directory in [&obsolete, &pending, &unrelated] {
+            fs::create_dir_all(directory).unwrap();
+        }
+        prune_update_cache(
+            &root,
+            Some(&pending.join("update.exe")),
+            std::time::SystemTime::now() + Duration::from_secs(32 * 86400),
+        );
+        assert!(!obsolete.exists());
+        assert!(pending.exists());
+        assert!(unrelated.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn stale_cdn_never_hides_a_newer_github_release() {
+        let newer_manifest = manifest().to_string().replace("1.2.3", "1.3.0");
+        let newer_release = github_release().to_string().replace("1.2.3", "1.3.0");
+        let (release, installer) = discover_fixture(vec![
+            (200, manifest().to_string()),
+            (200, newer_manifest),
+            (200, newer_release),
+        ])
+        .unwrap();
+        assert_eq!(release.version, "1.3.0");
+        assert!(installer.is_some());
+    }
+
+    #[test]
+    fn cdn_cannot_authorize_update_bytes_without_independent_github_metadata() {
+        let mut cdn = manifest();
+        cdn["platforms"]["windows-x86_64"]["updater"]["signature"] = "b".repeat(64).into();
+        let (_, installer) = discover_fixture(vec![
+            (200, cdn.to_string()),
+            (200, manifest().to_string()),
+            (200, github_release().to_string()),
+        ])
+        .unwrap();
+        assert_eq!(installer.unwrap().signature, "a".repeat(64));
+        let (_, installer) = discover_fixture(vec![
+            (200, cdn.to_string()),
+            (404, String::new()),
+            (503, String::new()),
+        ])
+        .unwrap();
+        assert!(installer.is_none());
+    }
+
+    #[test]
+    fn prereleases_are_ignored_even_if_they_are_the_only_reachable_entries() {
+        let preview = manifest().to_string().replace("1.2.3", "999.0.0-preview");
+        let preview_api = github_release()
+            .to_string()
+            .replace("1.2.3", "999.0.0-preview");
+        let (release, installer) = discover_fixture(vec![
+            (200, preview.clone()),
+            (200, preview),
+            (200, preview_api),
+        ])
+        .unwrap();
+        assert_eq!(release.version, env!("CARGO_PKG_VERSION"));
+        assert!(installer.is_none());
+        assert!(stable_version("0.4.1-preview").is_err());
     }
 
     fn discover_fixture(

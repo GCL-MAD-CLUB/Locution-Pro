@@ -1,5 +1,5 @@
 import { version as currentVersion } from "../../package.json";
-import { clientError, invokeCommand } from "../errors";
+import { captureOperationError, clientError, invokeCommand } from "../errors";
 
 export interface ReleaseInfo {
   version: string;
@@ -34,8 +34,13 @@ export function setUpdateIgnored(version: string, ignored: boolean) {
   return invokeCommand<void>("set_update_ignored", { version, ignored }).then(async () => {
     const state = await loadUpdateStartup().catch(() => null);
     if (!state) return;
-    state.ignoredVersions = state.ignoredVersions.filter((entry) => entry !== version);
-    if (ignored) state.ignoredVersions.push(version);
+    const ignoredVersions = state.ignoredVersions.filter((entry) => entry !== version);
+    if (ignored) ignoredVersions.push(version);
+    startup = Promise.resolve({
+      ...state,
+      ignoredVersions,
+      ignored: state.pending?.version === version ? ignored : state.ignored,
+    });
   });
 }
 
@@ -51,9 +56,11 @@ export function startupUpdateNotifications(
   | { status: "available"; release: ReleaseInfo; ignored: boolean }
 > {
   const notifications: ReturnType<typeof startupUpdateNotifications> = [];
-  if (state.failure) notifications.push({ status: "installFailed", failure: state.failure });
-  if (state.notes) notifications.push({ status: "installed", release: state.notes });
-  if (state.pending && !state.ignored) {
+  if (state.failure && isStableUpdateVersion(state.failure.version))
+    notifications.push({ status: "installFailed", failure: state.failure });
+  if (state.notes && isStableUpdateVersion(state.notes.version))
+    notifications.push({ status: "installed", release: state.notes });
+  if (state.pending && isStableUpdateVersion(state.pending.version) && !state.ignored) {
     notifications.push({ status: "available", release: state.pending, ignored: false });
   }
   return notifications;
@@ -112,10 +119,16 @@ export function compareVersions(left: string, right: string): number | null {
 
 let activeCheck: Promise<UpdateCheckResult> | null = null;
 
+export function isStableUpdateVersion(version: string) {
+  return /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version);
+}
+
 export function checkForUpdate(): Promise<UpdateCheckResult> {
+  if (!isStableUpdateVersion(currentVersion)) return Promise.resolve({ status: "latest" });
   if (activeCheck) return activeCheck;
   const request = invokeCommand<ReleaseInfo>("fetch_latest_release")
     .then(async (release): Promise<UpdateCheckResult> => {
+      if (parseVersion(release.version)?.prerelease.length) return { status: "latest" };
       const comparison = compareVersions(release.version, currentVersion);
       if (comparison === null) {
         throw clientError(
@@ -127,7 +140,8 @@ export function checkForUpdate(): Promise<UpdateCheckResult> {
       try {
         await invokeCommand("download_update", { version: release.version });
         return { status: "available", release };
-      } catch {
+      } catch (error) {
+        captureOperationError("help.checkUpdates", error);
         // Release discovery succeeded. Missing metadata, failed downloads and
         // hash failures all retain the original manual update path.
         return { status: "manual", release };
@@ -146,7 +160,26 @@ export function installPreparedUpdate(version: string, projectPath: string | nul
   return invokeCommand<void>("install_update", { version, projectPath });
 }
 
-export function createUpdateWriteBarrier() {
+export function withUpdateTimeout<T>(operation: Promise<T>, milliseconds = 30000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    operation,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(
+            clientError(
+              "UNEXPECTED_ERROR",
+              "Update preparation timed out; the application remains open.",
+            ),
+          ),
+        milliseconds,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+export function createUpdateWriteBarrier(timeout = 30000) {
   const pending = new Set<Promise<unknown>>();
   return {
     track<T>(request: Promise<T>): Promise<T> {
@@ -155,7 +188,12 @@ export function createUpdateWriteBarrier() {
     },
     async settle(): Promise<boolean> {
       const hadWrites = pending.size > 0;
-      while (pending.size > 0) await Promise.allSettled([...pending]);
+      await withUpdateTimeout(
+        (async () => {
+          while (pending.size > 0) await Promise.allSettled([...pending]);
+        })(),
+        timeout,
+      );
       return hadWrites;
     },
   };
@@ -175,8 +213,8 @@ export async function saveBeforeUpdate({
   settle?: () => Promise<boolean>;
 }): Promise<"cancelled" | "changed" | "started"> {
   const before = snapshot();
-  const hadWrites = await settle?.();
-  if ((needsSave || hadWrites) && !(await save())) return "cancelled";
+  const hadWrites = await withUpdateTimeout(Promise.resolve(settle?.()));
+  if ((needsSave || hadWrites) && !(await withUpdateTimeout(save()))) return "cancelled";
   if (snapshot() !== before) return "changed";
   await install();
   return "started";

@@ -2,7 +2,8 @@ import { createModuleLoader, deferred, flush } from "../support/module-loader.ts
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const loadModule = createModuleLoader(import.meta.url);
+const loadTestModule = createModuleLoader(import.meta.url);
+const loadModule = (path, imports) => loadTestModule(path, imports, { setTimeout, clearTimeout });
 
 function loadUpdate(release) {
   const invocations = [];
@@ -33,6 +34,54 @@ test("update versions follow semantic version precedence", () => {
   assert.equal(update.compareVersions("1.0.0-beta", "1.0.0-alpha"), 1);
   assert.equal(update.compareVersions("1.0.0-1", "1.0.0-alpha"), -1);
   assert.equal(update.compareVersions("1.0.0+build.2", "v1.0.0+build.1"), 0);
+});
+
+test("prerelease builds and release candidates never check, download or notify", async () => {
+  const calls = [];
+  const preview = loadModule("../../../src/application/update.ts", {
+    "../../package.json": { version: "0.4.1-preview" },
+    "../errors": {
+      invokeCommand: async (command) => {
+        calls.push(command);
+      },
+    },
+  });
+  assert.equal((await preview.checkForUpdate()).status, "latest");
+  assert.deepEqual(calls, []);
+  const { update, invocations } = loadUpdate({ version: "999.0.0-rc.1" });
+  assert.equal((await update.checkForUpdate()).status, "latest");
+  assert.deepEqual(invocations, ["fetch_latest_release"]);
+  assert.equal(
+    update.startupUpdateNotifications({
+      pending: { version: "1.0.0-preview" },
+      notes: { version: "1.0.0-rc.1" },
+      failure: { version: "1.0.0-beta" },
+    }).length,
+    0,
+  );
+});
+
+test("a hung save barrier times out and never launches the updater", async () => {
+  const { update } = loadUpdate();
+  const barrier = update.createUpdateWriteBarrier(15);
+  const pending = deferred();
+  const write = barrier.track(pending.promise);
+  let installs = 0;
+  await assert.rejects(
+    update.saveBeforeUpdate({
+      needsSave: false,
+      settle: barrier.settle,
+      save: async () => true,
+      snapshot: () => "unchanged",
+      install: async () => {
+        installs++;
+      },
+    }),
+    /timed out/,
+  );
+  assert.equal(installs, 0);
+  pending.resolve();
+  await write;
 });
 
 test("update versions reject malformed and ambiguous versions", () => {
@@ -70,6 +119,7 @@ test("update availability waits for the download and falls back to the release p
   const update = loadModule("../../../src/application/update.ts", {
     "../../package.json": { version: "0.4.0" },
     "../errors": {
+      captureOperationError: () => {},
       invokeCommand: (command) =>
         command === "fetch_latest_release"
           ? Promise.resolve({ version: "0.5.0" })
@@ -99,6 +149,7 @@ test("missing update metadata and hash or cache failures preserve release notes 
     const update = loadModule("../../../src/application/update.ts", {
       "../../package.json": { version: "0.4.0" },
       "../errors": {
+        captureOperationError: () => {},
         invokeCommand: async (command) => {
           if (command === "fetch_latest_release") return release;
           throw new Error(reason);
@@ -164,9 +215,13 @@ test("startup is read once per session and suppression is persisted for the sele
   assert.equal(update.loadUpdateStartup(), update.loadUpdateStartup());
   await update.loadUpdateStartup();
   await update.setUpdateIgnored("0.6.0", true);
-  assert.deepEqual(state.ignoredVersions, ["0.5.0", "0.6.0"]);
+  assert.deepEqual(Array.from((await update.loadUpdateStartup()).ignoredVersions), [
+    "0.5.0",
+    "0.6.0",
+  ]);
   await update.setUpdateIgnored("0.5.0", false);
-  assert.deepEqual(state.ignoredVersions, ["0.6.0"]);
+  assert.deepEqual(Array.from((await update.loadUpdateStartup()).ignoredVersions), ["0.6.0"]);
+  assert.deepEqual(state.ignoredVersions, ["0.5.0"]);
   await update.acknowledgeUpdateNotes();
   assert.equal(calls.filter(([command]) => command === "update_startup").length, 1);
   assert.equal(calls.at(-1)[0], "acknowledge_update_notes");

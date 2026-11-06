@@ -66,6 +66,7 @@ import {
 } from "./application/update";
 import {
   captureOperationError,
+  clientError,
   invokeCommand,
   runBackgroundOperation,
   runOperation,
@@ -868,7 +869,6 @@ function AppContent() {
     updateInstallingRef.current = true;
     setUpdateInstalling(true);
     setUpdateDialogState({ status: "available", release, ignored });
-    let handedOff = false;
     try {
       const result = await saveBeforeUpdate({
         needsSave: projectDirty,
@@ -877,7 +877,12 @@ function AppContent() {
         snapshot: () => JSON.stringify(getProjectWorkspaceSnapshot()),
         install: async () => {
           await installPreparedUpdate(release.version, savedUpdateProjectPathRef.current);
-          handedOff = true;
+          // A successful handoff closes this process. Returning while it is
+          // still alive must restore the manual update path.
+          throw clientError(
+            "UNEXPECTED_ERROR",
+            "The updater returned without closing the application",
+          );
         },
       });
       if (result === "changed") {
@@ -895,10 +900,8 @@ function AppContent() {
         release,
       });
     } finally {
-      if (!handedOff) {
-        updateInstallingRef.current = false;
-        setUpdateInstalling(false);
-      }
+      updateInstallingRef.current = false;
+      setUpdateInstalling(false);
     }
   }
 
@@ -1032,7 +1035,7 @@ function AppContent() {
     );
     if (makeCurrent && JSON.stringify(getProjectWorkspaceSnapshot()) !== snapshot) {
       messagePublished("已写入保存时的项目快照，期间新增的更改仍需保存。");
-      return;
+      return false;
     }
     if (makeCurrent) {
       projectSaved(savedPath, targetId);
@@ -1050,6 +1053,7 @@ function AppContent() {
       );
     }
     rememberRecentProject({ path: savedPath, projectId: targetId });
+    return true;
   }
 
   function suggestedProjectName(makeCopy = false) {
@@ -1095,7 +1099,7 @@ function AppContent() {
         resourceKind: "project",
       },
     );
-    return saveOutcome.status === "success";
+    return saveOutcome.status === "success" && saveOutcome.value;
   }
 
   async function saveProjectAs(makeCurrent = true) {
@@ -1114,7 +1118,7 @@ function AppContent() {
         resourceKind: "project",
       },
     );
-    return saveOutcome.status === "success";
+    return saveOutcome.status === "success" && saveOutcome.value;
   }
 
   async function saveProject() {

@@ -35,7 +35,7 @@ export async function checkReleaseAssets({ directory, version, repository }) {
   }
   const manifest = validateRelease(
     JSON.parse(await readFile(path.join(directory, "latest.json"), "utf8")),
-    { stable: false },
+    { stable: false, repository },
   );
   if (
     manifest.version !== version ||
@@ -91,7 +91,7 @@ export async function checkReleaseAssets({ directory, version, repository }) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { version } = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
   await checkReleaseAssets({
-    directory: path.join(root, "dist", "release"),
+    directory: path.join(root, "src-tauri", "target", "release-artifacts"),
     version,
     repository: process.env.GITHUB_REPOSITORY || RELEASE_REPOSITORY,
   });

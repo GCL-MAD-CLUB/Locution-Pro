@@ -1,6 +1,7 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { FALLBACK_VERSION } from "../site/src/release-contract.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const requiredFiles = [
@@ -72,6 +73,13 @@ export async function checkSite(siteRoot) {
     }
     ids.set(file, documentIds);
   }
+
+  const fallbackLabel = documents
+    .get("index.html")
+    ?.match(/data-release-version>\s*V([^<]+)\/ WINDOWS/u)?.[1]
+    ?.trim();
+  if (fallbackLabel !== FALLBACK_VERSION)
+    errors.push("index.html: fallback release version does not match the download contract");
 
   function assertReference(file, reference) {
     if (apiRoutes.has(reference)) return;

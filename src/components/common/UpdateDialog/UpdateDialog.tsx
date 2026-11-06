@@ -137,8 +137,6 @@ export function UpdateDialog({
       title={title}
       actions={actions}
       onCancel={onClose}
-      cancelDisabled={installing}
-      confirmDisabled={installing || blocked}
       onConfirm={state.status === "available" ? onInstall : onClose}
     >
       {state.status === "installFailed" && (

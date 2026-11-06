@@ -87,6 +87,9 @@ try {
                 Start-Sleep -Milliseconds 40
             }
         }
+        if (Test-Path -LiteralPath (Join-Path $directory 'cancel-start')) {
+            throw 'The application revoked the update handoff.'
+        }
         $parentAccepted = $true
         # The package, rather than the application, owns process termination.
         Stop-Process -InputObject $parentProcess -Force
@@ -109,7 +112,7 @@ try {
             if ($script:cancelRequested -and $failure.Contains('Update cancelled.') -and !$failure.Contains('Rollback')) {
                 $exitCode = 1
             } elseif ($exitCode -eq 1 -and !$failure) {
-                $exitCode = 1
+                # The worker cancelled before changing files.
             } else {
                 if (!$failure) { $failure = "The update installer failed (exit code $exitCode). Use the full installer to repair the installation." }
                 throw $failure
@@ -127,10 +130,8 @@ try {
     $script:finished = $true
     if ($form) { $form.Close(); $form.Dispose() }
     try {
-        if ($parentProcess -and $parentAccepted -and !$parentProcess.HasExited) {
-            Stop-Process -InputObject $parentProcess -Force
-            if (!$parentProcess.WaitForExit(10000)) { throw 'The old application could not be stopped for restart.' }
-        }
+        # Keep a surviving parent available for the application's watchdog.
+        # Never retry termination after editing may have resumed.
         $status = if ($exitCode -eq 0) { 'success' } elseif ($exitCode -eq 1) { 'cancelled' } else { 'failed' }
         $report = @{ version = $Version; exitCode = $exitCode; installerExitCode = $installerExitCode; status = $status; error = $failure }
         try {
@@ -154,7 +155,7 @@ try {
         if ($Headless) { $start.WindowStyle = 'Hidden' }
         # A revoked handoff leaves the old application running and editable.
         # Never close or duplicate it after the application rejected startup.
-        if (!$parentProcess -or $parentAccepted -or $parentProcess.HasExited) {
+        if (!$parentProcess -or $parentProcess.HasExited) {
             Start-Process @start | Out-Null
         }
     } catch {

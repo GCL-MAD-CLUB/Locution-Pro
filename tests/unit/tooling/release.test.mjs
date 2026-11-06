@@ -74,6 +74,29 @@ test("release artifacts contain the actual installer SHA-256 and immutable downl
   );
 });
 
+test("release regeneration replaces the complete previous file set without mixing versions", async (t) => {
+  const options = await fixture(t);
+  await prepareReleaseManifest(options);
+  await prepareReleaseManifest({ ...options, version: "2.2.0" });
+  const { manifest } = await checkReleaseAssets({
+    directory: options.outputDirectory,
+    version: "2.2.0",
+    repository: "GCL-MAD-CLUB/Locution-Pro",
+  });
+  assert.equal(manifest.version, "2.2.0");
+  await assert.rejects(
+    prepareReleaseManifest({
+      ...options,
+      installer: path.join(options.outputDirectory, "missing.exe"),
+    }),
+  );
+  await checkReleaseAssets({
+    directory: options.outputDirectory,
+    version: "2.2.0",
+    repository: "GCL-MAD-CLUB/Locution-Pro",
+  });
+});
+
 test("release generation rejects missing, empty and non-executable installers", async (t) => {
   const options = await fixture(t);
   await assert.rejects(
@@ -136,7 +159,8 @@ test("the manifest links to the repository that actually owns the release", asyn
     manifest.platforms[RELEASE_PLATFORM].url,
     /^https:\/\/github\.com\/release-owner\/product\/releases\/download\/v2\.1\.1\//u,
   );
-  assert.deepEqual(validateRelease(manifest), manifest);
+  assert.throws(() => validateRelease(manifest), /GitHub installer URL/);
+  assert.deepEqual(validateRelease(manifest, { repository: "release-owner/product" }), manifest);
 });
 
 async function publicationFixture(t, { version = "2.1.1", absent = false } = {}) {
@@ -224,7 +248,7 @@ test("publication rejects an artifact from another version or repository", async
   const { options } = await publicationFixture(t);
   await assert.rejects(
     checkReleaseAssets({ ...options, repository: "another/repository" }),
-    /expected version and repository/u,
+    /expected version and repository|Invalid GitHub installer URL/u,
   );
   await assert.rejects(checkReleaseAssets({ ...options, version: "2.1.2" }), /exactly/u);
 });

@@ -40,7 +40,6 @@ export function fallbackRelease() {
     platforms: {
       [RELEASE_PLATFORM]: {
         url: `${GITHUB_BASE}/download/v${FALLBACK_VERSION}/${name}`,
-        cdn_url: `${CDN_BASE}/${name}`,
       },
     },
   };

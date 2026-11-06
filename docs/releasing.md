@@ -124,9 +124,9 @@ CDN 仅提供版本线索和文件传输，不能独立授权自动执行。更�
 
 缓存摘要校验在阻塞任务中运行，同一会话不重复进行启动校验。启动时清理超过 30 天的已识别旧更新缓存，保留待更新版本和非托管目录。保存及等待已有写入均限制为 30 秒；更新控制器确认交接后，应用继续监视它是否完成关闭，超时撤销交接并恢复操作。无法结束旧进程时保留旧应用，不重试结束进程或启动重复实例。
 
-OpenList 后端自动同步最新正式 Release 的附件到[分享目录](https://openlist.frameneo.com/@s/YRrdPxj2)，CI 无需 OpenList Token。同步必须包含两个安装包与 `latest.json`，保留固定 0.4.1 回退文件；不要将预发布同步到稳定目录。CDN 清单需在对应安装包可下载后更新；同步短暂错序时官网会改用同版本 GitHub 安装包。
+OpenList 后端自动同步最新正式 Release 的附件到[分享目录](https://openlist.frameneo.com/@s/YRrdPxj2)，CI 无需 OpenList Token。同步必须包含两个安装包、`latest.json` 与 `SHA256SUMS.txt`；不要将预发布同步到稳定目录。该目录只保证最新正式版附件，旧版本固定回退直接使用 GitHub，不依赖 CDN 保留历史文件。CDN 清单需在对应安装包可下载后更新；同步短暂错序时官网会改用同版本 GitHub 安装包。
 
-官网的 `/api/release` 先读取 CDN 的 `/sd/YRrdPxj2/latest.json`，失败、超时或内容无效时读取 GitHub 的 `/releases/latest/download/latest.json`；两者都不可用时返回固定 0.4.1。GitHub 的 latest 路径以正式 Release 的最新标记为准，预发布清单也会被官网拒绝。清单读取不比较两个源的新旧，CDN 同步延迟期间可能继续提供上一个正式版本。
+官网的 `/api/release` 先读取 CDN 的 `/sd/YRrdPxj2/latest.json`，失败、超时或内容无效时读取 GitHub 的 `/releases/latest/download/latest.json`；两者都不可用时返回固定 0.4.1 的 GitHub 下载地址，不附带 CDN 地址。GitHub 的 latest 路径以正式 Release 的最新标记为准，预发布清单也会被官网拒绝。清单读取不比较两个源的新旧，CDN 同步延迟期间可能继续提供上一个正式版本。
 
 所有官网安装按钮统一进入 `/api/download`，由 Cloudflare Pages Worker 读取同一清单，优先请求 `cdn_url`，连接失败、超时、错误状态或非安装包响应时回退 `url`，流式返回安装包，不整包读入内存。清单有效但两个安装源都失败时返回 502，避免静默降级。响应开始后的网络中断需由浏览器重试；续传仅在客户端提供匹配的 SHA-256 ETag 时启用，版本变化会重新下载，避免拼接不同版本。网站不在下载过程中计算整包摘要，人工校验使用 `SHA256SUMS.txt`。
 

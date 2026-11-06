@@ -74,7 +74,7 @@ for (const failure of [
   });
 }
 
-test("unavailable manifests use fixed 0.4.1 URLs", async () => {
+test("unavailable manifests use the fixed 0.4.1 GitHub URL", async () => {
   const manifest = await readLatestRelease(async () => new Response(null, { status: 404 }));
   assert.deepEqual(manifest, fallbackRelease());
   assert.equal(manifest.version, "0.4.1");
@@ -234,16 +234,15 @@ test("API serves release JSON, rejects mutation methods and keeps static assets 
   assert.equal(response404.status, 404);
 });
 
-test("download API falls back to the 0.4.1 installer when neither manifest is usable", async () => {
+test("unavailable manifests download 0.4.1 from GitHub without the retired CDN file", async () => {
   const calls = [];
   const response = await handleRequest(request(), {}, async (url) => {
     calls.push(url);
-    return url.endsWith("latest.json") ? new Response(null, { status: 404 }) : binary();
+    if (url.endsWith("latest.json")) return new Response(null, { status: 404 });
+    assert.equal(url, `${GITHUB_BASE}/download/v0.4.1/Locution.Pro_0.4.1_x64-setup.exe`);
+    return binary();
   });
-  assert.deepEqual(calls, [
-    ...MANIFEST_URLS,
-    fallbackRelease().platforms[RELEASE_PLATFORM].cdn_url,
-  ]);
+  assert.deepEqual(calls, [...MANIFEST_URLS, fallbackRelease().platforms[RELEASE_PLATFORM].url]);
   assert.match(response.headers.get("Content-Disposition"), /0\.4\.1/u);
   await response.body.cancel();
 });

@@ -1,7 +1,9 @@
 import { initSectionNavigation } from "./navigation.js";
 import { initWorkspaceCarousel } from "./workspace.js";
+import { initReleaseDownload } from "./download.js";
 
 initWorkspaceCarousel();
+void initReleaseDownload(document);
 
 const queryExamples = {
   coast: {

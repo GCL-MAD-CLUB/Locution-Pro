@@ -139,6 +139,10 @@ LangString deleteAppData \${LANG_SIMPCHINESE} "删除应用程序数据"
   );
   const upgradeSource = join(temporary, "upgrade-files.nsh");
   writeFileSync(
+    join(temporary, "update-result.nsh"),
+    readFileSync(join(root, "src-tauri/windows/update-result.nsh")),
+  );
+  writeFileSync(
     upgradeSource,
     instrumented(
       "upgrade-files.nsh",
@@ -167,6 +171,65 @@ LangString deleteAppData \${LANG_SIMPCHINESE} "删除应用程序数据"
       ),
   );
   const oldTimestamp = new Date("2020-01-01T00:00:00Z");
+  await t.test("embedded uninstall commits the real file-removal transaction", () => {
+    const install = join(temporary, "embedded-uninstall-commit");
+    for (const name of [...files, "locution-pro.exe", "uninstall.exe"]) {
+      const file = join(install, name);
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, name.endsWith(".exe") ? "old executable" : "payload");
+    }
+    const finish =
+      functionSource("LocutionProFinishEmbeddedUninstall").split("  {{#each file_associations")[0] +
+      "\nFunctionEnd";
+    const executable = compile(
+      "embedded-uninstall-commit",
+      `
+!define PRODUCTNAME "Locution Pro"
+!define VERSION "1.0.0"
+!define INSTALLMODE "currentUser"
+!define MAINBINARYNAME "locution-pro"
+!define LOCUTION_PAYLOAD_MANIFEST "${nsis(manifest)}"
+Var PreviousInstallDir
+Var PreviousUninstallKey
+Var PassiveMode
+Var UpdateMode
+Var LocutionProUninstallComplete
+!include "${nsis(join(root, "src-tauri/windows/independent-install.nsh"))}"
+!include "${nsis(join(root, "src-tauri/windows/ffmpeg-options.nsh"))}"
+!include "${nsis(join(root, "src-tauri/windows/upgrade-files.nsh"))}"
+SilentInstall silent
+${language}
+${functionSource("SkipIfPassive")}
+${finish}
+Function .onInstFailed
+  Call LocutionProRollbackInstall
+  SetErrorLevel 2
+FunctionEnd
+Section
+  StrCpy $INSTDIR "${nsis(install)}"
+  StrCpy $PreviousInstallDir $INSTDIR
+  StrCpy $PreviousUninstallKey "${registry}\\embedded-uninstall"
+  StrCpy $LocutionProBundleFfmpeg 0
+  StrCpy $LocutionProBundleSemantic 0
+  Call LocutionProExtractUpgradeTools
+  StrCpy $LocutionProUpgradeMode "Uninstall"
+  !insertmacro LOCUTION_UPGRADE_COMMAND $0
+  nsExec::ExecToStack $0
+  Pop $0
+  Pop $1
+  \${If} $0 != 0
+    Abort "$1"
+  \${EndIf}
+  Call LocutionProFinishEmbeddedUninstall
+SectionEnd
+`,
+    );
+    run(executable, ["/S"]);
+    for (const name of [...files, "locution-pro.exe", "uninstall.exe"]) {
+      assert(!existsSync(join(install, name)), `Uninstall must remove ${name}`);
+    }
+  });
+
   for (const entry of [
     { name: "upgrade", version: "0.9.0", choice: 1 },
     { name: "fresh", version: "0.9.0", choice: 2, fresh: true },

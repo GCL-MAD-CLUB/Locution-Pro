@@ -12,7 +12,7 @@ on:
         type: string
 
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref }}
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -25,17 +25,18 @@ jobs:
   validate:
     name: Validate release tag
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
       actions: read
     outputs:
-      prerelease: ${{ steps.version.outputs.prerelease }}
       tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.version.outputs.sha }}
     steps:
       - name: Checkout release revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
           persist-credentials: false
       # Tags bypass branch protection and workflow_dispatch accepts any existing
       # tag. Refuse to publish a commit whose CI never passed.
@@ -45,17 +46,16 @@ jobs:
         run: |
           set -euo pipefail
           release_sha="$(git rev-parse HEAD)"
-          runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$release_sha&status=success&per_page=1" --jq '.total_count')"
+          runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$release_sha&status=success&event=push&per_page=100" --jq '[.workflow_runs[] | select(.head_branch == "main")] | length')"
           if [[ "$runs" -eq 0 ]]; then
             echo "::error::No successful CI run found for $release_sha. Wait for CI or rerun this workflow."
             exit 1
           fi
           echo "CI passed for $release_sha"
-      - name: Set up Node.js and npm
-        uses: ./.github/actions/setup-npm
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: npm ci
       - name: Validate tag and manifest versions
         id: version
         shell: bash
@@ -66,30 +66,39 @@ jobs:
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
           export GITHUB_REF_TYPE=tag
           export GITHUB_REF_NAME="$RELEASE_TAG"
-          npm run check:versions
+          node scripts/check-version-consistency.mjs
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          if [[ "$RELEASE_TAG" == *-* ]]; then
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
-          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Check existing release state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: node scripts/prepare-release-draft.mjs --check
 
-  build-and-publish:
-    name: Build and publish Windows installer
+  build-windows:
+    name: Build Windows release artifacts
     needs: validate
     runs-on: windows-2025
     timeout-minutes: 90
     environment:
       name: release
       url: https://github.com/${{ github.repository }}/releases/tag/${{ needs.validate.outputs.tag }}
-    permissions:
-      contents: write
+    outputs:
+      artifact-id: ${{ steps.release-artifact.outputs.artifact-id }}
     steps:
       - name: Checkout release revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: ${{ needs.validate.outputs.sha }}
           persist-credentials: false
+      - name: Require the official project build secret
+        shell: pwsh
+        env:
+          LOCUTION_PRO_PROJECT_BUILD_SECRET_V1: ${{ secrets.LOCUTION_PRO_PROJECT_BUILD_SECRET_V1 || secrets.LINECUT_PROJECT_BUILD_SECRET_V1 }}
+        run: |
+          if (-not $env:LOCUTION_PRO_PROJECT_BUILD_SECRET_V1) {
+            throw "The release environment is missing LOCUTION_PRO_PROJECT_BUILD_SECRET_V1"
+          }
       - name: Set up Node.js and npm
         uses: ./.github/actions/setup-npm
         with:
@@ -105,7 +114,7 @@ jobs:
             src-tauri
             src-tauri/thumbnail-provider
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
       # The build hooks download ~844 MiB of pinned models when the cache misses.
       # Cache the verified destination directories; the preparation scripts
       # re-check every digest, so a stale or partial cache cannot be packaged.
@@ -119,9 +128,20 @@ jobs:
             src-tauri/resources/semantic-search
             src-tauri/resources/storyboard-semantic
           key: model-assets-${{ runner.os }}-${{ hashFiles('scripts/prepare-semantic-assets.mjs', 'scripts/prepare-storyboard-semantic-assets.mjs', 'src-tauri/resources/*/MODEL.md') }}
-      - name: Prepare verified model assets
-        run: npm run prepare:semantic && npm run prepare:storyboard-semantic
-      - name: Save model assets
+      - name: Cache verified FFmpeg download
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/ffmpeg-assets/*/*.zip
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/prepare-ffmpeg-assets.mjs') }}
+      - name: Prepare verified FFmpeg bundle assets
+        run: npm run prepare:ffmpeg
+      # Tauri hooks prepare/check models once and build the thumbnail provider once.
+      # Keep building separate from uploading so retries never rebuild the installer.
+      - name: Build Windows installer
+        env:
+          LOCUTION_PRO_PROJECT_BUILD_SECRET_V1: ${{ secrets.LOCUTION_PRO_PROJECT_BUILD_SECRET_V1 || secrets.LINECUT_PROJECT_BUILD_SECRET_V1 }}
+        run: npm run tauri -- build --ci -- --locked
+      - name: Save verified model assets
         if: steps.model-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -129,31 +149,56 @@ jobs:
             src-tauri/resources/semantic-search
             src-tauri/resources/storyboard-semantic
           key: ${{ steps.model-cache.outputs.cache-primary-key }}
-      - name: Require the official project build secret
-        shell: pwsh
-        env:
-          LOCUTION_PRO_PROJECT_BUILD_SECRET_V1: ${{ secrets.LOCUTION_PRO_PROJECT_BUILD_SECRET_V1 || secrets.LINECUT_PROJECT_BUILD_SECRET_V1 }}
-        run: |
-          if (-not $env:LOCUTION_PRO_PROJECT_BUILD_SECRET_V1) {
-            throw "The release environment is missing LOCUTION_PRO_PROJECT_BUILD_SECRET_V1"
-          }
-      - name: Prepare verified FFmpeg bundle assets
-        run: npm run prepare:ffmpeg
-      - name: Build thumbnail provider resource
-        run: npm run build:thumbnail-provider
-      - name: Build and publish release
-        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # action-v0.6.2
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          LOCUTION_PRO_PROJECT_BUILD_SECRET_V1: ${{ secrets.LOCUTION_PRO_PROJECT_BUILD_SECRET_V1 || secrets.LINECUT_PROJECT_BUILD_SECRET_V1 }}
+      - name: Bundle update-only installer without recompiling
+        run: npm run build:update-installer
+      - name: Generate release manifest and checksums
+        run: npm run prepare:release
+      - name: Verify complete release artifacts
+        run: npm run check:release
+      - name: Preserve complete release artifacts
+        id: release-artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          tagName: ${{ needs.validate.outputs.tag }}
-          releaseName: Locution Pro ${{ needs.validate.outputs.tag }}
-          generateReleaseNotes: true
-          releaseDraft: true
-          prerelease: ${{ needs.validate.outputs.prerelease }}
-          includeUpdaterJson: false
-          # Product name stays "Locution Pro"; only the published file name
-          # drops the space so download URLs and CLI use need no escaping.
-          assetNamePattern: "Locution.Pro_[version]_[arch][setup][ext]"
-          retryAttempts: 2
+          name: windows-release-${{ needs.validate.outputs.tag }}-${{ github.run_attempt }}
+          path: src-tauri/target/release-artifacts
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  publish-draft:
+    name: Verify and upload release draft
+    needs: [validate, build-windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout validated revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Download exact build artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build-windows.outputs.artifact-id }}
+          path: src-tauri/target/release-artifacts
+          merge-multiple: true
+      - name: Recheck release tag
+        env:
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+          RELEASE_SHA: ${{ needs.validate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$RELEASE_SHA"
+      - name: Verify artifacts and prepare release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+        run: node scripts/prepare-release-draft.mjs

@@ -89,6 +89,6 @@ description: 按现象处理导入、媒体连接、检索、预览、保存与�
 2. 选择**帮助 → 显示日志文件**。
 3. 找到对应时段的日志，复制一份用于反馈。
 4. 检查日志中的路径、项目名称等信息，遮去不希望公开的内容。
-5. 在[问题反馈页面](https://github.com/GCL-MAD-CLUB/LineCut/issues)说明应用版本、系统、操作步骤、媒体格式与提示。
+5. 在[问题反馈页面](https://github.com/GCL-MAD-CLUB/Locution-Pro/issues)说明应用版本、系统、操作步骤、媒体格式与提示。
 
-不要提交私人素材或完整项目。确需样本时，先制作不含敏感内容且能重现问题的最小样本。反馈安全问题请使用[私密漏洞报告](https://github.com/GCL-MAD-CLUB/LineCut/security/advisories/new)。
+不要提交私人素材或完整项目。确需样本时，先制作不含敏感内容且能重现问题的最小样本。反馈安全问题请使用[私密漏洞报告](https://github.com/GCL-MAD-CLUB/Locution-Pro/security/advisories/new)。

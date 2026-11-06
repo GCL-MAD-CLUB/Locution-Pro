@@ -69,6 +69,20 @@ test("failed validation preserves the last good package", async (t) => {
   assert.equal(await readFile(path.join(output, "index.html"), "utf8"), lastGoodHtml);
 });
 
+test("site checker rejects a fallback version label that differs from the download contract", async (t) => {
+  const root = await fixture(t);
+  const index = path.join(root, "site", "index.html");
+  await writeFile(
+    index,
+    (await readFile(index, "utf8")).replace("V0.4.1 / WINDOWS", "V9.9.9 / WINDOWS"),
+  );
+  assert(
+    (await checkSite(path.join(root, "site"))).some((error) =>
+      error.includes("fallback release version"),
+    ),
+  );
+});
+
 test("site checker catches missing anchors, CSS fonts, demo images and unpublished documents", async (t) => {
   const root = await fixture(t);
   const site = path.join(root, "site");
@@ -119,6 +133,18 @@ test("site checker requires the real Cloudflare 404 entry point", async (t) => {
   const root = await fixture(t);
   await rm(path.join(root, "site", "404.html"));
   assert.match((await checkSite(path.join(root, "site"))).join("\n"), /404\.html/u);
+});
+
+test("site checker requires the download Worker and restricts its invocation routes", async (t) => {
+  const root = await fixture(t);
+  const site = path.join(root, "site");
+  await writeFile(
+    path.join(site, "_routes.json"),
+    JSON.stringify({ version: 1, include: ["/*"], exclude: [] }),
+  );
+  assert.match((await checkSite(site)).join("\n"), /API routes/u);
+  await rm(path.join(site, "_worker.js"));
+  assert.match((await checkSite(site)).join("\n"), /_worker\.js/u);
 });
 
 test("site origins are normalized and reject non-origin URLs", () => {

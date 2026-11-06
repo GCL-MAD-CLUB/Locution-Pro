@@ -236,6 +236,7 @@ const operationPolicies = {
   "export.run": modal("导出视频失败"),
   "feedback.audio": silent("警告音效播放失败"),
   "help.checkUpdates": silent("检查更新失败"),
+  "help.installUpdate": silent("更新安装失败"),
   "help.openDocumentation": modal("无法打开 Locution Pro 帮助"),
   "help.openLogDirectory": modal("无法显示日志文件"),
   "media.bindSubtitles": modal("字幕绑定失败"),

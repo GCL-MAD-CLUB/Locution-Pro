@@ -1,5 +1,5 @@
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('Scan', 'Prepare', 'Upgrade', 'Uninstall', 'CheckUninstall', 'CheckBackup', 'Commit', 'Rollback')][string]$Mode,
+    [Parameter(Mandatory = $true)][ValidateSet('Scan', 'Prepare', 'Verify', 'Upgrade', 'Uninstall', 'CheckUninstall', 'CheckBackup', 'Commit', 'Rollback')][string]$Mode,
     [Parameter(Mandatory = $true)][string]$Root,
     [string]$PreviousRoot = '',
     [Parameter(Mandatory = $true)][string]$Manifest,
@@ -8,12 +8,19 @@ param(
     [int]$Ffmpeg = 1,
     [int]$Semantic = 1,
     [int]$Transactional = 0,
+    [ValidateSet(0, 1)][int]$UpdateOnly = 0,
+    [string]$CancelFile = '',
     [string]$BackupDirectory = ''
 )
 
 # Runs hidden under the installer. Never reads or deletes application data.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3
+
+function Assert-UpdateNotCancelled {
+    if ($UpdateOnly -and $Mode -in @('Scan', 'Prepare', 'Verify', 'Commit') -and
+        $CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Update cancelled.' }
+}
 
 function Assert-PlainPath([string]$Path) {
     $cursor = [IO.Path]::GetFullPath($Path)
@@ -228,6 +235,7 @@ function Test-CommittedBackup([string]$Path, [string]$Base) {
 }
 
 try {
+    Assert-UpdateNotCancelled
     if ($Mode -eq 'CheckBackup') {
         $Root = Resolve-InstallRoot $Root
         $backup = [IO.Path]::GetFullPath($BackupDirectory)
@@ -268,6 +276,13 @@ try {
         }
     }
     if ($MainBinary -notmatch '^[\w.-]+\.exe$') { throw 'Invalid main executable name' }
+    if ($UpdateOnly -and $Mode -in @('Scan', 'Prepare')) {
+        if (!$PreviousRoot -or $Root -ne $PreviousRoot -or
+            !(Test-Path -LiteralPath (Join-Path $Root $MainBinary) -PathType Leaf) -or
+            !(Test-Path -LiteralPath (Join-Path $Root 'uninstall.exe') -PathType Leaf)) {
+            throw 'The update-only installer requires an existing installation in the same directory.'
+        }
+    }
     if ($Mode -in @('Upgrade', 'Uninstall', 'CheckUninstall') -and (!$PreviousRoot -or $Root -ne $PreviousRoot)) {
         throw 'Embedded uninstall requires the identified previous installation as its root'
     }
@@ -282,6 +297,7 @@ try {
     $entries = @{}
     $reuse = @{}
     foreach ($entry in $payload.files) {
+        Assert-UpdateNotCancelled
         Publish-Progress 'hashing' $entry.path
         $parts = $entry.path.Split('\')
         if ($entry.path -match '[\x00-\x1f<>:"|?*\[\]=/]' -or
@@ -299,6 +315,11 @@ try {
             Assert-PlainPath $destination
             if (Test-Path -LiteralPath $destination -PathType Container) { throw "A payload destination is a directory: $destination" }
         }
+        $optionalDisabled = ($entry.group -eq 'ffmpeg' -and !$Ffmpeg) -or
+            ($entry.group -in @('semantic-search', 'storyboard-semantic') -and !$Semantic)
+        if ($Mode -eq 'Verify' -and !$optionalDisabled -and !(Test-Match $entry (Join-Path $Root $entry.path))) {
+            throw "Installed payload verification failed: $($entry.path)"
+        }
         # The executable and uninstaller are always replaced. Other core resources,
         # including the Explorer thumbnail provider, can safely keep matching bytes.
         if ($entry.path -in @($MainBinary, 'uninstall.exe')) { continue }
@@ -313,6 +334,24 @@ try {
     })
     $reuseFfmpeg = [int]($ffmpegEntries.Count -eq 2 -and @($ffmpegEntries | Where-Object { !$reuse.ContainsKey($_.path) }).Count -eq 0)
     $reuseSemantic = [int]($models.Count -gt 0 -and @($models | Where-Object { !$reuse.ContainsKey($_.path) }).Count -eq 0)
+    if ($UpdateOnly -and $Mode -in @('Scan', 'Prepare')) {
+        if (!$entries.ContainsKey($MainBinary)) { throw 'The update manifest is missing the target executable hash.' }
+        foreach ($entry in $payload.files) {
+            Assert-UpdateNotCancelled
+            $required = $entry.path -notin @($MainBinary, 'uninstall.exe') -and
+                !(($entry.group -eq 'ffmpeg' -and !$Ffmpeg) -or
+                ($entry.group -in @('semantic-search', 'storyboard-semantic') -and !$Semantic))
+            if ($required -and !$reuse.ContainsKey($entry.path)) {
+                throw "Update dependency is missing or differs from the target release: $($entry.path). Use the full installer to repair this installation."
+            }
+        }
+        if (@($payload.files | Where-Object { $_.group -eq 'transnetv2' }).Count -eq 0) {
+            throw 'The update dependency manifest is incomplete.'
+        }
+        if (($Ffmpeg -and $ffmpegEntries.Count -ne 2) -or ($Semantic -and $models.Count -eq 0)) {
+            throw 'The optional component dependency manifest is incomplete.'
+        }
+    }
     if ($Mode -in @('Uninstall', 'CheckUninstall')) {
         $reuse.Clear()
         $reuseFfmpeg = 0
@@ -335,6 +374,7 @@ try {
         }
         $selected = @{}
         foreach ($entry in $payload.files) {
+            Assert-UpdateNotCancelled
             $selected[$entry.path] = !(($entry.group -eq 'ffmpeg' -and !$Ffmpeg) -or
                 ($entry.group -in @('semantic-search', 'storyboard-semantic') -and !$Semantic))
             if (!$selected[$entry.path]) { $reuse.Remove($entry.path) }
@@ -360,6 +400,7 @@ try {
             $main = Join-Path $base $MainBinary
             if (Test-Path -LiteralPath $main -PathType Leaf) { $owned += $main }
             foreach ($entry in $payload.files) {
+                Assert-UpdateNotCancelled
                 $path = Join-Path $base $entry.path
                 if (Test-Path -LiteralPath $path -PathType Leaf) { $owned += $path }
             }
@@ -474,7 +515,10 @@ try {
     $lines.Add('[Reuse]')
     foreach ($relative in @($reuse.Keys | Sort-Object)) { $lines.Add("$relative=1") }
     $lines.Add('[Payload]')
-    foreach ($entry in $payload.files) { $lines.Add("$($entry.path)=$($entry.sha256)") }
+    foreach ($entry in $payload.files) {
+        Assert-UpdateNotCancelled
+        $lines.Add("$($entry.path)=$($entry.sha256)")
+    }
     # NSIS ReadINIStr uses the Windows profile API, which supports UTF-16LE INIs.
     [IO.File]::WriteAllLines($Result, $lines, [Text.Encoding]::Unicode)
     exit 0

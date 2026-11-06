@@ -18,7 +18,7 @@ import test from "node:test";
 
 test(
   "installer safety boundaries and complete template compilation",
-  { timeout: 300000 },
+  { timeout: 420000 },
   async (t) => {
     assert.equal(process.platform, "win32");
     const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -28,7 +28,7 @@ test(
     t.after(() => {
       const within = relative(target, resolve(temporary));
       assert(within && !within.startsWith("..") && !isAbsolute(within));
-      rmSync(temporary, { recursive: true, force: true });
+      rmSync(temporary, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 });
     });
     const windows = join(root, "src-tauri/windows");
     const run = (program, args, expected = 0, options = {}) => {
@@ -53,6 +53,189 @@ test(
       process.env.SystemRoot,
       "System32/WindowsPowerShell/v1.0/powershell.exe",
     );
+    function prepareControllerFixture() {
+      const application = join(temporary, "application.exe");
+      const installer = join(temporary, "updater.exe");
+      const compile = join(temporary, "compile-controller-fixture.ps1");
+      writeFileSync(
+        compile,
+        `
+$ErrorActionPreference = 'Stop'
+Add-Type -OutputAssembly '${application.replaceAll("'", "''")}' -OutputType ConsoleApplication -TypeDefinition @'
+using System;
+using System.IO;
+using System.Text;
+using System.Threading;
+public class Fixture {
+    public static int Main(string[] args) {
+        if (args.Length > 0 && args[0] == "--parent") {
+            File.WriteAllText(Environment.GetEnvironmentVariable("LOCUTION_PARENT_READY"), "ready");
+            Thread.Sleep(Timeout.Infinite);
+        }
+        if (args.Length > 0 && args[0] == "/S") {
+            int code = int.Parse(Environment.GetEnvironmentVariable("LOCUTION_INSTALLER_EXIT"));
+            foreach (string arg in args) {
+                if (code != 0 && arg.StartsWith("/ERRORFILE=")) {
+                    File.WriteAllText(arg.Substring(11), "Dependency SHA-256 mismatch: runtime.dll", Encoding.Unicode);
+                }
+            }
+            return code;
+        }
+        File.WriteAllLines(Environment.GetEnvironmentVariable("LOCUTION_RESTART_ARGS"), args);
+        return 0;
+    }
+}
+'@
+`,
+      );
+      if (!existsSync(application)) run(powershell, ["-NoProfile", "-File", compile]);
+      copyFileSync(application, installer);
+      return { application, installer };
+    }
+    await t.test(
+      "updater owns shutdown and restarts after success, failure and cancellation",
+      async () => {
+        const controller = join(temporary, "apply-update.ps1");
+        writeFileSync(
+          controller,
+          `\uFEFF${readFileSync(join(windows, "apply-update.ps1"), "utf8").replace(/^\ufeff/u, "")}`,
+        );
+        const { application, installer } = prepareControllerFixture();
+        const waitFor = async (predicate, message) => {
+          const deadline = Date.now() + 15000;
+          while (!predicate()) {
+            assert(Date.now() < deadline, message);
+            await new Promise((resolve) => setTimeout(resolve, 40));
+          }
+        };
+        for (const outcome of ["success", "failed", "cancelled", "rejected"]) {
+          const directory = join(temporary, `controller-${outcome}`);
+          mkdirSync(directory);
+          const ready = join(directory, "parent-ready");
+          const restarted = join(directory, "restart-args");
+          const environment = {
+            ...process.env,
+            LOCUTION_PARENT_READY: ready,
+            LOCUTION_RESTART_ARGS: restarted,
+            LOCUTION_INSTALLER_EXIT: outcome === "failed" ? "2" : "0",
+          };
+          const parent = spawn(application, ["--parent"], { windowsHide: true, env: environment });
+          const parentExit = new Promise((resolve) => parent.once("exit", resolve));
+          let helper;
+          try {
+            await waitFor(() => existsSync(ready), "Fixture parent did not start");
+            const handoff = join(directory, "handoff.json");
+            writeFileSync(
+              handoff,
+              JSON.stringify({
+                parent: parent.pid,
+                requireAcceptance: true,
+                executable: application,
+                installer,
+                version: "1.0.0",
+                signature: createHash("sha256").update(readFileSync(installer)).digest("hex"),
+                project: "C:\\project with spaces\\saved.lcp",
+              }),
+            );
+            if (outcome === "cancelled") writeFileSync(join(directory, "cancel"), "cancel");
+            helper = spawn(
+              powershell,
+              [
+                "-NoProfile",
+                "-STA",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                controller,
+                "-Installer",
+                installer,
+                "-Executable",
+                application,
+                "-Version",
+                "1.0.0",
+                "-Data",
+                handoff,
+                "-Headless",
+              ],
+              { windowsHide: true, env: environment },
+            );
+            let diagnostics = "";
+            helper.stderr.on("data", (chunk) => {
+              diagnostics += chunk;
+            });
+            const helperExit = new Promise((resolve, reject) => {
+              helper.once("exit", resolve);
+              helper.once("error", reject);
+            });
+            await waitFor(
+              () => existsSync(join(directory, "ready")),
+              "The controller did not request acceptance",
+            );
+            assert.equal(
+              parent.exitCode,
+              null,
+              "The old application must survive until explicit acceptance",
+            );
+            writeFileSync(
+              join(directory, outcome === "rejected" ? "cancel-start" : "accepted"),
+              "accepted",
+            );
+            const helperCode = await helperExit;
+            assert.equal(
+              helperCode,
+              outcome === "success" ? 0 : outcome === "cancelled" ? 1 : 2,
+              diagnostics,
+            );
+            if (outcome === "rejected") {
+              assert.equal(
+                parent.exitCode,
+                null,
+                "Revoking startup must leave the application alive",
+              );
+              assert(
+                !existsSync(restarted),
+                "A rejected handoff must not start a duplicate application",
+              );
+              const report = JSON.parse(
+                readFileSync(join(directory, "result.json"), "utf8").replace(/^\ufeff/u, ""),
+              );
+              assert.match(report.error, /cancelled before/u);
+              continue;
+            }
+            await parentExit;
+            assert.notEqual(
+              parent.exitCode,
+              null,
+              "The updater must terminate the initiating application",
+            );
+            await waitFor(
+              () => existsSync(restarted) && readFileSync(restarted, "utf8").length > 0,
+              "Every outcome must restart the application",
+            );
+            const report = JSON.parse(
+              readFileSync(join(directory, "result.json"), "utf8").replace(/^\ufeff/u, ""),
+            );
+            assert.equal(report.status, outcome);
+            const args = readFileSync(restarted, "utf8");
+            assert.match(args, /project with spaces\\saved\.lcp/u);
+            if (outcome === "failed") {
+              const encoded = args.match(/--update-error=([a-f0-9]+)/u)?.[1];
+              assert(encoded, "Failure details must be passed through launch arguments");
+              assert.match(
+                JSON.parse(Buffer.from(encoded, "hex").toString("utf8")).error,
+                /runtime\.dll/u,
+              );
+            } else assert.doesNotMatch(args, /--update-error/u);
+          } finally {
+            if (parent.exitCode === null) {
+              parent.kill();
+              await parentExit;
+            }
+            if (helper?.exitCode === null) helper.kill();
+          }
+        }
+      },
+    );
     const manifest = join(temporary, "manifest.json");
     const payload = join(temporary, "payload.txt");
     writeFileSync(payload, "payload");
@@ -60,21 +243,25 @@ test(
       manifest,
       JSON.stringify({
         version: 1,
-        files: ["LICENSE", "ffmpeg.exe", "ffprobe.exe", "semantic-search/model.onnx"].map(
-          (path) => ({
-            path: path.replaceAll("/", "\\"),
-            size: 7,
-            sha256: createHash("sha256").update("payload").digest("hex"),
-            group: path.startsWith("ff")
-              ? "ffmpeg"
-              : path.includes("/")
-                ? "semantic-search"
-                : "core",
-          }),
-        ),
+        files: [
+          "LICENSE",
+          "ffmpeg.exe",
+          "ffprobe.exe",
+          "transnetv2/model.onnx",
+          "semantic-search/model.onnx",
+        ].map((path) => ({
+          path: path.replaceAll("/", "\\"),
+          size: 7,
+          sha256: createHash("sha256").update("payload").digest("hex"),
+          group: path.startsWith("ff")
+            ? "ffmpeg"
+            : path.includes("/")
+              ? path.split("/")[0]
+              : "core",
+        })),
       }),
     );
-    const worker = (mode, install, result, extra = [], expected = 0) =>
+    const worker = (mode, install, result, extra = [], expected = 0, manifestPath = manifest) =>
       run(
         powershell,
         [
@@ -90,7 +277,7 @@ test(
           "-Root",
           install,
           "-Manifest",
-          manifest,
+          manifestPath,
           "-Result",
           result,
           "-MainBinary",
@@ -134,6 +321,83 @@ test(
         await exited;
       }
     };
+
+    await t.test(
+      "update-only validation rejects fresh, corrupt and missing dependencies without mutations",
+      () => {
+        const install = join(temporary, "update-only");
+        const result = join(temporary, "update-only.ini");
+        mkdirSync(install);
+        const extra = ["-PreviousRoot", install, "-UpdateOnly", "1", "-Transactional", "1"];
+        const updateManifest = join(temporary, "update-manifest.json");
+        const payloadManifest = JSON.parse(readFileSync(manifest, "utf8"));
+        payloadManifest.files.push({
+          path: "locution-pro.exe",
+          size: 7,
+          sha256: createHash("sha256").update("payload").digest("hex"),
+          group: "core",
+        });
+        writeFileSync(updateManifest, JSON.stringify(payloadManifest));
+        const updateWorker = (mode, extras = extra, expected = 0) =>
+          worker(mode, install, result, extras, expected, updateManifest);
+        updateWorker("Prepare", extra, 2);
+        assert.deepEqual(readdirSync(install), []);
+        writeFileSync(join(install, "locution-pro.exe"), "old executable");
+        writeFileSync(join(install, "uninstall.exe"), "old uninstaller");
+        const entries = JSON.parse(readFileSync(manifest, "utf8")).files;
+        for (const entry of entries) {
+          const path = join(install, entry.path);
+          mkdirSync(dirname(path), { recursive: true });
+          writeFileSync(path, "payload");
+        }
+        const mandatory = join(install, "transnetv2/model.onnx");
+        writeFileSync(mandatory, "damaged");
+        updateWorker("Prepare", extra, 2);
+        assert.equal(readFileSync(join(install, "locution-pro.exe"), "utf8"), "old executable");
+        assert(!existsSync(`${result}.transaction`));
+        writeFileSync(mandatory, "payload");
+        rmSync(join(install, "LICENSE"));
+        updateWorker("Prepare", extra, 2);
+        assert(!existsSync(`${result}.transaction`));
+        writeFileSync(join(install, "LICENSE"), "payload");
+        rmSync(join(install, "semantic-search/model.onnx"));
+        updateWorker("Scan", extra, 2);
+        updateWorker("Scan", [...extra, "-Semantic", "0"]);
+        rmSync(join(install, "ffmpeg.exe"));
+        updateWorker("Scan", [...extra, "-Semantic", "0"], 2);
+        updateWorker("Scan", [...extra, "-Semantic", "0", "-Ffmpeg", "0"]);
+        updateWorker("Prepare", [...extra, "-Semantic", "0", "-Ffmpeg", "0"]);
+        assert(!existsSync(join(install, "locution-pro.exe")));
+        writeFileSync(join(install, "locution-pro.exe"), "payload");
+        updateWorker("Verify", [...extra, "-Semantic", "0", "-Ffmpeg", "0"]);
+        writeFileSync(mandatory, "changed after prepare");
+        updateWorker("Verify", [...extra, "-Semantic", "0", "-Ffmpeg", "0"], 2);
+        writeFileSync(mandatory, "payload");
+        worker("Rollback", install, result);
+        assert.equal(readFileSync(join(install, "locution-pro.exe"), "utf8"), "old executable");
+        const cancelFile = join(temporary, "cancel-update");
+        const cancellable = [...extra, "-Semantic", "0", "-Ffmpeg", "0", "-CancelFile", cancelFile];
+        writeFileSync(cancelFile, "cancel");
+        updateWorker("Prepare", cancellable, 2);
+        assert(
+          !existsSync(`${result}.transaction`),
+          "Cancellation before Prepare must not modify files",
+        );
+        rmSync(cancelFile);
+        updateWorker("Prepare", cancellable);
+        writeFileSync(join(install, "locution-pro.exe"), "payload");
+        writeFileSync(cancelFile, "cancel");
+        updateWorker("Verify", cancellable, 2);
+        updateWorker("Commit", cancellable, 2);
+        assert(
+          existsSync(`${result}.transaction`),
+          "Cancellation must preserve the rollback transaction",
+        );
+        updateWorker("Rollback", cancellable);
+        assert.equal(readFileSync(join(install, "locution-pro.exe"), "utf8"), "old executable");
+        assert(!existsSync(`${result}.transaction`));
+      },
+    );
 
     await t.test(
       "locked committed backups warn without blocking later updates or uninstall",
@@ -295,7 +559,7 @@ test(
       );
     });
 
-    await t.test("all install scopes and dependency packaging branches compile", () => {
+    await t.test("all install scopes and dependency packaging branches compile", async () => {
       const compiler =
         process.env.NSIS_MAKENSIS ?? join(process.env.LOCALAPPDATA, "tauri/NSIS/makensis.exe");
       const support = ["debug", "release"]
@@ -358,8 +622,8 @@ test(
         const loops = {
           languages: ["SimpChinese"],
           language_files: [nsis(join(support, "SimpChinese.nsh"))],
-          resources: ["LICENSE"],
-          resources_dirs: [],
+          resources: ["LICENSE", "transnetv2\\model.onnx", "semantic-search\\model.onnx"],
+          resources_dirs: ["transnetv2", "semantic-search"],
           resources_ancestors: [],
           binaries: ["ffmpeg.exe", "ffprobe.exe"],
           deep_link_protocols: ["locutionpro"],
@@ -384,6 +648,12 @@ test(
         const file = join(temporary, `${scope}.nsi`);
         writeFileSync(file, `!define LOCUTION_PAYLOAD_MANIFEST "${nsis(manifest)}"\n${script}`);
         run(compiler, ["/V2", "/INPUTCHARSET", "UTF8", file]);
+        writeFileSync(
+          file,
+          `!define LOCUTION_UPDATE_ONLY\n!define LOCUTION_PAYLOAD_MANIFEST "${nsis(manifest)}"\n${script}`,
+        );
+        // Cached handoffs are only supported without an elevation boundary.
+        run(compiler, ["/V2", "/INPUTCHARSET", "UTF8", file], scope === "currentUser" ? 0 : 1);
         if (scope === "currentUser") {
           // Execute the complete production template using only mock payloads,
           // isolated registry keys, private data roots and suppressed shortcuts.
@@ -393,6 +663,7 @@ test(
             spawnSync("reg.exe", ["delete", `HKCU\\${registry}`, "/f"], { windowsHide: true });
           });
           const independent = join(temporary, "isolated-independent.nsh");
+          copyFileSync(join(windows, "update-result.nsh"), join(temporary, "update-result.nsh"));
           writeFileSync(
             independent,
             readFileSync(join(windows, "independent-install.nsh"), "utf8")
@@ -403,6 +674,10 @@ test(
               ),
           );
           let isolated = script
+            .replace(
+              /ReadRegStr \$4 (HKLM|HKCU) "[^"]+" "pv"/gu,
+              (_, hive) => `ReadRegStr $4 HKCU "${registry}\\WebView${hive}" "pv"`,
+            )
             .replace(/!define UNINSTKEY "[^"\n]+"/u, `!define UNINSTKEY "${registry}\\Uninstall"`)
             .replace(
               /!define MANUPRODUCTKEY "[^"\n]+"/u,
@@ -462,7 +737,25 @@ test(
               `${checkpoint(`before ${operation}`)}${operation}\n${checkpoint(`after ${operation}`)}`,
             );
           isolated = isolated.replace(/OutFile "[^"\n]+"/u, `OutFile "${nsis(executable)}"`);
-          const build = (manifestPath, failRegistration = false) => {
+          const build = (manifestPath, failRegistration = false, updateOnly = false) => {
+            // Compile the update flavor with nonexistent dependency sources. A
+            // retained File instruction would fail compilation immediately.
+            const source = updateOnly
+              ? isolated
+                  .replace(
+                    ' -Data "$LocutionProUpdateHandoff"',
+                    ' -Headless -Data "$LocutionProUpdateHandoff"',
+                  )
+                  .replace(
+                    /(!insertmacro LOCUTION_INSTALL_FILE )"[^"]+"/gu,
+                    (_, prefix) =>
+                      `${prefix}"${nsis(join(temporary, "dependency-not-in-update.exe"))}"`,
+                  )
+                  .replace(
+                    '!define MINIMUMWEBVIEW2VERSION ""',
+                    '!define MINIMUMWEBVIEW2VERSION "100.0.0.0"',
+                  )
+              : isolated;
             const fault = failRegistration
               ? `!macro NSIS_HOOK_POSTINSTALL
   WriteRegStr SHCTX "\${MANUPRODUCTKEY}" "UnexpectedNewValue" "must disappear"
@@ -473,7 +766,7 @@ test(
               : "";
             writeFileSync(
               file,
-              `!define LOCUTION_PAYLOAD_MANIFEST "${nsis(manifestPath)}"\n!define LOCUTION_MIGRATION_LOCAL_ROOT "${nsis(join(temporary, "local"))}"\n!define LOCUTION_MIGRATION_ROAMING_ROOT "${nsis(join(temporary, "roaming"))}"\n${fault}${isolated}`,
+              `${updateOnly ? "!define LOCUTION_UPDATE_ONLY\n" : ""}!define LOCUTION_PAYLOAD_MANIFEST "${nsis(manifestPath)}"\n!define LOCUTION_MIGRATION_LOCAL_ROOT "${nsis(join(temporary, "local"))}"\n!define LOCUTION_MIGRATION_ROAMING_ROOT "${nsis(join(temporary, "roaming"))}"\n${fault}${source}`,
             );
             run(compiler, ["/V2", "/INPUTCHARSET", "UTF8", file]);
           };
@@ -578,6 +871,162 @@ $arp.Dispose(); $base.Dispose()
           );
           assert.equal(readFileSync(main, "utf8"), "previous working executable");
           assert.deepEqual(readFileSync(join(install, "uninstall.exe")), uninstaller);
+          const updateManifest = join(temporary, "update-template-manifest.json");
+          const updatePayload = JSON.parse(readFileSync(manifest, "utf8"));
+          updatePayload.files.push({
+            path: "locution-installer-safety-fixture.exe",
+            size: 7,
+            sha256: createHash("sha256").update("payload").digest("hex"),
+            group: "core",
+          });
+          writeFileSync(updateManifest, JSON.stringify(updatePayload));
+          build(updateManifest, false, true);
+          const setVersion = (version) =>
+            run("reg.exe", [
+              "add",
+              `HKCU\\${registry}\\Uninstall`,
+              "/v",
+              "DisplayVersion",
+              "/d",
+              version,
+              "/f",
+              "/reg:64",
+            ]);
+          setVersion("0.9.0");
+          const dependency = join(install, "transnetv2/model.onnx");
+          run(executable, ["/S", "/UPDATE", "/CHECKUPDATE", `/D=${install}`], 2, options);
+          const setWebViewVersion = (version) =>
+            run("reg.exe", [
+              "add",
+              `HKCU\\${registry}\\WebViewHKCU`,
+              "/v",
+              "pv",
+              "/d",
+              version,
+              "/f",
+              "/reg:64",
+            ]);
+          setWebViewVersion("99.0.0.0");
+          run(executable, ["/S", "/UPDATE", "/CHECKUPDATE", `/D=${install}`], 2, options);
+          setWebViewVersion("100.0.0.0");
+          writeFileSync(dependency, "corrupt dependency");
+          const rejectedBefore = snapshotRegistration(
+            join(temporary, "update-rejected-before.json"),
+          );
+          run(executable, ["/S", "/UPDATE", `/D=${install}`], 2, options);
+          assert.equal(readFileSync(main, "utf8"), "previous working executable");
+          assert.deepEqual(
+            snapshotRegistration(join(temporary, "update-rejected-after.json")),
+            rejectedBefore,
+          );
+          writeFileSync(dependency, "payload");
+          run(executable, ["/S", "/UPDATE", "/CHECKUPDATE", `/D=${install}`], 0, options);
+          assert.equal(readFileSync(main, "utf8"), "previous working executable");
+          for (const version of ["1.0.0", "1.1.0"]) {
+            setVersion(version);
+            run(executable, ["/S", "/UPDATE", `/D=${install}`], 2, options);
+          }
+          setVersion("0.9.0");
+          const fresh = join(temporary, "fresh update target");
+          run(executable, ["/S", "/UPDATE", `/D=${fresh}`], 2, options);
+          assert(!existsSync(fresh));
+          const otherMain = join(temporary, "other-instance/locution-installer-safety-fixture.exe");
+          mkdirSync(dirname(otherMain));
+          copyFileSync(process.execPath, otherMain);
+          const other = spawn(
+            otherMain,
+            ["-e", "process.stdout.write('ready'); process.stdin.resume()"],
+            { windowsHide: true },
+          );
+          const otherExit = new Promise((resolve) => other.once("exit", resolve));
+          try {
+            await new Promise((resolve, reject) => {
+              other.stdout.once("data", resolve);
+              other.once("error", reject);
+            });
+            run(executable, ["/S", "/UPDATE", `/D=${install}`], 2, options);
+            assert.equal(
+              other.exitCode,
+              null,
+              "Update must not kill another application's workspace",
+            );
+            assert.equal(readFileSync(main, "utf8"), "previous working executable");
+          } finally {
+            other.stdin.end();
+            await otherExit;
+          }
+          run(executable, ["/S", "/UPDATE", `/D=${install}`], 0, options);
+          assert.equal(readFileSync(main, "utf8"), "payload");
+          assert.equal(readFileSync(dependency, "utf8"), "payload");
+          // Run the real bootstrap, including quoted handoff arguments, the
+          // embedded controller, worker mutex and failure/restart protocol.
+          const { application } = prepareControllerFixture();
+          copyFileSync(application, main);
+          const bootstrap = join(temporary, "bootstrap handoff");
+          mkdirSync(bootstrap);
+          const restarted = join(bootstrap, "restart-args");
+          const parentReady = join(bootstrap, "parent-ready");
+          const bootstrapEnv = {
+            ...options.env,
+            LOCUTION_PARENT_READY: parentReady,
+            LOCUTION_RESTART_ARGS: restarted,
+          };
+          const parent = spawn(main, ["--parent"], { windowsHide: true, env: bootstrapEnv });
+          const parentExit = new Promise((resolve) => parent.once("exit", resolve));
+          try {
+            const deadline = Date.now() + 10000;
+            while (!existsSync(parentReady)) {
+              assert(Date.now() < deadline, "Bootstrap parent did not start");
+              await new Promise((resolve) => setTimeout(resolve, 40));
+            }
+            const handoff = join(bootstrap, "handoff.json");
+            writeFileSync(
+              handoff,
+              JSON.stringify({
+                parent: parent.pid,
+                executable: main,
+                installer: executable,
+                version: "1.0.0",
+                signature: createHash("sha256").update(readFileSync(executable)).digest("hex"),
+                project: "C:\\saved project.lcp",
+              }),
+            );
+            run(executable, ["/UPDATE", `/HANDOFF="${handoff}"`, `/D=${install}`], 2, {
+              ...options,
+              env: bootstrapEnv,
+            });
+            const report = JSON.parse(
+              readFileSync(join(bootstrap, "result.json"), "utf8").replace(/^\ufeff/u, ""),
+            );
+            assert.equal(report.status, "failed");
+            assert.match(report.error, /newer than the installed version/u);
+            await Promise.race([
+              parentExit,
+              new Promise((_, reject) =>
+                setTimeout(
+                  () =>
+                    reject(
+                      new Error(`The package did not stop its parent: ${JSON.stringify(report)}`),
+                    ),
+                  5000,
+                ),
+              ),
+            ]);
+            const restartDeadline = Date.now() + 10000;
+            while (!existsSync(restarted) || !readFileSync(restarted, "utf8")) {
+              assert(
+                Date.now() < restartDeadline,
+                "The package bootstrap did not restart the application",
+              );
+              await new Promise((resolve) => setTimeout(resolve, 40));
+            }
+            assert.match(readFileSync(restarted, "utf8"), /--update-error=/u);
+          } finally {
+            if (parent.exitCode === null) {
+              parent.kill();
+              await parentExit;
+            }
+          }
         }
       }
     });

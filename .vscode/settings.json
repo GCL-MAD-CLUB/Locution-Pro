@@ -31,5 +31,9 @@
   "[typescriptreact]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  "prettier.requireConfig": true
+  "prettier.requireConfig": true,
+  "rust-analyzer.linkedProjects": [
+    "src-tauri/Cargo.toml",
+    "src-tauri/thumbnail-provider/Cargo.toml"
+  ]
 }

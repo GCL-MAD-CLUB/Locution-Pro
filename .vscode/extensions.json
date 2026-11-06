@@ -1,3 +1,19 @@
 {
-  "recommendations": ["esbenp.prettier-vscode", "rust-lang.rust-analyzer"]
+  "recommendations": [
+    "esbenp.prettier-vscode",
+    "editorconfig.editorconfig",
+    "rust-lang.rust-analyzer",
+    "tauri-apps.tauri-vscode",
+    "vadimcn.vscode-lldb",
+    "tamasfe.even-better-toml",
+    "fill-labs.dependi",
+    "ms-playwright.playwright",
+    "redhat.vscode-yaml",
+    "github.vscode-github-actions",
+    "github.vscode-pull-request-github",
+    "ms-vscode.powershell",
+    "idleberg.nsis",
+    "yzhang.markdown-all-in-one",
+    "mhutchie.git-graph"
+  ]
 }

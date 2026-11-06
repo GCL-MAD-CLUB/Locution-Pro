@@ -693,6 +693,40 @@
   --application-menubar-height: 0px;
 }
 
+/* WebKit on macOS ignores ::-webkit-scrollbar once scrollbar-color or a thin
+   scrollbar-width is set, and draws the system scrollbar instead: a light track
+   when scroll bars are always shown. Reset both so the ::-webkit-scrollbar styles
+   apply; the zero-specificity fallback covers containers that only declare
+   scrollbar-color. scrollbar-width: none still hides a scrollbar. */
+:root[data-platform="macos"] * {
+  scrollbar-color: auto !important;
+}
+
+:root[data-platform="macos"]
+  :is(
+    .history-list,
+    .popup-menu,
+    .select-dropdown-menu,
+    .update-dialog-notes,
+    .about-dialog-credits
+  ) {
+  scrollbar-width: auto !important;
+}
+
+:where([data-platform="macos"] *)::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+:where([data-platform="macos"] *)::-webkit-scrollbar-track,
+:where([data-platform="macos"] *)::-webkit-scrollbar-corner {
+  background: var(--color-transparent);
+}
+
+:where([data-platform="macos"] *)::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+}
+
 /* Workspace and brand bar palettes. The application menubar and PopupMenu
    retain their fixed scheme. Project Home uses the darkest palette in dark
    appearance; its light palette and the surrounding workspace remain independent. */

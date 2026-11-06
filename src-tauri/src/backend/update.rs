@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 const REPOSITORY: &str = "GCL-MAD-CLUB/Locution-Pro";
 const CDN: &str = "https://openlist.frameneo.com/sd/YRrdPxj2";
 const MAX_MANIFEST: usize = 64 * 1024;
+const MAX_RELEASE: usize = 1024 * 1024;
 const MAX_INSTALLER: u64 = 256 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -381,6 +382,111 @@ async fn read_manifest(
     decode_manifest(&bytes)
 }
 
+fn decode_github_release(bytes: &[u8]) -> AppResult<LatestRelease> {
+    #[derive(Deserialize)]
+    struct GitHubRelease {
+        tag_name: String,
+        name: Option<String>,
+        body: Option<String>,
+        html_url: String,
+        #[serde(default)]
+        draft: bool,
+        #[serde(default)]
+        prerelease: bool,
+    }
+    let release: GitHubRelease =
+        serde_json::from_slice(bytes).map_err(|error| invalid_update(error.to_string()))?;
+    let version = release
+        .tag_name
+        .strip_prefix('v')
+        .unwrap_or(&release.tag_name);
+    stable_version(version)?;
+    if release.draft
+        || release.prerelease
+        || release.html_url
+            != format!(
+                "https://github.com/{REPOSITORY}/releases/tag/{}",
+                release.tag_name
+            )
+    {
+        return Err(invalid_update(
+            "Expected a public stable release in the application repository",
+        ));
+    }
+    Ok(LatestRelease {
+        version: version.into(),
+        title: release.name.unwrap_or_default(),
+        body: release.body.unwrap_or_default(),
+        url: release.html_url,
+    })
+}
+
+async fn read_github_release(client: &reqwest::Client, url: &str) -> AppResult<LatestRelease> {
+    let mut response = client
+        .get(url)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .map_err(|error| update_error(error.to_string()))?;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| update_error(error.to_string()))?
+    {
+        if bytes.len() + chunk.len() > MAX_RELEASE {
+            return Err(invalid_update("GitHub release response is too large"));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    decode_github_release(&bytes)
+}
+
+// The manifest enables automatic installation; it is not required to discover
+// a release. Keep usable release metadata even if every automatic path fails.
+async fn discover_release(
+    client: &reqwest::Client,
+    manifests: [&str; 2],
+    github: &str,
+) -> AppResult<(LatestRelease, Option<Installer>)> {
+    let mut failures = Vec::new();
+    let mut fallback: Option<LatestRelease> = None;
+    for url in manifests {
+        match read_manifest(client, url).await {
+            Ok((release, installer)) => {
+                if fallback.as_ref().is_some_and(|known| {
+                    stable_version(&known.version).unwrap()
+                        > stable_version(&release.version).unwrap()
+                }) {
+                    continue;
+                }
+                if installer.is_some() {
+                    return Ok((release, installer));
+                }
+                fallback = Some(release);
+            }
+            Err(error) => failures.push(error.detail().to_string()),
+        }
+    }
+    match read_github_release(client, github).await {
+        Ok(release) => {
+            if fallback.as_ref().is_none_or(|known| {
+                stable_version(&release.version).unwrap() >= stable_version(&known.version).unwrap()
+            }) {
+                fallback = Some(release);
+            }
+        }
+        Err(error) => failures.push(error.detail().to_string()),
+    }
+    fallback.map(|release| (release, None)).ok_or_else(|| {
+        update_error(format!(
+            "All release sources unavailable: {}",
+            failures.join("; ")
+        ))
+    })
+}
+
 async fn fill_release_notes(client: &reqwest::Client, release: &mut LatestRelease) {
     if !release.body.is_empty() {
         return;
@@ -424,49 +530,38 @@ async fn fill_release_notes(client: &reqwest::Client, release: &mut LatestReleas
 #[tauri::command]
 pub(crate) async fn fetch_latest_release() -> CommandResult<LatestRelease> {
     let client = release_client(Duration::from_secs(8))?;
-    let mut failures = Vec::new();
-    for url in [
-        format!("{CDN}/latest.json"),
-        format!("https://github.com/{REPOSITORY}/releases/latest/download/latest.json"),
-    ] {
-        match read_manifest(&client, &url).await {
-            Ok((mut release, installer)) => {
-                let newer = semver::Version::parse(&release.version).unwrap()
-                    > semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
-                if newer {
-                    let Some(installer) = installer else {
-                        failures.push("Release has no update-only installer".into());
-                        continue;
-                    };
-                    fill_release_notes(&client, &mut release).await;
-                    {
-                        let mut state = updates()
-                            .lock()
-                            .map_err(|_| update_error("Update state is unavailable"))?;
-                        let previous = state.get(&release.version).and_then(|old| {
-                            (old.installer.signature == installer.signature)
-                                .then(|| old.path.clone())
-                                .flatten()
-                        });
-                        state.insert(
-                            release.version.clone(),
-                            PreparedUpdate {
-                                release: release.clone(),
-                                installer,
-                                path: previous,
-                            },
-                        );
-                    }
-                }
-                return Ok(release);
-            }
-            Err(error) => failures.push(error.detail().to_string()),
+    let (mut release, installer) = discover_release(
+        &client,
+        [
+            &format!("{CDN}/latest.json"),
+            &format!("https://github.com/{REPOSITORY}/releases/latest/download/latest.json"),
+        ],
+        &format!("https://api.github.com/repos/{REPOSITORY}/releases/latest"),
+    )
+    .await?;
+    fill_release_notes(&client, &mut release).await;
+    if let Some(installer) = installer.filter(|_| {
+        stable_version(&release.version).unwrap()
+            > stable_version(env!("CARGO_PKG_VERSION")).unwrap()
+    }) {
+        // An unavailable auto-update cache must not hide a discovered release.
+        if let Ok(mut state) = updates().lock() {
+            let previous = state.get(&release.version).and_then(|old| {
+                (old.installer.signature == installer.signature)
+                    .then(|| old.path.clone())
+                    .flatten()
+            });
+            state.insert(
+                release.version.clone(),
+                PreparedUpdate {
+                    release: release.clone(),
+                    installer,
+                    path: previous,
+                },
+            );
         }
     }
-    Err(update_error(format!(
-        "Release manifests unavailable: {}",
-        failures.join("; ")
-    )))
+    Ok(release)
 }
 
 fn prepared_update(version: &str) -> CommandResult<PreparedUpdate> {
@@ -715,6 +810,130 @@ pub(crate) async fn install_update(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn github_release() -> serde_json::Value {
+        serde_json::json!({
+            "tag_name": "v1.2.3", "name": "Release without latest.json", "body": "Legacy notes",
+            "html_url": format!("https://github.com/{REPOSITORY}/releases/tag/v1.2.3")
+        })
+    }
+
+    fn discover_fixture(
+        responses: Vec<(u16, String)>,
+    ) -> AppResult<(LatestRelease, Option<Installer>)> {
+        use std::net::TcpListener;
+        use std::thread;
+        use std::time::Instant;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            for (index, (status, body)) in responses.into_iter().enumerate() {
+                let mut stream = loop {
+                    match listener.accept() {
+                        Ok((stream, _)) => break stream,
+                        Err(error)
+                            if error.kind() == std::io::ErrorKind::WouldBlock
+                                && Instant::now() < deadline =>
+                        {
+                            thread::sleep(Duration::from_millis(5));
+                        }
+                        Err(error) => panic!("Release fixture connection failed: {error}"),
+                    }
+                };
+                stream.set_nonblocking(false).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                let mut request = [0; 4096];
+                let count = stream.read(&mut request).unwrap();
+                assert!(String::from_utf8_lossy(&request[..count])
+                    .starts_with(&format!("GET /{index} ")));
+                write!(stream, "HTTP/1.1 {status} Test\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            }
+        });
+        let result = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                discover_release(
+                    &release_client(Duration::from_secs(3)).unwrap(),
+                    [
+                        &format!("http://{address}/0"),
+                        &format!("http://{address}/1"),
+                    ],
+                    &format!("http://{address}/2"),
+                )
+                .await
+            });
+        server.join().unwrap();
+        result
+    }
+
+    #[test]
+    fn missing_or_invalid_manifests_fall_back_to_original_github_release_discovery() {
+        for first in [
+            (404, String::new()),
+            (200, "<html>not a manifest</html>".into()),
+        ] {
+            let (release, installer) = discover_fixture(vec![
+                first,
+                (404, String::new()),
+                (200, github_release().to_string()),
+            ])
+            .unwrap();
+            assert_eq!(release.version, "1.2.3");
+            assert_eq!(release.body, "Legacy notes");
+            assert!(installer.is_none());
+        }
+    }
+
+    #[test]
+    fn missing_updater_preserves_known_release_even_when_the_api_is_unavailable() {
+        let mut manifest = manifest();
+        manifest["platforms"]["windows-x86_64"]
+            .as_object_mut()
+            .unwrap()
+            .remove("updater");
+        let (release, installer) = discover_fixture(vec![
+            (200, manifest.to_string()),
+            (404, String::new()),
+            (403, String::new()),
+        ])
+        .unwrap();
+        assert_eq!(release.version, "1.2.3");
+        assert!(installer.is_none());
+    }
+
+    #[test]
+    fn github_manifest_recovers_auto_updates_after_cdn_failure() {
+        let (_, installer) =
+            discover_fixture(vec![(503, String::new()), (200, manifest().to_string())]).unwrap();
+        assert!(installer.is_some());
+    }
+
+    #[test]
+    fn check_fails_only_when_all_release_sources_are_unusable() {
+        assert!(discover_fixture(vec![
+            (404, String::new()),
+            (200, "{}".into()),
+            (503, String::new())
+        ])
+        .is_err());
+        let mut value = github_release();
+        for field in ["draft", "prerelease"] {
+            value[field] = true.into();
+            assert!(decode_github_release(&serde_json::to_vec(&value).unwrap()).is_err());
+            value[field] = false.into();
+        }
+        value["html_url"] = "https://example.com/untrusted".into();
+        assert!(decode_github_release(&serde_json::to_vec(&value).unwrap()).is_err());
+        value = github_release();
+        value["tag_name"] = "latest".into();
+        assert!(decode_github_release(&serde_json::to_vec(&value).unwrap()).is_err());
+    }
 
     #[test]
     fn preferences_survive_relaunch_without_resetting_ignored_or_seen_versions() {

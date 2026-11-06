@@ -521,13 +521,13 @@ function AppContent() {
         if (
           !active ||
           updateRequestRef.current !== 0 ||
-          result.status !== "available" ||
+          result.status === "latest" ||
           (cachedVersion !== undefined &&
             (compareVersions(result.release.version, cachedVersion) ?? 0) <= 0) ||
           ignoredVersions.includes(result.release.version)
         )
           return;
-        const notification: UpdateDialogState = { status: "available", release: result.release };
+        const notification: UpdateDialogState = { status: result.status, release: result.release };
         if (startupDialogsOpenRef.current) updateDialogQueueRef.current.push(notification);
         else {
           startupDialogsOpenRef.current = true;
@@ -821,7 +821,9 @@ function AppContent() {
       setUpdateDialogState(
         result.status === "available"
           ? { status: "available", release: result.release, ignored: ignored || false }
-          : { status: "latest" },
+          : result.status === "manual"
+            ? { status: "manual", release: result.release }
+            : { status: "latest" },
       );
     } catch (error) {
       captureOperationError("help.checkUpdates", error);
@@ -889,10 +891,8 @@ function AppContent() {
     } catch (error) {
       captureOperationError("help.installUpdate", error);
       setUpdateDialogState({
-        status: "available",
+        status: "manual",
         release,
-        ignored,
-        error: "未能启动更新，当前软件继续运行。请重试或查看日志。",
       });
     } finally {
       if (!handedOff) {

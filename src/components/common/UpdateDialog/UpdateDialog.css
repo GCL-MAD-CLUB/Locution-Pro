@@ -1,5 +1,7 @@
 .update-dialog {
   width: min(440px, calc(100vw - 48px));
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .update-dialog-available {
@@ -55,7 +57,7 @@
   margin: 0 0 8px;
   color: var(--color-text-highlight);
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -117,7 +119,7 @@
 .update-dialog-badge {
   flex: 0 0 auto;
   padding: 4px 9px;
-  color: var(--color-text-highlight);
+  color: var(--color-text-on-accent);
   background: var(--color-accent-hover);
   border-radius: var(--radius-pill);
   font-size: 10px;
@@ -145,7 +147,7 @@
   margin: 18px 0 8px;
   color: var(--color-text-highlight);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -237,11 +239,54 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 12px 0;
+  margin: 12px 0 0;
   font-size: 12px;
+  width: fit-content;
+  cursor: pointer;
+}
+
+.update-dialog-ignore input {
+  appearance: none;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid var(--color-checkbox-border);
+  border-radius: 2px;
+  background: var(--color-transparent) center / contain no-repeat;
+  cursor: pointer;
+}
+
+.update-dialog-ignore input:checked {
+  background-color: var(--color-checkbox-checked-background);
+  background-image: var(--image-checkbox-check);
+}
+
+.update-dialog-ignore input:hover:not(:disabled) {
+  border-color: var(--color-checkbox-hover-border);
+}
+
+.update-dialog-ignore input:checked:hover:not(:disabled) {
+  background-color: var(--color-checkbox-checked-hover-background);
+}
+
+.update-dialog-ignore input:focus-visible {
+  outline: 1px solid var(--color-accent) !important;
+  outline-offset: 3px;
+}
+
+.update-dialog-ignore:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: var(--opacity-dialog-disabled);
+}
+
+.update-dialog-ignore input:disabled {
+  cursor: not-allowed;
 }
 
 .update-dialog-error {
+  font-size: 12px;
   max-height: 240px;
   overflow: auto;
   white-space: pre-wrap;

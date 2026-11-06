@@ -1,4 +1,4 @@
-import { CircleAlert, Loader2, RefreshCw } from "lucide-react";
+import { ArrowUpRight, CircleAlert, Loader2, RefreshCw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { MouseEvent } from "react";
@@ -12,6 +12,7 @@ const appIconUrl = new URL("../../../../src-tauri/icons/icon.ico", import.meta.u
 
 export type UpdateDialogState =
   | { status: "available"; release: ReleaseInfo; error?: string; ignored?: boolean }
+  | { status: "manual"; release: ReleaseInfo }
   | { status: "installed"; release: ReleaseInfo }
   | { status: "installFailed"; failure: UpdateFailure }
   | { status: "latest" }
@@ -55,7 +56,9 @@ export function UpdateDialog({
           ? "检查更新失败"
           : "检查更新";
   const release =
-    state.status === "available" || state.status === "installed" ? state.release : null;
+    state.status === "available" || state.status === "manual" || state.status === "installed"
+      ? state.release
+      : null;
   const repairUrl =
     state.status === "installFailed"
       ? `https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/tag/v${encodeURIComponent(state.failure.version)}`
@@ -71,6 +74,7 @@ export function UpdateDialog({
           }}
         >
           前往发布页下载
+          <ArrowUpRight size={14} />
         </button>
         <button type="button" className="modal-dialog-cancel" onClick={onClose}>
           关闭
@@ -93,6 +97,20 @@ export function UpdateDialog({
           onClick={onClose}
           disabled={installing}
         >
+          稍后
+        </button>
+      </>
+    ) : state.status === "manual" ? (
+      <>
+        <button
+          type="button"
+          className="modal-dialog-confirm"
+          onClick={() => void openReleaseUrl(state.release.url)}
+        >
+          前往发布页
+          <ArrowUpRight size={14} />
+        </button>
+        <button type="button" className="modal-dialog-cancel" onClick={onClose}>
           稍后
         </button>
       </>
@@ -148,7 +166,7 @@ export function UpdateDialog({
           </div>
           <div>
             <h3>暂时无法检查更新</h3>
-            <p>请检查网络连接后重试。你仍然可以继续使用当前版本。</p>
+            <p>所有更新来源暂时不可用，请检查网络连接后重试。你仍然可以继续使用当前版本。</p>
           </div>
         </div>
       )}
@@ -166,7 +184,7 @@ export function UpdateDialog({
               </div>
               <p>
                 {release.version}{" "}
-                {state.status === "available" && <span>当前版本 {currentVersion}</span>}
+                {state.status !== "installed" && <span>当前版本 {currentVersion}</span>}
               </p>
             </div>
           </div>
@@ -180,15 +198,6 @@ export function UpdateDialog({
                       ? "更新包已下载，请等待当前任务结束后更新。"
                       : "更新包已下载并校验，更新完成后将重新打开软件。")}
               </p>
-              <label className="update-dialog-ignore">
-                <input
-                  type="checkbox"
-                  checked={state.ignored ?? false}
-                  disabled={installing}
-                  onChange={(event) => onIgnore(event.target.checked)}
-                />
-                不再提示此版本
-              </label>
             </>
           )}
           {state.status === "installed" && <p>已启动新版本，以下是本次更新内容。</p>}
@@ -219,6 +228,17 @@ export function UpdateDialog({
               <p className="update-dialog-empty">此版本没有提供更新说明。</p>
             )}
           </section>
+          {state.status === "available" && (
+            <label className="update-dialog-ignore">
+              <input
+                type="checkbox"
+                checked={state.ignored ?? false}
+                disabled={installing}
+                onChange={(event) => onIgnore(event.target.checked)}
+              />
+              不再提示此版本
+            </label>
+          )}
         </>
       )}
     </ModalDialog>

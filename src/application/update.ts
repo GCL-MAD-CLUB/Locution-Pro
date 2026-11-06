@@ -60,7 +60,7 @@ export function startupUpdateNotifications(
 }
 
 export type UpdateCheckResult =
-  { status: "available"; release: ReleaseInfo } | { status: "latest" };
+  { status: "available" | "manual"; release: ReleaseInfo } | { status: "latest" };
 
 interface ParsedVersion {
   release: [number, number, number];
@@ -124,8 +124,14 @@ export function checkForUpdate(): Promise<UpdateCheckResult> {
         );
       }
       if (comparison <= 0) return { status: "latest" };
-      await invokeCommand("download_update", { version: release.version });
-      return { status: "available", release };
+      try {
+        await invokeCommand("download_update", { version: release.version });
+        return { status: "available", release };
+      } catch {
+        // Release discovery succeeded. Missing metadata, failed downloads and
+        // hash failures all retain the original manual update path.
+        return { status: "manual", release };
+      }
     })
     .finally(() => {
       if (activeCheck === request) activeCheck = null;

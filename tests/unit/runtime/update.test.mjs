@@ -65,7 +65,7 @@ test("update checks expose only newer releases and share an active request", asy
   assert.equal(JSON.stringify(await next), JSON.stringify({ status: "available", release }));
 });
 
-test("update availability waits for the download and propagates its failure", async () => {
+test("update availability waits for the download and falls back to the release page on failure", async () => {
   const download = deferred();
   const update = loadModule("../../../src/application/update.ts", {
     "../../package.json": { version: "0.4.0" },
@@ -76,15 +76,49 @@ test("update availability waits for the download and propagates its failure", as
           : download.promise,
     },
   });
-  let available = false;
-  const request = update.checkForUpdate().then(() => {
-    available = true;
+  let result;
+  const request = update.checkForUpdate().then((value) => {
+    result = value;
   });
   await flush();
-  assert.equal(available, false);
+  assert.equal(result, undefined);
   download.reject(new Error("Both download sources failed"));
-  await assert.rejects(request, /Both download sources failed/);
-  assert.equal(available, false);
+  await request;
+  assert.equal(result.status, "manual");
+  assert.equal(result.release.version, "0.5.0");
+});
+
+test("missing update metadata and hash or cache failures preserve release notes and the manual path", async () => {
+  const release = {
+    version: "0.5.0",
+    title: "New release",
+    body: "Notes",
+    url: "https://github.com/releases",
+  };
+  for (const reason of ["No updater in legacy release", "SHA-256 mismatch", "Cache is read-only"]) {
+    const update = loadModule("../../../src/application/update.ts", {
+      "../../package.json": { version: "0.4.0" },
+      "../errors": {
+        invokeCommand: async (command) => {
+          if (command === "fetch_latest_release") return release;
+          throw new Error(reason);
+        },
+      },
+    });
+    const result = await update.checkForUpdate();
+    assert.equal(result.status, "manual", reason);
+    assert.equal(result.release, release);
+  }
+});
+
+test("only failure to discover a release rejects the update check, and retry remains possible", async () => {
+  const { update, pending } = loadUpdate();
+  const request = update.checkForUpdate();
+  pending.reject(new Error("All release sources unavailable"));
+  await assert.rejects(request, /All release sources unavailable/);
+  const retry = update.checkForUpdate();
+  assert.notEqual(retry, request);
+  await assert.rejects(retry, /All release sources unavailable/);
 });
 
 test("startup prioritizes failure details, then release notes and a verified pending update", () => {

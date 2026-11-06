@@ -143,6 +143,13 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
         return thumbnailBatch(args, false);
       case "fetch_latest_release":
         return state.latestRelease;
+      case "update_startup":
+        return { pending: null, notes: null, failure: null, ignored: false, ignoredVersions: [] };
+      case "download_update":
+      case "install_update":
+      case "set_update_ignored":
+      case "acknowledge_update_notes":
+        return null;
       case "get_preferences":
         return state.preferences;
       case "update_preferences":

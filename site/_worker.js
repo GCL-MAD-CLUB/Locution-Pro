@@ -2,7 +2,6 @@ import {
   MANIFEST_URLS,
   RELEASE_PLATFORM,
   fallbackRelease,
-  installerName,
   validateRelease,
 } from "./src/release-contract.js";
 
@@ -52,7 +51,7 @@ export async function readLatestRelease(fetcher = fetch) {
   return fallbackRelease();
 }
 
-export async function downloadRelease(request, release, fetcher = fetch) {
+export async function downloadRelease(_request, release, fetcher = fetch) {
   const platform = release.platforms[RELEASE_PLATFORM];
   for (const url of [platform.cdn_url, platform.url].filter(Boolean)) {
     const controller = new AbortController();
@@ -63,11 +62,8 @@ export async function downloadRelease(request, release, fetcher = fetch) {
       const headers = new Headers({
         "User-Agent": "Locution-Pro-Downloads",
         "Accept-Encoding": "identity",
+        Range: "bytes=0-1",
       });
-      const range = request.headers.get("Range");
-      const etag = platform.signature ? `"sha256-${platform.signature}"` : null;
-      // An unpinned resume may belong to yesterday's release: restart with 200 instead.
-      if (range && etag && request.headers.get("If-Range") === etag) headers.set("Range", range);
       upstream = await fetcher(url, { headers, signal: controller.signal, cache: "no-store" });
       if (
         ![200, 206].includes(upstream.status) ||
@@ -77,57 +73,27 @@ export async function downloadRelease(request, release, fetcher = fetch) {
         throw new Error("Installer unavailable");
       }
       reader = upstream.body.getReader();
-      const prefix = [];
+      const prefix = new Uint8Array(2);
       let prefixLength = 0;
-      while (prefixLength < (upstream.status === 200 ? 2 : 1)) {
+      while (prefixLength < prefix.length) {
         const chunk = await reader.read();
         if (chunk.done) throw new Error("Empty or truncated installer");
-        if (chunk.value.byteLength) {
-          prefix.push(chunk.value);
-          prefixLength += chunk.value.byteLength;
-        }
+        const bytes = chunk.value.subarray(0, prefix.length - prefixLength);
+        prefix.set(bytes, prefixLength);
+        prefixLength += bytes.byteLength;
       }
-      const secondByte = prefix[0].byteLength > 1 ? prefix[0][1] : prefix[1]?.[0];
-      if (upstream.status === 200 && (prefix[0][0] !== 0x4d || secondByte !== 0x5a)) {
+      if (prefix[0] !== 0x4d || prefix[1] !== 0x5a) {
         throw new Error("Expected a Windows executable");
       }
-      // Once the upstream starts sending, stream the large installer without a total timeout.
-      clearTimeout(timer);
-      const body = new ReadableStream({
-        start(stream) {
-          for (const chunk of prefix) stream.enqueue(chunk);
-        },
-        async pull(stream) {
-          try {
-            const { value, done } = await reader.read();
-            if (done) stream.close();
-            else stream.enqueue(value);
-          } catch (error) {
-            stream.error(error);
-          }
-        },
-        cancel(reason) {
-          controller.abort();
-          return reader.cancel(reason);
-        },
-      });
-      const outputHeaders = new Headers(responseHeaders);
-      for (const name of ["Content-Length", "Content-Range", "Accept-Ranges", "Last-Modified"]) {
-        if (upstream.headers.has(name)) outputHeaders.set(name, upstream.headers.get(name));
-      }
-      outputHeaders.set("Content-Type", "application/octet-stream");
-      if (etag) outputHeaders.set("ETag", etag);
-      outputHeaders.set(
-        "Content-Disposition",
-        `attachment; filename="${installerName(release.version)}"`,
-      );
-      return new Response(body, { status: upstream.status, headers: outputHeaders });
+      // Probe only the executable header; the browser downloads directly from the chosen source.
+      return new Response(null, { status: 302, headers: { ...responseHeaders, Location: url } });
     } catch {
+      controller.abort();
+    } finally {
+      clearTimeout(timer);
       controller.abort();
       if (reader) await reader.cancel().catch(() => {});
       else await upstream?.body?.cancel().catch(() => {});
-    } finally {
-      clearTimeout(timer);
     }
   }
   return new Response("下载源暂时不可用，请稍后重试。", {

@@ -7,6 +7,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const reusableRoots = ["transnetv2", "semantic-search", "storyboard-semantic"];
 
+function bundleInUpdate(path, group) {
+  return (
+    group === "core" ||
+    (group !== "ffmpeg" && !/\.(?:onnx|onnx_data|safetensors|dll|exe|bin|pt|pth)$/iu.test(path))
+  );
+}
+
 export async function prepareInstallerManifest(
   root = repository,
   target = "x86_64-pc-windows-msvc",
@@ -44,7 +51,13 @@ export async function prepareInstallerManifest(
     destinations.add(key);
     const hash = createHash("sha256");
     for await (const chunk of createReadStream(source)) hash.update(chunk);
-    files.push({ path, size: metadata.size, sha256: hash.digest("hex"), group });
+    files.push({
+      path,
+      size: metadata.size,
+      sha256: hash.digest("hex"),
+      group,
+      bundleInUpdate: bundleInUpdate(path, group),
+    });
   }
   if (Array.isArray(config.bundle.resources)) {
     throw new Error("Installer hashing requires explicit resource destination mappings");
@@ -99,9 +112,24 @@ export async function finalizeInstallerManifest(manifestPath, binaryPath, binary
     sha256: hash.digest("hex"),
     group: "core",
   });
+  for (const entry of manifest.files) {
+    if (typeof entry.path !== "string" || /[\x00-\x1f"]/u.test(entry.path)) {
+      throw new Error("Invalid installer resource path");
+    }
+    entry.bundleInUpdate = bundleInUpdate(entry.path, entry.group);
+  }
   manifest.files.sort((left, right) => left.path.localeCompare(right.path, "en"));
   const output = `${manifestPath}.nsis.json`;
   await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile(
+    `${output}.nsh`,
+    manifest.files
+      .filter((entry) => entry.bundleInUpdate)
+      .map(
+        (entry) => `!define "LOCUTION_UPDATE_BUNDLE_${entry.path.replaceAll("$", () => "$$")}" 1\n`,
+      )
+      .join(""),
+  );
   return output;
 }
 

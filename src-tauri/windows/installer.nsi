@@ -150,6 +150,9 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !system 'node "${LOCUTION_INSTALLER_SOURCE_DIR}\..\..\scripts\prepare-installer-manifest.mjs" --finalize-main "${LOCUTION_PAYLOAD_MANIFEST}" "${MAINBINARYSRCPATH}" "${MAINBINARYNAME}.exe"' = 0
 !undef LOCUTION_PAYLOAD_MANIFEST
 !define LOCUTION_PAYLOAD_MANIFEST "${LOCUTION_FINAL_PAYLOAD_MANIFEST}"
+!ifdef LOCUTION_UPDATE_ONLY
+  !include "${LOCUTION_PAYLOAD_MANIFEST}.nsh"
+!endif
 
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\independent-install.nsh"
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\upgrade-files.nsh"

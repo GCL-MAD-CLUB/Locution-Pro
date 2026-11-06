@@ -21,6 +21,7 @@ async function fixture(t, resources) {
     "src-tauri/target/release/locution-pro.exe": "MZ application",
     "src-tauri/resources/model/nested/模型.onnx": "model",
     "src-tauri/resources/model/onnxruntime.dll": "runtime",
+    "src-tauri/resources/model/README.md": "model documentation",
     "src-tauri/bin/ffmpeg-x86_64-pc-windows-msvc.exe": "ffmpeg",
     "src-tauri/bin/ffprobe-x86_64-pc-windows-msvc.exe": "ffprobe",
     LICENSE: "license",
@@ -45,16 +46,24 @@ test("installer manifest hashes actual payload bytes and nested Windows destinat
   const first = await readFile(output, "utf8");
   const manifest = JSON.parse(first);
   assert.equal(manifest.version, 1);
-  assert.equal(manifest.files.length, 6);
+  assert.equal(manifest.files.length, 7);
   const model = manifest.files.find((file) => file.path.endsWith("模型.onnx"));
   assert.deepEqual(model, {
     path: "semantic-search\\nested\\模型.onnx",
     size: 5,
     sha256: createHash("sha256").update("model").digest("hex"),
     group: "semantic-search",
+    bundleInUpdate: false,
   });
   assert.equal(manifest.files.find((file) => file.path === "LICENSE").group, "core");
+  assert.equal(manifest.files.find((file) => file.path === "LICENSE").bundleInUpdate, true);
+  assert.equal(manifest.files.find((file) => file.path.endsWith("README.md")).bundleInUpdate, true);
+  assert.equal(
+    manifest.files.find((file) => file.path.endsWith("onnxruntime.dll")).bundleInUpdate,
+    false,
+  );
   assert.equal(manifest.files.find((file) => file.path === "ffmpeg.exe").group, "ffmpeg");
+  assert.equal(manifest.files.find((file) => file.path === "ffmpeg.exe").bundleInUpdate, false);
   await prepareInstallerManifest(root);
   assert.equal(await readFile(output, "utf8"), first);
   await writeFile(join(root, "src-tauri/resources/model/nested/模型.onnx"), "MODEL");
@@ -79,6 +88,7 @@ test("NSIS finalization hashes the patched executable without changing the resou
       size: Buffer.byteLength(patched),
       sha256: createHash("sha256").update(patched).digest("hex"),
       group: "core",
+      bundleInUpdate: true,
     },
   );
   const resources = (manifest) =>

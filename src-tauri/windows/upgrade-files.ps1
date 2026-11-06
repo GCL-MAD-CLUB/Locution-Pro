@@ -304,6 +304,7 @@ try {
             @($parts | Where-Object { !$_ -or $_ -in @('.', '..') -or $_ -match '[. ]$' -or
                 $_ -match '^(?i:CON|PRN|AUX|NUL|COM[1-9\u00b9\u00b2\u00b3]|LPT[1-9\u00b9\u00b2\u00b3])(?:\.|$)' }).Count -gt 0 -or
             $entry.sha256 -notmatch '^[a-f0-9]{64}$' -or $entry.size -lt 0 -or
+            ($entry.PSObject.Properties.Name -contains 'bundleInUpdate' -and $entry.bundleInUpdate -isnot [bool]) -or
             $entry.group -notin @('core', 'ffmpeg', 'transnetv2', 'semantic-search', 'storyboard-semantic')) {
             throw 'Invalid installer manifest entry'
         }
@@ -338,7 +339,9 @@ try {
         if (!$entries.ContainsKey($MainBinary)) { throw 'The update manifest is missing the target executable hash.' }
         foreach ($entry in $payload.files) {
             Assert-UpdateNotCancelled
-            $required = $entry.path -notin @($MainBinary, 'uninstall.exe') -and
+            $bundledInUpdate = $entry.group -eq 'core' -or
+                ($entry.PSObject.Properties.Name -contains 'bundleInUpdate' -and $entry.bundleInUpdate)
+            $required = !$bundledInUpdate -and $entry.path -notin @($MainBinary, 'uninstall.exe') -and
                 !(($entry.group -eq 'ffmpeg' -and !$Ffmpeg) -or
                 ($entry.group -in @('semantic-search', 'storyboard-semantic') -and !$Semantic))
             if ($required -and !$reuse.ContainsKey($entry.path)) {

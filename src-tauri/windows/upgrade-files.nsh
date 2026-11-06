@@ -285,8 +285,8 @@ Function LocutionProPollUpgradeScan
 FunctionEnd
 
 !macro LOCUTION_INSTALL_FILE SOURCE DESTINATION
-  ; Update-only installers never embed dependencies. Every selected resource
-  ; must already match the new release's complete manifest before Prepare.
+  ; The finalized manifest selects application resources and model metadata
+  ; for update delivery. Large dependencies must already match before Prepare.
   ReadINIStr $0 "$LocutionProReusePlan" "Payload" "${DESTINATION}"
   ${If} $0 == ""
     SetErrorLevel 2
@@ -297,9 +297,13 @@ FunctionEnd
   ${If} $0 != 1
     ClearErrors
     !ifdef LOCUTION_UPDATE_ONLY
-      SetErrorLevel 2
-      !insertmacro LOCUTION_UPDATE_ERROR "更新包无法修复依赖：${DESTINATION}。请使用完整安装包。"
-      Abort "更新包无法修复依赖：${DESTINATION}。请使用完整安装包。"
+      !ifdef "LOCUTION_UPDATE_BUNDLE_${DESTINATION}"
+        File /a "/oname=${DESTINATION}" "${SOURCE}"
+      !else
+        SetErrorLevel 2
+        !insertmacro LOCUTION_UPDATE_ERROR "更新包无法修复依赖：${DESTINATION}。请使用完整安装包。"
+        Abort "更新包无法修复依赖：${DESTINATION}。请使用完整安装包。"
+      !endif
     !else
       File /a "/oname=${DESTINATION}" "${SOURCE}"
     !endif

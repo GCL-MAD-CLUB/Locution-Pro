@@ -245,9 +245,11 @@ public class Fixture {
         version: 1,
         files: [
           "LICENSE",
+          "locution_pro_thumbnail_provider.dll",
           "ffmpeg.exe",
           "ffprobe.exe",
           "transnetv2/model.onnx",
+          "transnetv2/README.md",
           "semantic-search/model.onnx",
         ].map((path) => ({
           path: path.replaceAll("/", "\\"),
@@ -258,6 +260,8 @@ public class Fixture {
             : path.includes("/")
               ? path.split("/")[0]
               : "core",
+          bundleInUpdate:
+            (!path.includes("/") && !path.startsWith("ff")) || path.endsWith("README.md"),
         })),
       }),
     );
@@ -357,7 +361,7 @@ public class Fixture {
         assert(!existsSync(`${result}.transaction`));
         writeFileSync(mandatory, "payload");
         rmSync(join(install, "LICENSE"));
-        updateWorker("Prepare", extra, 2);
+        updateWorker("Scan", extra);
         assert(!existsSync(`${result}.transaction`));
         writeFileSync(join(install, "LICENSE"), "payload");
         rmSync(join(install, "semantic-search/model.onnx"));
@@ -589,8 +593,8 @@ public class Fixture {
           compression: "none",
           manufacturer: "locutionpro",
           product_name: "Locution Pro",
-          version: "1.0.0",
-          version_with_build: "1.0.0.0",
+          version: "0.4.2",
+          version_with_build: "0.4.2.0",
           install_mode: scope,
           main_binary_name: "locution-pro",
           main_binary_path: nsis(mainInput),
@@ -628,7 +632,13 @@ public class Fixture {
         const loops = {
           languages: ["SimpChinese"],
           language_files: [nsis(join(support, "SimpChinese.nsh"))],
-          resources: ["LICENSE", "transnetv2\\model.onnx", "semantic-search\\model.onnx"],
+          resources: [
+            "LICENSE",
+            "locution_pro_thumbnail_provider.dll",
+            "transnetv2\\model.onnx",
+            "transnetv2\\README.md",
+            "semantic-search\\model.onnx",
+          ],
           resources_dirs: ["transnetv2", "semantic-search"],
           resources_ancestors: [],
           binaries: ["ffmpeg.exe", "ffprobe.exe"],
@@ -744,8 +754,8 @@ public class Fixture {
             );
           isolated = isolated.replace(/OutFile "[^"\n]+"/u, `OutFile "${nsis(executable)}"`);
           const build = (manifestPath, failRegistration = false, updateOnly = false) => {
-            // Compile the update flavor with nonexistent dependency sources. A
-            // retained File instruction would fail compilation immediately.
+            // Heavy dependency sources are absent from an update package, while
+            // the application DLL, licenses and metadata must remain embedded.
             const source = updateOnly
               ? isolated
                   .replace(
@@ -754,8 +764,12 @@ public class Fixture {
                   )
                   .replace(
                     /(!insertmacro LOCUTION_INSTALL_FILE )"[^"]+"/gu,
-                    (_, prefix) =>
-                      `${prefix}"${nsis(join(temporary, "dependency-not-in-update.exe"))}"`,
+                    (source, prefix, offset, text) =>
+                      /"(?:ffmpeg\.exe|ffprobe\.exe|[^"\n]+\.onnx)"/u.test(
+                        text.slice(offset + source.length).split("\n", 1)[0],
+                      )
+                        ? `${prefix}"${nsis(join(temporary, "dependency-not-in-update.exe"))}"`
+                        : source,
                   )
                   .replace(
                     '!define MINIMUMWEBVIEW2VERSION ""',
@@ -895,6 +909,10 @@ $arp.Dispose(); $base.Dispose()
             group: "core",
           });
           writeFileSync(updateManifest, JSON.stringify(updatePayload));
+          const thumbnail = join(install, "locution_pro_thumbnail_provider.dll");
+          const metadata = join(install, "transnetv2/README.md");
+          writeFileSync(thumbnail, "old thumbnail DLL 0.4.1");
+          writeFileSync(metadata, "old metadata 0.4.1");
           build(updateManifest, false, true);
           const setVersion = (version) =>
             run("reg.exe", [
@@ -907,7 +925,7 @@ $arp.Dispose(); $base.Dispose()
               "/f",
               "/reg:64",
             ]);
-          setVersion("0.9.0");
+          setVersion("0.4.1");
           const dependency = join(install, "transnetv2/model.onnx");
           run(executable, ["/S", "/UPDATE", "/CHECKUPDATE", `/D=${install}`], 2, options);
           const setWebViewVersion = (version) =>
@@ -937,11 +955,11 @@ $arp.Dispose(); $base.Dispose()
           writeFileSync(dependency, "payload");
           run(executable, ["/S", "/UPDATE", "/CHECKUPDATE", `/D=${install}`], 0, options);
           assert.equal(readFileSync(main, "utf8"), "previous working executable");
-          for (const version of ["1.0.0", "1.1.0"]) {
+          for (const version of ["0.4.2", "0.4.3"]) {
             setVersion(version);
             run(executable, ["/S", "/UPDATE", `/D=${install}`], 2, options);
           }
-          setVersion("0.9.0");
+          setVersion("0.4.1");
           const fresh = join(temporary, "fresh update target");
           run(executable, ["/S", "/UPDATE", `/D=${fresh}`], 2, options);
           assert(!existsSync(fresh));
@@ -970,9 +988,24 @@ $arp.Dispose(); $base.Dispose()
             other.stdin.end();
             await otherExit;
           }
+          build(updateManifest, true, true);
+          const failedUpdateBefore = snapshotRegistration(
+            join(temporary, "failed-core-update-before.json"),
+          );
+          run(executable, ["/S", "/UPDATE", `/D=${install}`], 2, options);
+          assert.equal(readFileSync(main, "utf8"), "previous working executable");
+          assert.equal(readFileSync(thumbnail, "utf8"), "old thumbnail DLL 0.4.1");
+          assert.equal(readFileSync(metadata, "utf8"), "old metadata 0.4.1");
+          assert.deepEqual(
+            snapshotRegistration(join(temporary, "failed-core-update-after.json")),
+            failedUpdateBefore,
+          );
+          build(updateManifest, false, true);
           run(executable, ["/S", "/UPDATE", `/D=${install}`], 0, options);
           assert.equal(readFileSync(main, "utf8"), bundledMain);
           assert.equal(readFileSync(dependency, "utf8"), "payload");
+          assert.equal(readFileSync(thumbnail, "utf8"), "payload");
+          assert.equal(readFileSync(metadata, "utf8"), "payload");
           // Run the real bootstrap, including quoted handoff arguments, the
           // embedded controller, worker mutex and failure/restart protocol.
           const { application } = prepareControllerFixture();
@@ -1001,7 +1034,7 @@ $arp.Dispose(); $base.Dispose()
                 parent: parent.pid,
                 executable: main,
                 installer: executable,
-                version: "1.0.0",
+                version: "0.4.2",
                 signature: createHash("sha256").update(readFileSync(executable)).digest("hex"),
                 project: "C:\\saved project.lcp",
               }),

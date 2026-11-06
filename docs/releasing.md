@@ -202,6 +202,8 @@ WebView2 使用安装器私有目录，执行前验证 Microsoft 签名；注册
 
 ## 处理发布失败
 
+GitHub 托管的 macOS arm64 运行机容量不足时，排队的 job 会在未执行任何步骤时被取消，并带有 “not acquired by Runner” 注解。`retry-runner-capacity.yml` 在 CI 或 Release 结束后只对这类 job 自动执行 **Re-run failed jobs**，每次运行最多重试两次；真正的构建或测试失败以及手动取消不会重跑。该工作流从默认分支生效，不检出 PR 代码。
+
 tag 与清单不一致时，在发布前修正，不对已公开 tag 强推不同源码。构建代码需要变化时使用新 tag。仅 `publish-draft` 失败时，在原工作流选择 **Re-run failed jobs**，复用原构建 artifact，无需重新编译 Windows 或下载模型；匹配的 GitHub 附件也不会重复上传。artifact 已过期或构建失败时，重新运行构建。不要以新源码重用旧版本的产物。
 
 确认安装包、可选组件、升级路径和项目兼容性后，再对外发布。不要将维护用构建步骤加入用户安装指南。

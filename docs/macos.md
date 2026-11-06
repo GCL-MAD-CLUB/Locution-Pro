@@ -1,6 +1,6 @@
 # macOS 构建
 
-本文面向在 macOS 上本地构建和调试的开发者。CI 在 macOS 上运行 Rust 的 clippy 与测试；发布流程在 Windows 安装包之后构建 arm64 的 `.app` 与 `.dmg`，上传到同一个草稿 release。macOS 包使用 ad-hoc 签名（`signingIdentity: "-"`），未经公证。
+本文面向在 macOS 上本地构建和调试的开发者。CI 在 macOS 上运行 Rust 的 clippy 与测试；发布流程与 Windows 并行构建 arm64 的 `.dmg` 与自动更新包，并写入同一份 `latest.json`（平台键 `darwin-aarch64`），自动更新的规则见[发布流程](releasing.md)。macOS 包使用 ad-hoc 签名（`signingIdentity: "-"`），未经公证。
 
 ## 环境
 

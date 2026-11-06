@@ -5,12 +5,15 @@ import { dirname, join, resolve, win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const reusableRoots = ["transnetv2", "semantic-search", "storyboard-semantic"];
+export const reusableRoots = ["transnetv2", "semantic-search", "storyboard-semantic"];
 
-function bundleInUpdate(path, group) {
+// Update packages carry application code and metadata; FFmpeg, model weights
+// and inference runtimes are reused from the installed copy.
+export function bundleInUpdate(path, group) {
   return (
     group === "core" ||
-    (group !== "ffmpeg" && !/\.(?:onnx|onnx_data|safetensors|dll|exe|bin|pt|pth)$/iu.test(path))
+    (group !== "ffmpeg" &&
+      !/\.(?:onnx|onnx_data|safetensors|dll|dylib|exe|bin|pt|pth)$/iu.test(path))
   );
 }
 

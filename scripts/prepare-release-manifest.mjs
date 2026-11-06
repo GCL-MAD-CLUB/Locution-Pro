@@ -5,6 +5,7 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   rename,
   rm,
@@ -15,9 +16,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   CDN_BASE,
+  MACOS_PLATFORM,
   RELEASE_PLATFORM,
   RELEASE_REPOSITORY,
   installerName,
+  macosInstallerName,
+  macosUpdaterName,
   updaterName,
   isReleaseVersion,
   isReleaseRepository,
@@ -25,10 +29,46 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+// File formats accepted for each release asset, checked before hashing.
+export const assetFormats = {
+  exe: { header: [0x4d, 0x5a], error: "Expected a Windows executable" },
+  gzip: { header: [0x1f, 0x8b], error: "Expected a gzip update archive" },
+  // A UDIF disk image ends with a 512-byte trailer that starts with "koly".
+  dmg: { trailer: "koly", error: "Expected a macOS disk image" },
+};
+
+export async function inspectAsset(file, format) {
+  const metadata = await stat(file);
+  if (!metadata.isFile() || metadata.size < 2) throw new Error("Missing or empty installer");
+  const { header, trailer, error } = assetFormats[format];
+  if (trailer) {
+    if (metadata.size < 512) throw new Error(error);
+    const handle = await open(file, "r");
+    try {
+      const bytes = Buffer.alloc(trailer.length);
+      await handle.read(bytes, 0, bytes.length, metadata.size - 512);
+      if (bytes.toString("latin1") !== trailer) throw new Error(error);
+    } finally {
+      await handle.close();
+    }
+  }
+  const hash = createHash("sha256");
+  let first = true;
+  for await (const chunk of createReadStream(file)) {
+    if (first && header && (chunk[0] !== header[0] || chunk[1] !== header[1])) {
+      throw new Error(error);
+    }
+    first = false;
+    hash.update(chunk);
+  }
+  return hash.digest("hex");
+}
+
 export async function prepareReleaseManifest({
   version,
   installer,
   updater,
+  macos,
   outputDirectory,
   repository = RELEASE_REPOSITORY,
   pubDate = new Date().toISOString(),
@@ -36,53 +76,56 @@ export async function prepareReleaseManifest({
   if (!isReleaseVersion(version)) throw new Error("Invalid release version");
   if (!isReleaseRepository(repository)) throw new Error("Invalid release repository");
   if (!Number.isFinite(Date.parse(pubDate))) throw new Error("Invalid publication date");
-  async function inspect(installer) {
-    const metadata = await stat(installer);
-    if (!metadata.isFile() || metadata.size < 2) throw new Error("Missing or empty installer");
-    const hash = createHash("sha256");
-    let first = true;
-    for await (const chunk of createReadStream(installer)) {
-      if (first && (chunk[0] !== 0x4d || chunk[1] !== 0x5a))
-        throw new Error("Expected a Windows executable");
-      first = false;
-      hash.update(chunk);
-    }
-    return hash.digest("hex");
-  }
-  const signature = await inspect(installer);
-  const updateSignature = await inspect(updater);
-  const name = installerName(version);
-  const updateName = updaterName(version);
-  const manifest = {
-    version,
-    pub_date: new Date(pubDate).toISOString(),
-    platforms: {
-      [RELEASE_PLATFORM]: {
-        signature,
-        url: `https://github.com/${repository}/releases/download/v${version}/${name}`,
-        cdn_url: `${CDN_BASE}/${name}`,
-        updater: {
-          signature: updateSignature,
-          url: `https://github.com/${repository}/releases/download/v${version}/${updateName}`,
-          cdn_url: `${CDN_BASE}/${updateName}`,
-        },
+  const assets = [
+    { platform: RELEASE_PLATFORM, file: installer, name: installerName(version), format: "exe" },
+    { platform: RELEASE_PLATFORM, file: updater, name: updaterName(version), format: "exe" },
+  ];
+  if (macos) {
+    assets.push(
+      {
+        platform: MACOS_PLATFORM,
+        file: macos.installer,
+        name: macosInstallerName(version),
+        format: "dmg",
       },
-    },
-  };
+      {
+        platform: MACOS_PLATFORM,
+        file: macos.updater,
+        name: macosUpdaterName(version),
+        format: "gzip",
+      },
+    );
+  }
+  for (const asset of assets) asset.signature = await inspectAsset(asset.file, asset.format);
+  const link = (asset) => ({
+    signature: asset.signature,
+    url: `https://github.com/${repository}/releases/download/v${version}/${asset.name}`,
+    cdn_url: `${CDN_BASE}/${asset.name}`,
+  });
+  const platforms = {};
+  for (let index = 0; index < assets.length; index += 2) {
+    platforms[assets[index].platform] = {
+      ...link(assets[index]),
+      updater: link(assets[index + 1]),
+    };
+  }
+  const manifest = { version, pub_date: new Date(pubDate).toISOString(), platforms };
   outputDirectory = path.resolve(outputDirectory);
   await mkdir(path.dirname(outputDirectory), { recursive: true });
   const stage = await mkdtemp(`${outputDirectory}.stage-`);
   const backup = `${stage}.previous`;
   let moved = false;
   try {
-    await copyFile(installer, path.join(stage, name));
-    await copyFile(updater, path.join(stage, updateName));
+    for (const asset of assets) await copyFile(asset.file, path.join(stage, asset.name));
     const json = `${JSON.stringify(manifest, null, 2)}\n`;
     await writeFile(path.join(stage, "latest.json"), json);
     const manifestHash = createHash("sha256").update(json).digest("hex");
     await writeFile(
       path.join(stage, "SHA256SUMS.txt"),
-      `${signature}  ${name}\n${updateSignature}  ${updateName}\n${manifestHash}  latest.json\n`,
+      [
+        ...assets.map((asset) => `${asset.signature}  ${asset.name}\n`),
+        `${manifestHash}  latest.json\n`,
+      ].join(""),
     );
     const previous = await lstat(outputDirectory).catch((error) => {
       if (error.code === "ENOENT") return null;
@@ -109,29 +152,42 @@ export async function prepareReleaseManifest({
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const { version } = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-  if (process.argv.length > 2) throw new Error("Usage: npm run prepare:release");
-  const manifest = await prepareReleaseManifest({
-    version,
-    updater: path.join(
-      root,
-      "src-tauri",
-      "target",
-      "installer",
-      `Locution Pro_${version}_x64-update.exe`,
-    ),
-    installer: path.join(
-      root,
-      "src-tauri",
-      "target",
-      "release",
-      "bundle",
-      "nsis",
-      `Locution Pro_${version}_x64-setup.exe`,
-    ),
-    outputDirectory: path.join(root, "src-tauri", "target", "release-artifacts"),
-    repository: process.env.GITHUB_REPOSITORY || RELEASE_REPOSITORY,
-  });
+  const target = path.join(root, "src-tauri", "target");
+  const outputDirectory = path.join(target, "release-artifacts");
+  const repository = process.env.GITHUB_REPOSITORY || RELEASE_REPOSITORY;
+  let manifest;
+  if (process.argv.length === 3 && process.argv[2] === "--with-macos") {
+    // Release CI: add the macOS build to the verified Windows artifact set.
+    const macos = path.join(target, "release-artifacts-macos");
+    manifest = await prepareReleaseManifest({
+      version,
+      installer: path.join(outputDirectory, installerName(version)),
+      updater: path.join(outputDirectory, updaterName(version)),
+      macos: {
+        installer: path.join(macos, macosInstallerName(version)),
+        updater: path.join(macos, macosUpdaterName(version)),
+      },
+      outputDirectory,
+      repository,
+    });
+  } else if (process.argv.length === 2) {
+    manifest = await prepareReleaseManifest({
+      version,
+      updater: path.join(target, "installer", `Locution Pro_${version}_x64-update.exe`),
+      installer: path.join(
+        target,
+        "release",
+        "bundle",
+        "nsis",
+        `Locution Pro_${version}_x64-setup.exe`,
+      ),
+      outputDirectory,
+      repository,
+    });
+  } else {
+    throw new Error("Usage: npm run prepare:release -- [--with-macos]");
+  }
   console.log(
-    `Release ${manifest.version}: full installer, update installer, latest.json and SHA256SUMS.txt ready in src-tauri/target/release-artifacts`,
+    `Release ${manifest.version}: ${Object.keys(manifest.platforms).join(", ")} installers, latest.json and SHA256SUMS.txt ready in src-tauri/target/release-artifacts`,
   );
 }

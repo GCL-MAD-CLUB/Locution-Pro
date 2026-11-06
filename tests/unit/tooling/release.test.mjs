@@ -8,6 +8,7 @@ import { prepareReleaseManifest } from "../../../scripts/prepare-release-manifes
 import { checkReleaseAssets } from "../../../scripts/check-release-assets.mjs";
 import { inspectRelease, prepareReleaseDraft } from "../../../scripts/prepare-release-draft.mjs";
 import {
+  MACOS_PLATFORM,
   RELEASE_PLATFORM,
   isReleaseVersion,
   validateRelease,
@@ -365,4 +366,89 @@ test("publication limits upload attempts and fails cleanly for API errors before
   );
   assert.equal(attempts, 3);
   assert.deepEqual(waits, [5000, 10000]);
+});
+
+async function macosFixture(t) {
+  const options = await fixture(t);
+  const directory = path.dirname(options.installer);
+  const image = Buffer.alloc(1024, 0);
+  image.write("koly", 512, "latin1");
+  options.macos = {
+    installer: path.join(directory, "Locution Pro_2.1.1_aarch64.dmg"),
+    updater: path.join(directory, "update.tar.gz"),
+  };
+  await writeFile(options.macos.installer, image);
+  await writeFile(options.macos.updater, Buffer.from([0x1f, 0x8b, 8, 0, 1, 2, 3]));
+  return options;
+}
+
+test("the macOS build adds a darwin-aarch64 entry beside the Windows files", async (t) => {
+  const options = await macosFixture(t);
+  const manifest = await prepareReleaseManifest(options);
+  assert.deepEqual(Object.keys(manifest.platforms), [RELEASE_PLATFORM, MACOS_PLATFORM]);
+  assert.deepEqual(validateRelease(manifest), manifest);
+  const macos = manifest.platforms[MACOS_PLATFORM];
+  assert.equal(
+    macos.url,
+    "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/download/v2.1.1/Locution.Pro_2.1.1_aarch64.dmg",
+  );
+  assert.equal(
+    macos.updater.cdn_url,
+    "https://openlist.frameneo.com/sd/YRrdPxj2/Locution.Pro_2.1.1_aarch64-update.tar.gz",
+  );
+  assert.equal(
+    macos.updater.signature,
+    createHash("sha256")
+      .update(await readFile(options.macos.updater))
+      .digest("hex"),
+  );
+  const { files } = await checkReleaseAssets({
+    directory: options.outputDirectory,
+    version: options.version,
+    repository: "GCL-MAD-CLUB/Locution-Pro",
+  });
+  assert.equal(files.length, 6);
+  const sums = await readFile(path.join(options.outputDirectory, "SHA256SUMS.txt"), "utf8");
+  assert.equal(sums.trim().split("\n").length, 5);
+});
+
+test("macOS release files must match their formats and the manifest", async (t) => {
+  const options = await macosFixture(t);
+  const check = () =>
+    checkReleaseAssets({
+      directory: options.outputDirectory,
+      version: options.version,
+      repository: "GCL-MAD-CLUB/Locution-Pro",
+    });
+  await writeFile(options.macos.installer, Buffer.alloc(1024, 0));
+  await assert.rejects(prepareReleaseManifest(options), /disk image/u);
+  const image = Buffer.alloc(1024, 0);
+  image.write("koly", 512, "latin1");
+  await writeFile(options.macos.installer, image);
+  await writeFile(options.macos.updater, "MZ not an archive");
+  await assert.rejects(prepareReleaseManifest(options), /gzip/u);
+  await writeFile(options.macos.updater, Buffer.from([0x1f, 0x8b, 8, 0]));
+  await prepareReleaseManifest(options);
+  await rm(path.join(options.outputDirectory, "Locution.Pro_2.1.1_aarch64-update.tar.gz"));
+  await assert.rejects(check(), /exactly/u);
+  // A Windows-only manifest cannot be published beside stray macOS files.
+  const { macos, ...windows } = options;
+  await prepareReleaseManifest(windows);
+  await writeFile(path.join(options.outputDirectory, "Locution.Pro_2.1.1_aarch64.dmg"), image);
+  await writeFile(
+    path.join(options.outputDirectory, "Locution.Pro_2.1.1_aarch64-update.tar.gz"),
+    Buffer.from([0x1f, 0x8b]),
+  );
+  await assert.rejects(check(), /disagree on the macOS build/u);
+  assert(macos);
+});
+
+test("the macOS manifest entry uses immutable URLs of the releasing repository", async (t) => {
+  const manifest = await prepareReleaseManifest(await macosFixture(t));
+  const tampered = structuredClone(manifest);
+  tampered.platforms[MACOS_PLATFORM].updater.url =
+    "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/latest/download/update.tar.gz";
+  assert.throws(() => validateRelease(tampered), /update-only installer/u);
+  tampered.platforms[MACOS_PLATFORM] = { ...manifest.platforms[MACOS_PLATFORM], signature: "x" };
+  assert.throws(() => validateRelease(tampered), /platform installer/u);
 });

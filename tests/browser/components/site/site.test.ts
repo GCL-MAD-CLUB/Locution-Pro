@@ -251,9 +251,11 @@ test("rapid demo changes show the latest choice and clear the busy state", async
 test("wheel input starts the chapter transition immediately and inertia advances only one screen", async ({
   page,
 }) => {
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/site/");
   await page.evaluate(() => document.fonts.ready);
+  await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
   const boundary = await page
     .locator("#workspace")
     .evaluate((section) =>
@@ -265,11 +267,32 @@ test("wheel input starts the chapter transition immediately and inertia advances
     );
   await page.mouse.move(800, 450);
   await page.mouse.wheel(0, 90);
-  await page.waitForFunction(() => scrollY > 1, undefined, { polling: "raf", timeout: 160 });
-  for (let i = 0; i < 8; i++) await page.mouse.wheel(0, 15);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(boundary);
-  await page.waitForTimeout(250);
+  await page.clock.runFor(96);
+  const started = await page.evaluate(() => scrollY);
+  expect(started).toBeGreaterThan(1);
+  expect(started).toBeLessThan(boundary);
+  // Keep inertia inside one gesture even when the test runner is busy. The
+  // 80 ms cadence also carries the gesture beyond the chapter animation.
+  for (let i = 0; i < 8; i++) {
+    await page.mouse.wheel(0, 15);
+    await page.clock.runFor(80);
+  }
   expect(await page.evaluate(() => scrollY)).toBe(boundary);
+  await page.clock.runFor(250);
+  expect(await page.evaluate(() => scrollY)).toBe(boundary);
+
+  const nextBoundary = await page
+    .locator("#features")
+    .evaluate((section) =>
+      Math.round(
+        section.getBoundingClientRect().top +
+          scrollY -
+          document.querySelector("header")!.getBoundingClientRect().height,
+      ),
+    );
+  await page.mouse.wheel(0, 90);
+  await page.clock.runFor(700);
+  expect(await page.evaluate(() => scrollY)).toBe(nextBoundary);
 });
 
 test("chapters land completely below the header in both directions and after resizing", async ({

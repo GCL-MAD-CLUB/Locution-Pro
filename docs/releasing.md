@@ -16,6 +16,7 @@
 
 ```powershell
 npm ci
+npm audit
 npm run test:all
 npm run test:rust
 npm run test:rust:thumbnail

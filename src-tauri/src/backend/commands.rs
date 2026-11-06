@@ -37,6 +37,43 @@ pub(crate) fn take_preferences_startup_error(
     }
 }
 
+/// Tells the frontend a launch project is waiting in `take_launch_project_path`.
+#[cfg(target_os = "macos")]
+const LAUNCH_PROJECT_EVENT: &str = "launch-project-path";
+
+/// macOS hands Finder opens (double-click, Dock drop, Open With) to the app as
+/// Apple Events, at launch or while running, instead of command-line arguments.
+#[cfg(target_os = "macos")]
+pub(crate) fn receive_opened_files(app: &tauri::AppHandle, urls: &[tauri::Url]) {
+    use tauri::Emitter;
+    let Some(path) = urls
+        .iter()
+        .filter_map(|url| url.to_file_path().ok())
+        .find_map(project_file_path)
+    else {
+        return;
+    };
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    match state.launch_project_path.lock() {
+        Ok(mut launch) => *launch = Some(path),
+        Err(_) => {
+            app_error(
+                ErrorCode::LaunchPathStateUnavailable,
+                "Launch project path state lock is poisoned",
+            );
+            return;
+        }
+    }
+    if let Err(error) = app.emit(LAUNCH_PROJECT_EVENT, ()) {
+        app_error(
+            ErrorCode::EventEmitFailed,
+            format!("Failed to announce the opened project: {error}"),
+        );
+    }
+}
+
 #[tauri::command]
 pub(crate) fn take_launch_project_path(
     state: tauri::State<'_, AppState>,

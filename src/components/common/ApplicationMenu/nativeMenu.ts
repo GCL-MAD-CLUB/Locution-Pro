@@ -8,6 +8,8 @@ export interface NativeMenuCommand {
   execute: Handler;
   /** While a text field has focus, the item edits text instead. */
   editAction?: NativeEditAction;
+  /** AppKit flips the checkmark on click, before the model decides. */
+  check?: boolean;
 }
 
 export interface NativeMenu {
@@ -44,7 +46,7 @@ export function buildNativeMenu(model: ApplicationMenuModel, editingText: boolea
     id: string,
     entry: { label: string; enabled: boolean; checked: boolean; execute: Handler },
   ): NativeMenuEntry {
-    commands.set(id, { enabled: entry.enabled, execute: entry.execute });
+    commands.set(id, { enabled: entry.enabled, execute: entry.execute, check: true });
     return {
       kind: "check",
       id,
@@ -63,8 +65,10 @@ export function buildNativeMenu(model: ApplicationMenuModel, editingText: boolea
       kind: "submenu",
       label,
       enabled: group.enabled && group.items.length > 0,
-      items: group.items.map((entry, index) =>
-        item(`${prefix}.${index}`, entry.label, {
+      // Keyed by path, not position: a selection from a menu built before the
+      // list reordered must still open the entry it showed.
+      items: group.items.map((entry) =>
+        item(`${prefix}:${entry.id}`, entry.label, {
           enabled: group.enabled,
           execute: entry.execute,
         }),

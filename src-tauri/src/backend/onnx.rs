@@ -54,9 +54,16 @@ impl From<&str> for SessionProvider {
     }
 }
 
+impl SessionProvider {
+    /// Whether inference runs on CPU now, including after a runtime fallback.
+    pub(super) fn is_cpu(&self) -> bool {
+        self.cpu.load(Ordering::Relaxed)
+    }
+}
+
 impl fmt::Display for SessionProvider {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.cpu.load(Ordering::Relaxed) {
+        if self.is_cpu() {
             formatter.write_str("CPU")
         } else {
             formatter.write_str(&self.initial)

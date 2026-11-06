@@ -683,12 +683,11 @@
 }
 
 /* macOS uses the system menu bar, so no space is reserved for the in-window
-   one, and the system UI fonts: SF for Latin text and PingFang SC for Chinese.
-   The Windows faces above are absent there and fall back to Songti. */
+   one. 宋体 is absent there and falls back to Songti, so its text uses the
+   system UI font (SF, PingFang SC for Chinese); the bundled sans stays. */
 :root[data-platform="macos"],
 [data-platform="macos"] [data-theme="darkest"],
 [data-platform="macos"] :is(.application-menubar, .popup-menu, [data-theme="dark"] .project-home) {
-  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
   --font-song: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
   --application-menubar-height: 0px;

@@ -23,7 +23,7 @@ function createModel(calls, enabled = true) {
       openProject: command("openProject"),
       recentProjects: {
         enabled: true,
-        items: [{ label: "a.lpp", execute: () => calls.push("a") }],
+        items: [{ id: "/projects/a.lpp", label: "a.lpp", execute: () => calls.push("a") }],
       },
       closeFocusedPanel: command("closeFocusedPanel"),
       closeProject: command("closeProject"),
@@ -127,7 +127,7 @@ test("every item id resolves to its command", () => {
   assert.equal(new Set(ids).size, ids.length);
   assert.deepEqual([...commands.keys()].sort(), ids.sort());
   commands.get("file.save").execute();
-  commands.get("file.recentProject.0").execute();
+  commands.get("file.recentProject:/projects/a.lpp").execute();
   commands.get("app.settings.media").execute();
   assert.deepEqual(calls, ["saveProject", "a", "media"]);
 });

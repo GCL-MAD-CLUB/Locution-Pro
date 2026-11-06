@@ -305,7 +305,6 @@ const listeners = new Set<() => void>();
 let snapshot: IncidentSnapshot = { incidents: [] };
 
 function publish(next: IncidentSnapshot) {
- 
   snapshot = next;
   for (const listener of listeners) {
     listener();

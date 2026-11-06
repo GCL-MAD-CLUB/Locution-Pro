@@ -145,13 +145,22 @@ function findFile(directory, name) {
 // macOS bundle reuses a local FFmpeg (LOCUTION_PRO_FFMPEG_DIR or PATH). A
 // Homebrew FFmpeg links Homebrew dylibs and runs only where Homebrew is
 // installed; supply a static build to produce a redistributable app.
+function findOnPath(name) {
+  try {
+    return execFileSync("/usr/bin/which", [name], { encoding: "utf8" }).trim();
+  } catch {
+    // which exits non-zero when the program is not on PATH.
+    return undefined;
+  }
+}
+
 function prepareMacFfmpeg() {
   const triple = process.arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin";
   mkdirSync(outputDir, { recursive: true });
   for (const name of ["ffmpeg", "ffprobe"]) {
     const source = process.env.LOCUTION_PRO_FFMPEG_DIR
       ? join(process.env.LOCUTION_PRO_FFMPEG_DIR, name)
-      : execFileSync("/usr/bin/which", [name], { encoding: "utf8" }).trim();
+      : findOnPath(name);
     if (!source || !existsSync(source)) {
       throw new Error(`${name} was not found; install FFmpeg or set LOCUTION_PRO_FFMPEG_DIR`);
     }

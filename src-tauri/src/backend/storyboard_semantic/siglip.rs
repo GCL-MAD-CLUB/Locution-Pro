@@ -228,7 +228,14 @@ fn model_guard(
 pub(super) fn preferred_batch(remaining: usize, cancel: &AtomicBool) -> AppResult<usize> {
     let mut guard = model_guard(cancel)?;
     let engine = guard.get_or_insert_with(BatchEngine::default);
-    let size = match engine.policy.fixed_gpu_size(engine.cpu) {
+    // A session that fell back to CPU mid-run keeps engine.cpu unset; it
+    // must still get CPU-tuned sizes instead of the fixed GPU shape.
+    let cpu = engine.cpu
+        || engine
+            .sessions
+            .iter()
+            .any(|session| session.runtime.provider().is_cpu());
+    let size = match engine.policy.fixed_gpu_size(cpu) {
         Some(size) => size,
         None => engine
             .policy

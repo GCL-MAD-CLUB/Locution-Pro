@@ -5,10 +5,7 @@
 //! ONNX Runtime's generic provider-options API instead.
 use super::{available_cpu_threads, cpu_thread_budget};
 use ort::session::{builder::GraphOptimizationLevel, Session};
-use std::{
-    hash::{Hash, Hasher},
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 /// Provider configurations in preference order. MLProgram covers the most
 /// operators but plans DINOv3 only with static shapes; callers always fix
@@ -22,17 +19,23 @@ pub(super) fn create_session(path: &Path, dimensions: &[(&str, i64)]) -> ort::Re
         .map(|home| PathBuf::from(home).join("Library/Caches/com.locutionpro.desktop"))
         .unwrap_or_else(std::env::temp_dir)
         .join("coreml");
-    let prepared = prepare_model(path, &cache)?;
+    let entry = CacheEntry::new(path);
+    entry.remove_stale(&cache);
+    let prepared = prepare_model(path, &cache, &entry)?;
     let path = prepared.as_deref().unwrap_or(path);
     let mut errors = Vec::new();
     for (format, static_shapes) in ATTEMPTS {
-        let compiled = cache
-            .join("compiled")
-            .join(format!("{}-{format}", model_cache_key(path, dimensions)));
+        let compiled = cache.join("compiled").join(format!(
+            "{}-{:016x}-{format}",
+            entry.prefix(),
+            stable_hash(&format!("{dimensions:?}"))
+        ));
         // Converter rejections are deterministic for a model and shape, so
         // later launches skip them instead of paying the conversion again.
+        // A failure may also be transient (memory pressure, a full disk), so
+        // the verdict expires; app updates also start over with a new entry.
         let rejected = compiled.join("rejected");
-        if rejected.is_file() {
+        if is_recent(&rejected) {
             errors.push(format!("{format}: rejected by an earlier launch"));
             continue;
         }
@@ -158,13 +161,87 @@ fn status_to_result(status: *mut ort::sys::OrtStatus) -> ort::Result<()> {
     Err(ort::Error::new(message))
 }
 
-/// Identifies a model file and its shape specialization for cache entries.
-fn model_cache_key(path: &Path, dimensions: &[(&str, i64)]) -> String {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    path.hash(&mut hasher);
-    dimensions.hash(&mut hasher);
-    file_identity(path).hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
+/// How long a CoreML rejection is trusted before the conversion is retried.
+const REJECTION_LIFETIME: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 60 * 60);
+
+fn is_recent(marker: &Path) -> bool {
+    std::fs::metadata(marker)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|modified| modified.elapsed().ok())
+        .is_some_and(|age| age < REJECTION_LIFETIME)
+}
+
+/// FNV-1a: cache names must stay stable across Rust releases, which
+/// `DefaultHasher` does not promise.
+fn stable_hash(text: &str) -> u64 {
+    text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+
+/// Names a model's cache entries as `{slot}-{version}-…`: the slot is the
+/// model path, the version covers the model files and the app (and with it the
+/// bundled ONNX Runtime). An update changes the version, so older entries for
+/// the same slot are deleted rather than left behind; prepared copies are
+/// as large as the model.
+struct CacheEntry {
+    slot: u64,
+    version: u64,
+}
+
+impl CacheEntry {
+    fn new(path: &Path) -> Self {
+        let mut sidecar = path.as_os_str().to_owned();
+        sidecar.push("_data");
+        let identity = format!(
+            "{}|{:?}|{:?}",
+            env!("CARGO_PKG_VERSION"),
+            file_identity(path),
+            file_identity(Path::new(&sidecar)),
+        );
+        Self {
+            slot: stable_hash(&path.to_string_lossy()),
+            version: stable_hash(&identity),
+        }
+    }
+
+    fn prefix(&self) -> String {
+        format!("{:016x}-{:016x}", self.slot, self.version)
+    }
+
+    fn remove_stale(&self, cache: &Path) {
+        let slot = format!("{:016x}-", self.slot);
+        let current = self.prefix();
+        for directory in [cache.join("prepared"), cache.join("compiled")] {
+            let Ok(entries) = std::fs::read_dir(&directory) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let stale = name.starts_with(&slot) && !name.starts_with(&current);
+                if stale || is_legacy_entry(&name) {
+                    let path = entry.path();
+                    let removed = if path.is_dir() {
+                        std::fs::remove_dir_all(&path)
+                    } else {
+                        std::fs::remove_file(&path)
+                    };
+                    if let Err(error) = removed {
+                        tracing::warn!(path = %path.display(), %error, "Failed to remove a stale CoreML cache entry");
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Entries named by a single 16-digit key, from builds before [`CacheEntry`];
+/// their model cannot be recovered from the name, so they are all removed.
+fn is_legacy_entry(name: &str) -> bool {
+    let is_key = |part: &str| part.len() == 16 && part.bytes().all(|byte| byte.is_ascii_hexdigit());
+    let mut parts = name.split(['-', '.']);
+    parts.next().is_some_and(is_key) && !parts.next().is_some_and(is_key)
 }
 
 fn file_identity(path: &Path) -> Option<(u64, std::time::SystemTime)> {
@@ -174,15 +251,9 @@ fn file_identity(path: &Path) -> Option<(u64, std::time::SystemTime)> {
 
 /// Rewrites the model once into a form the CoreML converter accepts; see
 /// [`rewrite`]. Returns `None` when the original file needs no changes.
-fn prepare_model(path: &Path, cache: &Path) -> ort::Result<Option<PathBuf>> {
+fn prepare_model(path: &Path, cache: &Path, entry: &CacheEntry) -> ort::Result<Option<PathBuf>> {
     let io = |error: std::io::Error| ort::Error::new(format!("Prepare CoreML model: {error}"));
-    let mut sidecar = path.as_os_str().to_owned();
-    sidecar.push("_data");
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    path.hash(&mut hasher);
-    file_identity(path).hash(&mut hasher);
-    file_identity(Path::new(&sidecar)).hash(&mut hasher);
-    let key = format!("{:016x}", hasher.finish());
+    let key = entry.prefix();
     let directory = cache.join("prepared");
     let target = directory.join(format!("{key}.onnx"));
     let unchanged = directory.join(format!("{key}.unchanged"));
@@ -208,6 +279,60 @@ fn prepare_model(path: &Path, cache: &Path) -> ort::Result<Option<PathBuf>> {
     std::fs::rename(&partial, &target).map_err(io)?;
     tracing::info!(model_path = %path.display(), prepared = %target.display(), elapsed_ms = started.elapsed().as_millis(), "Prepared ONNX model for CoreML");
     Ok(Some(target))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cache_names_use_a_stable_hash() {
+        assert_eq!(stable_hash(""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(stable_hash("a"), 0xaf63_dc4c_8601_ec8c);
+    }
+
+    #[test]
+    fn stale_and_legacy_cache_entries_are_removed() {
+        let cache = std::env::temp_dir().join(format!("coreml-cache-{}", uuid::Uuid::new_v4()));
+        let prepared = cache.join("prepared");
+        let compiled = cache.join("compiled");
+        std::fs::create_dir_all(&prepared).unwrap();
+        std::fs::create_dir_all(&compiled).unwrap();
+        let entry = CacheEntry {
+            slot: 1,
+            version: 2,
+        };
+        let old = CacheEntry {
+            slot: 1,
+            version: 3,
+        };
+        let other = CacheEntry {
+            slot: 4,
+            version: 5,
+        };
+        let keep = [
+            prepared.join(format!("{}.onnx", entry.prefix())),
+            prepared.join(format!("{}.onnx", other.prefix())),
+            compiled.join(format!("{}-{:016x}-MLProgram", entry.prefix(), 6)),
+        ];
+        let remove = [
+            prepared.join(format!("{}.onnx", old.prefix())),
+            prepared.join("0123456789abcdef.onnx"),
+            compiled.join(format!("{}-{:016x}-MLProgram", old.prefix(), 6)),
+            compiled.join("0123456789abcdef-NeuralNetwork"),
+        ];
+        for path in keep.iter().chain(&remove) {
+            if path.starts_with(&compiled) {
+                std::fs::create_dir_all(path).unwrap();
+            } else {
+                std::fs::write(path, b"").unwrap();
+            }
+        }
+        entry.remove_stale(&cache);
+        assert!(keep.iter().all(|path| path.exists()));
+        assert!(remove.iter().all(|path| !path.exists()));
+        std::fs::remove_dir_all(cache).unwrap();
+    }
 }
 
 /// Minimal protobuf rewrite of ModelProto -> GraphProto working around two

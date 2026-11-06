@@ -51,14 +51,17 @@ fn project_path_from_launch_args() -> Option<String> {
     env::args_os()
         .skip(1)
         .map(PathBuf::from)
-        .find(|path| {
-            path.is_file()
-                && path
-                    .extension()
-                    .and_then(|extension| extension.to_str())
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case(PROJECT_FILE_EXTENSION))
-        })
-        .map(|path| path.to_string_lossy().into_owned())
+        .find_map(project_file_path)
+}
+
+/// The path as a launch project, if it names an existing project file.
+pub(crate) fn project_file_path(path: PathBuf) -> Option<String> {
+    let is_project = path.is_file()
+        && path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case(PROJECT_FILE_EXTENSION));
+    is_project.then(|| path.to_string_lossy().into_owned())
 }
 
 #[derive(Clone)]

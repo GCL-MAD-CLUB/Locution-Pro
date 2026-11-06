@@ -156,7 +156,16 @@ pub fn run() {
                 let _ = cancel_all_tasks(state.inner());
             }
         })
-        .run(tauri::generate_context!());
+        .build(tauri::generate_context!())
+        .map(|app| {
+            app.run(|app, event| {
+                #[cfg(target_os = "macos")]
+                if let tauri::RunEvent::Opened { urls } = &event {
+                    receive_opened_files(app, urls);
+                }
+                let _ = (app, event);
+            })
+        });
     if let Err(error) = result {
         app_error(
             ErrorCode::ApplicationRunFailed,

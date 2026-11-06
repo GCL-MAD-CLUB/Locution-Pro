@@ -1,4 +1,5 @@
 import { applyAppearance, defaultThemeColor } from "./runtime/theme";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Loader2 } from "lucide-react";
@@ -131,6 +132,7 @@ const mediaFilters = [
 const subtitleExtensions = new Set(subtitleFilters[0].extensions);
 const recentMediaStorageKey = "locution-pro:recent-media-paths";
 const recentProjectStorageKey = "locution-pro:recent-project-paths";
+const launchProjectEvent = "launch-project-path";
 const recentPathsLimit = 10;
 const warningDisplayDurationMs = 5000;
 const workspaceConfigSaveDelayMs = 120;
@@ -324,6 +326,8 @@ function AppContent() {
   const [pendingDiscardMessage, setPendingDiscardMessage] = useState<string | null>(null);
   const [discardSavePending, setDiscardSavePending] = useState(false);
   const closingWindowRef = useRef(false);
+  const openProjectRef = useRef(openProject);
+  openProjectRef.current = openProject;
   const pendingDiscardResolveRef = useRef<((discard: boolean) => void) | null>(null);
 
   const {
@@ -528,6 +532,37 @@ function AppContent() {
 
     return () => window.clearInterval(timer);
   }, [autoSaveEnabled, autoSaveIntervalMinutes, hasProject, projectId]);
+
+  // macOS reports Finder opens as events, including while the app is running;
+  // the backend stores the path for take_launch_project_path first.
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    let disposed = false;
+    let unlistenLaunchProject: (() => void) | undefined;
+    runBackgroundOperation("project.launchPath", async () => {
+      const unlisten = await listen(launchProjectEvent, () => {
+        void runOperation("project.launchPath", () =>
+          invokeCommand<string | null>("take_launch_project_path"),
+        ).then((outcome) => {
+          if (outcome.status === "success" && outcome.value) {
+            return openProjectRef.current(outcome.value);
+          }
+        });
+      });
+      if (disposed) {
+        unlisten();
+      } else {
+        unlistenLaunchProject = unlisten;
+      }
+    });
+    return () => {
+      disposed = true;
+      unlistenLaunchProject?.();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isTauriRuntime()) {

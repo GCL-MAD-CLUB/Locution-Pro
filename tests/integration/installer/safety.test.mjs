@@ -567,7 +567,8 @@ public class Fixture {
       writeFileSync(mainInput, bundledMain);
       const compiler =
         process.env.NSIS_MAKENSIS ?? join(process.env.LOCALAPPDATA, "tauri/NSIS/makensis.exe");
-      const support = ["debug", "release"]
+      // A stale debug helper must not mask changes in the release toolchain.
+      const support = ["release", "debug"]
         .map((profile) => join(target, profile, "nsis/x64"))
         .find(
           (path) =>

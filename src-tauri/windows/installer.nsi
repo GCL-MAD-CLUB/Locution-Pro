@@ -26,6 +26,7 @@ ManifestDPIAwareness PerMonitorV2
 !include "utils.nsh"
 !include "Win\COM.nsh"
 !include "Win\Propkey.nsh"
+!include "Win\RestartManager.nsh"
 
 {{#if installer_hooks}}
 !include "{{installer_hooks}}"
@@ -284,7 +285,7 @@ Function LocutionProCheckRunningApp
       Abort "仍有 Locution Pro 进程运行，已取消更新。请保存并关闭其他窗口后重试。"
     ${EndIf}
   !else
-  !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
   !endif
 FunctionEnd
 
@@ -1089,7 +1090,7 @@ Section Uninstall
   !endif
 
   ${If} $LocutionProOwnsRegistration == 1
-    !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+    !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
   ${EndIf}
 
   ; Preflight all managed files and locks before deleting the first file. This

@@ -1,3 +1,4 @@
+!include "${__FILEDIR__}\update-result.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 
@@ -13,6 +14,7 @@ Var LocutionProInstallerMutex
   ${OrIf} $1 == 183
     IfSilent +2
       MessageBox MB_ICONEXCLAMATION|MB_OK "另一个 Locution Pro 安装或卸载程序正在运行。请先关闭它，再重试。"
+    !insertmacro LOCUTION_UPDATE_ERROR "Another Locution Pro installer or uninstaller is running."
     SetErrorLevel 2
     Quit
   ${EndIf}
@@ -273,6 +275,7 @@ Function EnsureIndependentInstallLocation
   ${EndIf}
   Pop $4
   ${If} $IndependentInstallLocation != 1
+    !insertmacro LOCUTION_UPDATE_ERROR "Invalid or linked installation directory: $INSTDIR"
     DetailPrint "安装目录无效，请选择本地磁盘上的独立应用目录。"
     IfSilent +2
       MessageBox MB_ICONEXCLAMATION|MB_OK "请选择本地磁盘上的独立应用目录，不能使用磁盘根目录、相对路径、链接目录或 LineCut 目录。"

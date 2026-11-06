@@ -74,6 +74,8 @@ ManifestDPIAwareness PerMonitorV2
 Var PassiveMode
 Var UpdateMode
 Var NoShortcutMode
+Var LocutionProUpdateWorker
+Var LocutionProUpdateHandoff
 Var LocutionProCheckUpdateOnly
 Var PreviousUninstallKey
 Var PreviousProductKey
@@ -253,8 +255,8 @@ FunctionEnd
 
 Function LocutionProCheckRunningApp
   !ifdef LOCUTION_UPDATE_ONLY
-    ; The initiating application exits through the handoff protocol. Never kill
-    ; another instance, which may own a different unsaved workspace.
+    ; The progress controller has stopped the initiating process. Refuse to
+    ; destroy a second instance with an unrelated unsaved workspace.
     !if "${INSTALLMODE}" == "currentUser"
       nsis_tauri_utils::FindProcessCurrentUser "${MAINBINARYNAME}.exe"
     !else
@@ -263,6 +265,7 @@ Function LocutionProCheckRunningApp
     Pop $0
     ${If} $0 != 1
       SetErrorLevel 2
+      !insertmacro LOCUTION_UPDATE_ERROR "仍有 Locution Pro 进程运行，已取消更新。请保存并关闭其他窗口后重试。"
       Abort "仍有 Locution Pro 进程运行，已取消更新。请保存并关闭其他窗口后重试。"
     ${EndIf}
   !else
@@ -277,6 +280,7 @@ Function LocutionProVerifyWebView2
   Pop $1
   ${If} $0 != 0
     SetErrorLevel 2
+    !insertmacro LOCUTION_UPDATE_ERROR "WebView2 安装程序的 Microsoft 数字签名验证失败，请重新下载安装包。"
     Abort "WebView2 安装程序的 Microsoft 数字签名验证失败，请重新下载安装包。"
   ${EndIf}
 FunctionEnd
@@ -390,7 +394,19 @@ FunctionEnd
 {{/each}}
 
 Function .onInit
-  !insertmacro LOCUTION_INSTALLER_MUTEX
+  !ifdef LOCUTION_UPDATE_ONLY
+    ; The outer process only hosts the progress controller; the silent worker
+    ; alone holds the installation mutex.
+    ${If} ${Silent}
+      ${GetOptions} $CMDLINE "/ERRORFILE=" $LocutionProUpdateErrorFile
+      ${GetOptions} $CMDLINE "/CANCELFILE=" $LocutionProUpdateCancelFile
+      ClearErrors
+      StrCpy $LocutionProUpdateWorker 1
+      !insertmacro LOCUTION_INSTALLER_MUTEX
+    ${EndIf}
+  !else
+    !insertmacro LOCUTION_INSTALLER_MUTEX
+  !endif
   !ifdef LOCUTION_UPDATE_ONLY
     ; This package has one operation. No repair, relocation or component wizard.
     SetSilent silent
@@ -486,20 +502,39 @@ Function .onInit
   ${EndIf}
   StrCpy $LocutionProPreviousFfmpegChoice $LocutionProBundleFfmpeg
   !ifdef LOCUTION_UPDATE_ONLY
+    ${If} $LocutionProUpdateWorker != 1
+      InitPluginsDir
+      File "/oname=$PLUGINSDIR\apply-update.ps1" "${LOCUTION_INSTALLER_SOURCE_DIR}\apply-update.ps1"
+      ${GetOptions} $CMDLINE "/HANDOFF=" $LocutionProUpdateHandoff
+      ; The NSIS host is x86. Its redirected PowerShell cannot inspect a
+      ; 64-bit application's executable path; use the native system host.
+      StrCpy $0 "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe"
+      ${If} ${RunningX64}
+        StrCpy $0 "$WINDIR\Sysnative\WindowsPowerShell\v1.0\powershell.exe"
+      ${EndIf}
+      nsExec::ExecToStack '"$0" -NoLogo -NoProfile -STA -ExecutionPolicy Bypass -File "$PLUGINSDIR\apply-update.ps1" -Installer "$EXEPATH" -Executable "$INSTDIR\${MAINBINARYNAME}.exe" -Version "${VERSION}" -Data "$LocutionProUpdateHandoff"'
+      Pop $0
+      Pop $1
+      SetErrorLevel $0
+      Quit
+    ${EndIf}
     StrCpy $UpdateMode 1
     ${If} $PreviousInstallDir == ""
     ${OrIf} $INSTDIR != $PreviousInstallDir
+      !insertmacro LOCUTION_UPDATE_ERROR "Update requires the registered installation directory."
       SetErrorLevel 2
       Quit
     ${EndIf}
     ReadRegStr $0 SHCTX "$PreviousUninstallKey" "DisplayVersion"
     ${If} $0 == ""
+      !insertmacro LOCUTION_UPDATE_ERROR "The installed version is missing from the registry."
       SetErrorLevel 2
       Quit
     ${EndIf}
     nsis_tauri_utils::SemverCompare "${VERSION}" $0
     Pop $0
     ${If} $0 != 1
+      !insertmacro LOCUTION_UPDATE_ERROR "The update version must be newer than the installed version."
       SetErrorLevel 2
       Quit
     ${EndIf}
@@ -551,6 +586,7 @@ Section EarlyChecks
         FileWrite $0 "$(silentDowngrades)"
       ${EndIf}
       SetErrorLevel 2
+      !insertmacro LOCUTION_UPDATE_ERROR "$(silentDowngrades)"
       Abort "$(silentDowngrades)"
     ${EndIf}
   !endif
@@ -569,6 +605,7 @@ Section WebView2
   ${If} $4 == ""
     !ifdef LOCUTION_UPDATE_ONLY
       SetErrorLevel 2
+      !insertmacro LOCUTION_UPDATE_ERROR "更新需要已安装的 WebView2 Runtime。请使用完整安装包修复。"
       Abort "更新需要已安装的 WebView2 Runtime。请使用完整安装包修复。"
     !else
     ReadRegStr $4 HKCU "SOFTWARE\Microsoft\EdgeUpdate\Clients\${WEBVIEW2APPGUID}" "pv"
@@ -587,6 +624,7 @@ Section WebView2
           DetailPrint "$(webview2DownloadSuccess)"
         ${Else}
           DetailPrint "$(webview2DownloadError)"
+          !insertmacro LOCUTION_UPDATE_ERROR "$(webview2AbortError)"
           Abort "$(webview2AbortError)"
         ${EndIf}
         StrCpy $6 "$PLUGINSDIR\MicrosoftEdgeWebview2Setup.exe"
@@ -620,12 +658,14 @@ Section WebView2
         ExecWait '$\"$6$\" ${WEBVIEW2INSTALLERARGS} /install' $1
         ${If} ${Errors}
           SetErrorLevel 2
+          !insertmacro LOCUTION_UPDATE_ERROR "$(webview2AbortError)"
           Abort "$(webview2AbortError)"
         ${EndIf}
         ${If} $1 = 0
           DetailPrint "$(webview2InstallSuccess)"
         ${Else}
           DetailPrint "$(webview2InstallError)"
+          !insertmacro LOCUTION_UPDATE_ERROR "$(webview2AbortError)"
           Abort "$(webview2AbortError)"
         ${EndIf}
       webview2_done:
@@ -636,6 +676,7 @@ Section WebView2
       ${If} $R0 = 1
         !ifdef LOCUTION_UPDATE_ONLY
           SetErrorLevel 2
+          !insertmacro LOCUTION_UPDATE_ERROR "WebView2 Runtime 版本不满足要求。请使用完整安装包修复。"
           Abort "WebView2 Runtime 版本不满足要求。请使用完整安装包修复。"
         !else
         update_webview:
@@ -654,6 +695,7 @@ Section WebView2
             ${GetFileName} "$R1" $0
             ${If} $0 != "MicrosoftEdgeUpdate.exe"
               SetErrorLevel 2
+              !insertmacro LOCUTION_UPDATE_ERROR "WebView2 更新程序路径无效，请先修复 WebView2 Runtime 后重试。"
               Abort "WebView2 更新程序路径无效，请先修复 WebView2 Runtime 后重试。"
             ${EndIf}
             StrCpy $6 $R1
@@ -670,6 +712,7 @@ Section WebView2
             ${EndIf}
           ${Else}
             SetErrorLevel 2
+            !insertmacro LOCUTION_UPDATE_ERROR "找不到 WebView2 更新程序，请先安装或修复 WebView2 Runtime 后重试。"
             Abort "找不到 WebView2 更新程序，请先安装或修复 WebView2 Runtime 后重试。"
           ${EndIf}
         !endif
@@ -746,6 +789,7 @@ Section Install
   ${If} ${Errors}
     Delete "$INSTDIR\${MAINBINARYNAME}.exe"
     SetErrorLevel 2
+    !insertmacro LOCUTION_UPDATE_ERROR "无法安装主程序。"
     Abort "无法安装主程序。"
   ${EndIf}
 
@@ -754,6 +798,7 @@ Section Install
   WriteUninstaller "$INSTDIR\uninstall.exe"
   ${If} ${Errors}
     SetErrorLevel 2
+    !insertmacro LOCUTION_UPDATE_ERROR "无法写入卸载程序，请检查目录权限后重试。"
     Abort "无法写入卸载程序，请检查目录权限后重试。"
   ${EndIf}
 
@@ -829,6 +874,7 @@ Section Install
   ${If} $0 != $INSTDIR
   ${OrIf} $1 != '$\"$INSTDIR\uninstall.exe$\"'
     SetErrorLevel 2
+    !insertmacro LOCUTION_UPDATE_ERROR "无法登记安装或卸载信息，正在恢复旧文件。请检查权限后重试。"
     Abort "无法登记安装或卸载信息，正在恢复旧文件。请检查权限后重试。"
   ${EndIf}
 

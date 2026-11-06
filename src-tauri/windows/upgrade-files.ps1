@@ -9,12 +9,18 @@ param(
     [int]$Semantic = 1,
     [int]$Transactional = 0,
     [ValidateSet(0, 1)][int]$UpdateOnly = 0,
+    [string]$CancelFile = '',
     [string]$BackupDirectory = ''
 )
 
 # Runs hidden under the installer. Never reads or deletes application data.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3
+
+function Assert-UpdateNotCancelled {
+    if ($UpdateOnly -and $Mode -in @('Scan', 'Prepare', 'Verify', 'Commit') -and
+        $CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Update cancelled.' }
+}
 
 function Assert-PlainPath([string]$Path) {
     $cursor = [IO.Path]::GetFullPath($Path)
@@ -229,6 +235,7 @@ function Test-CommittedBackup([string]$Path, [string]$Base) {
 }
 
 try {
+    Assert-UpdateNotCancelled
     if ($Mode -eq 'CheckBackup') {
         $Root = Resolve-InstallRoot $Root
         $backup = [IO.Path]::GetFullPath($BackupDirectory)
@@ -290,6 +297,7 @@ try {
     $entries = @{}
     $reuse = @{}
     foreach ($entry in $payload.files) {
+        Assert-UpdateNotCancelled
         Publish-Progress 'hashing' $entry.path
         $parts = $entry.path.Split('\')
         if ($entry.path -match '[\x00-\x1f<>:"|?*\[\]=/]' -or
@@ -329,6 +337,7 @@ try {
     if ($UpdateOnly -and $Mode -in @('Scan', 'Prepare')) {
         if (!$entries.ContainsKey($MainBinary)) { throw 'The update manifest is missing the target executable hash.' }
         foreach ($entry in $payload.files) {
+            Assert-UpdateNotCancelled
             $required = $entry.path -notin @($MainBinary, 'uninstall.exe') -and
                 !(($entry.group -eq 'ffmpeg' -and !$Ffmpeg) -or
                 ($entry.group -in @('semantic-search', 'storyboard-semantic') -and !$Semantic))
@@ -365,6 +374,7 @@ try {
         }
         $selected = @{}
         foreach ($entry in $payload.files) {
+            Assert-UpdateNotCancelled
             $selected[$entry.path] = !(($entry.group -eq 'ffmpeg' -and !$Ffmpeg) -or
                 ($entry.group -in @('semantic-search', 'storyboard-semantic') -and !$Semantic))
             if (!$selected[$entry.path]) { $reuse.Remove($entry.path) }
@@ -390,6 +400,7 @@ try {
             $main = Join-Path $base $MainBinary
             if (Test-Path -LiteralPath $main -PathType Leaf) { $owned += $main }
             foreach ($entry in $payload.files) {
+                Assert-UpdateNotCancelled
                 $path = Join-Path $base $entry.path
                 if (Test-Path -LiteralPath $path -PathType Leaf) { $owned += $path }
             }
@@ -504,7 +515,10 @@ try {
     $lines.Add('[Reuse]')
     foreach ($relative in @($reuse.Keys | Sort-Object)) { $lines.Add("$relative=1") }
     $lines.Add('[Payload]')
-    foreach ($entry in $payload.files) { $lines.Add("$($entry.path)=$($entry.sha256)") }
+    foreach ($entry in $payload.files) {
+        Assert-UpdateNotCancelled
+        $lines.Add("$($entry.path)=$($entry.sha256)")
+    }
     # NSIS ReadINIStr uses the Windows profile API, which supports UTF-16LE INIs.
     [IO.File]::WriteAllLines($Result, $lines, [Text.Encoding]::Unicode)
     exit 0

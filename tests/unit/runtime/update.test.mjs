@@ -87,6 +87,57 @@ test("update availability waits for the download and propagates its failure", as
   assert.equal(available, false);
 });
 
+test("startup prioritizes failure details, then release notes and a verified pending update", () => {
+  const { update } = loadUpdate();
+  const release = { version: "0.5.0", title: "Release", body: "Notes", url: "https://github.com" };
+  const failure = { version: "0.5.0", error: "Dependency hash mismatch: runtime.dll", exitCode: 2 };
+  const state = { failure, notes: release, pending: release, ignored: false, ignoredVersions: [] };
+  const notifications = update.startupUpdateNotifications(state);
+  assert.deepEqual(
+    Array.from(notifications, (item) => item.status),
+    ["installFailed", "installed", "available"],
+  );
+  assert.equal(notifications[0].failure.error, failure.error);
+  state.ignored = true;
+  assert.deepEqual(
+    Array.from(update.startupUpdateNotifications(state), (item) => item.status),
+    ["installFailed", "installed"],
+  );
+  state.pending = null;
+  state.notes = null;
+  state.failure = null;
+  assert.equal(update.startupUpdateNotifications(state).length, 0);
+});
+
+test("startup is read once per session and suppression is persisted for the selected version", async () => {
+  const calls = [];
+  const state = {
+    failure: null,
+    notes: null,
+    pending: null,
+    ignored: false,
+    ignoredVersions: ["0.5.0"],
+  };
+  const update = loadModule("../../../src/application/update.ts", {
+    "../../package.json": { version: "0.4.0" },
+    "../errors": {
+      invokeCommand: async (command, args) => {
+        calls.push([command, args]);
+        return command === "update_startup" ? state : undefined;
+      },
+    },
+  });
+  assert.equal(update.loadUpdateStartup(), update.loadUpdateStartup());
+  await update.loadUpdateStartup();
+  await update.setUpdateIgnored("0.6.0", true);
+  assert.deepEqual(state.ignoredVersions, ["0.5.0", "0.6.0"]);
+  await update.setUpdateIgnored("0.5.0", false);
+  assert.deepEqual(state.ignoredVersions, ["0.6.0"]);
+  await update.acknowledgeUpdateNotes();
+  assert.equal(calls.filter(([command]) => command === "update_startup").length, 1);
+  assert.equal(calls.at(-1)[0], "acknowledge_update_notes");
+});
+
 test("update never launches after a cancelled save or a changed workspace", async () => {
   const { update } = loadUpdate();
   let workspace = "original";

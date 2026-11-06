@@ -17,6 +17,8 @@ Var LocutionProProgressFileLabel
 Var LocutionProPreparedInstallDir
 Var LocutionProTransactionActive
 
+!include "${__FILEDIR__}\update-result.nsh"
+
 !ifndef LOCUTION_PAYLOAD_MANIFEST
   !define LOCUTION_PAYLOAD_MANIFEST "${LOCUTION_INSTALLER_SOURCE_DIR}\..\target\installer\payload-manifest.json"
 !endif
@@ -40,7 +42,7 @@ Function LocutionProExtractUpgradeTools
 FunctionEnd
 
 !macro LOCUTION_UPGRADE_COMMAND OUTPUT
-  StrCpy ${OUTPUT} '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\upgrade-files.ps1" -Mode "$LocutionProUpgradeMode" -Root "$LocutionProWorkerRoot" -PreviousRoot "$LocutionProWorkerPreviousRoot" -Manifest "$PLUGINSDIR\payload-manifest.json" -Result "$LocutionProReusePlan" -MainBinary "${MAINBINARYNAME}.exe" -Ffmpeg $LocutionProBundleFfmpeg -Semantic $LocutionProBundleSemantic -Transactional 1 -UpdateOnly ${LOCUTION_UPDATE_ONLY_VALUE}'
+  StrCpy ${OUTPUT} '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\upgrade-files.ps1" -Mode "$LocutionProUpgradeMode" -Root "$LocutionProWorkerRoot" -PreviousRoot "$LocutionProWorkerPreviousRoot" -Manifest "$PLUGINSDIR\payload-manifest.json" -Result "$LocutionProReusePlan" -MainBinary "${MAINBINARYNAME}.exe" -Ffmpeg $LocutionProBundleFfmpeg -Semantic $LocutionProBundleSemantic -Transactional 1 -UpdateOnly ${LOCUTION_UPDATE_ONLY_VALUE} -CancelFile "$LocutionProUpdateCancelFile"'
 !macroend
 
 Function LocutionProReadUpgradePlan
@@ -49,6 +51,7 @@ Function LocutionProReadUpgradePlan
 FunctionEnd
 
 Function LocutionProUpgradeFailed
+  !insertmacro LOCUTION_UPDATE_ERROR "$1"
   DetailPrint "$1"
   IfSilent +2
     MessageBox MB_ICONSTOP|MB_OK "无法安全更新应用文件。请关闭 Locution Pro 及占用其组件的程序，检查目录权限后重试。$\r$\n$1"
@@ -105,6 +108,7 @@ Function LocutionProCommitInstall
   ${If} $0 != 0
     Pop $LocutionProUpgradeMode
     SetErrorLevel 2
+    !insertmacro LOCUTION_UPDATE_ERROR "安装后的文件校验失败，正在恢复旧版本：$1"
     Abort "安装后的文件校验失败，正在恢复旧版本：$1"
   ${EndIf}
   StrCpy $LocutionProUpgradeMode "Commit"
@@ -116,7 +120,8 @@ Function LocutionProCommitInstall
   ${AndIf} $0 != 10
     Pop $LocutionProUpgradeMode
     SetErrorLevel 2
-    Abort "无法提交应用文件变更，正在恢复旧文件。"
+    !insertmacro LOCUTION_UPDATE_ERROR "无法提交应用文件变更，正在恢复旧文件：$1"
+    Abort "无法提交应用文件变更，正在恢复旧文件：$1"
   ${EndIf}
   ; Only cleanup failures after the durable commit boundary are non-fatal.
   StrCpy $LocutionProTransactionActive 0
@@ -283,6 +288,7 @@ FunctionEnd
   ReadINIStr $0 "$LocutionProReusePlan" "Payload" "${DESTINATION}"
   ${If} $0 == ""
     SetErrorLevel 2
+    !insertmacro LOCUTION_UPDATE_ERROR "安装包资源清单不完整：${DESTINATION}"
     Abort "安装包资源清单不完整：${DESTINATION}"
   ${EndIf}
   ReadINIStr $0 "$LocutionProReusePlan" "Reuse" "${DESTINATION}"
@@ -290,12 +296,14 @@ FunctionEnd
     ClearErrors
     !ifdef LOCUTION_UPDATE_ONLY
       SetErrorLevel 2
+      !insertmacro LOCUTION_UPDATE_ERROR "更新包无法修复依赖：${DESTINATION}。请使用完整安装包。"
       Abort "更新包无法修复依赖：${DESTINATION}。请使用完整安装包。"
     !else
       File /a "/oname=${DESTINATION}" "${SOURCE}"
     !endif
     ${If} ${Errors}
       SetErrorLevel 2
+      !insertmacro LOCUTION_UPDATE_ERROR "无法安装组件：${DESTINATION}"
       Abort "无法安装组件：${DESTINATION}"
     ${EndIf}
   ${Else}

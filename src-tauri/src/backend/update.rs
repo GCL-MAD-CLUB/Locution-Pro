@@ -7,7 +7,7 @@ const CDN: &str = "https://openlist.frameneo.com/sd/YRrdPxj2";
 const MAX_MANIFEST: usize = 64 * 1024;
 const MAX_INSTALLER: u64 = 256 * 1024 * 1024;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct LatestRelease {
     version: String,
@@ -16,7 +16,7 @@ pub(crate) struct LatestRelease {
     url: String,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Installer {
     signature: String,
     url: String,
@@ -42,8 +42,234 @@ struct Manifest {
 
 #[derive(Clone)]
 struct PreparedUpdate {
+    release: LatestRelease,
     installer: Installer,
     path: Option<PathBuf>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct CachedUpdate {
+    release: LatestRelease,
+    installer: Installer,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
+struct UpdatePreferences {
+    pending: Option<CachedUpdate>,
+    ignored_versions: Vec<String>,
+    seen_versions: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct UpdateFailure {
+    version: String,
+    error: String,
+    exit_code: i32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct UpdateStartup {
+    pending: Option<LatestRelease>,
+    ignored: bool,
+    notes: Option<LatestRelease>,
+    failure: Option<UpdateFailure>,
+    ignored_versions: Vec<String>,
+}
+
+fn update_preferences<T>(
+    app: &tauri::AppHandle,
+    action: impl FnOnce(&mut UpdatePreferences) -> AppResult<T>,
+) -> AppResult<T> {
+    let path = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| update_error(error.to_string()))?
+        .join("update-state.json");
+    update_preferences_at(&path, action)
+}
+
+fn update_preferences_at<T>(
+    path: &Path,
+    action: impl FnOnce(&mut UpdatePreferences) -> AppResult<T>,
+) -> AppResult<T> {
+    static LOCK: Mutex<()> = Mutex::new(());
+    let _guard = LOCK
+        .lock()
+        .map_err(|_| update_error("Update preferences are locked"))?;
+    let mut state = match fs::read(path) {
+        Ok(bytes) => serde_json::from_slice::<UpdatePreferences>(&bytes)
+            .map_err(|error| invalid_update(format!("Read update preferences: {error}")))?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => UpdatePreferences::default(),
+        Err(error) => return Err(update_error(error.to_string())),
+    };
+    let result = action(&mut state)?;
+    let bytes = serde_json::to_vec(&state).map_err(|error| update_error(error.to_string()))?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| update_error("Missing update preferences directory"))?;
+    fs::create_dir_all(parent).map_err(|error| update_error(error.to_string()))?;
+    let temporary = parent.join(format!("update-state-{}.tmp", Uuid::new_v4()));
+    let saved = (|| -> std::io::Result<()> {
+        let mut file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        drop(file);
+        // rename replaces the previous file atomically, including on Windows.
+        // Never remove the old state before the replacement is ready.
+        fs::rename(&temporary, path)
+    })();
+    if let Err(error) = saved {
+        let _ = fs::remove_file(&temporary);
+        return Err(update_error(format!("Persist update preferences: {error}")));
+    }
+    Ok(result)
+}
+
+fn remember_version(versions: &mut Vec<String>, version: String) {
+    if !versions.contains(&version) {
+        versions.push(version);
+    }
+}
+
+fn stable_version(value: &str) -> AppResult<semver::Version> {
+    let version =
+        semver::Version::parse(value).map_err(|error| invalid_update(error.to_string()))?;
+    if !version.pre.is_empty() || !version.build.is_empty() {
+        return Err(invalid_update("Expected a stable update version"));
+    }
+    Ok(version)
+}
+
+fn cached_installer_path(
+    app: &tauri::AppHandle,
+    version: &str,
+    installer: &Installer,
+) -> AppResult<PathBuf> {
+    stable_version(version)?;
+    validate_installer(installer, version, "update")?;
+    Ok(app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| update_error(error.to_string()))?
+        .join("updates")
+        .join(format!(
+            "{version}-{}",
+            installer.signature.to_ascii_lowercase()
+        ))
+        .join("update.exe"))
+}
+
+fn launch_failure(arguments: impl IntoIterator<Item = String>) -> Option<UpdateFailure> {
+    let encoded = arguments
+        .into_iter()
+        .find_map(|argument| argument.strip_prefix("--update-error=").map(str::to_owned))?;
+    if encoded.len() > 24576 || encoded.len() % 2 != 0 || !encoded.is_ascii() {
+        return None;
+    }
+    let bytes = (0..encoded.len())
+        .step_by(2)
+        .map(|index| u8::from_str_radix(&encoded[index..index + 2], 16))
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    let failure: UpdateFailure = serde_json::from_slice(&bytes).ok()?;
+    stable_version(&failure.version).ok()?;
+    (!failure.error.trim().is_empty()).then_some(failure)
+}
+
+#[tauri::command]
+pub(crate) async fn update_startup(app: tauri::AppHandle) -> CommandResult<UpdateStartup> {
+    let failure = launch_failure(env::args());
+    let (cached, ignored, seen) = update_preferences(&app, |state| {
+        Ok((
+            state.pending.clone(),
+            state.ignored_versions.clone(),
+            state.seen_versions.clone(),
+        ))
+    })
+    .unwrap_or_else(|error| {
+        tracing::warn!(error = error.detail(), "Read startup update preferences");
+        (None, Vec::new(), Vec::new())
+    });
+    let current = env!("CARGO_PKG_VERSION");
+    let mut pending = None;
+    let mut notes = None;
+    if let Some(cached) = cached.filter(|cached| {
+        stable_version(&cached.release.version).is_ok()
+            && validate_installer(&cached.installer, &cached.release.version, "update").is_ok()
+    }) {
+        if stable_version(&cached.release.version)? > stable_version(current)? {
+            let path = cached_installer_path(&app, &cached.release.version, &cached.installer)?;
+            if verify_download(&path, &cached.installer.signature).is_ok() {
+                updates()
+                    .lock()
+                    .map_err(|_| update_error("Update state is unavailable"))?
+                    .insert(
+                        cached.release.version.clone(),
+                        PreparedUpdate {
+                            release: cached.release.clone(),
+                            installer: cached.installer,
+                            path: Some(path),
+                        },
+                    );
+                pending = Some(cached.release);
+            }
+        } else if cached.release.version == current {
+            notes = Some(cached.release);
+        }
+    }
+    if seen.iter().any(|version| version == current) {
+        notes = None;
+    } else {
+        let mut release = notes.unwrap_or_else(|| LatestRelease {
+            version: current.into(),
+            title: format!("Locution Pro {current}"),
+            body: String::new(),
+            url: format!("https://github.com/{REPOSITORY}/releases/tag/v{current}"),
+        });
+        if let Ok(client) = release_client(Duration::from_secs(4)) {
+            fill_release_notes(&client, &mut release).await;
+        }
+        notes = Some(release);
+    }
+    Ok(UpdateStartup {
+        ignored: pending
+            .as_ref()
+            .is_some_and(|release| ignored.contains(&release.version)),
+        pending,
+        notes,
+        failure,
+        ignored_versions: ignored,
+    })
+}
+
+#[tauri::command]
+pub(crate) fn set_update_ignored(
+    app: tauri::AppHandle,
+    version: String,
+    ignored: bool,
+) -> CommandResult<()> {
+    stable_version(&version)?;
+    update_preferences(&app, |state| {
+        state.ignored_versions.retain(|entry| entry != &version);
+        if ignored {
+            remember_version(&mut state.ignored_versions, version);
+        }
+        Ok(())
+    })
+}
+
+#[tauri::command]
+pub(crate) fn acknowledge_update_notes(app: tauri::AppHandle) -> CommandResult<()> {
+    update_preferences(&app, |state| {
+        remember_version(&mut state.seen_versions, env!("CARGO_PKG_VERSION").into());
+        Ok(())
+    })
 }
 
 fn updates() -> &'static Mutex<HashMap<String, PreparedUpdate>> {
@@ -212,6 +438,7 @@ pub(crate) async fn fetch_latest_release() -> CommandResult<LatestRelease> {
                         failures.push("Release has no update-only installer".into());
                         continue;
                     };
+                    fill_release_notes(&client, &mut release).await;
                     {
                         let mut state = updates()
                             .lock()
@@ -224,12 +451,12 @@ pub(crate) async fn fetch_latest_release() -> CommandResult<LatestRelease> {
                         state.insert(
                             release.version.clone(),
                             PreparedUpdate {
+                                release: release.clone(),
                                 installer,
                                 path: previous,
                             },
                         );
                     }
-                    fill_release_notes(&client, &mut release).await;
                 }
                 return Ok(release);
             }
@@ -352,20 +579,14 @@ pub(crate) async fn download_update(app: tauri::AppHandle, version: String) -> C
         .as_ref()
         .is_some_and(|path| verify_download(path, &prepared.installer.signature).is_ok())
     {
+        persist_download(&app, &prepared)?;
         return Ok(());
     }
-    let directory = app
-        .path()
-        .app_cache_dir()
-        .map_err(|error| update_error(error.to_string()))?
-        .join("updates")
-        .join(format!(
-            "{}-{}",
-            version,
-            prepared.installer.signature.to_ascii_lowercase()
-        ));
-    fs::create_dir_all(&directory).map_err(|error| update_error(error.to_string()))?;
-    let path = directory.join("update.exe");
+    let path = cached_installer_path(&app, &version, &prepared.installer)?;
+    let directory = path
+        .parent()
+        .ok_or_else(|| update_error("Missing update cache directory"))?;
+    fs::create_dir_all(directory).map_err(|error| update_error(error.to_string()))?;
     if path.is_file() && verify_download(&path, &prepared.installer.signature).is_ok() {
         updates()
             .lock()
@@ -373,6 +594,7 @@ pub(crate) async fn download_update(app: tauri::AppHandle, version: String) -> C
             .get_mut(&version)
             .ok_or_else(|| update_error("Update metadata changed"))?
             .path = Some(path);
+        persist_download(&app, &prepared)?;
         return Ok(());
     }
     let partial = directory.join(format!("{}.part", Uuid::new_v4()));
@@ -392,22 +614,39 @@ pub(crate) async fn download_update(app: tauri::AppHandle, version: String) -> C
         return Err(invalid_update("Release metadata changed while downloading"));
     }
     current.path = Some(path);
+    drop(state);
+    persist_download(&app, &prepared)?;
     Ok(())
+}
+
+fn persist_download(app: &tauri::AppHandle, prepared: &PreparedUpdate) -> AppResult<()> {
+    update_preferences(app, |state| {
+        if state.pending.as_ref().is_some_and(|cached| {
+            matches!((stable_version(&cached.release.version), stable_version(&prepared.release.version)),
+                (Ok(cached), Ok(incoming)) if cached > incoming)
+        }) {
+            return Ok(());
+        }
+        state.pending = Some(CachedUpdate {
+            release: prepared.release.clone(),
+            installer: prepared.installer.clone(),
+        });
+        Ok(())
+    })
 }
 
 #[tauri::command]
 pub(crate) async fn install_update(
-    app: tauri::AppHandle,
     version: String,
     project_path: Option<String>,
-) -> CommandResult<Option<i32>> {
+) -> CommandResult<()> {
     let prepared = prepared_update(&version)?;
     let installer = prepared
         .path
         .ok_or_else(|| update_error("The update has not finished downloading"))?;
     #[cfg(not(windows))]
     {
-        let _ = (app, installer, project_path);
+        let _ = (installer, project_path);
         Err(update_error(
             "Windows updates are unavailable on this platform",
         ))
@@ -415,95 +654,129 @@ pub(crate) async fn install_update(
     #[cfg(windows)]
     {
         let signature = prepared.installer.signature;
-        let worker = tauri::async_runtime::spawn_blocking(move || -> AppResult<_> {
+        let (mut child, ready) = tauri::async_runtime::spawn_blocking(move || -> AppResult<_> {
             verify_download(&installer, &signature)?;
             let executable = env::current_exe().map_err(|error| update_error(error.to_string()))?;
             let root = executable
                 .parent()
                 .ok_or_else(|| update_error("Missing installation directory"))?;
-            let status = StdCommand::new(&installer)
-                .args(["/S", "/UPDATE", "/CHECKUPDATE"])
-                .raw_arg(format!("/D={}", root.display()))
-                .creation_flags(CREATE_NO_WINDOW)
-                .status()
-                .map_err(|error| update_error(error.to_string()))?;
-            if !status.success() {
-                return Ok(Err(status.code().unwrap_or(2)));
-            }
             let directory = installer
                 .parent()
                 .ok_or_else(|| update_error("Missing update directory"))?
                 .join(format!("handoff-{}", Uuid::new_v4()));
             fs::create_dir(&directory).map_err(|error| update_error(error.to_string()))?;
-            let script = directory.join("apply-update.ps1");
             let data = directory.join("handoff.json");
-            fs::write(
-                &script,
-                concat!("\u{feff}", include_str!("../../windows/apply-update.ps1")),
-            )
-            .map_err(|error| update_error(error.to_string()))?;
-            fs::write(
-                &data,
-                serde_json::to_vec(&serde_json::json!({
-                    "parent": std::process::id(), "executable": executable, "installer": installer,
-                    "signature": signature, "project": project_path,
-                }))
-                .map_err(|error| update_error(error.to_string()))?,
-            )
-            .map_err(|error| update_error(error.to_string()))?;
-            let powershell = PathBuf::from(
-                env::var_os("WINDIR").ok_or_else(|| update_error("Missing Windows directory"))?,
-            )
-            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
-            let child = StdCommand::new(powershell)
-                .args([
-                    "-NoLogo",
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                ])
-                .arg(script)
-                .arg("-Data")
-                .arg(&data)
-                .creation_flags(CREATE_NO_WINDOW)
+            let handoff = serde_json::json!({
+                "parent": std::process::id(), "executable": executable, "installer": installer,
+                "signature": signature, "project": project_path, "version": version,
+                    "requireAcceptance": true,
+            });
+            let bytes =
+                serde_json::to_vec(&handoff).map_err(|error| update_error(error.to_string()))?;
+            fs::write(&data, bytes).map_err(|error| update_error(error.to_string()))?;
+            // The updater owns shutdown. Keep the application alive until it has
+            // verified the handoff and can display its progress window.
+            let child = StdCommand::new(&installer)
+                .arg("/UPDATE")
+                // NSIS parses /KEY="value", not a quoted whole option.
+                .raw_arg(format!("/HANDOFF=\"{}\"", data.display()))
+                .raw_arg(format!("/D={}", root.display()))
                 .spawn()
                 .map_err(|error| update_error(error.to_string()))?;
-            Ok(Ok((child, directory.join("ready"))))
+            Ok((child, directory.join("ready")))
         })
         .await
         .map_err(|error| update_error(error.to_string()))??;
-        let (mut child, ready) = match worker {
-            Ok(worker) => worker,
-            Err(code) => return Ok(Some(code)),
-        };
-        for _ in 0..100 {
+        for _ in 0..600 {
+            if ready.is_file() {
+                let accepted = ready.with_file_name("accepted");
+                fs::write(accepted, b"accepted")
+                    .map_err(|error| update_error(error.to_string()))?;
+                return Ok(());
+            }
             if child
                 .try_wait()
                 .map_err(|error| update_error(error.to_string()))?
                 .is_some()
             {
                 return Err(update_error(
-                    "The update helper failed to start; the application remains open",
+                    "The updater closed before accepting the handoff",
                 ));
-            }
-            if ready.is_file() {
-                app.exit(0);
-                return Ok(None);
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        let _ = child.kill();
-        Err(update_error(
-            "The update helper timed out; the application remains open",
-        ))
+        // Revoke the handoff before restoring editing. A delayed controller
+        // cannot kill this process without the explicit acceptance above.
+        let _ = fs::write(ready.with_file_name("cancel-start"), b"cancel");
+        Err(update_error("The updater has not acknowledged startup"))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preferences_survive_relaunch_without_resetting_ignored_or_seen_versions() {
+        let directory = env::temp_dir().join(format!("locution-update-{}", Uuid::new_v4()));
+        let path = directory.join("update-state.json");
+        let (release, installer) =
+            decode_manifest(&serde_json::to_vec(&manifest()).unwrap()).unwrap();
+        update_preferences_at(&path, |state| {
+            state.pending = Some(CachedUpdate {
+                release,
+                installer: installer.unwrap(),
+            });
+            remember_version(&mut state.ignored_versions, "1.2.3".into());
+            remember_version(&mut state.seen_versions, "0.4.1".into());
+            Ok(())
+        })
+        .unwrap();
+        update_preferences_at(&path, |state| {
+            assert_eq!(state.pending.as_ref().unwrap().release.version, "1.2.3");
+            assert_eq!(state.ignored_versions, ["1.2.3"]);
+            assert_eq!(state.seen_versions, ["0.4.1"]);
+            remember_version(&mut state.seen_versions, "0.4.1".into());
+            remember_version(&mut state.seen_versions, "1.2.3".into());
+            state.ignored_versions.clear();
+            Ok(())
+        })
+        .unwrap();
+        let before = fs::read(&path).unwrap();
+        assert!(update_preferences_at(&path, |state| {
+            state.pending = None;
+            Err::<(), _>(update_error("Simulated preference failure"))
+        })
+        .is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        let state: UpdatePreferences = serde_json::from_slice(&before).unwrap();
+        assert_eq!(state.seen_versions, ["0.4.1", "1.2.3"]);
+        assert!(state.ignored_versions.is_empty());
+        fs::remove_file(path).unwrap();
+        fs::remove_dir(directory).unwrap();
+    }
+
+    #[test]
+    fn failure_arguments_round_trip_unicode_and_reject_invalid_or_oversized_payloads() {
+        let payload = serde_json::json!({"version": "1.2.3", "exitCode": 2, "error": "Hash mismatch: D:\\应用\\runtime.dll\nRollback completed."});
+        let encoded = serde_json::to_vec(&payload)
+            .unwrap()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        let failure =
+            launch_failure(["app.exe".into(), format!("--update-error={encoded}")]).unwrap();
+        assert_eq!(failure.error, payload["error"].as_str().unwrap());
+        assert_eq!(failure.exit_code, 2);
+        for invalid in [
+            "z1".to_string(),
+            "0".into(),
+            "应用".into(),
+            "00".repeat(12289),
+        ] {
+            assert!(launch_failure([format!("--update-error={invalid}")]).is_none());
+        }
+    }
 
     fn manifest() -> serde_json::Value {
         let artifact = |kind| {

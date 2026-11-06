@@ -139,6 +139,10 @@ LangString deleteAppData \${LANG_SIMPCHINESE} "删除应用程序数据"
   );
   const upgradeSource = join(temporary, "upgrade-files.nsh");
   writeFileSync(
+    join(temporary, "update-result.nsh"),
+    readFileSync(join(root, "src-tauri/windows/update-result.nsh")),
+  );
+  writeFileSync(
     upgradeSource,
     instrumented(
       "upgrade-files.nsh",

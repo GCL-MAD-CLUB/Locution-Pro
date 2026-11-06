@@ -18,7 +18,7 @@ import test from "node:test";
 
 test(
   "installer safety boundaries and complete template compilation",
-  { timeout: 300000 },
+  { timeout: 420000 },
   async (t) => {
     assert.equal(process.platform, "win32");
     const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -28,7 +28,7 @@ test(
     t.after(() => {
       const within = relative(target, resolve(temporary));
       assert(within && !within.startsWith("..") && !isAbsolute(within));
-      rmSync(temporary, { recursive: true, force: true });
+      rmSync(temporary, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 });
     });
     const windows = join(root, "src-tauri/windows");
     const run = (program, args, expected = 0, options = {}) => {
@@ -52,6 +52,189 @@ test(
     const powershell = join(
       process.env.SystemRoot,
       "System32/WindowsPowerShell/v1.0/powershell.exe",
+    );
+    function prepareControllerFixture() {
+      const application = join(temporary, "application.exe");
+      const installer = join(temporary, "updater.exe");
+      const compile = join(temporary, "compile-controller-fixture.ps1");
+      writeFileSync(
+        compile,
+        `
+$ErrorActionPreference = 'Stop'
+Add-Type -OutputAssembly '${application.replaceAll("'", "''")}' -OutputType ConsoleApplication -TypeDefinition @'
+using System;
+using System.IO;
+using System.Text;
+using System.Threading;
+public class Fixture {
+    public static int Main(string[] args) {
+        if (args.Length > 0 && args[0] == "--parent") {
+            File.WriteAllText(Environment.GetEnvironmentVariable("LOCUTION_PARENT_READY"), "ready");
+            Thread.Sleep(Timeout.Infinite);
+        }
+        if (args.Length > 0 && args[0] == "/S") {
+            int code = int.Parse(Environment.GetEnvironmentVariable("LOCUTION_INSTALLER_EXIT"));
+            foreach (string arg in args) {
+                if (code != 0 && arg.StartsWith("/ERRORFILE=")) {
+                    File.WriteAllText(arg.Substring(11), "Dependency SHA-256 mismatch: runtime.dll", Encoding.Unicode);
+                }
+            }
+            return code;
+        }
+        File.WriteAllLines(Environment.GetEnvironmentVariable("LOCUTION_RESTART_ARGS"), args);
+        return 0;
+    }
+}
+'@
+`,
+      );
+      if (!existsSync(application)) run(powershell, ["-NoProfile", "-File", compile]);
+      copyFileSync(application, installer);
+      return { application, installer };
+    }
+    await t.test(
+      "updater owns shutdown and restarts after success, failure and cancellation",
+      async () => {
+        const controller = join(temporary, "apply-update.ps1");
+        writeFileSync(
+          controller,
+          `\uFEFF${readFileSync(join(windows, "apply-update.ps1"), "utf8").replace(/^\ufeff/u, "")}`,
+        );
+        const { application, installer } = prepareControllerFixture();
+        const waitFor = async (predicate, message) => {
+          const deadline = Date.now() + 15000;
+          while (!predicate()) {
+            assert(Date.now() < deadline, message);
+            await new Promise((resolve) => setTimeout(resolve, 40));
+          }
+        };
+        for (const outcome of ["success", "failed", "cancelled", "rejected"]) {
+          const directory = join(temporary, `controller-${outcome}`);
+          mkdirSync(directory);
+          const ready = join(directory, "parent-ready");
+          const restarted = join(directory, "restart-args");
+          const environment = {
+            ...process.env,
+            LOCUTION_PARENT_READY: ready,
+            LOCUTION_RESTART_ARGS: restarted,
+            LOCUTION_INSTALLER_EXIT: outcome === "failed" ? "2" : "0",
+          };
+          const parent = spawn(application, ["--parent"], { windowsHide: true, env: environment });
+          const parentExit = new Promise((resolve) => parent.once("exit", resolve));
+          let helper;
+          try {
+            await waitFor(() => existsSync(ready), "Fixture parent did not start");
+            const handoff = join(directory, "handoff.json");
+            writeFileSync(
+              handoff,
+              JSON.stringify({
+                parent: parent.pid,
+                requireAcceptance: true,
+                executable: application,
+                installer,
+                version: "1.0.0",
+                signature: createHash("sha256").update(readFileSync(installer)).digest("hex"),
+                project: "C:\\project with spaces\\saved.lcp",
+              }),
+            );
+            if (outcome === "cancelled") writeFileSync(join(directory, "cancel"), "cancel");
+            helper = spawn(
+              powershell,
+              [
+                "-NoProfile",
+                "-STA",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                controller,
+                "-Installer",
+                installer,
+                "-Executable",
+                application,
+                "-Version",
+                "1.0.0",
+                "-Data",
+                handoff,
+                "-Headless",
+              ],
+              { windowsHide: true, env: environment },
+            );
+            let diagnostics = "";
+            helper.stderr.on("data", (chunk) => {
+              diagnostics += chunk;
+            });
+            const helperExit = new Promise((resolve, reject) => {
+              helper.once("exit", resolve);
+              helper.once("error", reject);
+            });
+            await waitFor(
+              () => existsSync(join(directory, "ready")),
+              "The controller did not request acceptance",
+            );
+            assert.equal(
+              parent.exitCode,
+              null,
+              "The old application must survive until explicit acceptance",
+            );
+            writeFileSync(
+              join(directory, outcome === "rejected" ? "cancel-start" : "accepted"),
+              "accepted",
+            );
+            const helperCode = await helperExit;
+            assert.equal(
+              helperCode,
+              outcome === "success" ? 0 : outcome === "cancelled" ? 1 : 2,
+              diagnostics,
+            );
+            if (outcome === "rejected") {
+              assert.equal(
+                parent.exitCode,
+                null,
+                "Revoking startup must leave the application alive",
+              );
+              assert(
+                !existsSync(restarted),
+                "A rejected handoff must not start a duplicate application",
+              );
+              const report = JSON.parse(
+                readFileSync(join(directory, "result.json"), "utf8").replace(/^\ufeff/u, ""),
+              );
+              assert.match(report.error, /cancelled before/u);
+              continue;
+            }
+            await parentExit;
+            assert.notEqual(
+              parent.exitCode,
+              null,
+              "The updater must terminate the initiating application",
+            );
+            await waitFor(
+              () => existsSync(restarted) && readFileSync(restarted, "utf8").length > 0,
+              "Every outcome must restart the application",
+            );
+            const report = JSON.parse(
+              readFileSync(join(directory, "result.json"), "utf8").replace(/^\ufeff/u, ""),
+            );
+            assert.equal(report.status, outcome);
+            const args = readFileSync(restarted, "utf8");
+            assert.match(args, /project with spaces\\saved\.lcp/u);
+            if (outcome === "failed") {
+              const encoded = args.match(/--update-error=([a-f0-9]+)/u)?.[1];
+              assert(encoded, "Failure details must be passed through launch arguments");
+              assert.match(
+                JSON.parse(Buffer.from(encoded, "hex").toString("utf8")).error,
+                /runtime\.dll/u,
+              );
+            } else assert.doesNotMatch(args, /--update-error/u);
+          } finally {
+            if (parent.exitCode === null) {
+              parent.kill();
+              await parentExit;
+            }
+            if (helper?.exitCode === null) helper.kill();
+          }
+        }
+      },
     );
     const manifest = join(temporary, "manifest.json");
     const payload = join(temporary, "payload.txt");
@@ -192,6 +375,27 @@ test(
         writeFileSync(mandatory, "payload");
         worker("Rollback", install, result);
         assert.equal(readFileSync(join(install, "locution-pro.exe"), "utf8"), "old executable");
+        const cancelFile = join(temporary, "cancel-update");
+        const cancellable = [...extra, "-Semantic", "0", "-Ffmpeg", "0", "-CancelFile", cancelFile];
+        writeFileSync(cancelFile, "cancel");
+        updateWorker("Prepare", cancellable, 2);
+        assert(
+          !existsSync(`${result}.transaction`),
+          "Cancellation before Prepare must not modify files",
+        );
+        rmSync(cancelFile);
+        updateWorker("Prepare", cancellable);
+        writeFileSync(join(install, "locution-pro.exe"), "payload");
+        writeFileSync(cancelFile, "cancel");
+        updateWorker("Verify", cancellable, 2);
+        updateWorker("Commit", cancellable, 2);
+        assert(
+          existsSync(`${result}.transaction`),
+          "Cancellation must preserve the rollback transaction",
+        );
+        updateWorker("Rollback", cancellable);
+        assert.equal(readFileSync(join(install, "locution-pro.exe"), "utf8"), "old executable");
+        assert(!existsSync(`${result}.transaction`));
       },
     );
 
@@ -458,6 +662,7 @@ test(
             spawnSync("reg.exe", ["delete", `HKCU\\${registry}`, "/f"], { windowsHide: true });
           });
           const independent = join(temporary, "isolated-independent.nsh");
+          copyFileSync(join(windows, "update-result.nsh"), join(temporary, "update-result.nsh"));
           writeFileSync(
             independent,
             readFileSync(join(windows, "independent-install.nsh"), "utf8")
@@ -536,6 +741,10 @@ test(
             // retained File instruction would fail compilation immediately.
             const source = updateOnly
               ? isolated
+                  .replace(
+                    ' -Data "$LocutionProUpdateHandoff"',
+                    ' -Headless -Data "$LocutionProUpdateHandoff"',
+                  )
                   .replace(
                     /(!insertmacro LOCUTION_INSTALL_FILE )"[^"]+"/gu,
                     (_, prefix) =>
@@ -748,68 +957,74 @@ $arp.Dispose(); $base.Dispose()
           run(executable, ["/S", "/UPDATE", `/D=${install}`], 0, options);
           assert.equal(readFileSync(main, "utf8"), "payload");
           assert.equal(readFileSync(dependency, "utf8"), "payload");
-          // The real helper waits for the old process, returns the installer's
-          // failure code and writes its report without restarting an invalid app.
-          const parent = spawn(process.execPath, ["-e", "process.stdin.resume()"], {
-            windowsHide: true,
-          });
-          const helperScript = join(temporary, "apply-update.ps1");
-          writeFileSync(
-            helperScript,
-            `\uFEFF${readFileSync(join(windows, "apply-update.ps1"), "utf8")}`,
-          );
-          const handoff = join(temporary, "handoff.json");
-          writeFileSync(
-            handoff,
-            JSON.stringify({
-              parent: parent.pid,
-              executable: process.execPath,
-              installer: executable,
-              signature: createHash("sha256").update(readFileSync(executable)).digest("hex"),
-              project: null,
-            }),
-          );
-          const helper = spawn(
-            powershell,
-            [
-              "-NoProfile",
-              "-NonInteractive",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              helperScript,
-              "-Data",
-              handoff,
-              "-NoErrorDialog",
-            ],
-            { windowsHide: true },
-          );
-          const exit = new Promise((resolve, reject) => {
-            helper.once("exit", resolve);
-            helper.once("error", reject);
-          });
+          // Run the real bootstrap, including quoted handoff arguments, the
+          // embedded controller, worker mutex and failure/restart protocol.
+          const { application } = prepareControllerFixture();
+          copyFileSync(application, main);
+          const bootstrap = join(temporary, "bootstrap handoff");
+          mkdirSync(bootstrap);
+          const restarted = join(bootstrap, "restart-args");
+          const parentReady = join(bootstrap, "parent-ready");
+          const bootstrapEnv = {
+            ...options.env,
+            LOCUTION_PARENT_READY: parentReady,
+            LOCUTION_RESTART_ARGS: restarted,
+          };
+          const parent = spawn(main, ["--parent"], { windowsHide: true, env: bootstrapEnv });
+          const parentExit = new Promise((resolve) => parent.once("exit", resolve));
           try {
             const deadline = Date.now() + 10000;
-            while (!existsSync(join(temporary, "ready"))) {
-              assert(
-                helper.exitCode === null && Date.now() < deadline,
-                "Update helper did not acknowledge its parent",
-              );
-              await new Promise((resolve) => setTimeout(resolve, 50));
+            while (!existsSync(parentReady)) {
+              assert(Date.now() < deadline, "Bootstrap parent did not start");
+              await new Promise((resolve) => setTimeout(resolve, 40));
             }
-            assert(
-              !existsSync(join(temporary, "result.json")),
-              "Installer must wait for the old application to exit",
+            const handoff = join(bootstrap, "handoff.json");
+            writeFileSync(
+              handoff,
+              JSON.stringify({
+                parent: parent.pid,
+                executable: main,
+                installer: executable,
+                version: "1.0.0",
+                signature: createHash("sha256").update(readFileSync(executable)).digest("hex"),
+                project: "C:\\saved project.lcp",
+              }),
             );
-            parent.stdin.end();
-            assert.equal(await exit, 2);
+            run(executable, ["/UPDATE", `/HANDOFF="${handoff}"`, `/D=${install}`], 2, {
+              ...options,
+              env: bootstrapEnv,
+            });
             const report = JSON.parse(
-              readFileSync(join(temporary, "result.json"), "utf8").replace(/^\ufeff/u, ""),
+              readFileSync(join(bootstrap, "result.json"), "utf8").replace(/^\ufeff/u, ""),
             );
-            assert.equal(report.exitCode, 2);
+            assert.equal(report.status, "failed");
+            assert.match(report.error, /newer than the installed version/u);
+            await Promise.race([
+              parentExit,
+              new Promise((_, reject) =>
+                setTimeout(
+                  () =>
+                    reject(
+                      new Error(`The package did not stop its parent: ${JSON.stringify(report)}`),
+                    ),
+                  5000,
+                ),
+              ),
+            ]);
+            const restartDeadline = Date.now() + 10000;
+            while (!existsSync(restarted) || !readFileSync(restarted, "utf8")) {
+              assert(
+                Date.now() < restartDeadline,
+                "The package bootstrap did not restart the application",
+              );
+              await new Promise((resolve) => setTimeout(resolve, 40));
+            }
+            assert.match(readFileSync(restarted, "utf8"), /--update-error=/u);
           } finally {
-            if (parent.exitCode === null) parent.kill();
-            if (helper.exitCode === null) helper.kill();
+            if (parent.exitCode === null) {
+              parent.kill();
+              await parentExit;
+            }
           }
         }
       }

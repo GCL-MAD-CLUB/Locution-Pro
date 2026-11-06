@@ -144,6 +144,9 @@ pub fn run() {
             fetch_latest_release,
             download_update,
             install_update,
+            update_startup,
+            set_update_ignored,
+            acknowledge_update_notes,
             cancel_task,
             play_system_sound,
             record_frontend_incident

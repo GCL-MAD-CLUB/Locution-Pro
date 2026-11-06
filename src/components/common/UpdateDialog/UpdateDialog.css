@@ -233,3 +233,18 @@
 .update-dialog-empty {
   color: var(--color-text-help);
 }
+.update-dialog-ignore {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0;
+  font-size: 12px;
+}
+
+.update-dialog-error {
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}

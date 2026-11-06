@@ -8,6 +8,57 @@ export interface ReleaseInfo {
   url: string;
 }
 
+export interface UpdateFailure {
+  version: string;
+  error: string;
+  exitCode: number;
+}
+
+export interface UpdateStartup {
+  pending: ReleaseInfo | null;
+  ignored: boolean;
+  ignoredVersions: string[];
+  notes: ReleaseInfo | null;
+  failure: UpdateFailure | null;
+}
+
+let startup: Promise<UpdateStartup> | null = null;
+
+export function loadUpdateStartup() {
+  // React may mount the startup effect twice. Reading launch arguments and
+  // hashing a cached installer is a single operation for this app session.
+  return (startup ??= invokeCommand<UpdateStartup>("update_startup"));
+}
+
+export function setUpdateIgnored(version: string, ignored: boolean) {
+  return invokeCommand<void>("set_update_ignored", { version, ignored }).then(async () => {
+    const state = await loadUpdateStartup().catch(() => null);
+    if (!state) return;
+    state.ignoredVersions = state.ignoredVersions.filter((entry) => entry !== version);
+    if (ignored) state.ignoredVersions.push(version);
+  });
+}
+
+export function acknowledgeUpdateNotes() {
+  return invokeCommand<void>("acknowledge_update_notes");
+}
+
+export function startupUpdateNotifications(
+  state: UpdateStartup,
+): Array<
+  | { status: "installFailed"; failure: UpdateFailure }
+  | { status: "installed"; release: ReleaseInfo }
+  | { status: "available"; release: ReleaseInfo; ignored: boolean }
+> {
+  const notifications: ReturnType<typeof startupUpdateNotifications> = [];
+  if (state.failure) notifications.push({ status: "installFailed", failure: state.failure });
+  if (state.notes) notifications.push({ status: "installed", release: state.notes });
+  if (state.pending && !state.ignored) {
+    notifications.push({ status: "available", release: state.pending, ignored: false });
+  }
+  return notifications;
+}
+
 export type UpdateCheckResult =
   { status: "available"; release: ReleaseInfo } | { status: "latest" };
 
@@ -86,7 +137,7 @@ export function checkForUpdate(): Promise<UpdateCheckResult> {
 export { currentVersion };
 
 export function installPreparedUpdate(version: string, projectPath: string | null) {
-  return invokeCommand<number | null>("install_update", { version, projectPath });
+  return invokeCommand<void>("install_update", { version, projectPath });
 }
 
 export function createUpdateWriteBarrier() {

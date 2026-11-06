@@ -55,8 +55,13 @@ import { cancelAllTaskProgress, useTaskProgressStatus } from "./systems/TaskSyst
 import { runMediaImportBatchTask } from "./application/media/mediaImportTask";
 import {
   checkForUpdate,
+  compareVersions,
   createUpdateWriteBarrier,
   installPreparedUpdate,
+  loadUpdateStartup,
+  startupUpdateNotifications,
+  setUpdateIgnored,
+  acknowledgeUpdateNotes,
   saveBeforeUpdate,
 } from "./application/update";
 import {
@@ -313,6 +318,8 @@ function AppContent() {
   const [preferencesCategory, setPreferencesCategory] = useState<PreferencesCategory | null>(null);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [updateDialogState, setUpdateDialogState] = useState<UpdateDialogState | null>(null);
+  const updateDialogQueueRef = useRef<UpdateDialogState[]>([]);
+  const startupDialogsOpenRef = useRef(false);
   const updateRequestRef = useRef(0);
   const [updateChecking, setUpdateChecking] = useState(false);
   const [updateInstalling, setUpdateInstalling] = useState(false);
@@ -491,17 +498,56 @@ function AppContent() {
   useEffect(() => {
     if (!isTauriRuntime()) return;
     let active = true;
-    void checkForUpdate()
-      .then((result) => {
-        if (active && result.status === "available") {
-          setUpdateDialogState({ status: "available", release: result.release });
+    void (async () => {
+      let ignoredVersions: string[] = [];
+      let cachedVersion: string | undefined;
+      try {
+        const startup = await loadUpdateStartup();
+        if (!active) return;
+        ignoredVersions = startup.ignoredVersions;
+        cachedVersion = startup.pending?.version;
+        if (updateRequestRef.current === 0) {
+          const notifications = startupUpdateNotifications(startup);
+          updateDialogQueueRef.current = notifications.slice(1);
+          startupDialogsOpenRef.current = notifications.length > 0;
+          setUpdateDialogState(notifications[0] ?? null);
         }
-      })
-      .catch((error) => captureOperationError("help.checkUpdates", error));
+      } catch (error) {
+        captureOperationError("help.checkUpdates", error);
+      }
+      if (!active) return;
+      try {
+        const result = await checkForUpdate();
+        if (
+          !active ||
+          updateRequestRef.current !== 0 ||
+          result.status !== "available" ||
+          (cachedVersion !== undefined &&
+            (compareVersions(result.release.version, cachedVersion) ?? 0) <= 0) ||
+          ignoredVersions.includes(result.release.version)
+        )
+          return;
+        const notification: UpdateDialogState = { status: "available", release: result.release };
+        if (startupDialogsOpenRef.current) updateDialogQueueRef.current.push(notification);
+        else {
+          startupDialogsOpenRef.current = true;
+          setUpdateDialogState(notification);
+        }
+      } catch (error) {
+        captureOperationError("help.checkUpdates", error);
+      }
+    })();
     return () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (updateDialogState?.status !== "installed") return;
+    void acknowledgeUpdateNotes().catch((error) =>
+      captureOperationError("help.checkUpdates", error),
+    );
+  }, [updateDialogState]);
 
   useEffect(() => {
     if (!isTauriRuntime() || !hasProject || !autoSaveEnabled) {
@@ -758,15 +804,23 @@ function AppContent() {
     }
     if (updateChecking || updateInstallingRef.current) return;
     const request = ++updateRequestRef.current;
+    updateDialogQueueRef.current = [];
+    startupDialogsOpenRef.current = false;
     setUpdateChecking(true);
     setUpdateDialogState(null);
     messagePublished("正在检查更新；新版本下载完成后会通知你。");
     try {
       const result = await checkForUpdate();
       if (updateRequestRef.current !== request) return;
+      const ignored =
+        result.status === "available" &&
+        (await loadUpdateStartup().catch(() => null))?.ignoredVersions.includes(
+          result.release.version,
+        );
+      if (updateRequestRef.current !== request) return;
       setUpdateDialogState(
         result.status === "available"
-          ? { status: "available", release: result.release }
+          ? { status: "available", release: result.release, ignored: ignored || false }
           : { status: "latest" },
       );
     } catch (error) {
@@ -779,8 +833,25 @@ function AppContent() {
 
   function closeUpdateDialog() {
     if (updateInstallingRef.current) return;
-    updateRequestRef.current += 1;
-    setUpdateDialogState(null);
+    const next = updateDialogQueueRef.current.shift() ?? null;
+    startupDialogsOpenRef.current = next !== null;
+    setUpdateDialogState(next);
+  }
+
+  async function ignoreUpdate(ignored: boolean) {
+    if (updateDialogState?.status !== "available") return;
+    const version = updateDialogState.release.version;
+    try {
+      await setUpdateIgnored(version, ignored);
+      setUpdateDialogState((state) =>
+        state?.status === "available" && state.release.version === version
+          ? { ...state, ignored }
+          : state,
+      );
+    } catch (error) {
+      captureOperationError("help.checkUpdates", error);
+      messagePublished("未能保存更新提醒设置，请重试。");
+    }
   }
 
   async function applyUpdate() {
@@ -791,10 +862,11 @@ function AppContent() {
       isBusy
     )
       return;
-    const release = updateDialogState.release;
+    const { release, ignored } = updateDialogState;
     updateInstallingRef.current = true;
     setUpdateInstalling(true);
-    setUpdateDialogState({ status: "available", release });
+    setUpdateDialogState({ status: "available", release, ignored });
+    let handedOff = false;
     try {
       const result = await saveBeforeUpdate({
         needsSave: projectDirty,
@@ -802,23 +874,15 @@ function AppContent() {
         save: saveProjectWithOutcome,
         snapshot: () => JSON.stringify(getProjectWorkspaceSnapshot()),
         install: async () => {
-          const exitCode = await installPreparedUpdate(
-            release.version,
-            savedUpdateProjectPathRef.current,
-          );
-          if (exitCode !== null) {
-            setUpdateDialogState({
-              status: "available",
-              release,
-              error: `更新前置校验未通过（退出码 ${exitCode}）。当前版本未被修改，请使用完整安装包修复依赖后重试。`,
-            });
-          }
+          await installPreparedUpdate(release.version, savedUpdateProjectPathRef.current);
+          handedOff = true;
         },
       });
       if (result === "changed") {
         setUpdateDialogState({
           status: "available",
           release,
+          ignored,
           error: "保存期间工作区发生了变化，已取消更新。请确认并再次保存后更新。",
         });
       }
@@ -827,11 +891,14 @@ function AppContent() {
       setUpdateDialogState({
         status: "available",
         release,
+        ignored,
         error: "未能启动更新，当前软件继续运行。请重试或查看日志。",
       });
     } finally {
-      updateInstallingRef.current = false;
-      setUpdateInstalling(false);
+      if (!handedOff) {
+        updateInstallingRef.current = false;
+        setUpdateInstalling(false);
+      }
     }
   }
 
@@ -1755,6 +1822,7 @@ function AppContent() {
             onInstall={() => void applyUpdate()}
             onClose={closeUpdateDialog}
             onRetry={() => void checkForUpdates()}
+            onIgnore={(ignored) => void ignoreUpdate(ignored)}
           />
         )}
       </div>

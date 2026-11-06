@@ -1,7 +1,9 @@
 use super::*;
 
+// Only the Windows drop target reads the region; other platforms accept and ignore it.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) struct MediaImportDropRegion {
     left: i32,
     top: i32,
@@ -9,6 +11,7 @@ pub(crate) struct MediaImportDropRegion {
     bottom: i32,
 }
 
+#[cfg(windows)]
 impl MediaImportDropRegion {
     fn contains(self, x: i32, y: i32) -> bool {
         x >= self.left && x <= self.right && y >= self.top && y <= self.bottom

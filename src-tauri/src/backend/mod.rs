@@ -26,7 +26,9 @@ use std::{
     time::Duration,
     time::{SystemTime, UNIX_EPOCH},
 };
-use tauri::{Emitter, Manager};
+#[cfg(windows)]
+use tauri::Emitter;
+use tauri::Manager;
 use uuid::Uuid;
 
 mod application_menu;

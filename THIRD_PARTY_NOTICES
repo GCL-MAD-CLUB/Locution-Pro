@@ -35,7 +35,17 @@ FFmpeg and FFprobe
    https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz
    https://github.com/FFmpeg/FFmpeg/tree/n8.0.1
 
-   macOS bundles do not download a pinned FFmpeg. npm run prepare:ffmpeg
+   Official macOS release bundles include the static arm64 FFmpeg 9.0.2
+   build published at https://ffmpeg.martin-riedl.de (build
+   1789931890_9.0.2, pinned by SHA-256 in the release workflow). Its -L
+   output identifies it as GPLv3-or-later (--enable-gpl and
+   --enable-version3), and it links only system frameworks. Corresponding
+   source:
+
+   https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
+   https://github.com/FFmpeg/FFmpeg/tree/n9.0.2
+
+   Local macOS builds do not download a pinned FFmpeg. npm run prepare:ffmpeg
    copies the ffmpeg and ffprobe executables found on PATH, or in
    LOCUTION_PRO_FFMPEG_DIR, as ffmpeg-<target> and ffprobe-<target>. Their
    license and corresponding source are those of the copied build; check

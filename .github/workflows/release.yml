@@ -157,3 +157,99 @@ jobs:
           # drops the space so download URLs and CLI use need no escaping.
           assetNamePattern: "Locution.Pro_[version]_[arch][setup][ext]"
           retryAttempts: 2
+
+  build-macos:
+    name: Build and publish macOS app
+    # Runs after the Windows job so both upload into the draft release it created.
+    needs: [validate, build-and-publish]
+    runs-on: macos-15
+    timeout-minutes: 90
+    environment:
+      name: release
+      url: https://github.com/${{ github.repository }}/releases/tag/${{ needs.validate.outputs.tag }}
+    permissions:
+      contents: write
+    env:
+      # Static arm64 FFmpeg that links only system frameworks; GPLv3-or-later,
+      # see THIRD_PARTY_NOTICES.
+      FFMPEG_MACOS_BUILD: 1789931890_9.0.2
+      FFMPEG_MACOS_SHA256: c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924
+      FFPROBE_MACOS_SHA256: fcbe839537485eaee7a7a8bc5cbc0f90d53617e80943e8a5b2e31cb851197ea6
+    steps:
+      - name: Checkout release revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+          persist-credentials: false
+      - name: Set up Node.js and npm
+        uses: ./.github/actions/setup-npm
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: 1.96.0
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: src-tauri
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Restore model assets
+        id: model-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            src-tauri/resources/semantic-search
+            src-tauri/resources/storyboard-semantic
+          key: model-assets-${{ runner.os }}-${{ hashFiles('scripts/prepare-semantic-assets.mjs', 'scripts/prepare-storyboard-semantic-assets.mjs', 'src-tauri/resources/*/MODEL.md') }}
+      - name: Prepare verified model assets
+        run: npm run prepare:semantic && npm run prepare:storyboard-semantic
+      - name: Save model assets
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            src-tauri/resources/semantic-search
+            src-tauri/resources/storyboard-semantic
+          key: ${{ steps.model-cache.outputs.cache-primary-key }}
+      - name: Require the official project build secret
+        env:
+          LOCUTION_PRO_PROJECT_BUILD_SECRET_V1: ${{ secrets.LOCUTION_PRO_PROJECT_BUILD_SECRET_V1 || secrets.LINECUT_PROJECT_BUILD_SECRET_V1 }}
+        run: |
+          if [[ -z "$LOCUTION_PRO_PROJECT_BUILD_SECRET_V1" ]]; then
+            echo "::error::The release environment is missing LOCUTION_PRO_PROJECT_BUILD_SECRET_V1"
+            exit 1
+          fi
+      - name: Prepare verified FFmpeg bundle assets
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/ffmpeg"
+          mkdir -p "$dir"
+          for tool in ffmpeg ffprobe; do
+            curl -fsSL --retry 3 -o "$dir/$tool.zip" "https://ffmpeg.martin-riedl.de/download/macos/arm64/$FFMPEG_MACOS_BUILD/$tool.zip"
+          done
+          echo "$FFMPEG_MACOS_SHA256  $dir/ffmpeg.zip" | shasum -a 256 -c -
+          echo "$FFPROBE_MACOS_SHA256  $dir/ffprobe.zip" | shasum -a 256 -c -
+          unzip -oq "$dir/ffmpeg.zip" -d "$dir"
+          unzip -oq "$dir/ffprobe.zip" -d "$dir"
+          echo "LOCUTION_PRO_FFMPEG_DIR=$dir" >> "$GITHUB_ENV"
+          LOCUTION_PRO_FFMPEG_DIR="$dir" npm run prepare:ffmpeg
+      # tauri-build checks bundle resources while compiling, before the
+      # beforeBundleCommand would download the ONNX Runtime dylib.
+      - name: Prepare ONNX Runtime and TransNetV2 assets
+        run: npm run prepare:transnetv2
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # action-v0.6.2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          LOCUTION_PRO_PROJECT_BUILD_SECRET_V1: ${{ secrets.LOCUTION_PRO_PROJECT_BUILD_SECRET_V1 || secrets.LINECUT_PROJECT_BUILD_SECRET_V1 }}
+        with:
+          tagName: ${{ needs.validate.outputs.tag }}
+          releaseName: Locution Pro ${{ needs.validate.outputs.tag }}
+          generateReleaseNotes: true
+          releaseDraft: true
+          prerelease: ${{ needs.validate.outputs.prerelease }}
+          includeUpdaterJson: false
+          assetNamePattern: "Locution.Pro_[version]_[arch][setup][ext]"
+          retryAttempts: 2

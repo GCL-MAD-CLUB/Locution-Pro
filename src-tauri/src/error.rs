@@ -64,7 +64,9 @@ pub(crate) struct ErrorDefinition {
 
 macro_rules! define_error_codes {
     ($($variant:ident => ($name:literal, $category:ident, $retryable:literal)),+ $(,)?) => {
+        // Some codes are raised only by Windows-specific code.
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        #[cfg_attr(not(windows), allow(dead_code))]
         pub(crate) enum ErrorCode {
             $($variant),+
         }

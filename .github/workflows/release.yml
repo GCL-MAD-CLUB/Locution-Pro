@@ -113,6 +113,7 @@ jobs:
           workspaces: |
             src-tauri
             src-tauri/thumbnail-provider
+          cache-on-failure: true
       - name: Install frontend dependencies
         run: npm ci --no-audit --no-fund
       # The build hooks download ~844 MiB of pinned models when the cache misses.
@@ -135,7 +136,10 @@ jobs:
           key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/prepare-ffmpeg-assets.mjs') }}
       - name: Prepare verified FFmpeg bundle assets
         run: npm run prepare:ffmpeg
-      # Tauri hooks prepare/check models once and build the thumbnail provider once.
+      # tauri-build validates bundle resources during Rust compilation, before beforeBundleCommand.
+      - name: Build thumbnail provider resource before application compilation
+        run: npm run build:thumbnail-provider
+      # The bundle hook rechecks the already-built provider incrementally.
       # Keep building separate from uploading so retries never rebuild the installer.
       - name: Build Windows installer
         env:

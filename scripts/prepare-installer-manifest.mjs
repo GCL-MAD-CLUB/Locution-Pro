@@ -61,7 +61,7 @@ export async function prepareInstallerManifest(
     }
     await add(resolve(tauri, `${binary}-${target}.exe`), `${name}.exe`, "ffmpeg");
   }
-  // beforeBundleCommand runs after compiling the final executable.
+  // NSIS refreshes this entry after Tauri patches/signs the compiled executable.
   const mainBinary = config.mainBinaryName ?? "locution-pro";
   await add(resolve(tauri, `target/release/${mainBinary}.exe`), `${mainBinary}.exe`, "core");
   files.sort((left, right) => left.path.localeCompare(right.path, "en"));
@@ -71,7 +71,49 @@ export async function prepareInstallerManifest(
   return output;
 }
 
+// Tauri patches/signs the executable after beforeBundleCommand. NSIS invokes
+// this against the final File input, before embedding its own manifest copy.
+export async function finalizeInstallerManifest(manifestPath, binaryPath, binaryName) {
+  if (
+    win32.basename(binaryName) !== binaryName ||
+    !/^[^\x00-\x1f<>:"|?*]+\.exe$/iu.test(binaryName)
+  ) {
+    throw new Error(`Invalid main executable destination: ${binaryName}`);
+  }
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  if (manifest.version !== 1 || !Array.isArray(manifest.files)) {
+    throw new Error("Unsupported installer manifest");
+  }
+  const metadata = await lstat(binaryPath);
+  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new Error(`Invalid main executable input: ${binaryPath}`);
+  }
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(binaryPath)) hash.update(chunk);
+  manifest.files = manifest.files.filter(
+    (entry) => entry.path.toLowerCase() !== binaryName.toLowerCase(),
+  );
+  manifest.files.push({
+    path: binaryName,
+    size: metadata.size,
+    sha256: hash.digest("hex"),
+    group: "core",
+  });
+  manifest.files.sort((left, right) => left.path.localeCompare(right.path, "en"));
+  const output = `${manifestPath}.nsis.json`;
+  await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`);
+  return output;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const output = await prepareInstallerManifest(repository, process.env.TAURI_ENV_TARGET_TRIPLE);
+  const args = process.argv.slice(2);
+  if (args.length && (args[0] !== "--finalize-main" || args.length !== 4)) {
+    throw new Error(
+      "Usage: prepare-installer-manifest.mjs [--finalize-main <manifest> <binary> <name>]",
+    );
+  }
+  const output = args.length
+    ? await finalizeInstallerManifest(...args.slice(1))
+    : await prepareInstallerManifest(repository, process.env.TAURI_ENV_TARGET_TRIPLE);
   console.log(`Prepared installer SHA-256 manifest: ${output}`);
 }

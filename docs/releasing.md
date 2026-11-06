@@ -130,6 +130,10 @@ OpenList 后端自动同步最新正式 Release 的附件到[分享目录](https
 `beforeBundleCommand` 在 TransNetV2 和缩略图提供程序准备完成后执行
 `npm run prepare:installer`，按 Tauri 的资源目标路径与 FFmpeg sidecar 文件生成 SHA-256 清单，
 并将清单封入 NSIS 安装包。缺失资源、目标路径冲突或不支持的资源映射会阻止打包。
+Tauri 会在此钩子之后改写主程序的安装器类型标记，并可能执行签名。因此，NSIS 模板在编译时
+调用同一脚本的 `--finalize-main <清单> <主程序路径> <安装文件名>`，从实际封包的主程序计算
+摘要与大小，生成独立的 `<清单>.nsis.json` 后嵌入；资源摘要和原始清单保持不变。
+完整包与更新包都必须执行这一步，不能直接用钩子阶段的主程序摘要作最终校验，也不能跳过主程序校验。
 修改资源配置时须同步维护清理范围：`transnetv2`、`semantic-search`、`storyboard-semantic`
 和 `licenses` 为已识别旧安装的管理目录；该旧安装根目录的 DLL、主程序、卸载程序及媒体工具为应用代码。
 只有注册记录识别出的旧安装目录才执行整目录及根目录 DLL 清理。全新或变更后的目标目录仅处理当前清单

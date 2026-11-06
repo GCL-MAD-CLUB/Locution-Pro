@@ -140,6 +140,16 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
   !include MultiUser.nsh
 !endif
 
+; Hash the actual executable supplied to NSIS, after Tauri's bundle-type patch
+; and code signing. The beforeBundleCommand manifest predates those changes.
+!ifndef LOCUTION_PAYLOAD_MANIFEST
+  !define LOCUTION_PAYLOAD_MANIFEST "${LOCUTION_INSTALLER_SOURCE_DIR}\..\target\installer\payload-manifest.json"
+!endif
+!define LOCUTION_FINAL_PAYLOAD_MANIFEST "${LOCUTION_PAYLOAD_MANIFEST}.nsis.json"
+!system 'node "${LOCUTION_INSTALLER_SOURCE_DIR}\..\..\scripts\prepare-installer-manifest.mjs" --finalize-main "${LOCUTION_PAYLOAD_MANIFEST}" "${MAINBINARYSRCPATH}" "${MAINBINARYNAME}.exe"' = 0
+!undef LOCUTION_PAYLOAD_MANIFEST
+!define LOCUTION_PAYLOAD_MANIFEST "${LOCUTION_FINAL_PAYLOAD_MANIFEST}"
+
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\independent-install.nsh"
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\upgrade-files.nsh"
 !include "${LOCUTION_INSTALLER_SOURCE_DIR}\registration-state.nsh"

@@ -82,6 +82,7 @@ run(process.execPath, [
 run("cargo", ["fmt", "--manifest-path", "src-tauri/Cargo.toml"]);
 run(process.execPath, [join(root, "scripts", "check-version-consistency.mjs")]);
 run(process.execPath, [join(root, "scripts", "prepare-ffmpeg-assets.mjs")]);
+run(process.execPath, [join(root, "scripts", "build-thumbnail-provider.mjs")]);
 run(process.execPath, [tauriCli, "build", "--", "--locked"]);
 
 const bundleDirectory = join(root, "src-tauri", "target", "release", "bundle", "nsis");

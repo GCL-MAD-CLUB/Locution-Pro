@@ -2,7 +2,7 @@
 
 本文件记录产品变化与升级注意事项。使用说明见[用户指南](docs/user-guide/index.md)，安装包与实际发布状态以[下载页面](https://github.com/GCL-MAD-CLUB/Locution-Pro/releases)为准。
 
-## 0.4.2（待发布）
+## 0.4.2（正式版）
 
 ### 功能与体验
 

@@ -6,6 +6,8 @@
 
 使用受保护的 release Environment，仅允许受信任维护者发布。配置 main 的 PR 审查与 CI required 门禁，启用私密漏洞报告和依赖安全更新。
 
+Environment 的发布来源保留 `v*` tag，并允许精确的 `main` 分支，以便从受保护的 main 手动运行发布工作流。手动运行时仍须指定已有的发布 tag；应用源码固定检出该 tag 对应的提交，并校验该提交在 main 上的 CI 已通过。
+
 正式构建使用 `LOCUTION_PRO_PROJECT_BUILD_SECRET_V1`，工作流仍支持旧名称 `LINECUT_PROJECT_BUILD_SECRET_V1`。名称迁移必须保留原值，禁止重新生成已有项目所需的密钥。具体读取优先级见[项目文件契约](../src-tauri/src/project_file/README.md)。
 
 证书和密码保存在发布环境中，不写入源码、文档或日志。
@@ -64,6 +66,12 @@ git push origin v0.4.2
 预发布 tag 应与清单完整一致，例如 `v0.4.2-preview`。包含连字符的 tag 由工作流标记为 prerelease。
 
 发布校验要求该提交已有 main 分支 push 触发的成功 CI 运行。tag 推送不经过分支保护，因此在 CI 完成前打 tag 会让发布工作流直接失败；等 CI 通过后重跑发布工作流即可。构建固定使用通过校验的提交 SHA，上传前再次确认 tag 未移动。相同 tag 的手动触发和自动触发共用并发锁。发布附件按 `Locution.Pro_<版本>_x64-setup.exe` 命名，产品名与安装路径仍为 `Locution Pro`。
+
+需要使用 main 上修正后的工作流重跑已有 tag 时，从受保护的 main 手动触发，并明确指定应用 tag。不要移动既有 tag 来更新工作流：
+
+```powershell
+gh workflow run release.yml --ref main -f tag=v0.4.2
+```
 
 ## 自动发布内容
 
@@ -177,6 +185,8 @@ WebView2 使用安装器私有目录，执行前验证 Microsoft 签名；注册
 确认工作流成功、安装包附件完整、发布说明与兼容提示正确后，由发布维护者使用自己的账号发布草稿。发布时重新比较当前稳定版的语义版本：仅将较新的正式版设为最新版本，旧版本维护发行取消最新标记；预发布保留 prerelease 标记且不设为最新。不要在附件上传完成前公开发布。发布后确认 OpenList 已同步四份附件，并检查官网版本和下载入口；无需为更新下载版本重新部署官网。
 
 应用 tag 和文档站部署分别核对。文档站由 main 上的工作流部署；本地文件变化或构建成功不表示公开站点已经更新。
+
+正式发布成功后，将 CHANGELOG 中对应版本的“待发布”改为“正式版”，通过文档 PR 合并到 main；已有发布 tag 保持不变。
 
 ## 处理发布失败
 

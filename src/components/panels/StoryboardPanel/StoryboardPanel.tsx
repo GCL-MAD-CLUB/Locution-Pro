@@ -2242,6 +2242,7 @@ export function StoryboardPanel() {
 
     const handleSelectionKeyDown = (event: KeyboardEvent) => {
       if (
+        viewMode === "graph" ||
         event.defaultPrevented ||
         event.altKey ||
         isEditableKeyboardTarget(event.target) ||
@@ -3914,7 +3915,14 @@ export function StoryboardPanel() {
               sourceForShot={sourceForShot}
               shotTitle={(shot) => storyboardShotTitle(shot, shotCount, shotAnnotations[shot.id])}
               selectedShotIds={selectedShotIds}
-              onSelectShot={handleShotSelection}
+              onSelectionChange={(ids) => {
+                shotSelectionReplaced(Array.from(ids), activeShotId);
+              }}
+              onActivateShot={(shot) => {
+                selectionAnchorRef.current = shot.id;
+                selectionFocusRef.current = shot.id;
+                seekToShot(shot, videoContext);
+              }}
             />
           ) : (
             <StoryboardIconView

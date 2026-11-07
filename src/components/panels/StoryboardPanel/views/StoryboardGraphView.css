@@ -7,13 +7,13 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: clip;
   background: var(--color-surface-canvas);
   border: 1px solid var(--color-border-frame);
   border-radius: 5px;
   box-shadow: inset 0 0 0 1px var(--color-border-frame-inset);
   outline: none;
-  cursor: grab;
+  cursor: default;
   touch-action: none;
   overscroll-behavior: contain;
   user-select: none;
@@ -30,6 +30,90 @@
 
 .storyboard-graph-view.is-panning {
   cursor: grabbing;
+}
+
+.storyboard-graph-view.is-hand,
+.storyboard-graph-view.is-hand .storyboard-graph-dot {
+  cursor: grab;
+}
+
+.storyboard-graph-view.is-hand.is-panning,
+.storyboard-graph-view.is-hand.is-panning .storyboard-graph-dot {
+  cursor: grabbing;
+}
+
+.storyboard-graph-view.is-selecting {
+  cursor: crosshair;
+}
+
+.storyboard-graph-tools {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 6;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--color-border-overlay-default);
+  border-radius: 5px;
+  background: var(--color-surface-table-inset);
+  box-shadow: 0 2px 8px var(--color-shadow);
+}
+
+.storyboard-graph-tools button {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  border: 1px solid var(--color-transparent);
+  border-radius: 3px;
+  color: var(--color-text-placeholder);
+  background: var(--color-transparent);
+  cursor: pointer;
+}
+
+.storyboard-graph-tools button:hover {
+  color: var(--storyboard-graph-hover);
+  background: var(--color-surface-active);
+}
+
+.storyboard-graph-tools button[aria-pressed="true"],
+.storyboard-graph-tools button[aria-checked="true"] {
+  color: var(--storyboard-graph-hover);
+  background: var(--color-surface-active);
+  border-color: var(--color-border-overlay-default);
+}
+
+.storyboard-graph-tools button:focus-visible {
+  outline: 1px solid var(--storyboard-graph-hover);
+  outline-offset: 1px;
+}
+
+.storyboard-graph-tools svg {
+  width: 18px;
+  height: 18px;
+}
+
+.storyboard-graph-selection-modes {
+  display: flex;
+  gap: 2px;
+  margin-left: 3px;
+  padding-left: 5px;
+  border-left: 1px solid var(--color-border-overlay-default);
+}
+
+.storyboard-graph-marquee {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  min-width: 1px;
+  min-height: 1px;
+  border: 1px solid var(--storyboard-graph-hover);
+  background: var(--color-text-placeholder);
+  opacity: 0.3;
+  pointer-events: none;
 }
 
 .storyboard-graph-world,
@@ -97,18 +181,43 @@
   opacity: 0.2;
 }
 
-.storyboard-graph-dot.is-selected::after {
-  background: var(--color-text-highlight);
+.storyboard-graph-dot.is-selected::after,
+.storyboard-graph-dot.is-hovered::after {
+  visibility: hidden;
+}
+
+.storyboard-graph-selection-rings {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.storyboard-graph-selection-rings [data-selection-ring] {
+  fill: none;
+  stroke: var(--storyboard-graph-hover);
+  stroke-width: 1;
+}
+
+.storyboard-graph-selected-node {
+  fill: var(--storyboard-graph-hover);
+  stroke: none;
+}
+
+.storyboard-graph-hovered-node {
+  fill: var(--storyboard-graph-hover);
+  stroke: var(--color-surface-canvas);
 }
 
 .storyboard-graph-dot.is-neighbor::after,
-.storyboard-graph-dot.is-hovered::after,
-.storyboard-graph-dot:focus-visible::after {
+.storyboard-graph-dot.is-hovered:not(.is-selected)::after,
+.storyboard-graph-dot:focus-visible:not(.is-selected)::after {
   background: var(--storyboard-graph-hover);
 }
 
-.storyboard-graph-dot.is-hovered::after,
-.storyboard-graph-dot:focus-visible::after {
+.storyboard-graph-dot.is-hovered:not(.is-selected)::after,
+.storyboard-graph-dot:focus-visible:not(.is-selected)::after {
   transform: scale(var(--storyboard-graph-dot-hover-scale, 1.35));
 }
 
@@ -118,8 +227,14 @@
 }
 
 .storyboard-graph-dot:focus-visible {
-  outline: 1px solid var(--color-accent);
-  outline-offset: 1px;
+  outline: none;
+}
+
+.storyboard-graph-previews {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
 }
 
 .storyboard-graph-preview {
@@ -128,8 +243,13 @@
   pointer-events: none;
 }
 
-.storyboard-graph-preview.is-neighbor {
+.storyboard-graph-view.is-hand .storyboard-graph-preview.is-neighbor,
+.storyboard-graph-preview.is-muted {
   opacity: 0.6;
+}
+
+.storyboard-graph-view.is-pointer .storyboard-graph-preview {
+  pointer-events: auto;
 }
 
 .storyboard-graph-preview::after {
@@ -169,7 +289,7 @@
   position: absolute;
   right: 12px;
   bottom: 12px;
-  z-index: 3;
+  z-index: 5;
   box-sizing: border-box;
   display: block;
   width: min(176px, 28%);
@@ -200,7 +320,7 @@
 }
 
 .storyboard-graph-minimap-content circle.is-selected {
-  fill: var(--color-text-highlight);
+  fill: var(--storyboard-graph-hover);
 }
 
 .storyboard-graph-minimap-viewport {

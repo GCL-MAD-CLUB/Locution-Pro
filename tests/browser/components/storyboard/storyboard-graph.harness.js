@@ -35,10 +35,15 @@ const source = {
   frameRate: 24,
 };
 
-export function mountGraph(empty = false, spread = 1) {
+export function mountGraph(empty = false, spread = 1, nodeRadius = 4) {
   const renderedGraph = {
     ...graph,
-    nodes: graph.nodes.map((node) => ({ ...node, x: node.x * spread, y: node.y * spread })),
+    nodes: graph.nodes.map((node) => ({
+      ...node,
+      x: node.x * spread,
+      y: node.y * spread,
+      radius: nodeRadius,
+    })),
   };
   const host = document.createElement("div");
   host.id = "graph-host";
@@ -51,13 +56,22 @@ export function mountGraph(empty = false, spread = 1) {
   document.body.append(reference);
   function Harness() {
     const [selectedShotIds, setSelectedShotIds] = useState(new Set());
+    const [activatedShotId, setActivatedShotId] = useState(null);
+    const [activations, setActivations] = useState([]);
+    window.graphSelection = [...selectedShotIds].sort();
+    window.graphActivatedShot = activatedShotId;
+    window.graphActivations = activations;
     return React.createElement(StoryboardGraphCanvas, {
       graph: empty ? undefined : renderedGraph,
       shots,
       sourceForShot: () => source,
       shotTitle: (shot) => `Shot ${shot.id}`,
       selectedShotIds,
-      onSelectShot: (_, shot) => setSelectedShotIds(new Set([shot.id])),
+      onSelectionChange: setSelectedShotIds,
+      onActivateShot: (shot) => {
+        setActivatedShotId(shot.id);
+        setActivations((current) => [...current, shot.id]);
+      },
     });
   }
   createRoot(host).render(React.createElement(Harness));

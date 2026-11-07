@@ -278,6 +278,7 @@ SectionEnd`,
         `
 !define UNINSTKEY "${registry}\\current-uninstall"
 !define MANUPRODUCTKEY "${registry}\\locutionpro\\Locution Pro"
+!define LOCUTION_INSTALLER_SOURCE_DIR "${nsis(join(root, "src-tauri/windows"))}"
 !define LOCUTION_MIGRATION_LOCAL_ROOT "${nsis(data)}"
 !define LOCUTION_MIGRATION_ROAMING_ROOT "${nsis(data)}"
 !define INSTALLMODE "currentUser"

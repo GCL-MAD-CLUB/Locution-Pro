@@ -52,6 +52,7 @@ interface SearchResult {
   frames: ReadonlyMap<string, number>;
   status: "ready" | "failed";
   version: number;
+  input: Pick<SearchState, "scope" | "shots" | "query" | "negativePrompts">;
 }
 interface SearchState {
   negativePrompts: string;
@@ -65,6 +66,7 @@ interface SearchState {
 }
 interface IndexJob {
   scope: string;
+  shots: ReadonlyMap<string, string>;
   cancelled: boolean;
   listeners: Set<() => void>;
   promise: Promise<"ready" | "cancelled" | "failed">;
@@ -72,9 +74,29 @@ interface IndexJob {
 const emptyScores: ReadonlyMap<string, number> = new Map();
 // Same scope and storyboard content share one native job across panel instances.
 const indexJobs = new Map<string, IndexJob>();
+// Index membership is per shot content. Removing shots cannot invalidate the
+// embeddings of those that remain, or require another native progress task.
+const indexedShots = new Map<string, Map<string, string>>();
 // The native text model lives for the process lifetime. Share its initialization
 // across panels, but allow another attempt if loading fails or is cancelled.
 let initialization: Promise<boolean> | undefined;
+
+function containsSemanticShots(
+  indexed: readonly SemanticShot[],
+  requested: readonly SemanticShot[],
+) {
+  const keys = new Map(indexed.map((shot) => [shot.id, JSON.stringify(shot)]));
+  return requested.every((shot) => keys.get(shot.id) === JSON.stringify(shot));
+}
+
+function canReuseSearch(previous: SearchResult["input"], current: SearchResult["input"]) {
+  return (
+    previous.scope === current.scope &&
+    previous.query === current.query &&
+    previous.negativePrompts === current.negativePrompts &&
+    containsSemanticShots(previous.shots, current.shots)
+  );
+}
 
 export function initializeStoryboardSemanticSearch(): Promise<boolean> {
   if (initialization) return initialization;
@@ -117,12 +139,22 @@ export function initializeStoryboardSemanticSearch(): Promise<boolean> {
 function indexShots(state: Pick<SearchState, "shots" | "scope" | "indexKey">): IndexJob {
   const existing = indexJobs.get(state.indexKey);
   if (existing) return existing;
+  const ready = indexedShots.get(state.scope) ?? new Map<string, string>();
+  const missing = state.shots.filter((shot) => ready.get(shot.id) !== JSON.stringify(shot));
+  const covering = [...indexJobs.values()].find(
+    (job) =>
+      job.scope === state.scope &&
+      missing.every((shot) => job.shots.get(shot.id) === JSON.stringify(shot)),
+  );
+  if (missing.length && covering) return covering;
   const job: IndexJob = {
     scope: state.scope,
+    shots: new Map(missing.map((shot) => [shot.id, JSON.stringify(shot)])),
     cancelled: false,
     listeners: new Set(),
     promise: Promise.resolve("ready"),
   };
+  if (!missing.length) return job;
   indexJobs.set(state.indexKey, job);
   const notify = () => {
     for (const listener of job.listeners) listener();
@@ -160,11 +192,15 @@ function indexShots(state: Pick<SearchState, "shots" | "scope" | "indexKey">): I
         });
       });
       await invokeCommand("select_storyboard_frames", {
-        shots: state.shots,
+        shots: missing,
         taskId,
         onProgress,
       });
-      return job.cancelled || task.cancelled ? ("cancelled" as const) : ("ready" as const);
+      if (job.cancelled || task.cancelled) return "cancelled" as const;
+      const current = indexedShots.get(state.scope) ?? new Map<string, string>();
+      for (const shot of missing) current.set(shot.id, JSON.stringify(shot));
+      indexedShots.set(state.scope, current);
+      return "ready" as const;
     } catch (error) {
       if (job.cancelled || task.cancelled) return "cancelled" as const;
       task.fail(error, { resourceKind: "media" });
@@ -229,6 +265,23 @@ export function useStoryboardSemanticSearch(
   const version = useRef(0);
   const [tick, setTick] = useState(0);
   const [result, setResult] = useState<SearchResult | null>(null);
+  const reusable = useMemo(() => {
+    if (
+      !requestKey ||
+      !result ||
+      result.status !== "ready" ||
+      result.key === requestKey ||
+      !canReuseSearch(result.input, { scope, shots, query, negativePrompts })
+    )
+      return null;
+    const ids = new Set(shots.map((shot) => shot.id));
+    return {
+      ...result,
+      key: requestKey,
+      scores: new Map([...result.scores].filter(([id]) => ids.has(id))),
+      frames: new Map([...result.frames].filter(([id]) => ids.has(id))),
+    };
+  }, [requestKey, result, scope, query, negativePrompts, shots]);
 
   useEffect(() => {
     mounted.current = true;
@@ -238,6 +291,10 @@ export function useStoryboardSemanticSearch(
   }, []);
 
   useEffect(() => {
+    if (reusable) {
+      completedRequest.current = requestKey;
+      return;
+    }
     if (cancelledRequest.current !== requestKey) cancelledRequest.current = null;
     if (
       !requestKey ||
@@ -281,6 +338,7 @@ export function useStoryboardSemanticSearch(
               if (latest.current.indexKey === start.indexKey && latest.current.requestKey) {
                 completedRequest.current = latest.current.requestKey;
                 setResult({
+                  input: latest.current,
                   key: latest.current.requestKey,
                   scores: emptyScores,
                   frames: emptyScores,
@@ -295,14 +353,23 @@ export function useStoryboardSemanticSearch(
           // Read the panel now: query changes during indexing are intentionally
           // accepted. A different scope is handled by the next pump iteration.
           const current = latest.current;
-          if (!mounted.current || !current.requestKey || current.indexKey !== start.indexKey)
+          if (
+            !mounted.current ||
+            !current.requestKey ||
+            current.scope !== start.scope ||
+            !containsSemanticShots(start.shots, current.shots)
+          )
             return;
+          const stillCurrent = () =>
+            mounted.current &&
+            Boolean(latest.current.requestKey) &&
+            canReuseSearch(current, latest.current);
           const outcome = await runOperation("storyboard.semanticSearch", async () => {
             if (!(await initializeStoryboardSemanticSearch())) {
-              cancelledRequest.current = current.requestKey;
+              if (stillCurrent()) cancelledRequest.current = latest.current.requestKey;
               return null;
             }
-            if (!mounted.current || latest.current.requestKey !== current.requestKey) return null;
+            if (!stillCurrent()) return null;
             return searchSemanticPrompts(
               searchLines(searchQueryToMultiline(current.query, "semantic")),
               searchLines(current.negativePrompts),
@@ -311,7 +378,7 @@ export function useStoryboardSemanticSearch(
                   query,
                   shots: current.shots,
                 }),
-              () => mounted.current && latest.current.requestKey === current.requestKey,
+              stillCurrent,
               (queries) =>
                 invokeCommand<SemanticMatch[][]>("search_storyboards_semantic_batch", {
                   queries,
@@ -319,11 +386,12 @@ export function useStoryboardSemanticSearch(
                 }),
             );
           });
-          if (!mounted.current || latest.current.requestKey !== current.requestKey) return;
+          if (!stillCurrent()) return;
           if (outcome.status === "success" && outcome.value === null) return;
-          completedRequest.current = current.requestKey;
+          completedRequest.current = latest.current.requestKey;
           if (outcome.status === "success" && outcome.value !== null) {
             setResult({
+              input: current,
               key: current.requestKey,
               scores: new Map(outcome.value.map((match) => [match.id, match.similarity])),
               frames: new Map(outcome.value.map((match) => [match.id, match.frame])),
@@ -332,7 +400,8 @@ export function useStoryboardSemanticSearch(
             });
           } else if (outcome.status === "failed") {
             setResult({
-              key: current.requestKey,
+              input: latest.current,
+              key: latest.current.requestKey,
               scores: emptyScores,
               frames: emptyScores,
               status: "failed",
@@ -348,15 +417,16 @@ export function useStoryboardSemanticSearch(
     // Only the debounce is tied to view changes. A started index keeps its
     // background task and queue slot until native work settles.
     return () => window.clearTimeout(timer);
-  }, [requestKey, tick]);
+  }, [requestKey, tick, reusable]);
 
-  const current = requestKey && result?.key === requestKey ? result : null;
+  const current = requestKey && result?.key === requestKey ? result : reusable;
   return {
     scores: current?.scores ?? emptyScores,
     frames: current?.frames ?? emptyScores,
     status: !requestKey ? "idle" : (current?.status ?? "pending"),
     resultVersion: current?.version ?? 0,
     retry: () => {
+      for (const shot of shots) indexedShots.get(scope)?.delete(shot.id);
       indexed.current.delete(indexKey);
       completedRequest.current = null;
       cancelledRequest.current = null;

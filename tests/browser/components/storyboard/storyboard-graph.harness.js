@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { StoryboardGraphCanvas } from "../../../../src/components/panels/StoryboardPanel/views/StoryboardGraphCanvas.tsx";
+import { StoryboardGraphView } from "../../../../src/components/panels/StoryboardPanel/views/StoryboardGraphView.tsx";
+import { useStoryboardSemanticSearch } from "../../../../src/application/media/storyboardSemanticSearch.ts";
+import { TaskProgress } from "../../../../src/systems/TaskSystem";
 import "../../../../src/styles.css";
 import "../../../../src/components/panels/StoryboardPanel/StoryboardPanel.css";
 
@@ -92,6 +95,135 @@ export function mountGraph(empty = false, spread = 1, nodeRadius = 4) {
         setActivations((current) => [...current, shot.id]);
       },
     });
+  }
+  createRoot(host).render(React.createElement(Harness));
+}
+
+export function mountLiveGraph(holdIndex = false) {
+  const nativeWorker = window.Worker;
+  window.graphLiveCalls = [];
+  window.graphLiveRequests = [];
+  window.graphLiveWorkers = 0;
+  const pending = [];
+  window.graphLiveHold = false;
+  const pendingSearch = [];
+  const pendingIndex = [];
+  window.graphLiveReleaseIndex = () => {
+    for (const resolve of pendingIndex.splice(0)) resolve(null);
+  };
+  window.graphLiveHoldSearch = false;
+  window.graphLiveReleaseSearch = () => {
+    window.graphLiveHoldSearch = false;
+    for (const send of pendingSearch.splice(0)) send();
+  };
+  window.graphLiveRelease = () => {
+    window.graphLiveHold = false;
+    for (const send of pending.splice(0)) send();
+  };
+  window.Worker = class extends nativeWorker {
+    constructor(...args) {
+      super(...args);
+      window.graphLiveWorkers++;
+      this.addEventListener("message", (event) => {
+        if (event.data.type === "ready") window.graphLiveTarget = event.data.graph;
+      });
+    }
+    postMessage(message) {
+      window.graphLiveRequests.push(message);
+      const send = () => super.postMessage(message);
+      if (window.graphLiveHold) pending.push(send);
+      else send();
+    }
+  };
+  window.__TAURI_INTERNALS__ = {
+    transformCallback: () => 1,
+    unregisterCallback: () => {},
+    invoke: async (command, args) => {
+      window.graphLiveCalls.push({ command, args });
+      if (command === "select_storyboard_frames" && holdIndex)
+        return new Promise((resolve) => pendingIndex.push(resolve));
+      if (command === "read_storyboard_graph_vectors")
+        return args.shots.map((shot) => ({
+          id: shot.id,
+          thumbnailFrame: shot.startFrame,
+          vector: [Math.cos(Number(shot.id) / 2), Math.sin(Number(shot.id) / 2), 0.1],
+        }));
+      const matches = () =>
+        args.shots.map((shot) => ({
+          id: shot.id,
+          similarity: (Number(shot.id) + 1) / 10,
+          frame: shot.startFrame,
+        }));
+      if (
+        command === "search_storyboards_semantic" ||
+        command === "search_storyboards_semantic_batch"
+      ) {
+        const result =
+          command === "search_storyboards_semantic" ? matches() : args.queries.map(matches);
+        if (window.graphLiveHoldSearch)
+          return new Promise((resolve) => pendingSearch.push(() => resolve(result)));
+        return result;
+      }
+      return null;
+    },
+  };
+  const host = document.createElement("div");
+  host.id = "graph-live-host";
+  host.style.cssText = "position:absolute;left:24px;top:24px;width:800px;height:500px";
+  document.body.append(host);
+  function Harness() {
+    const [currentShots, setCurrentShots] = useState(shots);
+    const [filter, setFilter] = useState(null);
+    const [query, setQuery] = useState("");
+    const [threshold, setThreshold] = useState(0.5);
+    const semanticShots = React.useMemo(
+      () =>
+        currentShots.map((shot) => ({
+          id: shot.id,
+          assetId: "test",
+          fingerprint: "test",
+          source: "test",
+          startFrame: shot.start_frame,
+          endFrame: shot.end_frame,
+        })),
+      [currentShots],
+    );
+    const semantic = useStoryboardSemanticSearch(true, query, semanticShots, "graph-live", () =>
+      setQuery(""),
+    );
+    const visible = React.useMemo(
+      () =>
+        currentShots.filter(
+          (shot) =>
+            (!filter || filter.includes(shot.id)) &&
+            (!query ||
+              semantic.status !== "ready" ||
+              (semantic.scores.get(shot.id) ?? -1) >= threshold),
+        ),
+      [currentShots, filter, query, semantic.status, semantic.scores, threshold],
+    );
+    window.graphLiveFilter = setFilter;
+    window.graphLiveQuery = setQuery;
+    window.graphLiveThreshold = setThreshold;
+    window.graphLiveDelete = (ids) =>
+      setCurrentShots((current) => current.filter((shot) => !ids.includes(shot.id)));
+    window.graphLiveSearchStatus = semantic.status;
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(TaskProgress, null, null),
+      React.createElement(StoryboardGraphView, {
+        semanticShots,
+        scope: "graph-live",
+        available: true,
+        shots: visible,
+        sourceForShot: () => source,
+        shotTitle: (shot) => `Shot ${shot.id}`,
+        selectedShotIds: new Set(),
+        onSelectionChange: () => {},
+        onActivateShot: () => {},
+      }),
+    );
   }
   createRoot(host).render(React.createElement(Harness));
 }

@@ -22,6 +22,34 @@ const sparse = (edges, count, options = defaultStoryboardGraphOptions) =>
 const input = (id, vector) => ({ id, vector, thumbnailFrame: Number(id) * 10 });
 const connect = (edges, vectors) =>
   structuredClone(graphModule.connectStoryboardGraphEdges(edges, vectors));
+
+test("filters and deletion reconnect visible nodes without repeating cached pair comparisons", () => {
+  const shots = Array.from({ length: 12 }, (_, index) =>
+    input(String(index), [Math.cos(index / 3), Math.sin(index / 3), 0.2]),
+  );
+  const similarities = graphModule.indexStoryboardGraphSimilarities(shots);
+  const full = graphModule.buildStoryboardGraph(shots, undefined, undefined, { similarities });
+  assert.equal(similarities.comparisons, (shots.length * (shots.length - 1)) / 2);
+  const comparisons = similarities.comparisons;
+  for (const ids of [["0", "3", "6", "9"], ["0", "9"], ["0"], [], shots.map((shot) => shot.id)]) {
+    const visible = shots.filter((shot) => ids.includes(shot.id));
+    const graph = graphModule.buildStoryboardGraph(visible, undefined, undefined, { similarities });
+    assert.deepEqual(structuredClone(graph), build(visible));
+    assertConnected(graph.nodes, graph.edges);
+    assert.equal(
+      similarities.comparisons,
+      comparisons,
+      "all surviving pairs reuse their exact cached distance",
+    );
+    const warm = graphModule.buildStoryboardGraph(visible, undefined, undefined, {
+      similarities,
+      positions: full.nodes,
+    });
+    assertConnected(warm.nodes, warm.edges);
+    assert.ok(warm.nodes.every((node) => Number.isFinite(node.x) && Number.isFinite(node.y)));
+    assert.equal(similarities.comparisons, comparisons);
+  }
+});
 function assertConnected(nodes, edges) {
   if (!nodes.length) return;
   const visited = new Set([0]);

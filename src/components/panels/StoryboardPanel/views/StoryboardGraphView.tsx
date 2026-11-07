@@ -1,4 +1,5 @@
 import { Loader2, Network } from "lucide-react";
+import { useMemo } from "react";
 import { useStoryboardGraph } from "../../../../application/media/storyboardGraph";
 import type { SemanticShot } from "../../../../application/media/storyboardSemanticSearch";
 import { usePanelActive } from "../../../../runtime/systems/PanelState";
@@ -17,8 +18,9 @@ const phaseLabels = {
   layout: "正在计算图谱布局…",
 };
 
-function GraphProgress({ state, retry }: ReturnType<typeof useStoryboardGraph>) {
+function GraphProgress({ state, graph, retry }: ReturnType<typeof useStoryboardGraph>) {
   if (state.status === "ready") return null;
+  if (graph && !("message" in state)) return null;
   if ("message" in state)
     return (
       <div className="storyboard-graph-message" role="status">
@@ -44,13 +46,17 @@ export function StoryboardGraphView({
   ...props
 }: StoryboardGraphViewProps) {
   const panelActive = usePanelActive();
-  const result = useStoryboardGraph(semanticShots, scope, available && panelActive);
+  const visibleIds = useMemo(() => props.shots.map((shot) => shot.id), [props.shots]);
+  const result = useStoryboardGraph(
+    semanticShots,
+    scope,
+    available && panelActive,
+    undefined,
+    visibleIds,
+  );
   const empty = !semanticShots.length || !props.shots.length;
   return (
-    <StoryboardGraphCanvas
-      {...props}
-      graph={result.state.status === "ready" ? result.state.graph : undefined}
-    >
+    <StoryboardGraphCanvas key={scope} {...props} graph={result.graph}>
       {empty || !available ? (
         <div className="storyboard-graph-message" role="status">
           <Network aria-hidden="true" />

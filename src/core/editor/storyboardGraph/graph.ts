@@ -109,6 +109,35 @@ export function normalizedCosineDistance(a: readonly number[], b: readonly numbe
   return (1 - Math.max(-1, Math.min(1, dot))) / 2;
 }
 
+// One triangular row per vector caches each unordered pair exactly once. The
+// worker keeps this index across filters and deletions, including island repair.
+export function indexStoryboardGraphSimilarities(input: readonly StoryboardGraphVector[]) {
+  const dimensions = input[0]?.vector.length ?? 0;
+  const vectors = input.map((shot) => unitVector(shot.vector, dimensions));
+  const indices = new Map(input.map((shot, index) => [shot.id, index]));
+  const rows = vectors.map((_, index) => new Float64Array(index).fill(NaN));
+  let comparisons = 0;
+  return {
+    get comparisons() {
+      return comparisons;
+    },
+    distance(a: string, b: string) {
+      const first = indices.get(a);
+      const second = indices.get(b);
+      if (first === undefined || second === undefined)
+        throw clientError("UNEXPECTED_ERROR", "Unknown storyboard graph vector");
+      if (first === second) return 0;
+      const row = Math.max(first, second);
+      const column = Math.min(first, second);
+      if (Number.isNaN(rows[row][column])) {
+        rows[row][column] = normalizedCosineDistance(vectors[row], vectors[column]);
+        comparisons++;
+      }
+      return rows[row][column];
+    },
+  };
+}
+
 // Each disconnected component chooses its highest-scoring link to any external
 // node. Search all unit vectors: an outgoing link may be absent from the kNN
 // candidates entirely. Repeat after merging components, adding no redundant
@@ -117,6 +146,8 @@ export function connectStoryboardGraphEdges(
   edges: readonly StoryboardGraphEdge[],
   vectors: readonly (readonly number[])[],
   progress = (_: number) => {},
+  distance = (source: number, target: number) =>
+    normalizedCosineDistance(vectors[source], vectors[target]),
 ) {
   const result = [...edges];
   const parents = Uint32Array.from(vectors, (_, index) => index);
@@ -150,7 +181,7 @@ export function connectStoryboardGraphEdges(
         const edge = {
           source,
           target,
-          similarity: 1 - normalizedCosineDistance(vectors[source], vectors[target]),
+          similarity: 1 - distance(source, target),
         };
         for (const component of [labels[source], labels[target]]) {
           const best = strongest[component];
@@ -174,6 +205,8 @@ export function storyboardGraphNeighbors(
   vectors: number[][],
   k: number,
   progress = (_: number) => {},
+  distanceAt = (source: number, target: number) =>
+    normalizedCosineDistance(vectors[source], vectors[target]),
 ) {
   const indices: number[][] = [];
   const distances: number[][] = [];
@@ -182,7 +215,7 @@ export function storyboardGraphNeighbors(
     const nearest: { index: number; distance: number }[] = [];
     for (let j = 0; j < vectors.length; j++) {
       if (i === j || count === 0) continue;
-      const distance = normalizedCosineDistance(vectors[i], vectors[j]);
+      const distance = distanceAt(i, j);
       let position = nearest.length;
       while (position > 0 && nearest[position - 1].distance > distance) position--;
       if (position < count) {
@@ -222,11 +255,15 @@ function forceDirectedPositions(
   edges: readonly StoryboardGraphEdge[],
   degrees: readonly number[],
   progress: (fraction: number) => void,
+  previous: readonly StoryboardGraphNode[] = [],
 ) {
   if (shots.length <= 1) return shots.map(() => [0, 0]);
+  const positions = new Map(previous.map((node) => [node.id, node]));
   const nodes: ForceNode[] = shots.map((shot, i) => ({
     id: shot.id,
     radius: storyboardGraphNodeRadius(degrees[i]),
+    x: positions.get(shot.id)?.x,
+    y: positions.get(shot.id)?.y,
   }));
   // D3 replaces link indices with node references. Keep those mutations private
   // to this simulation so the public graph retains serializable numeric edges.
@@ -276,6 +313,10 @@ export function buildStoryboardGraph(
   input: readonly StoryboardGraphVector[],
   progress = (_phase: "neighbors" | "layout", _fraction: number) => {},
   options: StoryboardGraphOptions = defaultStoryboardGraphOptions,
+  reuse: {
+    similarities?: ReturnType<typeof indexStoryboardGraphSimilarities>;
+    positions?: readonly StoryboardGraphNode[];
+  } = {},
 ): StoryboardGraph {
   // Panel sorting and search must not alter the random initialization or node identities.
   const shots = [...input].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -285,8 +326,16 @@ export function buildStoryboardGraph(
   const dimensions = shots[0]?.vector.length ?? 0;
   const vectors = shots.map((shot) => unitVector(shot.vector, dimensions));
   const neighbors = Math.min(15, Math.max(0, shots.length - 1));
-  const { indices, distances } = storyboardGraphNeighbors(vectors, neighbors, (fraction) =>
-    progress("neighbors", fraction * 0.85),
+  const distance = reuse.similarities
+    ? (source: number, target: number) =>
+        reuse.similarities!.distance(shots[source].id, shots[target].id)
+    : (source: number, target: number) =>
+        normalizedCosineDistance(vectors[source], vectors[target]);
+  const { indices, distances } = storyboardGraphNeighbors(
+    vectors,
+    neighbors,
+    (fraction) => progress("neighbors", fraction * 0.85),
+    distance,
   );
   const edges: StoryboardGraphEdge[] = [];
   const seen = new Set<string>();
@@ -304,14 +353,19 @@ export function buildStoryboardGraph(
     sparsifyStoryboardGraphEdges(edges, shots.length, options),
     vectors,
     (fraction) => progress("neighbors", 0.85 + fraction * 0.15),
+    distance,
   );
   const degrees = shots.map(() => 0);
   for (const edge of sparseEdges) {
     degrees[edge.source]++;
     degrees[edge.target]++;
   }
-  const positions = forceDirectedPositions(shots, sparseEdges, degrees, (fraction) =>
-    progress("layout", fraction),
+  const positions = forceDirectedPositions(
+    shots,
+    sparseEdges,
+    degrees,
+    (fraction) => progress("layout", fraction),
+    reuse.positions,
   );
   if (positions.some((position) => position.length !== 2 || !position.every(Number.isFinite))) {
     throw clientError("UNEXPECTED_ERROR", "Non-finite storyboard graph layout");

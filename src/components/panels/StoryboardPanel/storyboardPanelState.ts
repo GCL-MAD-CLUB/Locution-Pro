@@ -54,7 +54,7 @@ export type StoryboardShotFlag = "retained" | "none" | "excluded";
 export type StoryboardShotEditFilter = "edited" | "unedited";
 export type StoryboardShotVisualLabel = StoryboardShotColorLabel | "custom";
 export type StoryboardShotColorLabelFilter = StoryboardShotVisualLabel | "none";
-export type StoryboardViewMode = "list" | "grid";
+export type StoryboardViewMode = "list" | "grid" | "graph";
 export type StoryboardKeywordEditorMode = "plain" | "withParents";
 export type StoryboardIconMetadataMode =
   | "none"

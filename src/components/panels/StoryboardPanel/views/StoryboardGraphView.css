@@ -1,0 +1,250 @@
+.storyboard-graph-container {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.storyboard-graph-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.storyboard-graph-controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.storyboard-graph-controls input {
+  width: 64px;
+  padding: 3px 6px;
+  color: var(--color-text-field);
+  background: var(--color-surface-input-inset);
+  border: 1px solid var(--color-border-default);
+  border-radius: 4px;
+}
+
+.storyboard-graph-controls button {
+  padding: 3px 8px;
+  color: var(--color-text-field);
+  background: var(--color-surface-active);
+  border: 1px solid var(--color-border-default);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.storyboard-graph-controls :disabled {
+  cursor: default;
+  opacity: var(--opacity-control-disabled);
+}
+
+.storyboard-graph-controls > span {
+  color: var(--color-text-placeholder);
+}
+
+.storyboard-graph-view {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-surface-canvas);
+}
+
+.storyboard-graph-edges,
+.storyboard-graph-nodes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.storyboard-graph-edges line {
+  stroke: var(--color-text-placeholder);
+  stroke-width: 0.6;
+  transition: opacity 140ms ease;
+}
+
+.storyboard-graph-edges line.is-muted {
+  opacity: 0.025;
+}
+
+.storyboard-graph-edges line.is-highlighted {
+  stroke: var(--color-accent);
+  stroke-width: 1;
+}
+
+.storyboard-graph-dot {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-transparent);
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: opacity 140ms ease;
+}
+
+.storyboard-graph-dot::after {
+  width: var(--storyboard-graph-dot-size, 7px);
+  height: var(--storyboard-graph-dot-size, 7px);
+  content: "";
+  border: 1px solid var(--color-surface-canvas);
+  border-radius: 50%;
+  background: var(--color-text-placeholder);
+  transition: transform 120ms ease;
+}
+
+.storyboard-graph-dot.is-neighbor::after {
+  background: var(--color-text-field);
+}
+
+.storyboard-graph-view.has-focus .storyboard-graph-dot:not(.is-neighbor):not(.is-selected) {
+  opacity: 0.2;
+}
+
+.storyboard-graph-node-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  display: none;
+  max-width: 120px;
+  overflow: hidden;
+  color: var(--color-text-placeholder);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.storyboard-graph-nodes.has-labels .storyboard-graph-node-label,
+.storyboard-graph-dot.is-neighbor .storyboard-graph-node-label,
+.storyboard-graph-dot.is-selected .storyboard-graph-node-label {
+  display: block;
+}
+
+.storyboard-graph-dot.is-hovered .storyboard-graph-node-label {
+  color: var(--color-text-field);
+}
+
+.storyboard-graph-dot.is-selected::after,
+.storyboard-graph-dot.is-hovered::after,
+.storyboard-graph-dot:focus-visible::after {
+  background: var(--color-accent);
+  transform: scale(1.5);
+}
+
+.storyboard-graph-dot.is-hovered {
+  z-index: 1;
+}
+
+.storyboard-graph-dot:focus-visible {
+  z-index: 1;
+  outline: 1px solid var(--color-accent);
+}
+
+.storyboard-graph-preview {
+  position: absolute;
+  z-index: 2;
+  overflow: hidden;
+  border: 1px solid var(--color-border-overlay-default);
+  border-radius: 5px;
+  background: var(--color-surface-canvas);
+  box-shadow: 0 4px 16px var(--color-shadow);
+  pointer-events: none;
+}
+
+.storyboard-graph-preview .shot-semantic-frame {
+  position: relative;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+
+.storyboard-graph-preview > span {
+  display: block;
+  padding: 5px 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.storyboard-graph-caption {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  left: 12px;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--color-text-placeholder);
+  pointer-events: none;
+}
+
+.storyboard-graph-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 20px;
+  box-sizing: border-box;
+  color: var(--color-text-placeholder);
+  text-align: center;
+}
+
+.storyboard-graph-message > svg {
+  width: 24px;
+  height: 24px;
+}
+
+.storyboard-graph-message > button {
+  padding: 5px 12px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 4px;
+  color: var(--color-text-field);
+  background: var(--color-surface-active);
+  cursor: pointer;
+}
+
+.storyboard-graph-message > progress {
+  width: min(240px, 80%);
+  accent-color: var(--color-accent);
+}
+
+.storyboard-graph-spinner {
+  animation: storyboard-graph-spin 1s linear infinite;
+}
+
+@keyframes storyboard-graph-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .storyboard-graph-spinner {
+    animation: none;
+  }
+  .storyboard-graph-dot::after,
+  .storyboard-graph-dot,
+  .storyboard-graph-edges line {
+    transition: none;
+  }
+}

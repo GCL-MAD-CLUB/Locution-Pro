@@ -130,6 +130,7 @@ pub fn run() {
             prune_project_states,
             detect_storyboard_shots,
             storyboard_semantic_search_available,
+            read_storyboard_graph_vectors,
             initialize_storyboard_semantic_search,
             select_storyboard_frames,
             search_storyboards_semantic,

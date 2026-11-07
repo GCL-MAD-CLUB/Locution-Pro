@@ -30,6 +30,7 @@ import {
   List,
   ListFilter,
   Loader2,
+  Network,
   Scissors,
   Star,
 } from "lucide-react";
@@ -111,6 +112,7 @@ import {
   storyboardShotColorLabels,
 } from "./annotations/StoryboardColorLabelButtons";
 import { StoryboardIconView } from "./views/StoryboardIconView";
+import { StoryboardGraphView } from "./views/StoryboardGraphView";
 import { StoryboardKeywordPanel } from "./annotations/StoryboardKeywordPanel";
 import { StoryboardFrameDataPanel } from "./analysis/StoryboardFrameDataPanel";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -393,6 +395,7 @@ const defaultStoryboardFooterAreaVisibility: StoryboardFooterAreaVisibility = {
   sort: {
     list: false,
     grid: true,
+    graph: false,
   },
   thumbnailSize: true,
 };
@@ -1387,8 +1390,8 @@ export function StoryboardPanel() {
     [shotStacks, shots],
   );
   const displayShots = useMemo(
-    () => visibleStoryboardShots(shots, shotStacks),
-    [shotStacks, shots],
+    () => (viewMode === "graph" ? shots : visibleStoryboardShots(shots, shotStacks)),
+    [shotStacks, shots, viewMode],
   );
   const semanticShots = useMemo(
     () =>
@@ -1612,7 +1615,7 @@ export function StoryboardPanel() {
   const footerSortLabel =
     storyboardGridSortOptions.find((option) => option.id === activeShotSort.columnId)?.label ??
     "标题";
-  const footerSortVisible = footerAreaVisibility.sort[viewMode];
+  const footerSortVisible = viewMode !== "graph" && footerAreaVisibility.sort[viewMode];
   const sprayKeywordParseResult = parseStoryboardKeywordInput(sprayKeywordInput);
   const sprayKeywords = sprayKeywordParseResult.paths;
   const sprayRecentKeywordLabels = useMemo(() => {
@@ -2190,6 +2193,7 @@ export function StoryboardPanel() {
   useEffect(() => {
     setFooterSortMenu(null);
     setFooterSprayMenu(null);
+    if (viewMode === "graph") setSprayActive(false);
   }, [viewMode]);
 
   useEffect(() => {
@@ -3901,6 +3905,17 @@ export function StoryboardPanel() {
               shotTitle={(shot) => storyboardShotTitle(shot, shotCount, shotAnnotations[shot.id])}
               shotLabel={(shot) => storyboardShotLabel(shotAnnotations[shot.id])}
             />
+          ) : viewMode === "graph" ? (
+            <StoryboardGraphView
+              semanticShots={semanticShots}
+              scope={JSON.stringify([projectId, selection.workspaceId, videoContext])}
+              available={semanticSearchAvailable}
+              shots={sortedShots}
+              sourceForShot={sourceForShot}
+              shotTitle={(shot) => storyboardShotTitle(shot, shotCount, shotAnnotations[shot.id])}
+              selectedShotIds={selectedShotIds}
+              onSelectShot={handleShotSelection}
+            />
           ) : (
             <StoryboardIconView
               sourceKey={videoContext}
@@ -4018,6 +4033,16 @@ export function StoryboardPanel() {
               >
                 <Grid2X2 aria-hidden="true" />
               </button>
+              <button
+                type="button"
+                className={viewMode === "graph" ? "active" : ""}
+                onClick={() => setViewMode("graph")}
+                title="图谱视图"
+                aria-label="图谱视图"
+                aria-pressed={viewMode === "graph"}
+              >
+                <Network aria-hidden="true" />
+              </button>
               <span className="storyboard-filter-separator storyboard-footer-separator" />
             </div>
           )}
@@ -4036,7 +4061,7 @@ export function StoryboardPanel() {
               <span className="storyboard-filter-separator storyboard-footer-separator" />
             </div>
           )}
-          {footerAreaVisibility.sprayTool && (
+          {viewMode !== "graph" && footerAreaVisibility.sprayTool && (
             <div
               className={`storyboard-footer-area storyboard-footer-spray-area ${
                 sprayActive ? "is-active" : ""
@@ -4356,7 +4381,7 @@ export function StoryboardPanel() {
             </button>
           ) : (
             <>
-              {footerAreaVisibility.thumbnailSize && (
+              {viewMode !== "graph" && footerAreaVisibility.thumbnailSize && (
                 <>
                   <span className="storyboard-thumbnail-size-label">缩略图：</span>
                   <input
@@ -4549,6 +4574,7 @@ export function StoryboardPanel() {
             </PopupMenuItem>
             <PopupMenuItem
               checked={footerAreaVisibility.sprayTool}
+              disabled={viewMode === "graph"}
               onSelect={() =>
                 setFooterAreaVisibility((current) => ({
                   ...current,
@@ -4560,6 +4586,7 @@ export function StoryboardPanel() {
             </PopupMenuItem>
             <PopupMenuItem
               checked={footerSortVisible}
+              disabled={viewMode === "graph"}
               onSelect={() =>
                 setFooterAreaVisibility((current) => ({
                   ...current,

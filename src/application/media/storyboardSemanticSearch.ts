@@ -65,7 +65,6 @@ interface SearchState {
 }
 interface IndexJob {
   scope: string;
-  query: string;
   cancelled: boolean;
   listeners: Set<() => void>;
   promise: Promise<"ready" | "cancelled" | "failed">;
@@ -115,12 +114,11 @@ export function initializeStoryboardSemanticSearch(): Promise<boolean> {
   return initialization;
 }
 
-function indexShots(state: SearchState): IndexJob {
+function indexShots(state: Pick<SearchState, "shots" | "scope" | "indexKey">): IndexJob {
   const existing = indexJobs.get(state.indexKey);
   if (existing) return existing;
   const job: IndexJob = {
     scope: state.scope,
-    query: state.query,
     cancelled: false,
     listeners: new Set(),
     promise: Promise.resolve("ready"),
@@ -177,6 +175,11 @@ function indexShots(state: SearchState): IndexJob {
     }
   })();
   return job;
+}
+
+// Graph and search consumers share native indexing work and its cancellation task.
+export function ensureStoryboardSemanticIndex(shots: readonly SemanticShot[], scope: string) {
+  return indexShots({ shots, scope, indexKey: JSON.stringify([scope, shots]) }).promise;
 }
 
 export function useStoryboardSemanticSearch(
@@ -254,7 +257,12 @@ export function useStoryboardSemanticSearch(
             const onUpdate = () => {
               if (!mounted.current) return;
               const current = latest.current;
-              if (job.cancelled && current.scope === job.scope && current.query === job.query) {
+              if (
+                job.cancelled &&
+                current.scope === job.scope &&
+                current.indexKey === start.indexKey &&
+                current.query === start.query
+              ) {
                 cancelledRequest.current = current.requestKey;
                 current.clearQuery();
               }

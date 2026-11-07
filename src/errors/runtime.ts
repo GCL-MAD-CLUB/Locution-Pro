@@ -273,6 +273,7 @@ const operationPolicies = {
   "storage.recentPaths": silent("最近记录更新失败"),
   "storyboard.semanticSearch": modal("分镜语义搜索失败"),
   "storyboard.semanticIndex": modal("分镜语义索引构建失败"),
+  "storyboard.graph": silent("分镜图谱生成失败"),
   "storyboard.semanticAvailability": silent("检查分镜语义检索组件失败"),
   "subtitle.semanticSearch": modal("字幕语义搜索失败"),
   "subtitle.semanticIndex": modal("字幕语义索引构建失败"),

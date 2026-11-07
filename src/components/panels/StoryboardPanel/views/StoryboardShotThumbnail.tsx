@@ -201,10 +201,13 @@ function useShotFrameThumbnail({
   return thumbnail?.identity === thumbnailIdentity ? thumbnail : null;
 }
 
-export function StoryboardSemanticThumbnail(props: ShotFrameThumbnailProps) {
+export function StoryboardSemanticThumbnail({
+  ariaLabel = "语义检索最高得分帧",
+  ...props
+}: ShotFrameThumbnailProps & { ariaLabel?: string }) {
   const thumbnail = useShotFrameThumbnail(props);
   return (
-    <div className="shot-semantic-frame" role="img" aria-label="语义检索最高得分帧">
+    <div className="shot-semantic-frame" role="img" aria-label={ariaLabel}>
       {thumbnail && (
         <img
           className="shot-frame"

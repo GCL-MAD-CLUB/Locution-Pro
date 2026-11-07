@@ -333,7 +333,7 @@
   border-style: dashed;
 }
 
-.storyboard-graph-view.is-hand .storyboard-graph-preview.is-neighbor,
+.storyboard-graph-preview.is-neighbor,
 .storyboard-graph-preview.is-muted {
   opacity: 0.6;
 }

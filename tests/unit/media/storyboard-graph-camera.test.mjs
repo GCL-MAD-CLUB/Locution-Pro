@@ -12,6 +12,7 @@ import {
   storyboardGraphViewport,
   storyboardGraphWorldPoint,
   storyboardGraphZoomLimits,
+  storyboardGraphNodeScale,
   zoomStoryboardGraphAt,
   indexStoryboardGraphNeighborhoods,
   storyboardGraphNeighborhood,
@@ -161,7 +162,8 @@ test("maximum displayed node size is independent of graph bounds and panel dimen
         canvas,
       );
       close(camera.zoom, limits.max);
-      diameters.push(points[0].radius * 2 * camera.zoom);
+      close(limits.max, 2);
+      diameters.push(points[0].radius * 2 * storyboardGraphNodeScale(camera.zoom));
       relativeLimits.push(limits.max / limits.min);
       contained(camera, display, canvas);
       const overview = storyboardGraphOverviewCanvas(display, canvas);
@@ -179,6 +181,17 @@ test("maximum displayed node size is independent of graph bounds and panel dimen
     new Set(relativeLimits).size > 1,
     "the allowed factor from fitted size varies with the actual graph",
   );
+});
+
+test("node scale follows zoom only up to 0.8 while positions continue to magnify to 2", () => {
+  for (const zoom of [0.2, 0.4, 0.6, 0.8]) close(storyboardGraphNodeScale(zoom), zoom);
+  for (const zoom of [0.8, 1, 1.5, 2]) close(storyboardGraphNodeScale(zoom), 0.8);
+  const canvas = storyboardGraphCanvas(nodes);
+  const camera = constrainStoryboardGraphCamera({ x: 0, y: 0, zoom: 20 }, size, canvas);
+  close(camera.zoom, 2);
+  const a = storyboardGraphScreenPoint({ x: 0, y: 0 }, camera, size);
+  const b = storyboardGraphScreenPoint({ x: 1, y: 0 }, camera, size);
+  close(b.x - a.x, 2);
 });
 
 test("panning follows screen distance at the current zoom", () => {

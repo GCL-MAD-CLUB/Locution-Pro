@@ -27,6 +27,7 @@ import {
   storyboardGraphOverviewPoint,
   storyboardGraphOverviewWorldPoint,
   storyboardGraphScreenPoint,
+  storyboardGraphNodeScale,
   storyboardGraphWorldPoint,
   storyboardGraphViewport,
   zoomStoryboardGraphAt,
@@ -223,6 +224,7 @@ type GraphNodeEvent = MouseEvent<HTMLElement>;
 // paint can move to the top of its layer independently.
 const GraphHitNode = memo(function GraphHitNode({
   node,
+  scale,
   shot,
   title,
   selected,
@@ -237,6 +239,7 @@ const GraphHitNode = memo(function GraphHitNode({
   onSelect,
 }: {
   node: StoryboardGraphNode;
+  scale: number;
   shot: StoryboardShot;
   title: string;
   selected: boolean;
@@ -255,7 +258,12 @@ const GraphHitNode = memo(function GraphHitNode({
       type="button"
       className={`storyboard-graph-dot ${selected ? "is-selected" : ""} ${hovered ? "is-hovered" : ""} ${neighbor ? "is-neighbor" : ""}`}
       data-storyboard-shot-id={node.id}
-      style={{ left: node.x, top: node.y, width: node.radius * 2, height: node.radius * 2 }}
+      style={{
+        left: node.x,
+        top: node.y,
+        width: node.radius * 2 * scale,
+        height: node.radius * 2 * scale,
+      }}
       aria-label={title}
       aria-pressed={selected}
       aria-describedby={hovered ? previewId : undefined}
@@ -282,7 +290,7 @@ const GraphNode = memo(function GraphNode({
   node,
   x,
   y,
-  zoom,
+  nodeScale,
   selected,
   hovered,
   neighbor,
@@ -291,14 +299,14 @@ const GraphNode = memo(function GraphNode({
   node: StoryboardGraphNode;
   x: number;
   y: number;
-  zoom: number;
+  nodeScale: number;
   selected: boolean;
   hovered: boolean;
   neighbor: boolean;
   annotation?: StoryboardShotAnnotation;
 }) {
   const scale = hovered ? graphDotHoverScale : 1;
-  const ring = storyboardGraphSelectionRing(node.radius * zoom, scale);
+  const ring = storyboardGraphSelectionRing(node.radius * nodeScale, scale);
   return (
     <g
       data-overlay-node={node.id}
@@ -311,8 +319,8 @@ const GraphNode = memo(function GraphNode({
           data-graph-node={node.id}
           data-selection-node={selected ? node.id : undefined}
           className={`storyboard-graph-node ${selected ? "storyboard-graph-selected-node" : ""}`}
-          r={(node.radius - 0.5) * zoom}
-          strokeWidth={zoom}
+          r={(node.radius - 0.5) * nodeScale}
+          strokeWidth={nodeScale}
         />
         {selected && (
           <circle
@@ -514,6 +522,7 @@ export function StoryboardGraphCanvas({
     [],
   );
   const hoverEnabled = camera.zoom > graphHoverMinPixelsPerWorldUnit;
+  const nodeScale = storyboardGraphNodeScale(camera.zoom);
   const activeHoveredId = hoverEnabled ? hoveredId : null;
   const panRef = useRef<{ id: number; x: number; y: number; camera: StoryboardGraphCamera } | null>(
     null,
@@ -562,6 +571,8 @@ export function StoryboardGraphCanvas({
   const viewport = useMemo(() => storyboardGraphViewport(camera, size), [camera, size]);
   const overviewViewport = storyboardGraphOverviewPoint(viewport, overviewCanvas);
   const hoveredNode = activeHoveredId ? nodesById.get(activeHoveredId) : undefined;
+  const revealNeighbors =
+    tool === "hand" || Boolean(hoveredNode && !selectedShotIds.has(hoveredNode.id));
   const previewEmphasis = useMemo(() => {
     if (tool !== "pointer") return null;
     if (hoveredPreviewId) {
@@ -581,7 +592,7 @@ export function StoryboardGraphCanvas({
   const previews = useMemo<StoryboardGraphPreview[]>(() => {
     if (!hoverEnabled) return [];
     const ids = new Set(selectedShotIds);
-    if (tool === "hand") for (const id of neighborhood) ids.add(id);
+    if (revealNeighbors) for (const id of neighborhood) ids.add(id);
     else if (hoveredNode) ids.add(hoveredNode.id);
     const candidates = [...ids]
       .flatMap((id) => {
@@ -612,10 +623,10 @@ export function StoryboardGraphCanvas({
       const selected = selectedShotIds.has(candidate.node.id);
       const dotScale = candidate.node.id === hoveredNode?.id ? graphDotHoverScale : 1;
       const previewDistance =
-        candidate.node.radius * camera.zoom * dotScale +
+        candidate.node.radius * nodeScale * dotScale +
         previewTipGap +
         (selected
-          ? storyboardGraphSelectionRing(candidate.node.radius * camera.zoom, dotScale).gap + 1
+          ? storyboardGraphSelectionRing(candidate.node.radius * nodeScale, dotScale).gap + 1
           : 0) +
         previewArrowHeight +
         previewFrameGap;
@@ -641,13 +652,14 @@ export function StoryboardGraphCanvas({
   }, [
     hoverEnabled,
     hoveredNode,
-    tool,
+    revealNeighbors,
     neighborhood,
     selectedShotIds,
     nodesById,
     shotsById,
     sourceForShot,
     camera,
+    nodeScale,
     size,
     previewWidth,
     previewHeight,
@@ -658,7 +670,7 @@ export function StoryboardGraphCanvas({
       visibleNodes.flatMap((node) => {
         const point = storyboardGraphScreenPoint(node, camera, size);
         const margin =
-          storyboardGraphSelectionRing(node.radius * camera.zoom, graphDotHoverScale).radius + 2;
+          storyboardGraphSelectionRing(node.radius * nodeScale, graphDotHoverScale).radius + 2;
         return point.x < -margin ||
           point.x > size.width + margin ||
           point.y < -margin ||
@@ -666,7 +678,7 @@ export function StoryboardGraphCanvas({
           ? []
           : [{ node, ...point }];
       }),
-    [visibleNodes, camera, size],
+    [visibleNodes, camera, size, nodeScale],
   );
   const incidentEdges = useMemo(() => {
     const result = new Map<string, StoryboardGraph["edges"]>();
@@ -721,12 +733,12 @@ export function StoryboardGraphCanvas({
         .filter(
           (preview) =>
             preview.node.id === hoveredNode.id ||
-            (tool === "hand" && !selectedShotIds.has(preview.node.id)),
+            (revealNeighbors && !selectedShotIds.has(preview.node.id)),
         )
         .map((preview) => {
           const point = storyboardGraphScreenPoint(hoveredNode, camera, size);
           const edgeY = preview.above ? preview.top + previewHeight : preview.top;
-          const radius = hoveredNode.radius * camera.zoom * graphDotHoverScale;
+          const radius = hoveredNode.radius * nodeScale * graphDotHoverScale;
           return (
             <polygon
               key={preview.node.id}
@@ -1220,6 +1232,7 @@ export function StoryboardGraphCanvas({
             <GraphHitNode
               key={node.id}
               node={node}
+              scale={nodeScale / camera.zoom}
               shot={shotsById.get(node.id)!}
               title={shotTitle(shotsById.get(node.id)!)}
               selected={selectedShotIds.has(node.id)}
@@ -1249,7 +1262,7 @@ export function StoryboardGraphCanvas({
             node={node}
             x={x}
             y={y}
-            zoom={camera.zoom}
+            nodeScale={nodeScale}
             selected={selectedShotIds.has(node.id)}
             hovered={activeHoveredId === node.id}
             neighbor={neighborhood.has(node.id)}
@@ -1268,6 +1281,7 @@ export function StoryboardGraphCanvas({
         <GraphPreviewPresence previews={previews} enabled={hoverEnabled}>
           {(preview, exiting, onExited) => {
             const isHovered = preview.node.id === hoveredNode?.id;
+            const isSelected = selectedShotIds.has(preview.node.id);
             const shot = shotsById.get(preview.node.id);
             if (!shot) return null;
             const colorStyle = annotationStyle(shotAnnotations[preview.node.id]);
@@ -1289,7 +1303,7 @@ export function StoryboardGraphCanvas({
                   )
                     onExited();
                 }}
-                className={`storyboard-graph-preview ${preview.above ? "is-above" : "is-below"}${colorStyle ? " has-color-label" : ""}${selectedShotIds.has(preview.node.id) ? " is-selected" : ""}${!isHovered && !selectedShotIds.has(preview.node.id) ? " is-neighbor" : ""}${previewEmphasis && !previewEmphasis.has(preview.node.id) ? " is-muted" : ""}${exiting ? " is-exiting" : ""}`}
+                className={`storyboard-graph-preview ${preview.above ? "is-above" : "is-below"}${colorStyle ? " has-color-label" : ""}${isSelected ? " is-selected" : ""}${!isHovered && !isSelected ? " is-neighbor" : ""}${previewEmphasis && !previewEmphasis.has(preview.node.id) ? " is-muted" : ""}${exiting ? " is-exiting" : ""}`}
                 onPointerEnter={() => {
                   setHoveredPreviewId(preview.node.id);
                 }}
@@ -1313,7 +1327,9 @@ export function StoryboardGraphCanvas({
                     top: preview.top,
                     ...colorStyle,
                     zIndex:
-                      tool === "pointer" && preview.node.id === hoveredPreviewId
+                      tool === "pointer" &&
+                      (isHovered || isSelected) &&
+                      preview.node.id === hoveredPreviewId
                         ? previews.length + 4
                         : preview.zIndex,
                     "--storyboard-graph-preview-caret": `${preview.caret}px`,

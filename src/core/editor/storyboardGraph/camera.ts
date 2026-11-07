@@ -75,11 +75,13 @@ export function storyboardGraphZoomLimits(size: StoryboardGraphSize, canvas: Sto
     Math.max(1, size.width) / canvas.width,
     Math.max(1, size.height) / canvas.height,
   );
-  // Coordinates and radii render at one CSS pixel per world unit before the
-  // camera transform. Cap their displayed pixel scale, not a multiple of fit:
-  // identical nodes then have the same maximum size in every graph and panel.
-  const maxPixelsPerWorldUnit = 1;
-  return { min: Math.min(cover, maxPixelsPerWorldUnit), max: maxPixelsPerWorldUnit };
+  // Keep the original zoom-out framing; allow positions to magnify further
+  // while node geometry uses its own lower pixel-scale cap.
+  return { min: Math.min(cover, 1), max: 2 };
+}
+
+export function storyboardGraphNodeScale(zoom: number) {
+  return Math.min(zoom, 0.8);
 }
 
 // A small graph may reach the pixel cap before filling the display. Include
@@ -135,7 +137,7 @@ export function fitStoryboardGraphCamera(
       x: content.x + content.width / 2,
       y: content.y + content.height / 2,
       zoom: Math.min(
-        2,
+        1,
         Math.max(1, size.width - 96) / Math.max(64, content.width),
         Math.max(1, size.height - 96) / Math.max(64, content.height),
       ),

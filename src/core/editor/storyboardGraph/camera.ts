@@ -12,6 +12,18 @@ export function storyboardGraphNeighborhood(graph: StoryboardGraph, id: string) 
   return neighbors;
 }
 
+// Cache once per graph so hover never scans every edge. Include each node itself.
+export function indexStoryboardGraphNeighborhoods(graph: StoryboardGraph) {
+  const result = new Map(graph.nodes.map((node) => [node.id, new Set([node.id])]));
+  for (const edge of graph.edges) {
+    const source = graph.nodes[edge.source].id;
+    const target = graph.nodes[edge.target].id;
+    result.get(source)!.add(target);
+    result.get(target)!.add(source);
+  }
+  return result;
+}
+
 export interface StoryboardGraphRect {
   x: number;
   y: number;

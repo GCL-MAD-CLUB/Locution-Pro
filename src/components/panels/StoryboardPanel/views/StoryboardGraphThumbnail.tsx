@@ -1,10 +1,12 @@
 import { Star, Tags } from "lucide-react";
+import { memo } from "react";
+import { timelineThumbnailResolutionForDisplay } from "../../../../timelineThumbnail";
 import type { PanelRowSource } from "../../../../core/editor/multiSource";
 import { frameToTimeUs } from "../../../../core/editor/timeline";
 import type { StoryboardShot, StoryboardShotAnnotation } from "../../../../types";
 import { ShotFrameButton } from "./StoryboardShotThumbnail";
 
-export function StoryboardGraphThumbnail({
+export const StoryboardGraphThumbnail = memo(function StoryboardGraphThumbnail({
   shot,
   source,
   annotation,
@@ -28,7 +30,7 @@ export function StoryboardGraphThumbnail({
         {...source}
         priority={priority}
         requestEnabled={requestEnabled}
-        resolution={{ width: 640, height: 360 }}
+        resolution={timelineThumbnailResolutionForDisplay(128, 72)}
         thumbnailTimeUs={frameToTimeUs(thumbnailFrame, source.frameRate)}
         previewOnly
         onSelect={(event) => event.preventDefault()}
@@ -64,4 +66,4 @@ export function StoryboardGraphThumbnail({
       </div>
     </>
   );
-}
+});

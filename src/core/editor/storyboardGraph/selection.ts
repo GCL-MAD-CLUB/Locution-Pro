@@ -4,10 +4,10 @@ import type { StoryboardGraphRect } from "./camera";
 export type StoryboardGraphTool = "pointer" | "hand";
 export type StoryboardGraphSelectionMode = "replace" | "add" | "subtract" | "intersect";
 
-// Preserve a one-pixel gap up to an 8px displayed diameter, then scale the gap
-// with the node. The ring itself remains one screen pixel wide.
-export function storyboardGraphSelectionRing(nodeRadius: number, zoom: number) {
-  const displayedRadius = nodeRadius * zoom;
+// The caller projects the node's radius using camera zoom. Hover then scales
+// that screen radius and gap; the ring remains one screen pixel wide.
+export function storyboardGraphSelectionRing(screenRadius: number, hoverScale = 1) {
+  const displayedRadius = screenRadius * hoverScale;
   const gap = Math.max(1, displayedRadius / 4);
   const strokeWidth = 1;
   return { radius: displayedRadius + gap + strokeWidth / 2, gap, strokeWidth };

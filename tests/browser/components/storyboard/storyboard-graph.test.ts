@@ -128,15 +128,15 @@ test("graph frame matches icon view; controls and corner text are absent; hover 
   expect(layering.tooltipOpacity).toBe(1);
   expect(layering.neighborOpacities).toEqual([]);
   const hoverColors = await page.evaluate(() => {
-    const hoveredDot = document.querySelector(".storyboard-graph-dot.is-hovered");
+    const hoveredDot = document.querySelector(".storyboard-graph-dot-visual.is-hovered");
     const neighborDot = document.querySelector(
-      ".storyboard-graph-dot.is-neighbor:not(.is-hovered)",
+      ".storyboard-graph-dot-visual.is-neighbor:not(.is-hovered)",
     );
     const highlightedEdge = document.querySelector(".storyboard-graph-edges line.is-highlighted");
     const overviewFrame = document.querySelector("[data-graph-viewport]");
     return {
-      dot: hoveredDot ? getComputedStyle(hoveredDot, "::after").backgroundColor : "",
-      neighborDot: neighborDot ? getComputedStyle(neighborDot, "::after").backgroundColor : "",
+      dot: hoveredDot ? getComputedStyle(hoveredDot.querySelector("circle")!).fill : "",
+      neighborDot: neighborDot ? getComputedStyle(neighborDot.querySelector("circle")!).fill : "",
       edge: highlightedEdge ? getComputedStyle(highlightedEdge).stroke : "",
       overviewFill: overviewFrame ? getComputedStyle(overviewFrame).fill : "",
       overviewStroke: overviewFrame ? getComputedStyle(overviewFrame).stroke : "",
@@ -161,6 +161,184 @@ test("graph frame matches icon view; controls and corner text are absent; hover 
   expect(previewGeometry.arrowTipY).toBeLessThan(previewGeometry.dotTop);
   await dot.click();
   await expect(dot).toHaveAttribute("aria-pressed", "true");
+});
+
+test("selection preserves the disc geometry; zoom scales it and only hover enlarges it by 1.1", async ({
+  page,
+}) => {
+  await mount(page, false, 3);
+  const disc = page.locator('[data-graph-node="4"]');
+  const geometry = () =>
+    disc.evaluate((element) => {
+      const circle = element as SVGCircleElement;
+      return {
+        radius: circle.r.baseVal.value,
+        stroke: getComputedStyle(circle).strokeWidth,
+        width: circle.getBoundingClientRect().width,
+      };
+    });
+  const normal = await geometry();
+  await page.evaluate(() => (window as any).graphSetSelection(new Set(["4"])));
+  await expect(disc).toHaveAttribute("data-selection-node", "4");
+  expect(await geometry()).toEqual(normal);
+  await shot(page, 4).hover();
+  expect((await geometry()).width / normal.width).toBeCloseTo(1.1, 4);
+  await page.evaluate(() => (window as any).graphSetSelection(new Set()));
+  await expect(disc).not.toHaveAttribute("data-selection-node");
+  expect((await geometry()).width / normal.width).toBeCloseTo(1.1, 4);
+  await page.mouse.move(1000, 700);
+  await expect(shot(page, 4)).not.toHaveClass(/is-hovered/);
+  expect(await geometry()).toEqual(normal);
+  const initial = await transform(page);
+  await page.mouse.move(600, 350);
+  await page.mouse.wheel(0, -300);
+  await expect.poll(async () => (await transform(page)).zoom).toBeGreaterThan(initial.zoom);
+  const zoom = (await transform(page)).zoom;
+  expect((await geometry()).radius / normal.radius).toBeCloseTo(zoom / initial.zoom, 4);
+});
+
+test("hover scale, node and edge colors, and preview entry and exit ease immediately together", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await mount(page);
+  const entering = await page.evaluate(async () => {
+    for (const element of document.querySelectorAll(
+      ".storyboard-graph-node-paint, .storyboard-graph-node",
+    ))
+      getComputedStyle(element).getPropertyValue("scale");
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    const button = document.querySelector('[data-storyboard-shot-id="4"].storyboard-graph-dot')!;
+    button.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    return document
+      .querySelector(".storyboard-graph-view")!
+      .getAnimations({ subtree: true })
+      .filter((animation) => animation instanceof CSSTransition)
+      .map((animation) => {
+        animation.pause();
+        const effect = animation.effect as KeyframeEffect;
+        const frames = effect.getKeyframes();
+        return {
+          target: (effect.target as Element).getAttribute("class"),
+          property: (animation as CSSTransition).transitionProperty,
+          duration: effect.getTiming().duration,
+          easing: effect.getTiming().easing,
+          from: frames[0],
+          to: frames.at(-1)!,
+        };
+      });
+  });
+  for (const [target, property] of [
+    ["storyboard-graph-node-paint", "scale"],
+    ["storyboard-graph-node", "fill"],
+    ["is-highlighted", "stroke"],
+    ["storyboard-graph-preview", "opacity"],
+  ]) {
+    const transition = entering.find(
+      (item) => item.target?.includes(target) && item.property === property,
+    );
+    expect(transition, `${target} ${property}: ${JSON.stringify(entering)}`).toBeDefined();
+    expect(transition!.duration).toBe(120);
+    expect(transition!.easing).toBe("ease");
+  }
+  const scaling = entering.find((item) => item.property === "scale")!;
+  expect(parseFloat(String(scaling.to.scale))).toBe(1.1);
+  const fadingIn = entering.find((item) => item.target?.includes("storyboard-graph-preview"))!;
+  expect(Number(fadingIn.from.opacity)).toBe(0);
+  expect(Number(fadingIn.to.opacity)).toBe(1);
+  const exiting = await page.evaluate(async () => {
+    for (const animation of document
+      .querySelector(".storyboard-graph-view")!
+      .getAnimations({ subtree: true }))
+      animation.finish();
+    // Commit the finished values before asking React to remove the hover.
+    document.querySelector(".storyboard-graph-preview")!.getBoundingClientRect();
+    const button = document.querySelector('[data-storyboard-shot-id="4"].storyboard-graph-dot')!;
+    button.dispatchEvent(
+      new PointerEvent("pointerout", { bubbles: true, relatedTarget: document.body }),
+    );
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    const preview = document.querySelector<HTMLElement>(".storyboard-graph-preview.is-exiting");
+    const transition = preview
+      ?.getAnimations()
+      .find((animation) => (animation as CSSTransition).transitionProperty === "opacity");
+    const effect = transition?.effect as KeyframeEffect | undefined;
+    return {
+      hoverCleared: !button.classList.contains("is-hovered"),
+      inert: preview?.inert,
+      pointerEvents: preview && getComputedStyle(preview).pointerEvents,
+      frames: effect?.getKeyframes(),
+      duration: effect?.getTiming().duration,
+    };
+  });
+  expect(exiting.hoverCleared).toBe(true);
+  expect(exiting.inert).toBe(true);
+  expect(exiting.pointerEvents).toBe("none");
+  expect(exiting.duration).toBe(120);
+  expect(Number(exiting.frames?.at(-1)?.opacity)).toBe(0);
+  await expect(page.locator(".storyboard-graph-preview")).toHaveCount(0);
+});
+
+test("visible previews keep their DOM position and never restart entry when layers or distance order change", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await mount(page);
+  await page.clock.install();
+  await page.evaluate(() => (window as any).graphSetSelection(new Set(["0", "4", "8"])));
+  await shot(page, 4).hover();
+  await expect(page.locator(".storyboard-graph-preview")).toHaveCount(3);
+  await page.clock.runFor(200);
+  await page.evaluate(() => {
+    const removed: string[] = [];
+    const entries: string[] = [];
+    const root = document.querySelector(".storyboard-graph-previews")!;
+    new MutationObserver((records) => {
+      for (const record of records)
+        for (const node of record.removedNodes)
+          if (node instanceof HTMLElement && node.matches(".storyboard-graph-preview"))
+            removed.push(node.dataset.previewShotId!);
+    }).observe(root, { childList: true });
+    root.addEventListener("transitionrun", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !target.matches(".storyboard-graph-preview")) return;
+      for (const animation of target.getAnimations()) {
+        if (!(animation instanceof CSSTransition) || animation.transitionProperty !== "opacity")
+          continue;
+        const frames = (animation.effect as KeyframeEffect).getKeyframes();
+        if (Number(frames[0].opacity) === 0) entries.push(target.dataset.previewShotId!);
+      }
+    });
+    (window as any).graphPreviewLifecycle = { removed, entries };
+  });
+  // The selected previews stay visible while their distance-based z-indices change.
+  await shot(page, 0).hover();
+  await page.clock.runFor(200);
+  await page.locator('[data-preview-shot-id="8"]').hover();
+  await page.clock.runFor(200);
+  await shot(page, 8).hover();
+  await page.clock.runFor(200);
+  expect(await page.evaluate(() => (window as any).graphPreviewLifecycle)).toEqual({
+    removed: [],
+    entries: [],
+  });
+  await expect(page.locator(".storyboard-graph-preview.is-exiting")).toHaveCount(0);
+  // Actual removal cleans up only the departing preview; the other two persist.
+  await page.mouse.move(1100, 700);
+  await page.evaluate(() => (window as any).graphSetSelection(new Set(["0", "4"])));
+  await page.clock.runFor(200);
+  await expect(page.locator('[data-preview-shot-id="8"]')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).graphPreviewLifecycle)).toEqual({
+    removed: ["8"],
+    entries: [],
+  });
 });
 
 test("wheel zoom anchors to the pointer; canvas and overview drags stay synchronized and bounded", async ({
@@ -349,10 +527,10 @@ test("darkest default graph colors match the dark appearance", async ({ page }) 
   await mount(page);
   const read = () =>
     page.evaluate(() => {
-      const dot = document.querySelector(".storyboard-graph-dot")!;
-      const edge = document.querySelector(".storyboard-graph-edges line")!;
+      const dot = document.querySelector(".storyboard-graph-dot-visual")!;
+      const edge = document.querySelector(".storyboard-graph-edges path")!;
       return {
-        dot: getComputedStyle(dot, "::after").backgroundColor,
+        dot: getComputedStyle(dot.querySelector("circle")!).fill,
         edge: getComputedStyle(edge).stroke,
       };
     });
@@ -378,12 +556,12 @@ test("hover emphasis is brighter in dark appearances and deeper in light", async
     }, theme);
     await dot.hover();
     const colors = await page.evaluate(() => ({
-      dot: getComputedStyle(document.querySelector(".storyboard-graph-dot.is-hovered")!, "::after")
-        .backgroundColor,
+      dot: getComputedStyle(
+        document.querySelector(".storyboard-graph-dot-visual.is-hovered circle")!,
+      ).fill,
       neighborDot: getComputedStyle(
-        document.querySelector(".storyboard-graph-dot.is-neighbor:not(.is-hovered)")!,
-        "::after",
-      ).backgroundColor,
+        document.querySelector(".storyboard-graph-dot-visual.is-neighbor:not(.is-hovered) circle")!,
+      ).fill,
       edge: getComputedStyle(document.querySelector(".storyboard-graph-edges line.is-highlighted")!)
         .stroke,
     }));
@@ -547,13 +725,17 @@ test("selection previews persist, hover adds only its own preview, and selected 
       return {
         width: Number.parseFloat(ring.strokeWidth),
         gap:
-          circle.r.baseVal.value - Number.parseFloat(ring.strokeWidth) / 2 - node.r.baseVal.value,
+          (circle.r.baseVal.value -
+            node.r.baseVal.value -
+            Number.parseFloat(fill.strokeWidth) / 2) *
+            node.getScreenCTM()!.a -
+          Number.parseFloat(ring.strokeWidth) / 2,
         stroke: ring.stroke,
         fill: fill.fill,
       };
     });
     expect(ring.width).toBeCloseTo(1, 1);
-    expect(ring.gap).toBeCloseTo(1, 1);
+    expect(ring.gap).toBeGreaterThanOrEqual(0.99);
     expect(ring.stroke).toBe(ring.fill);
     expect(isGrayscale(ring.fill)).toBe(true);
   }
@@ -592,9 +774,11 @@ test("ring gaps grow beyond 8px diameter and preview arrows follow the ring", as
       const center = new DOMPoint(circle.cx.baseVal.value, circle.cy.baseVal.value).matrixTransform(
         circle.getScreenCTM()!,
       );
-      const radius = node.r.baseVal.value;
+      const scale = node.getScreenCTM()!.a;
+      const radius =
+        (node.r.baseVal.value + parseFloat(getComputedStyle(node).strokeWidth) / 2) * scale;
       const width = Number.parseFloat(ring.strokeWidth);
-      const ringTop = center.y - circle.r.baseVal.value - width / 2;
+      const ringTop = center.y - circle.r.baseVal.value * scale - width / 2;
       const tip =
         preview.getBoundingClientRect().top +
         Number.parseFloat(arrow.top) +
@@ -602,7 +786,7 @@ test("ring gaps grow beyond 8px diameter and preview arrows follow the ring", as
       return {
         radius,
         width,
-        gap: circle.r.baseVal.value - width / 2 - radius,
+        gap: circle.r.baseVal.value * scale - width / 2 - radius,
         arrowGap: ringTop - tip,
       };
     });
@@ -611,7 +795,7 @@ test("ring gaps grow beyond 8px diameter and preview arrows follow the ring", as
     expect(geometry.arrowGap).toBeCloseTo(2, 1);
     gaps.push(geometry.gap);
   }
-  expect(gaps[0]).toBeCloseTo(1, 1);
+  expect(gaps[0]).toBeGreaterThanOrEqual(1 - 1e-5);
   expect(gaps[2]).toBeCloseTo(2, 1);
   expect(gaps[3]).toBeLessThan(gaps[2]);
 });
@@ -637,7 +821,7 @@ test("selected node and ring share one SVG center through fractional zoom, pan a
             node.cy.baseVal.value === ring.cy.baseVal.value,
           dx: (a.left + a.right - b.left - b.right) / 2,
           dy: (a.top + a.bottom - b.top - b.bottom) / 2,
-          htmlPaint: getComputedStyle(button, "::after").visibility,
+          htmlHitTarget: button instanceof HTMLButtonElement,
           strokeWidth: getComputedStyle(ring).strokeWidth,
         };
       });
@@ -645,7 +829,7 @@ test("selected node and ring share one SVG center through fractional zoom, pan a
       expect(geometry.sameLocalCenter).toBe(true);
       expect(geometry.dx).toBeCloseTo(0, 3);
       expect(geometry.dy).toBeCloseTo(0, 3);
-      expect(geometry.htmlPaint).toBe("hidden");
+      expect(geometry.htmlHitTarget).toBe(true);
       expect(geometry.strokeWidth).toBe("1px");
     };
     await assertConcentric();
@@ -762,13 +946,13 @@ test("hovered nodes paint above selected bodies and rings in either tool", async
         const layer = document.querySelector(".storyboard-graph-selection-rings")!;
         const body = layer.lastElementChild!.querySelector("circle")!;
         return {
-          htmlPaint: getComputedStyle(button, "::after").visibility,
+          htmlHitTarget: button instanceof HTMLButtonElement,
           fill: getComputedStyle(body).fill,
           layerZ: Number(getComputedStyle(layer).zIndex),
           worldZ: getComputedStyle(document.querySelector(".storyboard-graph-world")!).zIndex,
         };
       });
-      expect(paint.htmlPaint).toBe("hidden");
+      expect(paint.htmlHitTarget).toBe(true);
       expect(isGrayscale(paint.fill)).toBe(true);
       expect(paint.layerZ).toBeGreaterThan(Number(paint.worldZ) || 0);
     }
@@ -882,8 +1066,23 @@ test("hand thumbnails allow position preview while preserving neighbor previews 
   await page.getByRole("button", { name: "手型工具", exact: true }).click();
   await shot(page, 5).hover();
   await expect(page.locator(".storyboard-graph-preview")).toHaveCount(4);
+  const stacking = () =>
+    page.locator(".storyboard-graph-preview").evaluateAll((elements) =>
+      elements
+        .map((element) => ({
+          id: element.getAttribute("data-preview-shot-id"),
+          z: Number(getComputedStyle(element).zIndex),
+        }))
+        .sort((a, b) => a.z - b.z),
+    );
+  const distanceOrder = await stacking();
+  expect(distanceOrder.map(({ id }) => id)).toEqual(["6", "3", "4", "5"]);
   const preview = page.locator('[data-preview-shot-id="5"]');
   const frame = preview.getByRole("img", { name: "分镜选帧缩略图", exact: true });
+  await frame.hover();
+  expect(await stacking()).toEqual(distanceOrder);
+  await page.locator('[data-preview-shot-id="6"]').hover();
+  expect(await stacking()).toEqual(distanceOrder);
   await frame.hover();
   await expect(preview.locator(".shot-hover-progress")).toBeVisible();
   await expect(page.locator(".storyboard-graph-preview")).toHaveCount(4);

@@ -1,7 +1,9 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -20,7 +22,7 @@ import {
   fitStoryboardGraphCamera,
   panStoryboardGraph,
   storyboardGraphCanvas,
-  storyboardGraphNeighborhood,
+  indexStoryboardGraphNeighborhoods,
   storyboardGraphOverviewCanvas,
   storyboardGraphOverviewPoint,
   storyboardGraphOverviewWorldPoint,
@@ -71,10 +73,12 @@ const previewMaxWidth = 128;
 const previewTipGap = 2;
 const previewArrowHeight = 5;
 const previewFrameGap = 3;
-const graphDotHoverScale = 1.35;
+const graphDotHoverScale = 1.1;
+const graphHoverDurationMs = 120;
 const graphHoverMinPixelsPerWorldUnit = 0.4;
 const emptyNodes: StoryboardGraph["nodes"] = [];
 const emptyAnnotations: Readonly<Record<string, StoryboardShotAnnotation>> = {};
+const emptyNeighborhood = new Set<string>();
 
 function annotationStyle(
   annotation: StoryboardShotAnnotation | undefined,
@@ -96,6 +100,34 @@ interface StoryboardGraphPreview {
   zIndex: number;
 }
 
+function raiseGraphNode(layer: SVGSVGElement | null, id: string) {
+  const node = layer?.querySelector<SVGGElement>(`[data-overlay-node="${CSS.escape(id)}"]`);
+  if (!layer || !node || layer.lastElementChild === node) return;
+  // Keep ongoing transitions when changing the paint order. Older webviews
+  // need their animations restored after the ordinary DOM move.
+  if (typeof layer.moveBefore === "function") layer.moveBefore(node, null);
+  else {
+    const animations = node.getAnimations({ subtree: true }).flatMap((animation) => {
+      const effect = animation.effect;
+      return effect instanceof KeyframeEffect && effect.target
+        ? [
+            {
+              target: effect.target,
+              frames: effect.getKeyframes(),
+              timing: effect.getTiming(),
+              time: animation.currentTime,
+            },
+          ]
+        : [];
+    });
+    layer.appendChild(node);
+    for (const animation of animations) {
+      const resumed = animation.target.animate(animation.frames, animation.timing);
+      resumed.currentTime = animation.time;
+    }
+  }
+}
+
 interface MarqueeGesture {
   id: number;
   start: { x: number; y: number };
@@ -107,6 +139,210 @@ interface MarqueeGesture {
   active: boolean;
   timer?: number;
   spray?: { historyGroupId: string };
+}
+
+type GraphNodeEvent = MouseEvent<HTMLElement>;
+
+// A stable HTML hit target preserves focus and pointer capture while the SVG
+// paint can move to the top of its layer independently.
+const GraphHitNode = memo(function GraphHitNode({
+  node,
+  shot,
+  title,
+  selected,
+  hovered,
+  neighbor,
+  hoverEnabled,
+  tabIndex,
+  previewId,
+  onHover,
+  onLeave,
+  onBlur,
+  onSelect,
+}: {
+  node: StoryboardGraphNode;
+  shot: StoryboardShot;
+  title: string;
+  selected: boolean;
+  hovered: boolean;
+  neighbor: boolean;
+  hoverEnabled: boolean;
+  tabIndex: number;
+  previewId: string;
+  onHover: (id: string) => void;
+  onLeave: (event: { relatedTarget: EventTarget | null }) => void;
+  onBlur: () => void;
+  onSelect: (event: GraphNodeEvent, shot: StoryboardShot, group: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`storyboard-graph-dot ${selected ? "is-selected" : ""} ${hovered ? "is-hovered" : ""} ${neighbor ? "is-neighbor" : ""}`}
+      data-storyboard-shot-id={node.id}
+      style={{ left: node.x, top: node.y, width: node.radius * 2, height: node.radius * 2 }}
+      aria-label={title}
+      aria-pressed={selected}
+      aria-describedby={hovered ? previewId : undefined}
+      tabIndex={tabIndex}
+      onPointerEnter={
+        hoverEnabled
+          ? (event) => {
+              if (!event.buttons) onHover(node.id);
+            }
+          : undefined
+      }
+      onPointerLeave={hoverEnabled ? onLeave : undefined}
+      onFocus={hoverEnabled ? () => onHover(node.id) : undefined}
+      onBlur={hoverEnabled ? onBlur : undefined}
+      onClick={(event) => onSelect(event, shot, false)}
+      onDoubleClick={(event) => onSelect(event, shot, true)}
+    />
+  );
+});
+
+// Selection keeps exactly the same disc, stroke and radius. Camera zoom updates
+// geometry immediately; only hover animates the inner group's scale.
+const GraphNode = memo(function GraphNode({
+  node,
+  x,
+  y,
+  zoom,
+  selected,
+  hovered,
+  neighbor,
+  annotation,
+}: {
+  node: StoryboardGraphNode;
+  x: number;
+  y: number;
+  zoom: number;
+  selected: boolean;
+  hovered: boolean;
+  neighbor: boolean;
+  annotation?: StoryboardShotAnnotation;
+}) {
+  const scale = hovered ? graphDotHoverScale : 1;
+  const ring = storyboardGraphSelectionRing(node.radius * zoom, scale);
+  return (
+    <g
+      data-overlay-node={node.id}
+      transform={`translate(${x}, ${y})`}
+      style={annotationStyle(annotation)}
+      className={`storyboard-graph-dot-visual ${selected ? "is-selected" : ""} ${hovered ? "is-hovered" : ""} ${neighbor ? "is-neighbor" : ""}`}
+    >
+      <g className="storyboard-graph-node-paint">
+        <circle
+          data-graph-node={node.id}
+          data-selection-node={selected ? node.id : undefined}
+          className={`storyboard-graph-node ${selected ? "storyboard-graph-selected-node" : ""}`}
+          r={(node.radius - 0.5) * zoom}
+          strokeWidth={zoom}
+        />
+        {selected && (
+          <circle
+            data-selection-ring={node.id}
+            r={ring.radius / scale}
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
+      </g>
+    </g>
+  );
+});
+
+// Retain only the fading neighborhood. Removing it after its transition keeps
+// line colors smooth on leave without delaying the start of that transition.
+const GraphHighlightedEdges = memo(function GraphHighlightedEdges({
+  edges,
+  nodes,
+}: {
+  edges: StoryboardGraph["edges"];
+  nodes: StoryboardGraph["nodes"];
+}) {
+  const [retained, setRetained] = useState({ edges, nodes });
+  const active = useMemo(() => new Set(edges), [edges]);
+  const painted = new Set([...(retained.nodes === nodes ? retained.edges : []), ...edges]);
+  useLayoutEffect(() => {
+    setRetained((previous) => ({
+      nodes,
+      edges: [...new Set([...(previous.nodes === nodes ? previous.edges : []), ...edges])],
+    }));
+    const timer = window.setTimeout(() => setRetained({ edges, nodes }), graphHoverDurationMs);
+    return () => window.clearTimeout(timer);
+  }, [edges, nodes]);
+  return (
+    <>
+      {[...painted].map((edge) => {
+        const a = nodes[edge.source];
+        const b = nodes[edge.target];
+        return (
+          <line
+            key={`${edge.source}:${edge.target}`}
+            className={active.has(edge) ? "is-highlighted" : "is-exiting"}
+            x1={a.x}
+            y1={a.y}
+            x2={b.x}
+            y2={b.y}
+            vectorEffect="non-scaling-stroke"
+            onTransitionEnd={(event) => {
+              if (
+                event.propertyName === "opacity" &&
+                !active.has(edge) &&
+                Number(getComputedStyle(event.currentTarget).opacity) === 0
+              )
+                setRetained((previous) =>
+                  previous.edges.includes(edge)
+                    ? { ...previous, edges: previous.edges.filter((item) => item !== edge) }
+                    : previous,
+                );
+            }}
+          />
+        );
+      })}
+    </>
+  );
+});
+
+// Keep visible previews in a stable DOM order: moving even a keyed element can
+// restart its CSS entry transition. Distance and hover affect only z-index.
+// Departing previews remain mounted for their fade-out and can reverse it.
+function GraphPreviewPresence({
+  previews,
+  enabled,
+  children,
+}: {
+  previews: StoryboardGraphPreview[];
+  enabled: boolean;
+  children: (preview: StoryboardGraphPreview, exiting: boolean, onExited: () => void) => ReactNode;
+}) {
+  const [retained, setRetained] = useState(previews);
+  const active = new Map(previews.map((preview) => [preview.node.id, preview]));
+  const painted = new Map(retained.map((preview) => [preview.node.id, preview]));
+  for (const preview of previews) painted.set(preview.node.id, preview);
+  useLayoutEffect(() => {
+    if (!enabled) {
+      setRetained([]);
+      return;
+    }
+    setRetained((previous) => {
+      const merged = new Map(previous.map((preview) => [preview.node.id, preview]));
+      for (const preview of previews) merged.set(preview.node.id, preview);
+      return [...merged.values()];
+    });
+    const activeIds = new Set(previews.map((preview) => preview.node.id));
+    const timer = window.setTimeout(
+      () => setRetained((previous) => previous.filter((preview) => activeIds.has(preview.node.id))),
+      graphHoverDurationMs,
+    );
+    return () => window.clearTimeout(timer);
+  }, [previews, enabled]);
+  return enabled
+    ? [...painted.values()].map((preview) =>
+        children(preview, !active.has(preview.node.id), () => {
+          setRetained((previous) => previous.filter((item) => item.node.id !== preview.node.id));
+        }),
+      )
+    : null;
 }
 
 export function StoryboardGraphCanvas({
@@ -126,28 +362,32 @@ export function StoryboardGraphCanvas({
 }: StoryboardGraphCanvasProps) {
   const panelActive = usePanelActive();
   const stageRef = useRef<HTMLDivElement>(null);
+  const nodePaintRef = useRef<SVGSVGElement>(null);
   const overviewRef = useRef<SVGSVGElement>(null);
   const previewId = useId();
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hoveredPreviewId, setHoveredPreviewId] = useState<string | null>(null);
-  const hoverLeaveTimerRef = useRef<number | undefined>(undefined);
-  const cancelHoverLeave = useCallback(() => {
-    window.clearTimeout(hoverLeaveTimerRef.current);
-    hoverLeaveTimerRef.current = undefined;
-  }, []);
   const resetHover = useCallback(() => {
-    cancelHoverLeave();
     setHoveredId(null);
     setHoveredPreviewId(null);
-  }, [cancelHoverLeave]);
-  const leaveHover = useCallback(() => {
-    cancelHoverLeave();
-    hoverLeaveTimerRef.current = window.setTimeout(() => {
-      setHoveredId(null);
-      setHoveredPreviewId(null);
-    }, 180);
-  }, [cancelHoverLeave]);
+  }, []);
+  const hoverNode = useCallback((id: string) => {
+    raiseGraphNode(nodePaintRef.current, id);
+    setHoveredPreviewId(null);
+    setHoveredId(id);
+  }, []);
+  const leaveHover = useCallback(
+    (event: { relatedTarget: EventTarget | null }) => {
+      if (
+        event.relatedTarget instanceof Element &&
+        event.relatedTarget.closest(".storyboard-graph-preview, .storyboard-graph-hover-bridge")
+      )
+        return;
+      resetHover();
+    },
+    [resetHover],
+  );
   const [dragging, setDragging] = useState<"canvas" | "overview" | null>(null);
   const [navigationTool, setTool] = useState<StoryboardGraphTool>("pointer");
   const tool = sprayActive ? "pointer" : navigationTool;
@@ -181,13 +421,26 @@ export function StoryboardGraphCanvas({
     graph: StoryboardGraph | undefined;
     camera: StoryboardGraphCamera;
   } | null>(null);
-  const camera = constrainStoryboardGraphCamera(
-    navigation && navigation.graph === graph ? navigation.camera : initialCamera,
-    size,
-    canvas,
+  const camera = useMemo(
+    () =>
+      constrainStoryboardGraphCamera(
+        navigation && navigation.graph === graph ? navigation.camera : initialCamera,
+        size,
+        canvas,
+      ),
+    [navigation, graph, initialCamera, size, canvas],
   );
   const cameraRef = useRef(camera);
-  cameraRef.current = camera;
+  useLayoutEffect(() => {
+    cameraRef.current = camera;
+  }, [camera]);
+  const cameraFrameRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (cameraFrameRef.current !== null) cancelAnimationFrame(cameraFrameRef.current);
+    },
+    [],
+  );
   const hoverEnabled = camera.zoom > graphHoverMinPixelsPerWorldUnit;
   const activeHoveredId = hoverEnabled ? hoveredId : null;
   const panRef = useRef<{ id: number; x: number; y: number; camera: StoryboardGraphCamera } | null>(
@@ -198,7 +451,11 @@ export function StoryboardGraphCanvas({
     (update: (current: StoryboardGraphCamera) => StoryboardGraphCamera) => {
       const next = constrainStoryboardGraphCamera(update(cameraRef.current), size, canvas);
       cameraRef.current = next;
-      setNavigation({ graph, camera: next });
+      if (cameraFrameRef.current === null)
+        cameraFrameRef.current = requestAnimationFrame(() => {
+          cameraFrameRef.current = null;
+          setNavigation({ graph, camera: cameraRef.current });
+        });
     },
     [graph, size, canvas],
   );
@@ -208,7 +465,18 @@ export function StoryboardGraphCanvas({
     () => nodes.filter((node) => shotsById.has(node.id)),
     [nodes, shotsById],
   );
-  const visibleNodeKey = JSON.stringify(visibleNodes.map((node) => node.id));
+  const visibleNodeKey = useMemo(
+    () => JSON.stringify(visibleNodes.map((node) => node.id)),
+    [visibleNodes],
+  );
+  const nodesById = useMemo(
+    () => new Map(visibleNodes.map((node) => [node.id, node])),
+    [visibleNodes],
+  );
+  const neighborhoods = useMemo(
+    () => (graph ? indexStoryboardGraphNeighborhoods(graph) : new Map<string, Set<string>>()),
+    [graph],
+  );
   const edges = useMemo(
     () =>
       graph?.edges.filter(
@@ -216,29 +484,23 @@ export function StoryboardGraphCanvas({
       ) ?? [],
     [graph, nodes, shotsById],
   );
-  const neighborhood = useMemo(
-    () =>
-      graph && activeHoveredId
-        ? storyboardGraphNeighborhood(graph, activeHoveredId)
-        : new Set<string>(),
-    [graph, activeHoveredId],
-  );
-  const viewport = storyboardGraphViewport(camera, size);
+  const neighborhood = activeHoveredId
+    ? (neighborhoods.get(activeHoveredId) ?? emptyNeighborhood)
+    : emptyNeighborhood;
+  const viewport = useMemo(() => storyboardGraphViewport(camera, size), [camera, size]);
   const overviewViewport = storyboardGraphOverviewPoint(viewport, overviewCanvas);
-  const hoveredNode = activeHoveredId
-    ? visibleNodes.find((node) => node.id === activeHoveredId)
-    : undefined;
+  const hoveredNode = activeHoveredId ? nodesById.get(activeHoveredId) : undefined;
   const previewEmphasis = useMemo(() => {
     if (tool !== "pointer") return null;
     if (hoveredPreviewId) {
       return !selectedShotIds.has(hoveredPreviewId) && graph
-        ? storyboardGraphNeighborhood(graph, hoveredPreviewId)
+        ? (neighborhoods.get(hoveredPreviewId) ?? emptyNeighborhood)
         : new Set([hoveredPreviewId]);
     }
     return activeHoveredId && selectedShotIds.has(activeHoveredId)
       ? new Set([activeHoveredId])
       : null;
-  }, [tool, hoveredPreviewId, activeHoveredId, selectedShotIds, graph]);
+  }, [tool, hoveredPreviewId, activeHoveredId, selectedShotIds, graph, neighborhoods]);
   const previewWidth = Math.max(
     1,
     Math.min(previewMaxWidth, size.width - 16, ((size.height - 48) * 16) / 9),
@@ -246,12 +508,14 @@ export function StoryboardGraphCanvas({
   const previewHeight = (previewWidth * 9) / 16;
   const previews = useMemo<StoryboardGraphPreview[]>(() => {
     if (!hoverEnabled) return [];
-    const candidates = visibleNodes
-      .filter(
-        (node) =>
-          selectedShotIds.has(node.id) ||
-          (tool === "hand" ? neighborhood.has(node.id) : node.id === hoveredNode?.id),
-      )
+    const ids = new Set(selectedShotIds);
+    if (tool === "hand") for (const id of neighborhood) ids.add(id);
+    else if (hoveredNode) ids.add(hoveredNode.id);
+    const candidates = [...ids]
+      .flatMap((id) => {
+        const node = nodesById.get(id);
+        return node ? [node] : [];
+      })
       .flatMap((node) => {
         const shot = shotsById.get(node.id);
         if (!shot) return [];
@@ -274,11 +538,13 @@ export function StoryboardGraphCanvas({
     return candidates.map((candidate, index) => {
       const point = storyboardGraphScreenPoint(candidate.node, camera, size);
       const selected = selectedShotIds.has(candidate.node.id);
-      const dotScale = !selected && candidate.node.id === hoveredNode?.id ? graphDotHoverScale : 1;
+      const dotScale = candidate.node.id === hoveredNode?.id ? graphDotHoverScale : 1;
       const previewDistance =
-        candidate.node.radius * dotScale * camera.zoom +
+        candidate.node.radius * camera.zoom * dotScale +
         previewTipGap +
-        (selected ? storyboardGraphSelectionRing(candidate.node.radius, camera.zoom).gap + 1 : 0) +
+        (selected
+          ? storyboardGraphSelectionRing(candidate.node.radius * camera.zoom, dotScale).gap + 1
+          : 0) +
         previewArrowHeight +
         previewFrameGap;
       const topAbove = point.y - previewDistance - previewHeight;
@@ -306,7 +572,7 @@ export function StoryboardGraphCanvas({
     tool,
     neighborhood,
     selectedShotIds,
-    visibleNodes,
+    nodesById,
     shotsById,
     sourceForShot,
     camera,
@@ -314,6 +580,92 @@ export function StoryboardGraphCanvas({
     previewWidth,
     previewHeight,
   ]);
+
+  const projectedNodes = useMemo(
+    () =>
+      visibleNodes.flatMap((node) => {
+        const point = storyboardGraphScreenPoint(node, camera, size);
+        const margin =
+          storyboardGraphSelectionRing(node.radius * camera.zoom, graphDotHoverScale).radius + 2;
+        return point.x < -margin ||
+          point.x > size.width + margin ||
+          point.y < -margin ||
+          point.y > size.height + margin
+          ? []
+          : [{ node, ...point }];
+      }),
+    [visibleNodes, camera, size],
+  );
+  const incidentEdges = useMemo(() => {
+    const result = new Map<string, StoryboardGraph["edges"]>();
+    for (const edge of edges)
+      for (const index of [edge.source, edge.target]) {
+        const id = nodes[index].id;
+        const incident = result.get(id);
+        if (incident) incident.push(edge);
+        else result.set(id, [edge]);
+      }
+    return result;
+  }, [edges, nodes]);
+  const highlightedEdges = useMemo(() => {
+    const result = new Set<StoryboardGraph["edges"][number]>();
+    for (const id of neighborhood)
+      for (const edge of incidentEdges.get(id) ?? [])
+        if (neighborhood.has(nodes[edge.source].id) && neighborhood.has(nodes[edge.target].id))
+          result.add(edge);
+    return [...result];
+  }, [neighborhood, incidentEdges, nodes]);
+  // Batch static edges by opacity. Hover updates only the small highlighted
+  // neighborhood, rather than thousands of individual SVG attributes.
+  const edgePaths = useMemo(() => {
+    const paths = new Map<number, string[]>();
+    for (const edge of edges) {
+      const a = nodes[edge.source];
+      const b = nodes[edge.target];
+      if (
+        Math.max(a.x, b.x) < viewport.x ||
+        Math.min(a.x, b.x) > viewport.x + viewport.width ||
+        Math.max(a.y, b.y) < viewport.y ||
+        Math.min(a.y, b.y) > viewport.y + viewport.height
+      )
+        continue;
+      const opacity = Math.round((0.08 + edge.similarity * 0.14) * 100) / 100;
+      let segments = paths.get(opacity);
+      if (!segments) paths.set(opacity, (segments = []));
+      segments.push(`M${a.x},${a.y}L${b.x},${b.y}`);
+    }
+    return [...paths].map(([opacity, segments]) => (
+      <path
+        key={opacity}
+        className="storyboard-graph-base-edges"
+        d={segments.join("")}
+        opacity={opacity}
+        vectorEffect="non-scaling-stroke"
+      />
+    ));
+  }, [edges, nodes, viewport]);
+  const hoverBridges = hoveredNode
+    ? previews
+        .filter(
+          (preview) =>
+            preview.node.id === hoveredNode.id ||
+            (tool === "hand" && !selectedShotIds.has(preview.node.id)),
+        )
+        .map((preview) => {
+          const point = storyboardGraphScreenPoint(hoveredNode, camera, size);
+          const edgeY = preview.above ? preview.top + previewHeight : preview.top;
+          const radius = hoveredNode.radius * camera.zoom * graphDotHoverScale;
+          return (
+            <polygon
+              key={preview.node.id}
+              className="storyboard-graph-hover-bridge"
+              points={`${point.x - radius},${point.y} ${point.x + radius},${point.y} ${preview.left + previewWidth},${edgeY} ${preview.left},${edgeY}`}
+              onPointerLeave={leaveHover}
+              aria-hidden="true"
+            />
+          );
+        })
+    : null;
 
   const cancelGestures = useCallback(
     (restoreSelection = true) => {
@@ -363,8 +715,6 @@ export function StoryboardGraphCanvas({
       resetHover();
     }
   }, [panelActive, cancelGestures, resetHover]);
-
-  useEffect(() => () => cancelHoverLeave(), [cancelHoverLeave]);
 
   useEffect(() => {
     const blur = () => {
@@ -452,9 +802,9 @@ export function StoryboardGraphCanvas({
     return storyboardGraphMarqueeHitIds(visibleNodes, storyboardGraphSelectionRect(start, end));
   }
 
-  function newSprayHistoryGroup() {
+  const newSprayHistoryGroup = useCallback(() => {
     return `storyboard-graph-spray-${previewId}-${Date.now()}-${++spraySequenceRef.current}`;
-  }
+  }, [previewId]);
 
   function updateMarquee(gesture: MarqueeGesture, point: { x: number; y: number }) {
     gesture.active = true;
@@ -639,34 +989,48 @@ export function StoryboardGraphCanvas({
       );
   }
 
-  function selectNode(event: MouseEvent<HTMLElement>, shot: StoryboardShot, group: boolean) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (tool !== "pointer" || suppressClickRef.current || (!group && event.detail > 1)) return;
-    const hits =
-      group && graph
-        ? new Set(
-            [...storyboardGraphNeighborhood(graph, shot.id)].filter((id) => shotsById.has(id)),
-          )
-        : new Set([shot.id]);
-    if (sprayActive) {
-      const historyGroupId =
-        group && lastSprayClickRef.current?.id === shot.id
-          ? lastSprayClickRef.current.historyGroupId
-          : newSprayHistoryGroup();
-      if (!group) lastSprayClickRef.current = { id: shot.id, historyGroupId };
-      callbacksRef.current.onSprayShots?.(hits, historyGroupId, event.altKey);
-      return;
-    }
-    const previous = lastClickRef.current;
-    const base =
-      group && previous?.id === shot.id && previous.mode === selectionMode
-        ? previous.base
-        : new Set(selectionRef.current);
-    if (!group) lastClickRef.current = { id: shot.id, base, mode: selectionMode };
-    commitSelection(applyStoryboardGraphSelection(base, hits, selectionMode));
-    callbacksRef.current.onActivateShot(shot);
-  }
+  const selectNode = useCallback(
+    (event: GraphNodeEvent, shot: StoryboardShot, group: boolean) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (tool !== "pointer" || suppressClickRef.current || (!group && event.detail > 1)) return;
+      const hits =
+        group && graph
+          ? new Set(
+              [...(neighborhoods.get(shot.id) ?? emptyNeighborhood)].filter((id) =>
+                shotsById.has(id),
+              ),
+            )
+          : new Set([shot.id]);
+      if (sprayActive) {
+        const historyGroupId =
+          group && lastSprayClickRef.current?.id === shot.id
+            ? lastSprayClickRef.current.historyGroupId
+            : newSprayHistoryGroup();
+        if (!group) lastSprayClickRef.current = { id: shot.id, historyGroupId };
+        callbacksRef.current.onSprayShots?.(hits, historyGroupId, event.altKey);
+        return;
+      }
+      const previous = lastClickRef.current;
+      const base =
+        group && previous?.id === shot.id && previous.mode === selectionMode
+          ? previous.base
+          : new Set(selectionRef.current);
+      if (!group) lastClickRef.current = { id: shot.id, base, mode: selectionMode };
+      commitSelection(applyStoryboardGraphSelection(base, hits, selectionMode));
+      callbacksRef.current.onActivateShot(shot);
+    },
+    [
+      tool,
+      sprayActive,
+      graph,
+      neighborhoods,
+      shotsById,
+      newSprayHistoryGroup,
+      selectionMode,
+      commitSelection,
+    ],
+  );
 
   function changeTool(next: StoryboardGraphTool) {
     cancelGestures();
@@ -676,14 +1040,21 @@ export function StoryboardGraphCanvas({
     setTool(next);
   }
 
+  const overviewEdgePath = useMemo(
+    () =>
+      edges
+        .map((edge) => {
+          const a = storyboardGraphOverviewPoint(nodes[edge.source], overviewCanvas);
+          const b = storyboardGraphOverviewPoint(nodes[edge.target], overviewCanvas);
+          return `M${a.x},${a.y}L${b.x},${b.y}`;
+        })
+        .join(""),
+    [edges, nodes, overviewCanvas],
+  );
   const overviewGeometry = useMemo(
     () => (
       <g className="storyboard-graph-minimap-content" pointerEvents="none">
-        {edges.map((edge) => {
-          const a = storyboardGraphOverviewPoint(nodes[edge.source], overviewCanvas);
-          const b = storyboardGraphOverviewPoint(nodes[edge.target], overviewCanvas);
-          return <line key={`${edge.source}:${edge.target}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />;
-        })}
+        <path d={overviewEdgePath} />
         {visibleNodes.map((node) => {
           const point = storyboardGraphOverviewPoint(node, overviewCanvas);
           return (
@@ -699,7 +1070,7 @@ export function StoryboardGraphCanvas({
         })}
       </g>
     ),
-    [edges, nodes, overviewCanvas, visibleNodes, selectedShotIds, shotAnnotations],
+    [overviewEdgePath, overviewCanvas, visibleNodes, selectedShotIds, shotAnnotations],
   );
 
   return (
@@ -709,6 +1080,7 @@ export function StoryboardGraphCanvas({
       style={
         {
           "--storyboard-graph-dot-hover-scale": `${graphDotHoverScale}`,
+          "--storyboard-graph-hover-duration": `${graphHoverDurationMs}ms`,
         } as CSSProperties
       }
       role="region"
@@ -753,6 +1125,14 @@ export function StoryboardGraphCanvas({
       onPointerLeave={resetHover}
       onKeyDown={navigateKeyboard}
     >
+      <svg
+        className="storyboard-graph-hover-bridges"
+        width={size.width}
+        height={size.height}
+        aria-hidden="true"
+      >
+        {hoverBridges}
+      </svg>
       <div
         className="storyboard-graph-world"
         style={{
@@ -760,110 +1140,50 @@ export function StoryboardGraphCanvas({
         }}
       >
         <svg className="storyboard-graph-edges" width={1} height={1} aria-hidden="true">
-          {edges.map((edge) => {
-            const source = nodes[edge.source];
-            const target = nodes[edge.target];
-            const highlighted = neighborhood.has(source.id) && neighborhood.has(target.id);
-            return (
-              <line
-                key={`${source.id}:${target.id}`}
-                className={highlighted ? "is-highlighted" : hoveredNode ? "is-muted" : ""}
-                x1={source.x}
-                y1={source.y}
-                x2={target.x}
-                y2={target.y}
-                vectorEffect="non-scaling-stroke"
-                opacity={highlighted ? 0.8 : 0.08 + edge.similarity * 0.14}
-              />
-            );
-          })}
+          {edgePaths}
+          <GraphHighlightedEdges edges={highlightedEdges} nodes={nodes} />
         </svg>
-        <div className="storyboard-graph-nodes" role="group" aria-label="分镜圆点">
-          {visibleNodes.map((node) => {
-            const shot = shotsById.get(node.id)!;
-            return (
-              <button
-                type="button"
-                key={node.id}
-                data-storyboard-shot-id={node.id}
-                className={`storyboard-graph-dot ${selectedShotIds.has(node.id) ? "is-selected" : ""} ${activeHoveredId === node.id ? "is-hovered" : ""} ${neighborhood.has(node.id) ? "is-neighbor" : ""}`}
-                style={
-                  {
-                    left: node.x,
-                    top: node.y,
-                    ...annotationStyle(shotAnnotations[node.id]),
-                    "--storyboard-graph-dot-size": `${node.radius * 2}px`,
-                  } as CSSProperties
-                }
-                aria-label={shotTitle(shot)}
-                aria-pressed={selectedShotIds.has(node.id)}
-                tabIndex={tool === "pointer" ? 0 : -1}
-                aria-describedby={activeHoveredId === node.id ? previewId : undefined}
-                onPointerEnter={
-                  hoverEnabled
-                    ? (event) => {
-                        if (!event.buttons) {
-                          cancelHoverLeave();
-                          setHoveredPreviewId(null);
-                          setHoveredId(node.id);
-                        }
-                      }
-                    : undefined
-                }
-                onPointerLeave={hoverEnabled ? leaveHover : undefined}
-                onFocus={
-                  hoverEnabled
-                    ? () => {
-                        cancelHoverLeave();
-                        setHoveredPreviewId(null);
-                        setHoveredId(node.id);
-                      }
-                    : undefined
-                }
-                onBlur={hoverEnabled ? resetHover : undefined}
-                onClick={(event) => selectNode(event, shot, false)}
-                onDoubleClick={(event) => selectNode(event, shot, true)}
-              />
-            );
-          })}
+        <div className="storyboard-graph-hit-nodes" role="group" aria-label="????">
+          {projectedNodes.map(({ node }) => (
+            <GraphHitNode
+              key={node.id}
+              node={node}
+              shot={shotsById.get(node.id)!}
+              title={shotTitle(shotsById.get(node.id)!)}
+              selected={selectedShotIds.has(node.id)}
+              hovered={activeHoveredId === node.id}
+              neighbor={neighborhood.has(node.id)}
+              hoverEnabled={hoverEnabled}
+              tabIndex={tool === "pointer" ? 0 : -1}
+              previewId={previewId}
+              onHover={hoverNode}
+              onLeave={leaveHover}
+              onBlur={resetHover}
+              onSelect={selectNode}
+            />
+          ))}
         </div>
       </div>
       <svg
-        className="storyboard-graph-selection-rings"
+        ref={nodePaintRef}
+        className="storyboard-graph-selection-rings storyboard-graph-nodes"
         width={size.width}
         height={size.height}
         aria-hidden="true"
       >
-        {visibleNodes
-          .filter((node) => selectedShotIds.has(node.id) || node.id === activeHoveredId)
-          .sort((a, b) => Number(a.id === activeHoveredId) - Number(b.id === activeHoveredId))
-          .map((node) => {
-            const point = storyboardGraphScreenPoint(node, camera, size);
-            const selected = selectedShotIds.has(node.id);
-            const ring = storyboardGraphSelectionRing(node.radius, camera.zoom);
-            return (
-              <g
-                key={node.id}
-                style={annotationStyle(shotAnnotations[node.id])}
-                data-overlay-node={node.id}
-                transform={`translate(${point.x}, ${point.y})`}
-              >
-                <circle
-                  data-selection-node={selected ? node.id : undefined}
-                  className={
-                    selected ? "storyboard-graph-selected-node" : "storyboard-graph-hovered-node"
-                  }
-                  r={
-                    selected
-                      ? node.radius * camera.zoom
-                      : (node.radius - 0.5) * camera.zoom * graphDotHoverScale
-                  }
-                  strokeWidth={selected ? undefined : camera.zoom * graphDotHoverScale}
-                />
-                {selected && <circle data-selection-ring={node.id} r={ring.radius} />}
-              </g>
-            );
-          })}
+        {projectedNodes.map(({ node, x, y }) => (
+          <GraphNode
+            key={node.id}
+            node={node}
+            x={x}
+            y={y}
+            zoom={camera.zoom}
+            selected={selectedShotIds.has(node.id)}
+            hovered={activeHoveredId === node.id}
+            neighbor={neighborhood.has(node.id)}
+            annotation={shotAnnotations[node.id]}
+          />
+        ))}
       </svg>
       {marquee && (
         <div
@@ -873,60 +1193,75 @@ export function StoryboardGraphCanvas({
         />
       )}
       <div className="storyboard-graph-previews">
-        {previews.map((preview) => {
-          const isHovered = preview.node.id === hoveredNode?.id;
-          const shot = shotsById.get(preview.node.id)!;
-          const colorStyle = annotationStyle(shotAnnotations[preview.node.id]);
-          return (
-            <div
-              key={preview.node.id}
-              id={isHovered ? previewId : undefined}
-              role={isHovered ? "tooltip" : undefined}
-              data-preview-shot-id={preview.node.id}
-              data-storyboard-shot-id={preview.node.id}
-              className={`storyboard-graph-preview ${preview.above ? "is-above" : "is-below"}${colorStyle ? " has-color-label" : ""}${selectedShotIds.has(preview.node.id) ? " is-selected" : ""}${!isHovered && !selectedShotIds.has(preview.node.id) ? " is-neighbor" : ""}${previewEmphasis && !previewEmphasis.has(preview.node.id) ? " is-muted" : ""}`}
-              onPointerEnter={() => {
-                cancelHoverLeave();
-                setHoveredPreviewId(preview.node.id);
-              }}
-              onPointerLeave={() => {
-                setHoveredPreviewId(null);
-                leaveHover();
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (sprayActive) selectNode(event, shot, false);
-              }}
-              onDoubleClick={(event) => {
-                event.stopPropagation();
-                if (sprayActive) selectNode(event, shot, true);
-              }}
-              style={
-                {
-                  width: previewWidth,
-                  left: preview.left,
-                  top: preview.top,
-                  ...colorStyle,
-                  zIndex:
-                    preview.node.id === hoveredPreviewId ? previews.length + 4 : preview.zIndex,
-                  "--storyboard-graph-preview-caret": `${preview.caret}px`,
-                  "--storyboard-graph-preview-arrow-gap": `${previewFrameGap}px`,
-                  "--storyboard-graph-preview-arrow-height": `${previewArrowHeight}px`,
-                } as CSSProperties
-              }
-            >
-              <StoryboardGraphThumbnail
-                shot={shot}
-                source={preview.source}
-                annotation={shotAnnotations[preview.node.id]}
-                thumbnailFrame={preview.node.thumbnailFrame}
-                priority={preview.priority}
-                requestEnabled={panelActive && Boolean(preview.source.videoPath)}
-              />
-            </div>
-          );
-        })}
+        <GraphPreviewPresence previews={previews} enabled={hoverEnabled}>
+          {(preview, exiting, onExited) => {
+            const isHovered = preview.node.id === hoveredNode?.id;
+            const shot = shotsById.get(preview.node.id);
+            if (!shot) return null;
+            const colorStyle = annotationStyle(shotAnnotations[preview.node.id]);
+            return (
+              <div
+                key={preview.node.id}
+                id={isHovered ? previewId : undefined}
+                role={isHovered ? "tooltip" : undefined}
+                data-preview-shot-id={preview.node.id}
+                data-storyboard-shot-id={preview.node.id}
+                inert={exiting}
+                aria-hidden={exiting || undefined}
+                onTransitionEnd={(event) => {
+                  if (
+                    exiting &&
+                    event.target === event.currentTarget &&
+                    event.propertyName === "opacity" &&
+                    Number(getComputedStyle(event.currentTarget).opacity) === 0
+                  )
+                    onExited();
+                }}
+                className={`storyboard-graph-preview ${preview.above ? "is-above" : "is-below"}${colorStyle ? " has-color-label" : ""}${selectedShotIds.has(preview.node.id) ? " is-selected" : ""}${!isHovered && !selectedShotIds.has(preview.node.id) ? " is-neighbor" : ""}${previewEmphasis && !previewEmphasis.has(preview.node.id) ? " is-muted" : ""}${exiting ? " is-exiting" : ""}`}
+                onPointerEnter={() => {
+                  setHoveredPreviewId(preview.node.id);
+                }}
+                onPointerLeave={(event) => {
+                  setHoveredPreviewId(null);
+                  leaveHover(event);
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (sprayActive) selectNode(event, shot, false);
+                }}
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                  if (sprayActive) selectNode(event, shot, true);
+                }}
+                style={
+                  {
+                    width: previewWidth,
+                    left: preview.left,
+                    top: preview.top,
+                    ...colorStyle,
+                    zIndex:
+                      tool === "pointer" && preview.node.id === hoveredPreviewId
+                        ? previews.length + 4
+                        : preview.zIndex,
+                    "--storyboard-graph-preview-caret": `${preview.caret}px`,
+                    "--storyboard-graph-preview-arrow-gap": `${previewFrameGap}px`,
+                    "--storyboard-graph-preview-arrow-height": `${previewArrowHeight}px`,
+                  } as CSSProperties
+                }
+              >
+                <StoryboardGraphThumbnail
+                  shot={shot}
+                  source={preview.source}
+                  annotation={shotAnnotations[preview.node.id]}
+                  thumbnailFrame={preview.node.thumbnailFrame}
+                  priority={preview.priority}
+                  requestEnabled={panelActive && Boolean(preview.source.videoPath)}
+                />
+              </div>
+            );
+          }}
+        </GraphPreviewPresence>
       </div>
       {children}
       <StoryboardGraphTools

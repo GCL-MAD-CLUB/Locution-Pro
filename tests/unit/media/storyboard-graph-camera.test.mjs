@@ -13,6 +13,8 @@ import {
   storyboardGraphWorldPoint,
   storyboardGraphZoomLimits,
   zoomStoryboardGraphAt,
+  indexStoryboardGraphNeighborhoods,
+  storyboardGraphNeighborhood,
 } from "../../../src/core/editor/storyboardGraph/camera.ts";
 
 const size = { width: 800, height: 500 };
@@ -21,6 +23,18 @@ const nodes = [
   { id: "b", x: 1800, y: 800, radius: 4, thumbnailFrame: 10 },
 ];
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, `${a} != ${b}`);
+test("cached neighborhoods preserve undirected adjacency and isolated nodes", () => {
+  const graph = {
+    nodes: [...nodes, { id: "isolated", x: 0, y: 0, radius: 4, thumbnailFrame: 0 }],
+    edges: [{ source: 0, target: 1, similarity: 0.95 }],
+  };
+  const indexed = indexStoryboardGraphNeighborhoods(graph);
+  for (const node of graph.nodes)
+    assert.deepEqual(indexed.get(node.id), storyboardGraphNeighborhood(graph, node.id));
+  assert.deepEqual([...indexed.get("isolated")], ["isolated"]);
+  assert.equal(indexed.get("missing"), undefined);
+  assert.notEqual(indexed.get("a"), indexed.get("b"));
+});
 const closePoint = (a, b) => {
   close(a.x, b.x);
   close(a.y, b.y);

@@ -65,6 +65,7 @@ export function mountGraph(empty = false, spread = 1, nodeRadius = 4) {
     const [sprayActive, setSprayActive] = useState(false);
     const [sprays, setSprays] = useState([]);
     window.graphSetAnnotations = setShotAnnotations;
+    window.graphSetSelection = setSelectedShotIds;
     window.graphSetSprayActive = setSprayActive;
     window.graphSprays = sprays;
     window.graphSelection = [...selectedShotIds].sort();

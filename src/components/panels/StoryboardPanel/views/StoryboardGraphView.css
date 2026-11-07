@@ -1,5 +1,6 @@
 .storyboard-graph-view {
   --storyboard-graph-hover: var(--color-contrast-inverse);
+  --storyboard-graph-hover-duration: 120ms;
 
   position: relative;
   box-sizing: border-box;
@@ -135,6 +136,7 @@
 
 .storyboard-graph-world,
 .storyboard-graph-edges,
+.storyboard-graph-hit-nodes,
 .storyboard-graph-nodes {
   position: absolute;
   top: 0;
@@ -143,6 +145,7 @@
 }
 
 .storyboard-graph-world {
+  z-index: 1;
   transform-origin: 0 0;
 }
 
@@ -150,27 +153,39 @@
   overflow: visible;
 }
 
+.storyboard-graph-edges path,
 .storyboard-graph-edges line {
+  fill: none;
   stroke: var(--color-storyboard-graph-default);
   stroke-width: 0.6;
-  transition: opacity 140ms ease;
+  transition:
+    opacity var(--storyboard-graph-hover-duration) ease,
+    stroke var(--storyboard-graph-hover-duration) ease;
 }
 
-.storyboard-graph-edges line.is-muted {
+.storyboard-graph-view.has-focus .storyboard-graph-base-edges {
   opacity: 0.025;
 }
 
 .storyboard-graph-edges line.is-highlighted {
   stroke: var(--storyboard-graph-hover);
   stroke-width: 1;
+  opacity: 0.8;
+}
+
+.storyboard-graph-edges line.is-exiting {
+  opacity: 0;
+}
+
+@starting-style {
+  .storyboard-graph-edges line.is-highlighted {
+    stroke: var(--color-storyboard-graph-default);
+    opacity: 0.2;
+  }
 }
 
 .storyboard-graph-dot {
   position: absolute;
-  display: grid;
-  place-items: center;
-  width: var(--storyboard-graph-dot-size);
-  height: var(--storyboard-graph-dot-size);
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -178,36 +193,60 @@
   transform: translate(-50%, -50%);
   cursor: pointer;
   pointer-events: auto;
-  transition: opacity 140ms ease;
+  outline: none;
+  transition: transform var(--storyboard-graph-hover-duration) ease;
 }
 
-.storyboard-graph-dot::after {
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
-  content: "";
-  border: 1px solid var(--color-surface-canvas);
-  border-radius: 50%;
-  background: var(--storyboard-color-label, var(--color-storyboard-graph-default));
+.storyboard-graph-dot.is-hovered {
+  transform: translate(-50%, -50%) scale(var(--storyboard-graph-dot-hover-scale));
+  z-index: 1;
+}
+
+.storyboard-graph-dot-visual {
+  transition: opacity var(--storyboard-graph-hover-duration) ease;
+}
+
+.storyboard-graph-hover-bridges {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.storyboard-graph-node {
+  fill: var(--storyboard-color-label, var(--color-storyboard-graph-default));
+  stroke: var(--color-surface-canvas);
   transition:
-    background-color 120ms ease,
-    transform 120ms ease;
+    fill var(--storyboard-graph-hover-duration) ease,
+    stroke var(--storyboard-graph-hover-duration) ease;
 }
 
-.storyboard-graph-view.has-focus .storyboard-graph-dot:not(.is-neighbor):not(.is-selected) {
+.storyboard-graph-node-paint {
+  scale: 1;
+  transform-origin: 0 0;
+  transition: scale var(--storyboard-graph-hover-duration) ease;
+}
+
+.storyboard-graph-dot-visual.is-hovered .storyboard-graph-node-paint {
+  scale: var(--storyboard-graph-dot-hover-scale);
+}
+
+.storyboard-graph-dot-visual.is-neighbor .storyboard-graph-node,
+.storyboard-graph-dot-visual.is-hovered .storyboard-graph-node,
+.storyboard-graph-dot-visual.is-selected .storyboard-graph-node {
+  fill: var(--storyboard-color-label, var(--storyboard-graph-hover));
+}
+
+.storyboard-graph-view.has-focus .storyboard-graph-dot:not(.is-neighbor):not(.is-selected),
+.storyboard-graph-view.has-focus .storyboard-graph-dot-visual:not(.is-neighbor):not(.is-selected) {
   opacity: 0.2;
-}
-
-.storyboard-graph-dot.is-selected::after,
-.storyboard-graph-dot.is-hovered::after {
-  visibility: hidden;
 }
 
 .storyboard-graph-selection-rings {
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 1;
+  z-index: 2;
   pointer-events: none;
 }
 
@@ -215,36 +254,14 @@
   fill: none;
   stroke: var(--storyboard-color-label, var(--storyboard-graph-hover));
   stroke-width: 1;
+  pointer-events: none;
+  transition: stroke var(--storyboard-graph-hover-duration) ease;
 }
 
-.storyboard-graph-selected-node {
-  fill: var(--storyboard-color-label, var(--storyboard-graph-hover));
+.storyboard-graph-hover-bridge {
+  fill: var(--color-transparent);
   stroke: none;
-}
-
-.storyboard-graph-hovered-node {
-  fill: var(--storyboard-color-label, var(--storyboard-graph-hover));
-  stroke: var(--color-surface-canvas);
-}
-
-.storyboard-graph-dot.is-neighbor::after,
-.storyboard-graph-dot.is-hovered:not(.is-selected)::after,
-.storyboard-graph-dot:focus-visible:not(.is-selected)::after {
-  background: var(--storyboard-color-label, var(--storyboard-graph-hover));
-}
-
-.storyboard-graph-dot.is-hovered:not(.is-selected)::after,
-.storyboard-graph-dot:focus-visible:not(.is-selected)::after {
-  transform: scale(var(--storyboard-graph-dot-hover-scale, 1.35));
-}
-
-.storyboard-graph-dot.is-hovered,
-.storyboard-graph-dot:focus-visible {
-  z-index: 1;
-}
-
-.storyboard-graph-dot:focus-visible {
-  outline: none;
+  pointer-events: all;
 }
 
 .storyboard-graph-previews {
@@ -258,6 +275,7 @@
   position: absolute;
   z-index: 4;
   pointer-events: none;
+  transition: opacity var(--storyboard-graph-hover-duration) ease;
 }
 
 .storyboard-graph-preview.has-color-label .shot-frame-button {
@@ -324,6 +342,17 @@
   pointer-events: auto;
 }
 
+.storyboard-graph-view .storyboard-graph-preview.is-exiting {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@starting-style {
+  .storyboard-graph-view .storyboard-graph-preview {
+    opacity: 0;
+  }
+}
+
 .storyboard-graph-preview::after {
   position: absolute;
   top: calc(100% + var(--storyboard-graph-preview-arrow-gap, 3px));
@@ -355,6 +384,10 @@
   box-shadow:
     0 0 0 1.2px var(--color-border-selection),
     0 0 0 2px var(--color-border-inset);
+  transition:
+    background-color var(--storyboard-graph-hover-duration) ease,
+    border-color var(--storyboard-graph-hover-duration) ease,
+    box-shadow var(--storyboard-graph-hover-duration) ease;
 }
 
 .storyboard-graph-navigator {
@@ -388,7 +421,8 @@
   outline-offset: -2px;
 }
 
-.storyboard-graph-minimap-content line {
+.storyboard-graph-minimap-content path {
+  fill: none;
   stroke: var(--color-storyboard-graph-default);
   stroke-width: 0.35;
   opacity: 0.22;
@@ -396,6 +430,7 @@
 
 .storyboard-graph-minimap-content circle {
   fill: var(--storyboard-color-label, var(--color-storyboard-graph-default));
+  transition: fill var(--storyboard-graph-hover-duration) ease;
 }
 
 .storyboard-graph-minimap-content circle.is-selected {
@@ -464,8 +499,15 @@
   .storyboard-graph-spinner {
     animation: none;
   }
-  .storyboard-graph-dot::after,
   .storyboard-graph-dot,
+  .storyboard-graph-dot-visual,
+  .storyboard-graph-node,
+  .storyboard-graph-node-paint,
+  .storyboard-graph-selection-rings [data-selection-ring],
+  .storyboard-graph-preview,
+  .storyboard-graph-preview .shot-frame-button,
+  .storyboard-graph-minimap-content circle,
+  .storyboard-graph-edges path,
   .storyboard-graph-edges line {
     transition: none;
   }

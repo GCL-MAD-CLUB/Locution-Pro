@@ -852,9 +852,9 @@ public class Fixture {
             `$ErrorActionPreference = 'Stop'
 $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey('CurrentUser', 'Registry64')
 $product = $base.CreateSubKey($env:LOCUTION_TEST_REGISTRY + '\\Product')
-$product.SetValue('BundleFfmpeg', 0, 'DWord')
-$product.SetValue('FfmpegPath', 'C:\\old tools\\ffmpeg.exe', 'String')
-$product.SetValue('FfprobePath', 'C:\\old tools\\ffprobe.exe', 'String')
+$product.DeleteValue('BundleFfmpeg', $false)
+$product.DeleteValue('FfmpegPath', $false)
+$product.DeleteValue('FfprobePath', $false)
 $product.SetValue('LargeInteger', [long]::Parse('9223372036854775806'), 'QWord')
 $product.SetValue('Binary', [byte[]]@(0, 1, 128, 255), 'Binary')
 $product.SetValue('EmptyBinary', [byte[]]@(), 'Binary')
@@ -869,6 +869,13 @@ $arp.Dispose(); $base.Dispose()
 `,
           );
           run(powershell, ["-NoProfile", "-File", seed], 0, registryOptions);
+          // Real 0.4.1 external-tool installs have no component registry value
+          // and no bundled FFmpeg; their choice is a UTF-16 user-data file.
+          const legacyMedia = join(options.env.LOCUTION_PRO_DATA_DIR, "installer-media-paths.ini");
+          const externalMedia =
+            "ffmpeg_path=C:\\旧工具\\ffmpeg.exe\r\nffprobe_path=C:\\旧工具\\ffprobe.exe\r\n";
+          writeFileSync(legacyMedia, `\ufeff${externalMedia}`, "utf16le");
+          for (const name of ["ffmpeg.exe", "ffprobe.exe"]) rmSync(join(install, name));
           function snapshotRegistration(output) {
             run(powershell, [
               "-NoProfile",
@@ -953,6 +960,40 @@ $arp.Dispose(); $base.Dispose()
             rejectedBefore,
           );
           writeFileSync(dependency, "payload");
+          for (const record of ["", "ffmpeg_path=C:\\old tools\\ffmpeg.exe\r\n"]) {
+            writeFileSync(legacyMedia, record);
+            run(executable, ["/S", "/UPDATE", "/CHECKUPDATE", `/D=${install}`], 2, options);
+          }
+          for (const encoding of ["utf8", "utf16le"]) {
+            writeFileSync(
+              legacyMedia,
+              `${encoding === "utf16le" ? "\ufeff" : ""}${externalMedia}`,
+              encoding,
+            );
+            run(executable, ["/S", "/UPDATE", "/CHECKUPDATE", `/D=${install}`], 0, options);
+          }
+          // A newer explicit bundled choice wins over any legacy external record.
+          run("reg.exe", [
+            "add",
+            `HKCU\\${registry}\\Product`,
+            "/v",
+            "BundleFfmpeg",
+            "/t",
+            "REG_DWORD",
+            "/d",
+            "1",
+            "/f",
+            "/reg:64",
+          ]);
+          run(executable, ["/S", "/UPDATE", "/CHECKUPDATE", `/D=${install}`], 2, options);
+          run("reg.exe", [
+            "delete",
+            `HKCU\\${registry}\\Product`,
+            "/v",
+            "BundleFfmpeg",
+            "/f",
+            "/reg:64",
+          ]);
           run(executable, ["/S", "/UPDATE", "/CHECKUPDATE", `/D=${install}`], 0, options);
           assert.equal(readFileSync(main, "utf8"), "previous working executable");
           for (const version of ["0.4.2", "0.4.3"]) {
@@ -1006,6 +1047,15 @@ $arp.Dispose(); $base.Dispose()
           assert.equal(readFileSync(dependency, "utf8"), "payload");
           assert.equal(readFileSync(thumbnail, "utf8"), "payload");
           assert.equal(readFileSync(metadata, "utf8"), "payload");
+          const migrated = snapshotRegistration(join(temporary, "legacy-media-migrated.json"));
+          const migratedValues = migrated.keys.find((key) => key.path === `${registry}\\Product`)
+            .tree.values;
+          const readValue = (name) => migratedValues.find((value) => value.name === name).data;
+          assert.equal(readValue("BundleFfmpeg"), 0);
+          assert.equal(readValue("FfmpegPath"), "C:\\旧工具\\ffmpeg.exe");
+          assert.equal(readValue("FfprobePath"), "C:\\旧工具\\ffprobe.exe");
+          assert(!existsSync(join(install, "ffmpeg.exe")));
+          assert.equal(readFileSync(legacyMedia, "utf16le"), `\ufeff${externalMedia}`);
           // Run the real bootstrap, including quoted handoff arguments, the
           // embedded controller, worker mutex and failure/restart protocol.
           const { application } = prepareControllerFixture();

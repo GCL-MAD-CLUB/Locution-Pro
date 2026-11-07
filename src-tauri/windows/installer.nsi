@@ -513,8 +513,29 @@ Function .onInit
   StrCpy $LocutionProPreviousSemanticChoice $LocutionProBundleSemantic
   ClearErrors
   ReadRegDWORD $0 SHCTX "$PreviousProductKey" "BundleFfmpeg"
-  ${IfNot} ${Errors}
-  ${AndIf} $0 == 0
+  ${If} ${Errors}
+    ; 0.4.1 recorded external tools in user data, without a BundleFfmpeg value.
+    ; Only an identified old install and a complete legacy record may opt out.
+    ${If} $PreviousInstallDir != ""
+      InitPluginsDir
+      File "/oname=$PLUGINSDIR\read-legacy-media.ps1" "${LOCUTION_INSTALLER_SOURCE_DIR}\read-legacy-media.ps1"
+      ReadEnvStr $2 "LOCUTION_PRO_DATA_DIR"
+      ${If} $2 == ""
+        StrCpy $2 "${LOCUTION_MIGRATION_LOCAL_ROOT}\Locution Pro"
+      ${EndIf}
+      nsExec::ExecToStack '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\read-legacy-media.ps1" -Source "$2\installer-media-paths.ini" -Result "$PLUGINSDIR\legacy-media.ini"'
+      Pop $0
+      Pop $1
+      ${If} $0 == 0
+        ReadINIStr $0 "$PLUGINSDIR\legacy-media.ini" "Media" "External"
+        ${If} $0 == 1
+          StrCpy $LocutionProBundleFfmpeg 0
+          ReadINIStr $LocutionProFfmpegPath "$PLUGINSDIR\legacy-media.ini" "Media" "FfmpegPath"
+          ReadINIStr $LocutionProFfprobePath "$PLUGINSDIR\legacy-media.ini" "Media" "FfprobePath"
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+  ${ElseIf} $0 == 0
     StrCpy $LocutionProBundleFfmpeg 0
     ReadRegStr $LocutionProFfmpegPath SHCTX "$PreviousProductKey" "FfmpegPath"
     ReadRegStr $LocutionProFfprobePath SHCTX "$PreviousProductKey" "FfprobePath"

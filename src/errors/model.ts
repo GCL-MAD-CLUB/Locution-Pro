@@ -1,6 +1,7 @@
 /** Stable operation names accepted by the application error boundary. */
 export type OperationKey =
   | "app.event"
+  | "app.menu"
   | "dragDrop.listen"
   | "dragDrop.region"
   | "export.reveal"
@@ -159,6 +160,16 @@ function frontendErrorId() {
   return `FE-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
 }
 
+/**
+ * V8 (WebView2) stacks begin with "Name: message"; WebKit (macOS) stacks list
+ * only frames, so the message must be kept alongside them explicitly.
+ */
+export function errorDiagnostic(error: Error, message = error.message) {
+  const stack = error.stack;
+  if (!stack) return message;
+  return message && !stack.includes(message) ? `${message}\n${stack}` : stack;
+}
+
 class ClientError extends Error implements NormalizedError {
   readonly errorId: string;
   readonly code: string;
@@ -174,7 +185,7 @@ class ClientError extends Error implements NormalizedError {
     this.code = code;
     this.category = definition.category;
     this.retryable = definition.retryable;
-    this.detail = this.stack || detail;
+    this.detail = errorDiagnostic(this, detail);
   }
 }
 

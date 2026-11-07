@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { clientError, ERROR_CATEGORIES } from "./model";
+import { clientError, ERROR_CATEGORIES, errorDiagnostic } from "./model";
 import { incidentRecovery } from "./recovery";
 import type {
   ErrorCategory,
@@ -57,7 +57,7 @@ function serializedError(error: unknown): Partial<PublicCommandError> | null {
 
 function diagnosticDetail(error: unknown) {
   if (error instanceof Error) {
-    return error.stack || error.message;
+    return errorDiagnostic(error, `${error.name}: ${error.message}`);
   }
   if (typeof error === "string") {
     return error;
@@ -230,6 +230,7 @@ const modal = (title: string): OperationPolicy => ({
 
 const operationPolicies = {
   "app.event": modal("操作失败"),
+  "app.menu": silent("系统菜单更新失败"),
   "dragDrop.listen": silent("文件拖放监听失败"),
   "dragDrop.region": silent("文件拖放区域更新失败"),
   "export.reveal": silent("无法在资源管理器中显示导出文件"),

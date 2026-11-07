@@ -4,23 +4,36 @@ import { lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  MACOS_PLATFORM,
   RELEASE_PLATFORM,
   RELEASE_REPOSITORY,
   installerName,
+  macosInstallerName,
+  macosUpdaterName,
   updaterName,
   validateRelease,
 } from "../site/src/release-contract.js";
+import { inspectAsset } from "./prepare-release-manifest.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export async function checkReleaseAssets({ directory, version, repository }) {
   const name = installerName(version);
   const updateName = updaterName(version);
-  const names = [name, updateName, "latest.json", "SHA256SUMS.txt"];
+  const macosNames = [macosInstallerName(version), macosUpdaterName(version)];
   const entries = await readdir(directory);
-  if (entries.length !== names.length || names.some((entry) => !entries.includes(entry))) {
+  const extras = entries.filter(
+    (entry) => ![name, updateName, "latest.json", "SHA256SUMS.txt"].includes(entry),
+  );
+  const macos = extras.length > 0;
+  const names = [name, updateName, ...(macos ? macosNames : []), "latest.json", "SHA256SUMS.txt"];
+  if (
+    entries.length !== names.length ||
+    names.some((entry) => !entries.includes(entry)) ||
+    (macos && macosNames.some((entry) => !extras.includes(entry)))
+  ) {
     throw new Error(
-      "Release artifacts must contain exactly the full installer, update installer, latest.json and SHA256SUMS.txt",
+      "Release artifacts must contain exactly the full installer, update installer, latest.json and SHA256SUMS.txt, plus both macOS files when present",
     );
   }
   const sizes = new Map();
@@ -46,6 +59,9 @@ export async function checkReleaseAssets({ directory, version, repository }) {
   ) {
     throw new Error("Release manifest does not match the expected version and repository");
   }
+  if (macos !== Boolean(manifest.platforms[MACOS_PLATFORM])) {
+    throw new Error("Release manifest and artifacts disagree on the macOS build");
+  }
   const lines = (await readFile(path.join(directory, "SHA256SUMS.txt"), "utf8"))
     .trim()
     .split(/\r?\n/u);
@@ -55,25 +71,30 @@ export async function checkReleaseAssets({ directory, version, repository }) {
     if (
       !match ||
       checksums.has(match[2]) ||
-      ![name, updateName, "latest.json"].includes(match[2])
+      !names.includes(match[2]) ||
+      match[2] === "SHA256SUMS.txt"
     ) {
       throw new Error("Invalid release checksum manifest");
     }
     checksums.set(match[2], match[1]);
   }
-  if (checksums.size !== 3) throw new Error("Missing release checksums");
+  if (checksums.size !== names.length - 1) throw new Error("Missing release checksums");
+  const formats = {
+    [name]: "exe",
+    [updateName]: "exe",
+    [macosNames[0]]: "dmg",
+    [macosNames[1]]: "gzip",
+  };
   const files = [];
   for (const entry of names) {
-    const hash = createHash("sha256");
-    let first = true;
-    for await (const chunk of createReadStream(path.join(directory, entry))) {
-      if ([name, updateName].includes(entry) && first && (chunk[0] !== 0x4d || chunk[1] !== 0x5a)) {
-        throw new Error("Expected a Windows executable");
-      }
-      first = false;
-      hash.update(chunk);
+    let sha256;
+    if (formats[entry]) {
+      sha256 = await inspectAsset(path.join(directory, entry), formats[entry]);
+    } else {
+      const hash = createHash("sha256");
+      for await (const chunk of createReadStream(path.join(directory, entry))) hash.update(chunk);
+      sha256 = hash.digest("hex");
     }
-    const sha256 = hash.digest("hex");
     if (checksums.has(entry) && sha256 !== checksums.get(entry)) {
       throw new Error(`Release checksum mismatch: ${entry}`);
     }
@@ -82,6 +103,15 @@ export async function checkReleaseAssets({ directory, version, repository }) {
     }
     if (entry === updateName && sha256 !== manifest.platforms[RELEASE_PLATFORM].updater.signature) {
       throw new Error("Update installer checksum does not match latest.json");
+    }
+    if (entry === macosNames[0] && sha256 !== manifest.platforms[MACOS_PLATFORM].signature) {
+      throw new Error("macOS disk image checksum does not match latest.json");
+    }
+    if (
+      entry === macosNames[1] &&
+      sha256 !== manifest.platforms[MACOS_PLATFORM].updater?.signature
+    ) {
+      throw new Error("macOS update archive checksum does not match latest.json");
     }
     files.push({ name: entry, size: sizes.get(entry), sha256, path: path.join(directory, entry) });
   }

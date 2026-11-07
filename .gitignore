@@ -76,3 +76,6 @@ src-tauri/resources/semantic-search/*
 # Downloaded storyboard embedding model
 src-tauri/resources/storyboard-semantic/*
 !src-tauri/resources/storyboard-semantic/MODEL.md
+
+# macOS ONNX Runtime, downloaded by npm run prepare:transnetv2
+src-tauri/resources/transnetv2/libonnxruntime.dylib

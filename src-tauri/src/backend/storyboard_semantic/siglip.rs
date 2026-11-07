@@ -228,9 +228,19 @@ fn model_guard(
 pub(super) fn preferred_batch(remaining: usize, cancel: &AtomicBool) -> AppResult<usize> {
     let mut guard = model_guard(cancel)?;
     let engine = guard.get_or_insert_with(BatchEngine::default);
-    let size = engine
-        .policy
-        .choose_resident(remaining, engine.sessions.iter().map(|model| model.size));
+    // A session that fell back to CPU mid-run keeps engine.cpu unset; it
+    // must still get CPU-tuned sizes instead of the fixed GPU shape.
+    let cpu = engine.cpu
+        || engine
+            .sessions
+            .iter()
+            .any(|session| session.runtime.provider().is_cpu());
+    let size = match engine.policy.fixed_gpu_size(cpu) {
+        Some(size) => size,
+        None => engine
+            .policy
+            .choose_resident(remaining, engine.sessions.iter().map(|model| model.size)),
+    };
     engine.next_size = size;
     Ok(size)
 }
@@ -339,6 +349,7 @@ fn embed_attempt(
             OnnxModel::load(
                 &directory.join("vision_model_fp16.onnx"),
                 &dimensions,
+                crate::backend::onnx::Accelerators::All,
                 inference_error,
             )?
         };
@@ -475,14 +486,75 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires packaged SigLIP2 models, ONNX Runtime and a DirectML GPU"]
+    #[ignore = "requires packaged SigLIP2 models, ONNX Runtime and a DirectML or CoreML GPU"]
+    fn siglip2_vision_gpu_matches_cpu() {
+        const BATCH: usize = 8;
+        let resources = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources");
+        let runtime = resources.join("transnetv2");
+        crate::backend::onnx::runtime::configure_dll_search(&runtime).unwrap();
+        ort::init_from(
+            runtime
+                .join(crate::backend::onnx::runtime::ONNXRUNTIME_DLL_FILE)
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .with_telemetry(false)
+        .commit()
+        .unwrap();
+        let model = resources.join("storyboard-semantic/siglip2/vision_model_fp16.onnx");
+        let dimensions = [
+            ("batch_size", BATCH as i64),
+            ("num_channels", 3),
+            ("height", SIDE as i64),
+            ("width", SIDE as i64),
+        ];
+        let input = Tensor::from_array((
+            [BATCH, 3, SIDE, SIDE],
+            (0..BATCH * 3 * SIDE * SIDE)
+                .map(|i| ((i * 17 % 509) as f32 - 254.0) / 254.0)
+                .collect::<Vec<_>>(),
+        ))
+        .unwrap();
+        let options = RunOptions::new()
+            .unwrap()
+            .with_outputs(OutputSelector::no_default().with("pooler_output"));
+        // Explicit provider: failures cannot be hidden by automatic CPU recovery.
+        let gpu = super::super::onnx::create_gpu_model_session_with_dimensions(&model, &dimensions)
+            .unwrap();
+        let actual = run_embedding_batch(&gpu, &input, &options, BATCH).unwrap();
+        let cpu = super::super::onnx::create_cpu_model_session_with_dimensions(&model, &dimensions)
+            .unwrap();
+        let expected = run_embedding_batch(&cpu, &input, &options, BATCH).unwrap();
+        let norm = |row: &[f32]| {
+            row.iter()
+                .map(|&x| f64::from(x).powi(2))
+                .sum::<f64>()
+                .sqrt()
+        };
+        for (a, b) in actual
+            .chunks_exact(DIMENSIONS)
+            .zip(expected.chunks_exact(DIMENSIONS))
+        {
+            let dot = a
+                .iter()
+                .zip(b)
+                .map(|(&x, &y)| f64::from(x) * f64::from(y))
+                .sum::<f64>();
+            let cosine = dot / (norm(a) * norm(b));
+            eprintln!("SigLIP2 vision GPU/CPU cosine: {cosine}");
+            assert!(cosine > 0.999, "SigLIP2 vision GPU/CPU cosine: {cosine}");
+        }
+    }
+
+    #[test]
+    #[ignore = "requires packaged SigLIP2 models, ONNX Runtime and a DirectML or CoreML GPU"]
     fn siglip2_query_encoder_provider_diagnostics() {
         let resources = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources");
         let runtime = resources.join("transnetv2");
         crate::backend::onnx::runtime::configure_dll_search(&runtime).unwrap();
         ort::init_from(
             runtime
-                .join("onnxruntime.dll")
+                .join(crate::backend::onnx::runtime::ONNXRUNTIME_DLL_FILE)
                 .to_string_lossy()
                 .into_owned(),
         )
@@ -495,12 +567,8 @@ mod tests {
         let tokenizer = text_tokenizer(directory.join("tokenizer.json")).unwrap();
         let ids = query_ids(&tokenizer, "an anime girl crying in a room").unwrap();
         let input = Tensor::from_array(([1, TOKENS], ids)).unwrap();
-        let gpu = super::super::onnx::create_directml_model_session_with_dimensions(
-            &model,
-            0,
-            &dimensions,
-        )
-        .unwrap();
+        let gpu = super::super::onnx::create_gpu_model_session_with_dimensions(&model, &dimensions)
+            .unwrap();
         let cpu = super::super::onnx::create_cpu_model_session_with_dimensions(&model, &dimensions)
             .unwrap();
         let actual = normalize(&run_text_embedding(&gpu, &input).unwrap()).unwrap();
@@ -519,7 +587,7 @@ mod tests {
                 / (norm(a) * norm(b))
         };
         let deviation = cosine(&actual, &expected);
-        eprintln!("SigLIP2 text DirectML/CPU cosine: {deviation}");
+        eprintln!("SigLIP2 text GPU/CPU cosine: {deviation}");
         // Diagnose provider drift without requiring a particular GPU defect.
         // The production query encoder always uses the validated CPU path.
         assert!(deviation.is_finite());

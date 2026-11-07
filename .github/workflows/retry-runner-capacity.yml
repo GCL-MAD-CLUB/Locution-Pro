@@ -1,0 +1,44 @@
+name: Retry runner capacity failures
+
+# Hosted macOS arm64 runners are sometimes unavailable; GitHub then cancels the
+# queued job without running a step and the required check fails. Rerun only
+# those jobs, at most twice, so real failures are still reported as they are.
+# workflow_run executes this file from the default branch with the base
+# repository's token and never checks out pull request code.
+on:
+  workflow_run:
+    workflows: [CI, Release]
+    types: [completed]
+
+permissions:
+  actions: write
+  checks: read
+
+jobs:
+  retry:
+    name: Rerun jobs that never got a runner
+    if: ${{ (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'cancelled') && github.event.workflow_run.run_attempt < 3 }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Rerun failed jobs after a runner acquisition timeout
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          set -euo pipefail
+          # A job cancelled by a user or a newer push has no such annotation.
+          stranded=0
+          for job in $(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" \
+            --jq '.jobs[] | select(.conclusion == "cancelled" and (.steps | length) == 0) | .id'); do
+            matches="$(gh api "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" \
+              --jq '[.[] | select(.message | test("not acquired by Runner"))] | length')"
+            if [[ "$matches" -gt 0 ]]; then stranded=$((stranded + 1)); fi
+          done
+          if [[ "$stranded" -eq 0 ]]; then
+            echo "No job waited for an unavailable runner; leaving the result as is."
+            exit 0
+          fi
+          echo "::notice::Rerunning attempt $RUN_ATTEMPT: $stranded job(s) never got a runner."
+          gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/rerun-failed-jobs"

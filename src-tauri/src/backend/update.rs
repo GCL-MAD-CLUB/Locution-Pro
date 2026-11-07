@@ -2,11 +2,43 @@ use super::*;
 use std::io::Write;
 use std::sync::OnceLock;
 
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+mod macos;
+
 const REPOSITORY: &str = "GCL-MAD-CLUB/Locution-Pro";
 const CDN: &str = "https://openlist.frameneo.com/sd/YRrdPxj2";
 const MAX_MANIFEST: usize = 64 * 1024;
 const MAX_RELEASE: usize = 1024 * 1024;
 const MAX_INSTALLER: u64 = 256 * 1024 * 1024;
+
+/// The latest.json platform entry this build installs from and its immutable
+/// asset names. macOS replaces the application bundle from a gzip archive;
+/// Windows runs the update-only NSIS installer.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+mod release_platform {
+    pub(super) const KEY: &str = "darwin-aarch64";
+    pub(super) const UPDATE_HEADER: &[u8] = &[0x1f, 0x8b];
+    pub(super) const UPDATE_FILE: &str = "update.tar.gz";
+
+    pub(super) fn asset(version: &str, variant: &str) -> String {
+        if variant == "setup" {
+            format!("Locution.Pro_{version}_aarch64.dmg")
+        } else {
+            format!("Locution.Pro_{version}_aarch64-{variant}.tar.gz")
+        }
+    }
+}
+
+#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+mod release_platform {
+    pub(super) const KEY: &str = "windows-x86_64";
+    pub(super) const UPDATE_HEADER: &[u8] = b"MZ";
+    pub(super) const UPDATE_FILE: &str = "update.exe";
+
+    pub(super) fn asset(version: &str, variant: &str) -> String {
+        format!("Locution.Pro_{version}_x64-{variant}.exe")
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -163,7 +195,7 @@ fn cached_installer_path(
             "{version}-{}",
             installer.signature.to_ascii_lowercase()
         ))
-        .join("update.exe"))
+        .join(release_platform::UPDATE_FILE))
 }
 
 fn launch_failure(arguments: impl IntoIterator<Item = String>) -> Option<UpdateFailure> {
@@ -358,7 +390,7 @@ fn invalid_update(detail: impl Into<String>) -> AppError {
 }
 
 fn validate_installer(installer: &Installer, version: &str, variant: &str) -> AppResult<()> {
-    let name = format!("Locution.Pro_{version}_x64-{variant}.exe");
+    let name = release_platform::asset(version, variant);
     if installer.signature.len() != 64
         || !installer
             .signature
@@ -395,8 +427,8 @@ fn decode_manifest(bytes: &[u8]) -> AppResult<(LatestRelease, Option<Installer>)
     }
     let platform = manifest
         .platforms
-        .get("windows-x86_64")
-        .ok_or_else(|| update_error("Missing Windows platform"))?;
+        .get(release_platform::KEY)
+        .ok_or_else(|| update_error(format!("Missing {} platform", release_platform::KEY)))?;
     validate_installer(&platform.full, &manifest.version, "setup")?;
     if let Some(installer) = &platform.updater {
         validate_installer(installer, &manifest.version, "update")?;
@@ -735,8 +767,8 @@ fn verify_download(path: &Path, signature: &str) -> AppResult<()> {
         if count == 0 {
             break;
         }
-        if first && !buffer[..count].starts_with(b"MZ") {
-            return Err(update_error("Update is not a Windows executable"));
+        if first && !buffer[..count].starts_with(release_platform::UPDATE_HEADER) {
+            return Err(update_error("Update has an unexpected file header"));
         }
         first = false;
         hash.update(&buffer[..count]);
@@ -887,6 +919,7 @@ fn persist_download(app: &tauri::AppHandle, prepared: &PreparedUpdate) -> AppRes
 
 #[tauri::command]
 pub(crate) async fn install_update(
+    app: tauri::AppHandle,
     version: String,
     project_path: Option<String>,
 ) -> CommandResult<()> {
@@ -894,15 +927,13 @@ pub(crate) async fn install_update(
     let installer = prepared
         .path
         .ok_or_else(|| update_error("The update has not finished downloading"))?;
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, all(target_os = "macos", target_arch = "aarch64"))))]
     {
-        let _ = (installer, project_path);
-        Err(update_error(
-            "Windows updates are unavailable on this platform",
-        ))
+        let _ = (app, installer, project_path);
+        return Err(update_error("Updates are unavailable on this platform"));
     }
-    #[cfg(windows)]
-    {
+    #[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64")))]
+    let signature = {
         let client = release_client(Duration::from_secs(8))?;
         let authority = authoritative_installer(&client, &version).await?;
         if authority.signature != prepared.installer.signature {
@@ -910,7 +941,24 @@ pub(crate) async fn install_update(
                 "Cached update does not match the GitHub release SHA-256",
             ));
         }
-        let signature = authority.signature;
+        authority.signature
+    };
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        tauri::async_runtime::spawn_blocking(move || {
+            verify_download(&installer, &signature)?;
+            macos::install(&installer, &version, project_path.as_deref())
+        })
+        .await
+        .map_err(|error| update_error(error.to_string()))??;
+        // The relaunch helper waits for this process to exit before opening
+        // the updated bundle with the saved project.
+        app.exit(0);
+        Ok(())
+    }
+    #[cfg(windows)]
+    {
+        let _ = &app;
         let (mut child, ready) = tauri::async_runtime::spawn_blocking(move || -> AppResult<_> {
             verify_download(&installer, &signature)?;
             let executable = env::current_exe().map_err(|error| update_error(error.to_string()))?;
@@ -994,7 +1042,7 @@ mod tests {
         }
         prune_update_cache(
             &root,
-            Some(&pending.join("update.exe")),
+            Some(&pending.join(release_platform::UPDATE_FILE)),
             std::time::SystemTime::now() + Duration::from_secs(32 * 86400),
         );
         assert!(!obsolete.exists());
@@ -1020,7 +1068,7 @@ mod tests {
     #[test]
     fn cdn_cannot_authorize_update_bytes_without_independent_github_metadata() {
         let mut cdn = manifest();
-        cdn["platforms"]["windows-x86_64"]["updater"]["signature"] = "b".repeat(64).into();
+        cdn["platforms"][release_platform::KEY]["updater"]["signature"] = "b".repeat(64).into();
         let (_, installer) = discover_fixture(vec![
             (200, cdn.to_string()),
             (200, manifest().to_string()),
@@ -1129,7 +1177,7 @@ mod tests {
     #[test]
     fn missing_updater_preserves_known_release_even_when_the_api_is_unavailable() {
         let mut manifest = manifest();
-        manifest["platforms"]["windows-x86_64"]
+        manifest["platforms"][release_platform::KEY]
             .as_object_mut()
             .unwrap()
             .remove("updater");
@@ -1235,15 +1283,16 @@ mod tests {
 
     fn manifest() -> serde_json::Value {
         let artifact = |kind| {
+            let name = release_platform::asset("1.2.3", kind);
             serde_json::json!({
                 "signature": "a".repeat(64),
-                "url": format!("https://github.com/{REPOSITORY}/releases/download/v1.2.3/Locution.Pro_1.2.3_x64-{kind}.exe"),
-                "cdn_url": format!("{CDN}/Locution.Pro_1.2.3_x64-{kind}.exe"),
+                "url": format!("https://github.com/{REPOSITORY}/releases/download/v1.2.3/{name}"),
+                "cdn_url": format!("{CDN}/{name}"),
             })
         };
         let mut platform = artifact("setup");
         platform["updater"] = artifact("update");
-        serde_json::json!({ "version": "1.2.3", "pub_date": "2026-10-05T16:40:45Z", "platforms": { "windows-x86_64": platform } })
+        serde_json::json!({ "version": "1.2.3", "pub_date": "2026-10-05T16:40:45Z", "platforms": { release_platform::KEY: platform } })
     }
 
     #[test]
@@ -1251,12 +1300,15 @@ mod tests {
         let mut data = manifest();
         let (release, updater) = decode_manifest(&serde_json::to_vec(&data).unwrap()).unwrap();
         assert_eq!(release.version, "1.2.3");
-        assert!(updater.unwrap().url.ends_with("-update.exe"));
+        assert!(updater
+            .unwrap()
+            .url
+            .ends_with(&release_platform::asset("1.2.3", "update")));
         for invalid in [
             "https://example.com/update.exe",
             "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/latest/download/update.exe",
         ] {
-            data["platforms"]["windows-x86_64"]["updater"]["url"] = invalid.into();
+            data["platforms"][release_platform::KEY]["updater"]["url"] = invalid.into();
             assert!(decode_manifest(&serde_json::to_vec(&data).unwrap()).is_err());
         }
     }
@@ -1264,7 +1316,7 @@ mod tests {
     #[test]
     fn legacy_manifest_can_report_the_current_version_without_an_updater() {
         let mut data = manifest();
-        data["platforms"]["windows-x86_64"]
+        data["platforms"][release_platform::KEY]
             .as_object_mut()
             .unwrap()
             .remove("updater");
@@ -1277,11 +1329,11 @@ mod tests {
     }
 
     #[test]
-    fn downloaded_executable_requires_matching_bytes_and_a_windows_header() {
-        let path = env::temp_dir().join(format!("locution-update-{}.exe", Uuid::new_v4()));
-        let bytes = b"MZ update fixture";
-        fs::write(&path, bytes).unwrap();
-        let signature = format!("{:x}", Sha256::digest(bytes));
+    fn downloaded_update_requires_matching_bytes_and_the_platform_header() {
+        let path = env::temp_dir().join(format!("locution-update-{}", Uuid::new_v4()));
+        let bytes = [release_platform::UPDATE_HEADER, b" update fixture"].concat();
+        fs::write(&path, &bytes).unwrap();
+        let signature = format!("{:x}", Sha256::digest(&bytes));
         assert!(verify_download(&path, &signature).is_ok());
         assert!(verify_download(&path, &"0".repeat(64)).is_err());
         fs::write(&path, b"<html>error</html>").unwrap();
@@ -1301,8 +1353,12 @@ mod tests {
             let mut requests = Vec::new();
             let deadline = Instant::now() + Duration::from_secs(10);
             for body in [
-                b"MZ corrupt CDN bytes".as_slice(),
-                b"MZ verified GitHub installer".as_slice(),
+                [release_platform::UPDATE_HEADER, b" corrupt CDN bytes"].concat(),
+                [
+                    release_platform::UPDATE_HEADER,
+                    b" verified GitHub installer",
+                ]
+                .concat(),
             ] {
                 let mut stream = loop {
                     match listener.accept() {
@@ -1335,15 +1391,19 @@ mod tests {
                     body.len()
                 )
                 .unwrap();
-                stream.write_all(body).unwrap();
+                stream.write_all(&body).unwrap();
             }
             requests
         });
         let path =
             env::temp_dir().join(format!("locution-update-fallback-{}.part", Uuid::new_v4()));
-        let expected = b"MZ verified GitHub installer";
+        let expected = [
+            release_platform::UPDATE_HEADER,
+            b" verified GitHub installer",
+        ]
+        .concat();
         let installer = Installer {
-            signature: format!("{:x}", Sha256::digest(expected)),
+            signature: format!("{:x}", Sha256::digest(&expected)),
             cdn_url: format!("http://{address}/cdn"),
             url: format!("http://{address}/github"),
         };

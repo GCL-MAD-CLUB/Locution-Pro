@@ -64,7 +64,9 @@ pub(crate) struct ErrorDefinition {
 
 macro_rules! define_error_codes {
     ($($variant:ident => ($name:literal, $category:ident, $retryable:literal)),+ $(,)?) => {
+        // Some codes are raised only by Windows-specific code.
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        #[cfg_attr(not(windows), allow(dead_code))]
         pub(crate) enum ErrorCode {
             $($variant),+
         }
@@ -171,6 +173,7 @@ define_error_codes! {
     NativeDragRegistrationFailed => ("NATIVE_DRAG_REGISTRATION_FAILED", Platform, true),
     ProcessTerminationFailed => ("PROCESS_TERMINATION_FAILED", Platform, true),
     SystemSoundPlayFailed => ("SYSTEM_SOUND_PLAY_FAILED", Platform, true),
+    ApplicationMenuFailed => ("APPLICATION_MENU_FAILED", Platform, true),
     ExportDestinationResolveFailed => ("EXPORT_DESTINATION_RESOLVE_FAILED", Platform, true),
     BlockingTaskFailed => ("BLOCKING_TASK_FAILED", Runtime, true),
     EventEmitFailed => ("EVENT_EMIT_FAILED", Runtime, true),

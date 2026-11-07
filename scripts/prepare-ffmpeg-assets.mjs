@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
+  chmodSync,
   copyFileSync,
   createWriteStream,
   existsSync,
@@ -140,7 +141,47 @@ function findFile(directory, name) {
   return undefined;
 }
 
+// No pinned macOS archive is published alongside the Windows build, so the
+// macOS bundle reuses a local FFmpeg (LOCUTION_PRO_FFMPEG_DIR or PATH). A
+// Homebrew FFmpeg links Homebrew dylibs and runs only where Homebrew is
+// installed; supply a static build to produce a redistributable app.
+function findOnPath(name) {
+  try {
+    return execFileSync("/usr/bin/which", [name], { encoding: "utf8" }).trim();
+  } catch {
+    // which exits non-zero when the program is not on PATH.
+    return undefined;
+  }
+}
+
+function prepareMacFfmpeg() {
+  const triple = process.arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin";
+  mkdirSync(outputDir, { recursive: true });
+  for (const name of ["ffmpeg", "ffprobe"]) {
+    const source = process.env.LOCUTION_PRO_FFMPEG_DIR
+      ? join(process.env.LOCUTION_PRO_FFMPEG_DIR, name)
+      : findOnPath(name);
+    if (!source || !existsSync(source)) {
+      throw new Error(`${name} was not found; install FFmpeg or set LOCUTION_PRO_FFMPEG_DIR`);
+    }
+    const linked = execFileSync("/usr/bin/otool", ["-L", source], { encoding: "utf8" });
+    if (/\/(opt\/homebrew|usr\/local)\//u.test(linked)) {
+      console.warn(`${source} links non-system libraries; the bundle is not redistributable`);
+    }
+    // Package-manager binaries are read-only; replace rather than overwrite.
+    const destination = join(outputDir, `${name}-${triple}`);
+    rmSync(destination, { force: true });
+    copyFileSync(source, destination);
+    chmodSync(destination, 0o755);
+  }
+  console.log(`Prepared macOS FFmpeg bundle assets in ${outputDir}`);
+}
+
 async function main() {
+  if (process.platform === "darwin") {
+    prepareMacFfmpeg();
+    return;
+  }
   if (Object.values(outputs).every(existsSync)) {
     console.log("FFmpeg bundle assets are already present");
     return;

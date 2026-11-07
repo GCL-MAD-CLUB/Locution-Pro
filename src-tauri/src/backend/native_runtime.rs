@@ -4,6 +4,8 @@ use crate::error::AppResult;
 use crate::error::{app_error, AppError, ErrorCode};
 use std::path::Path;
 
+// Only probed on Windows; other platforms rely on the dynamic loader's own errors.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(super) enum NativeDependency<'a> {
     VisualCpp,
     Library(&'a Path),

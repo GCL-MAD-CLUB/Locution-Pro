@@ -22,7 +22,7 @@ use super::onnx::runtime::{configure_dll_search, ONNXRUNTIME_DLL_FILE};
 #[cfg(test)]
 pub(super) use super::onnx::{
     cpu_thread_budget as storyboard_cpu_thread_budget, create_cpu_model_session,
-    create_directml_model_session, create_model_session,
+    create_gpu_model_session_with_dimensions, create_model_session,
 };
 use super::onnx::{runtime::OnnxRuntimePaths, OnnxModel, SessionProvider};
 use super::*;
@@ -447,6 +447,9 @@ fn storyboard_ffmpeg_args(path: &str, stream_index: i32, threads: usize) -> Vec<
     // back to system memory for the existing software scale/RGB filter.
     #[cfg(windows)]
     args.extend(["-hwaccel".to_string(), "d3d11va".to_string()]);
+    // TransNetV2 runs on CPU on macOS, so hardware decoding leaves it the cores.
+    #[cfg(target_os = "macos")]
+    args.extend(["-hwaccel".to_string(), "videotoolbox".to_string()]);
     args.extend([
         "-i".to_string(),
         path.to_string(),
@@ -459,8 +462,9 @@ fn storyboard_ffmpeg_args(path: &str, stream_index: i32, threads: usize) -> Vec<
         format!(
             "scale={STORYBOARD_FRAME_WIDTH}:{STORYBOARD_FRAME_HEIGHT}:flags=bilinear,format=rgb24"
         ),
-        "-vsync".to_string(),
-        "0".to_string(),
+        // FFmpeg 9 removed -vsync; -fps_mode (FFmpeg 5.1+) is the replacement.
+        "-fps_mode".to_string(),
+        "passthrough".to_string(),
     ]);
     // rawvideo supports frame threading, so bound its output workers too.
     append_ffmpeg_video_output_thread_args(&mut args, threads);
@@ -1086,13 +1090,19 @@ mod tests {
             assert!(index < input);
             assert_eq!(accelerator, "d3d11va");
         }
+        #[cfg(target_os = "macos")]
+        {
+            let (index, accelerator) = value("-hwaccel");
+            assert!(index < input);
+            assert_eq!(accelerator, "videotoolbox");
+        }
         assert!(!args.iter().any(|arg| arg == "-hwaccel_output_format"));
         let (output, threads) = value("-threads:v");
         assert!(output > input);
         assert_eq!(threads, "5");
         assert_eq!(value("-map").1, "0:2");
         assert_eq!(value("-vf").1, "scale=48:27:flags=bilinear,format=rgb24");
-        assert_eq!(value("-vsync").1, "0");
+        assert_eq!(value("-fps_mode").1, "passthrough");
         assert_eq!(value("-f").1, "rawvideo");
         assert_eq!(args.last().unwrap(), "pipe:1");
     }
@@ -1223,8 +1233,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires a DirectX 12 display adapter; run manually before Windows releases"]
-    fn packaged_transnet_model_loads_with_directml_provider() {
+    #[ignore = "requires a DirectX 12 adapter (Windows) or CoreML (macOS); run manually before releases"]
+    fn packaged_transnet_model_loads_with_gpu_provider() {
         let runtime_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("resources")
             .join(TRANSNET_RESOURCE_DIR);
@@ -1240,8 +1250,9 @@ mod tests {
             .commit()
             .expect("packaged ONNX Runtime must initialize");
 
-        let session = create_directml_model_session(&runtime_dir.join(TRANSNET_MODEL_FILE), 0)
-            .expect("packaged model must load with DirectML adapter 0");
+        let session =
+            create_gpu_model_session_with_dimensions(&runtime_dir.join(TRANSNET_MODEL_FILE), &[])
+                .expect("packaged model must load with the platform GPU provider");
         assert_transnet_reuse_matches_fresh_tensors(session);
     }
 

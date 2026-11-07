@@ -39,7 +39,9 @@ impl AppState {
             projects: Mutex::new(HashMap::new()),
             preferences: Mutex::new(preferences),
             startup_preferences_error: Mutex::new(startup_preferences_error),
-            launch_project_path: Mutex::new(project_path_from_launch_args()),
+            launch_project_path: Mutex::new(
+                take_early_launch_project().or_else(project_path_from_launch_args),
+            ),
             running_tasks: Mutex::new(HashMap::new()),
             running_ffmpeg: Mutex::new(HashMap::new()),
             workspace_config_lock: Mutex::new(()),
@@ -47,18 +49,36 @@ impl AppState {
     }
 }
 
+/// A project opened from Finder before setup created [`AppState`]: on a cold
+/// launch macOS delivers the open event before the event loop is ready.
+static EARLY_LAUNCH_PROJECT: Mutex<Option<String>> = Mutex::new(None);
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn defer_launch_project(path: String) {
+    if let Ok(mut early) = EARLY_LAUNCH_PROJECT.lock() {
+        *early = Some(path);
+    }
+}
+
+fn take_early_launch_project() -> Option<String> {
+    EARLY_LAUNCH_PROJECT.lock().ok()?.take()
+}
+
 fn project_path_from_launch_args() -> Option<String> {
     env::args_os()
         .skip(1)
         .map(PathBuf::from)
-        .find(|path| {
-            path.is_file()
-                && path
-                    .extension()
-                    .and_then(|extension| extension.to_str())
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case(PROJECT_FILE_EXTENSION))
-        })
-        .map(|path| path.to_string_lossy().into_owned())
+        .find_map(project_file_path)
+}
+
+/// The path as a launch project, if it names an existing project file.
+pub(crate) fn project_file_path(path: PathBuf) -> Option<String> {
+    let is_project = path.is_file()
+        && path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case(PROJECT_FILE_EXTENSION));
+    is_project.then(|| path.to_string_lossy().into_owned())
 }
 
 #[derive(Clone)]

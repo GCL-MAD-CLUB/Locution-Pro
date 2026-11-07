@@ -106,9 +106,11 @@ impl EmbeddingModel {
     fn load(app: &tauri::AppHandle) -> AppResult<Self> {
         let directory = resource_directory(app)?;
         super::onnx::runtime::initialize(app)?;
+        // CoreML lacks the int8 operators; it would split the graph.
         let session = OnnxModel::load(
             &directory.join("model_quantized.onnx"),
             &[],
+            super::onnx::Accelerators::DirectMlOnly,
             inference_error,
         )?;
         tracing::info!(provider = %session.provider(), "Selected subtitle semantic search provider");
@@ -965,7 +967,7 @@ mod tests {
         super::onnx::runtime::configure_dll_search(&runtime).unwrap();
         ort::init_from(
             runtime
-                .join("onnxruntime.dll")
+                .join(super::onnx::runtime::ONNXRUNTIME_DLL_FILE)
                 .to_string_lossy()
                 .into_owned(),
         )

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "build": {
+    "beforeBundleCommand": "npm run prepare:transnetv2 && npm run prepare:ffmpeg"
+  },
+  "bundle": {
+    "targets": ["app", "dmg"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns"],
+    "resources": {
+      "target/release/locution_pro_thumbnail_provider.dll": null,
+      "resources/transnetv2": null,
+      "resources/transnetv2/transnetv2.onnx": "transnetv2/transnetv2.onnx",
+      "resources/transnetv2/storyboard-event-model.json": "transnetv2/storyboard-event-model.json",
+      "resources/transnetv2/README.md": "transnetv2/README.md",
+      "resources/transnetv2/libonnxruntime.dylib": "transnetv2/libonnxruntime.dylib",
+      "resources/transnetv2/onnxruntime-LICENSE": "transnetv2/onnxruntime-LICENSE",
+      "resources/transnetv2/onnxruntime-ThirdPartyNotices.txt": "transnetv2/onnxruntime-ThirdPartyNotices.txt"
+    },
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": "-",
+      "entitlements": "Entitlements.plist"
+    }
+  }
+}

@@ -168,9 +168,19 @@ fn model_guard(
 fn preferred_batch(remaining: usize, cancel: &AtomicBool) -> AppResult<usize> {
     let mut guard = model_guard(cancel)?;
     let engine = guard.get_or_insert_with(BatchEngine::default);
-    let size = engine
-        .policy
-        .choose_resident(remaining, engine.sessions.iter().map(|s| s.size));
+    // A session that fell back to CPU mid-run keeps engine.cpu unset; it
+    // must still get CPU-tuned sizes instead of the fixed GPU shape.
+    let cpu = engine.cpu
+        || engine
+            .sessions
+            .iter()
+            .any(|session| session.runtime.provider().is_cpu());
+    let size = match engine.policy.fixed_gpu_size(cpu) {
+        Some(size) => size,
+        None => engine
+            .policy
+            .choose_resident(remaining, engine.sessions.iter().map(|s| s.size)),
+    };
     engine.next_size = size;
     Ok(size)
 }
@@ -267,7 +277,12 @@ fn embed_attempt(
         let runtime = if engine.cpu {
             OnnxModel::load_cpu(&directory.join("model.onnx"), &dimensions, inference_error)?
         } else {
-            OnnxModel::load(&directory.join("model.onnx"), &dimensions, inference_error)?
+            OnnxModel::load(
+                &directory.join("model.onnx"),
+                &dimensions,
+                crate::backend::onnx::Accelerators::All,
+                inference_error,
+            )?
         };
         if runtime.provider().to_string() == "CPU"
             && !engine.cpu
@@ -519,6 +534,8 @@ fn decode_args(
     );
     #[cfg(windows)]
     args.extend(["-hwaccel".into(), "d3d11va".into()]);
+    // No VideoToolbox here: its single decode session ran this full-frame
+    // stream about 4x slower than threaded software decoding on Apple silicon.
     args.extend([
         "-ss".into(),
         format!(
@@ -1502,14 +1519,14 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires packaged DINOv3, ONNX Runtime and a DirectML GPU"]
-    fn dinov3_directml_matches_cpu() {
+    #[ignore = "requires packaged DINOv3, ONNX Runtime and a DirectML or CoreML GPU"]
+    fn dinov3_gpu_matches_cpu() {
         let resources = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources");
         let runtime = resources.join("transnetv2");
         crate::backend::onnx::runtime::configure_dll_search(&runtime).unwrap();
         ort::init_from(
             runtime
-                .join("onnxruntime.dll")
+                .join(crate::backend::onnx::runtime::ONNXRUNTIME_DLL_FILE)
                 .to_string_lossy()
                 .into_owned(),
         )
@@ -1528,12 +1545,9 @@ mod tests {
             .unwrap()
             .with_outputs(OutputSelector::no_default().with("pooler_output"));
         // Explicit provider: failures cannot be hidden by automatic CPU recovery.
-        let gpu = super::super::onnx::create_directml_model_session_with_dimensions(
-            &path,
-            0,
-            &INPUT_DIMENSIONS,
-        )
-        .unwrap();
+        let gpu =
+            super::super::onnx::create_gpu_model_session_with_dimensions(&path, &INPUT_DIMENSIONS)
+                .unwrap();
         let actual = run_embedding_batch(&gpu, &input, &options, BATCH).unwrap();
         let cpu =
             super::super::onnx::create_cpu_model_session_with_dimensions(&path, &INPUT_DIMENSIONS)
@@ -1555,10 +1569,8 @@ mod tests {
                     .sqrt()
             };
             let cosine = dot / (norm(a) * norm(b));
-            assert!(cosine > 0.9999, "DirectML/CPU embedding cosine: {cosine}");
+            assert!(cosine > 0.9999, "GPU/CPU embedding cosine: {cosine}");
         }
-        eprintln!(
-            "DINOv3 DirectML batch completed; all eight embeddings match CPU (cosine > 0.9999)"
-        );
+        eprintln!("DINOv3 GPU batch completed; all eight embeddings match CPU (cosine > 0.9999)");
     }
 }

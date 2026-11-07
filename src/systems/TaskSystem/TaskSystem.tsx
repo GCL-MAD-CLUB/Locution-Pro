@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { captureOperationError, type OperationKey, type PublicContext } from "../../errors";
 import "../../components/common/TaskProgress/TaskProgress.css";
 
@@ -131,8 +131,19 @@ function setSnapshot(nextSnapshot: TaskProgressSnapshot) {
   }
 }
 
-function getTaskProgressSnapshot() {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+// Not useSyncExternalStore: it re-renders synchronously whenever the snapshot
+// moved after render, and FFmpeg progress (several processes at 10 Hz during
+// import) moves it between nearly every commit. WKWebView delivers those events
+// between commits, so the forced renders chain until React aborts with
+// "Maximum update depth exceeded". Progress may trail by a frame instead.
+function useTaskProgressSnapshot() {
+  const [current, setCurrent] = useState(getSnapshot);
+  useEffect(() => {
+    const update = () => setCurrent(getSnapshot());
+    update();
+    return subscribe(update);
+  }, []);
+  return current;
 }
 
 function startNextTasks() {
@@ -341,7 +352,7 @@ export async function cancelAllTaskProgress() {
 }
 
 export function useTaskProgressStatus(operation?: OperationKey): TaskProgressStatus {
-  const { tasks } = getTaskProgressSnapshot();
+  const { tasks } = useTaskProgressSnapshot();
 
   return useMemo(() => {
     const visibleTasks = operation ? tasks.filter((task) => task.operation === operation) : tasks;
@@ -355,7 +366,7 @@ export function useTaskProgressStatus(operation?: OperationKey): TaskProgressSta
 }
 
 export function TaskProgress({ children }: TaskProgressProps) {
-  const { tasks } = getTaskProgressSnapshot();
+  const { tasks } = useTaskProgressSnapshot();
 
   if (tasks.length === 0) {
     return children;

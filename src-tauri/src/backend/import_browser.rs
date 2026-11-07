@@ -96,12 +96,13 @@ pub(crate) async fn list_import_directory(directory: String) -> CommandResult<Im
                     return None;
                 }
                 let name = entry.file_name().to_string_lossy().into_owned();
-                let mut hidden = name.starts_with('.');
                 #[cfg(windows)]
-                {
+                let hidden = name.starts_with('.') || {
                     use std::os::windows::fs::MetadataExt;
-                    hidden |= metadata.file_attributes() & 2 != 0;
-                }
+                    metadata.file_attributes() & 2 != 0
+                };
+                #[cfg(not(windows))]
+                let hidden = name.starts_with('.');
                 Some(ImportEntry {
                     path: entry.path().to_string_lossy().into_owned(),
                     name,

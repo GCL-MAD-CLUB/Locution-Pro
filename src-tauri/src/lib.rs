@@ -55,6 +55,8 @@ pub fn run() {
         .setup(|app| {
             init_logging(app.handle())?;
             app.manage(AppState::new());
+            #[cfg(target_os = "macos")]
+            forward_menu_events(app.handle());
             #[cfg(windows)]
             if let Some(window) = app.get_webview_window("main") {
                 window
@@ -149,6 +151,8 @@ pub fn run() {
             acknowledge_update_notes,
             cancel_task,
             play_system_sound,
+            set_application_menu,
+            perform_native_edit_action,
             record_frontend_incident
         ])
         .on_window_event(|window, event| {
@@ -157,7 +161,16 @@ pub fn run() {
                 let _ = cancel_all_tasks(state.inner());
             }
         })
-        .run(tauri::generate_context!());
+        .build(tauri::generate_context!())
+        .map(|app| {
+            app.run(|app, event| {
+                #[cfg(target_os = "macos")]
+                if let tauri::RunEvent::Opened { urls } = &event {
+                    receive_opened_files(app, urls);
+                }
+                let _ = (app, event);
+            })
+        });
     if let Err(error) = result {
         app_error(
             ErrorCode::ApplicationRunFailed,

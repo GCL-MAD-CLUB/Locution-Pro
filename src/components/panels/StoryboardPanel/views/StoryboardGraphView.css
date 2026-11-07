@@ -1,73 +1,56 @@
-.storyboard-graph-container {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-}
-
-.storyboard-graph-controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--color-border-default);
-}
-
-.storyboard-graph-controls label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.storyboard-graph-controls input {
-  width: 64px;
-  padding: 3px 6px;
-  color: var(--color-text-field);
-  background: var(--color-surface-input-inset);
-  border: 1px solid var(--color-border-default);
-  border-radius: 4px;
-}
-
-.storyboard-graph-controls button {
-  padding: 3px 8px;
-  color: var(--color-text-field);
-  background: var(--color-surface-active);
-  border: 1px solid var(--color-border-default);
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.storyboard-graph-controls :disabled {
-  cursor: default;
-  opacity: var(--opacity-control-disabled);
-}
-
-.storyboard-graph-controls > span {
-  color: var(--color-text-placeholder);
-}
-
 .storyboard-graph-view {
+  --storyboard-graph-hover: var(--color-contrast-inverse);
+
   position: relative;
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   background: var(--color-surface-canvas);
+  border: 1px solid var(--color-border-frame);
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--color-border-frame-inset);
+  outline: none;
+  cursor: grab;
+  touch-action: none;
+  overscroll-behavior: contain;
+  user-select: none;
 }
 
+[data-theme="light"] .storyboard-graph-view {
+  --storyboard-graph-hover: var(--color-contrast-strong);
+}
+
+.storyboard-graph-view:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.storyboard-graph-view.is-panning {
+  cursor: grabbing;
+}
+
+.storyboard-graph-world,
 .storyboard-graph-edges,
 .storyboard-graph-nodes {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
   pointer-events: none;
 }
 
+.storyboard-graph-world {
+  transform-origin: 0 0;
+}
+
+.storyboard-graph-edges {
+  overflow: visible;
+}
+
 .storyboard-graph-edges line {
-  stroke: var(--color-text-placeholder);
+  stroke: var(--color-storyboard-graph-default);
   stroke-width: 0.6;
   transition: opacity 140ms ease;
 }
@@ -77,7 +60,7 @@
 }
 
 .storyboard-graph-edges line.is-highlighted {
-  stroke: var(--color-accent);
+  stroke: var(--storyboard-graph-hover);
   stroke-width: 1;
 }
 
@@ -85,8 +68,8 @@
   position: absolute;
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: var(--storyboard-graph-dot-size);
+  height: var(--storyboard-graph-dot-size);
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -98,74 +81,76 @@
 }
 
 .storyboard-graph-dot::after {
-  width: var(--storyboard-graph-dot-size, 7px);
-  height: var(--storyboard-graph-dot-size, 7px);
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
   content: "";
   border: 1px solid var(--color-surface-canvas);
   border-radius: 50%;
-  background: var(--color-text-placeholder);
-  transition: transform 120ms ease;
-}
-
-.storyboard-graph-dot.is-neighbor::after {
-  background: var(--color-text-field);
+  background: var(--color-storyboard-graph-default);
+  transition:
+    background-color 120ms ease,
+    transform 120ms ease;
 }
 
 .storyboard-graph-view.has-focus .storyboard-graph-dot:not(.is-neighbor):not(.is-selected) {
   opacity: 0.2;
 }
 
-.storyboard-graph-node-label {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  display: none;
-  max-width: 120px;
-  overflow: hidden;
-  color: var(--color-text-placeholder);
-  font-size: 10px;
-  line-height: 14px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  transform: translateX(-50%);
-  pointer-events: none;
+.storyboard-graph-dot.is-selected::after {
+  background: var(--color-text-highlight);
 }
 
-.storyboard-graph-nodes.has-labels .storyboard-graph-node-label,
-.storyboard-graph-dot.is-neighbor .storyboard-graph-node-label,
-.storyboard-graph-dot.is-selected .storyboard-graph-node-label {
-  display: block;
-}
-
-.storyboard-graph-dot.is-hovered .storyboard-graph-node-label {
-  color: var(--color-text-field);
-}
-
-.storyboard-graph-dot.is-selected::after,
+.storyboard-graph-dot.is-neighbor::after,
 .storyboard-graph-dot.is-hovered::after,
 .storyboard-graph-dot:focus-visible::after {
-  background: var(--color-accent);
-  transform: scale(1.5);
+  background: var(--storyboard-graph-hover);
 }
 
-.storyboard-graph-dot.is-hovered {
+.storyboard-graph-dot.is-hovered::after,
+.storyboard-graph-dot:focus-visible::after {
+  transform: scale(var(--storyboard-graph-dot-hover-scale, 1.35));
+}
+
+.storyboard-graph-dot.is-hovered,
+.storyboard-graph-dot:focus-visible {
   z-index: 1;
 }
 
 .storyboard-graph-dot:focus-visible {
-  z-index: 1;
   outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .storyboard-graph-preview {
   position: absolute;
-  z-index: 2;
-  overflow: hidden;
-  border: 1px solid var(--color-border-overlay-default);
-  border-radius: 5px;
-  background: var(--color-surface-canvas);
-  box-shadow: 0 4px 16px var(--color-shadow);
+  z-index: 4;
   pointer-events: none;
+}
+
+.storyboard-graph-preview.is-neighbor {
+  opacity: 0.6;
+}
+
+.storyboard-graph-preview::after {
+  position: absolute;
+  top: calc(100% + var(--storyboard-graph-preview-arrow-gap, 3px));
+  left: var(--storyboard-graph-preview-caret, 50%);
+  width: 0;
+  height: 0;
+  border-right: 4px solid var(--color-transparent);
+  border-left: 4px solid var(--color-transparent);
+  border-top: var(--storyboard-graph-preview-arrow-height, 5px) solid var(--color-border-selection);
+  transform: translateX(-50%);
+  content: "";
+}
+
+.storyboard-graph-preview.is-below::after {
+  top: auto;
+  bottom: calc(100% + var(--storyboard-graph-preview-arrow-gap, 3px));
+  border-top: 0;
+  border-bottom: var(--storyboard-graph-preview-arrow-height, 5px) solid
+    var(--color-border-selection);
 }
 
 .storyboard-graph-preview .shot-semantic-frame {
@@ -173,40 +158,78 @@
   width: 100%;
   height: auto;
   aspect-ratio: 16 / 9;
+  background: var(--color-surface-thumbnail);
+  border: 1px solid var(--color-border-inset);
+  box-shadow:
+    0 0 0 1.2px var(--color-border-selection),
+    0 0 0 2px var(--color-border-inset);
 }
 
-.storyboard-graph-preview > span {
-  display: block;
-  padding: 5px 8px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.storyboard-graph-caption {
+.storyboard-graph-minimap {
   position: absolute;
   right: 12px;
-  bottom: 10px;
-  left: 12px;
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  color: var(--color-text-placeholder);
-  pointer-events: none;
+  bottom: 12px;
+  z-index: 3;
+  box-sizing: border-box;
+  display: block;
+  width: min(176px, 28%);
+  min-width: 64px;
+  max-width: calc(100% - 16px);
+  aspect-ratio: 16 / 9;
+  background: var(--color-surface-table-inset);
+  border: 1px solid var(--color-border-overlay-default);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px var(--color-shadow);
+  cursor: grab;
+  touch-action: none;
+}
+
+.storyboard-graph-minimap:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.storyboard-graph-minimap-content line {
+  stroke: var(--color-storyboard-graph-default);
+  stroke-width: 0.35;
+  opacity: 0.22;
+}
+
+.storyboard-graph-minimap-content circle {
+  fill: var(--color-storyboard-graph-default);
+}
+
+.storyboard-graph-minimap-content circle.is-selected {
+  fill: var(--color-text-highlight);
+}
+
+.storyboard-graph-minimap-viewport {
+  fill: var(--color-text-placeholder);
+  fill-opacity: 0.12;
+  stroke: var(--color-text-control);
+  stroke-width: 1;
+  cursor: grab;
+}
+
+.storyboard-graph-minimap.is-dragging,
+.storyboard-graph-minimap.is-dragging .storyboard-graph-minimap-viewport {
+  cursor: grabbing;
 }
 
 .storyboard-graph-message {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  height: 100%;
   padding: 20px;
   box-sizing: border-box;
   color: var(--color-text-placeholder);
   text-align: center;
+  cursor: default;
 }
 
 .storyboard-graph-message > svg {

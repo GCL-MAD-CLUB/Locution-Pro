@@ -12,6 +12,8 @@ import {
 import { clientError } from "../../errors/model";
 import {
   defaultStoryboardGraphOptions,
+  storyboardGraphNodeRadius,
+  storyboardGraphCollisionPadding,
   type StoryboardGraphOptions,
 } from "./storyboardGraphOptions";
 
@@ -26,6 +28,7 @@ export interface StoryboardGraphNode {
   x: number;
   y: number;
   thumbnailFrame: number;
+  radius: number;
 }
 
 export interface StoryboardGraphEdge {
@@ -106,6 +109,66 @@ export function normalizedCosineDistance(a: readonly number[], b: readonly numbe
   return (1 - Math.max(-1, Math.min(1, dot))) / 2;
 }
 
+// Each disconnected component chooses its highest-scoring link to any external
+// node. Search all unit vectors: an outgoing link may be absent from the kNN
+// candidates entirely. Repeat after merging components, adding no redundant
+// bridges. Connectivity takes precedence over the threshold and degree cap.
+export function connectStoryboardGraphEdges(
+  edges: readonly StoryboardGraphEdge[],
+  vectors: readonly (readonly number[])[],
+  progress = (_: number) => {},
+) {
+  const result = [...edges];
+  const parents = Uint32Array.from(vectors, (_, index) => index);
+  let components = vectors.length;
+  const root = (index: number): number => {
+    while (parents[index] !== index) {
+      parents[index] = parents[parents[index]];
+      index = parents[index];
+    }
+    return index;
+  };
+  const merge = (edge: StoryboardGraphEdge) => {
+    const a = root(edge.source);
+    const b = root(edge.target);
+    if (a === b) return false;
+    parents[Math.max(a, b)] = Math.min(a, b);
+    components--;
+    return true;
+  };
+  for (const edge of edges) merge(edge);
+  const initialComponents = components;
+  const compare = (a: StoryboardGraphEdge, b: StoryboardGraphEdge) =>
+    b.similarity - a.similarity || a.source - b.source || a.target - b.target;
+
+  while (components > 1) {
+    const labels = Array.from(vectors, (_, index) => root(index));
+    const strongest: (StoryboardGraphEdge | undefined)[] = Array(vectors.length);
+    for (let source = 0; source < vectors.length; source++) {
+      for (let target = source + 1; target < vectors.length; target++) {
+        if (labels[source] === labels[target]) continue;
+        const edge = {
+          source,
+          target,
+          similarity: 1 - normalizedCosineDistance(vectors[source], vectors[target]),
+        };
+        for (const component of [labels[source], labels[target]]) {
+          const best = strongest[component];
+          if (!best || compare(edge, best) < 0) strongest[component] = edge;
+        }
+      }
+    }
+    const bridges = strongest.filter((edge): edge is StoryboardGraphEdge => Boolean(edge));
+    bridges.sort(compare);
+    for (const edge of bridges) {
+      if (merge(edge)) result.push(edge);
+    }
+    progress((initialComponents - components) / (initialComponents - 1));
+  }
+  progress(1);
+  return result;
+}
+
 // Exact kNN with O(nk) storage. Self is the first entry and is excluded from edges.
 export function storyboardGraphNeighbors(
   vectors: number[][],
@@ -147,6 +210,7 @@ function seededRandom() {
 
 interface ForceNode extends SimulationNodeDatum {
   id: string;
+  radius: number;
 }
 
 interface ForceEdge extends SimulationLinkDatum<ForceNode> {
@@ -156,15 +220,14 @@ interface ForceEdge extends SimulationLinkDatum<ForceNode> {
 function forceDirectedPositions(
   shots: readonly StoryboardGraphVector[],
   edges: readonly StoryboardGraphEdge[],
+  degrees: readonly number[],
   progress: (fraction: number) => void,
 ) {
   if (shots.length <= 1) return shots.map(() => [0, 0]);
-  const nodes: ForceNode[] = shots.map((shot) => ({ id: shot.id }));
-  const degrees = nodes.map(() => 0);
-  for (const edge of edges) {
-    degrees[edge.source]++;
-    degrees[edge.target]++;
-  }
+  const nodes: ForceNode[] = shots.map((shot, i) => ({
+    id: shot.id,
+    radius: storyboardGraphNodeRadius(degrees[i]),
+  }));
   // D3 replaces link indices with node references. Keep those mutations private
   // to this simulation so the public graph retains serializable numeric edges.
   const links: ForceEdge[] = edges.map((edge) => ({ ...edge }));
@@ -177,18 +240,23 @@ function forceDirectedPositions(
   const simulation = forceSimulation(nodes).stop().randomSource(seededRandom());
   try {
     simulation
-      .velocityDecay(0.35)
+      .velocityDecay(0.4)
       .force(
         "link",
         forceLink<ForceNode, ForceEdge>(links)
-          .distance((edge) => 36 + (1 - edge.similarity) * 160)
+          .distance((edge) => 30 + (1 - edge.similarity) * 90)
           .strength(strength),
       )
-      .force("charge", forceManyBody<ForceNode>().strength(-140).distanceMin(16))
-      .force("collision", forceCollide<ForceNode>(10).iterations(2))
+      .force("charge", forceManyBody<ForceNode>().strength(-120).distanceMin(12))
+      .force(
+        "collision",
+        forceCollide<ForceNode>((node) => node.radius + storyboardGraphCollisionPadding).iterations(
+          3,
+        ),
+      )
       .force("center", forceCenter(0, 0))
-      .force("x", forceX<ForceNode>(0).strength(0.012))
-      .force("y", forceY<ForceNode>(0).strength(0.012));
+      .force("x", forceX<ForceNode>(0).strength(0.015))
+      .force("y", forceY<ForceNode>(0).strength(0.015));
     const ticks = Math.ceil(
       Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay()),
     );
@@ -218,7 +286,7 @@ export function buildStoryboardGraph(
   const vectors = shots.map((shot) => unitVector(shot.vector, dimensions));
   const neighbors = Math.min(15, Math.max(0, shots.length - 1));
   const { indices, distances } = storyboardGraphNeighbors(vectors, neighbors, (fraction) =>
-    progress("neighbors", fraction),
+    progress("neighbors", fraction * 0.85),
   );
   const edges: StoryboardGraphEdge[] = [];
   const seen = new Set<string>();
@@ -232,8 +300,17 @@ export function buildStoryboardGraph(
       edges.push({ source, target, similarity: 1 - distances[i][slot + 1] });
     });
   });
-  const sparseEdges = sparsifyStoryboardGraphEdges(edges, shots.length, options);
-  const positions = forceDirectedPositions(shots, sparseEdges, (fraction) =>
+  const sparseEdges = connectStoryboardGraphEdges(
+    sparsifyStoryboardGraphEdges(edges, shots.length, options),
+    vectors,
+    (fraction) => progress("neighbors", 0.85 + fraction * 0.15),
+  );
+  const degrees = shots.map(() => 0);
+  for (const edge of sparseEdges) {
+    degrees[edge.source]++;
+    degrees[edge.target]++;
+  }
+  const positions = forceDirectedPositions(shots, sparseEdges, degrees, (fraction) =>
     progress("layout", fraction),
   );
   if (positions.some((position) => position.length !== 2 || !position.every(Number.isFinite))) {
@@ -244,6 +321,7 @@ export function buildStoryboardGraph(
     nodes: shots.map((shot, i) => ({
       id: shot.id,
       thumbnailFrame: shot.thumbnailFrame,
+      radius: storyboardGraphNodeRadius(degrees[i]),
       x: positions[i][0],
       y: positions[i][1],
     })),

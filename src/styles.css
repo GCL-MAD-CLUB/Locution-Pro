@@ -585,6 +585,7 @@
   --color-stack-text: var(--color-contrast-strong);
   --color-storyboard-duration: var(--palette-storyboard-duration);
   --color-storyboard-excluded-border: var(--palette-storyboard-excluded-border);
+  --color-storyboard-graph-default: var(--palette-light-scrollbar-thumb);
   --color-storyboard-match: var(--palette-storyboard-match);
   --color-storyboard-row-outline: var(--palette-storyboard-row-outline);
   --color-storyboard-spray-active: var(--palette-storyboard-spray-active);
@@ -1011,6 +1012,7 @@
   --color-stack-text: var(--palette-contrast-strong);
   --color-storyboard-duration: var(--palette-storyboard-duration);
   --color-storyboard-excluded-border: var(--palette-contrast-dark-storyboard-excluded-border);
+  --color-storyboard-graph-default: var(--palette-light-scrollbar-thumb);
   --color-storyboard-match: var(--palette-storyboard-match);
   --color-storyboard-row-outline: var(--palette-storyboard-row-outline);
   --color-storyboard-spray-active: var(--palette-storyboard-spray-active);
@@ -1340,6 +1342,7 @@
   --color-stack-text: var(--palette-contrast-strong);
   --color-storyboard-duration: var(--palette-light-storyboard-duration);
   --color-storyboard-excluded-border: var(--palette-light-storyboard-excluded-border);
+  --color-storyboard-graph-default: var(--palette-light-text-muted);
   --color-storyboard-match: var(--palette-light-storyboard-match);
   --color-storyboard-row-outline: var(--palette-light-storyboard-row-outline);
   --color-storyboard-spray-active: var(--palette-storyboard-spray-active);

@@ -15,43 +15,19 @@ function SelectionIcon({ mode }: { mode: StoryboardGraphSelectionMode }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="storyboard-graph-selection-icon">
       {mode === "replace" ? (
-        <rect x="5" y="5" width="14" height="14" fill="currentColor" />
+        <rect x="4" y="4" width="16" height="16" />
       ) : mode === "add" ? (
-        <path d="M3 3h13v5h5v13H8v-5H3Z" fill="currentColor" />
+        <path d="M3 3h13v5h5v13H8v-5H3Z" />
       ) : mode === "subtract" ? (
         <>
-          <path d="M3 3h13v5H8v8H3Z" fill="currentColor" />
-          <rect
-            x="9"
-            y="9"
-            width="12"
-            height="12"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
+          <path d="M3 3h13v5H8v8H3Z" />
+          <rect x="9" y="9" width="12" height="12" />
         </>
       ) : (
         <>
-          <rect
-            x="3"
-            y="3"
-            width="13"
-            height="13"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-          <rect
-            x="8"
-            y="8"
-            width="13"
-            height="13"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          />
-          <rect x="8" y="8" width="8" height="8" fill="currentColor" />
+          <rect x="3" y="3" width="13" height="13" />
+          <rect x="8" y="8" width="13" height="13" />
+          <path className="is-intersection" d="M8 8h8v8H8Z" />
         </>
       )}
     </svg>

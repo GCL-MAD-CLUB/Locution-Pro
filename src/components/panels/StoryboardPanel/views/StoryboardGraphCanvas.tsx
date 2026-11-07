@@ -436,7 +436,7 @@ export function StoryboardGraphCanvas({
     if (
       event.target instanceof Element &&
       event.target.closest(
-        ".storyboard-graph-tools, .storyboard-graph-minimap, .storyboard-graph-message",
+        ".storyboard-graph-tools, .storyboard-graph-navigator, .storyboard-graph-minimap, .storyboard-graph-message",
       )
     )
       return;
@@ -663,7 +663,9 @@ export function StoryboardGraphCanvas({
       onClickCapture={(event) => {
         if (
           event.target instanceof Element &&
-          event.target.closest(".storyboard-graph-tools, .storyboard-graph-minimap")
+          event.target.closest(
+            ".storyboard-graph-tools, .storyboard-graph-navigator, .storyboard-graph-minimap",
+          )
         )
           return;
         if (suppressClickRef.current) {
@@ -676,7 +678,7 @@ export function StoryboardGraphCanvas({
         if (
           event.target instanceof Element &&
           event.target.closest(
-            "button, .storyboard-graph-minimap, .storyboard-graph-tools, .storyboard-graph-message",
+            "button, .storyboard-graph-navigator, .storyboard-graph-minimap, .storyboard-graph-tools, .storyboard-graph-message",
           )
         )
           return;
@@ -874,32 +876,34 @@ export function StoryboardGraphCanvas({
           setSelectionMode(next);
         }}
       />
-      <svg
-        ref={overviewRef}
-        className={`storyboard-graph-minimap ${dragging === "overview" ? "is-dragging" : ""}`}
-        viewBox="0 0 160 90"
-        role="group"
-        aria-label="图谱全景导航"
-        tabIndex={0}
-        onPointerDown={startOverviewDrag}
-        onPointerMove={moveOverviewDrag}
-        onPointerUp={stopOverviewDrag}
-        onPointerCancel={stopOverviewDrag}
-        onLostPointerCapture={stopOverviewDrag}
-        onPointerEnter={resetHover}
-        onKeyDown={navigateKeyboard}
-      >
-        {overviewGeometry}
-        <rect
-          data-graph-viewport=""
-          className="storyboard-graph-minimap-viewport"
-          x={overviewViewport.x}
-          y={overviewViewport.y}
-          width={(viewport.width / overviewCanvas.width) * 160}
-          height={(viewport.height / overviewCanvas.height) * 90}
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
+      <div className="storyboard-graph-navigator">
+        <svg
+          ref={overviewRef}
+          className={`storyboard-graph-minimap ${dragging === "overview" ? "is-dragging" : ""}`}
+          viewBox="0 0 160 90"
+          role="group"
+          aria-label="图谱全景导航"
+          tabIndex={0}
+          onPointerDown={startOverviewDrag}
+          onPointerMove={moveOverviewDrag}
+          onPointerUp={stopOverviewDrag}
+          onPointerCancel={stopOverviewDrag}
+          onLostPointerCapture={stopOverviewDrag}
+          onPointerEnter={resetHover}
+          onKeyDown={navigateKeyboard}
+        >
+          {overviewGeometry}
+          <rect
+            data-graph-viewport=""
+            className="storyboard-graph-minimap-viewport"
+            x={overviewViewport.x}
+            y={overviewViewport.y}
+            width={(viewport.width / overviewCanvas.width) * 160}
+            height={(viewport.height / overviewCanvas.height) * 90}
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+      </div>
     </div>
   );
 }

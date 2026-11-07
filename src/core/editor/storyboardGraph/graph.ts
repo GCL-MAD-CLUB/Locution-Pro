@@ -9,13 +9,13 @@ import {
   type SimulationLinkDatum,
   type SimulationNodeDatum,
 } from "d3-force";
-import { clientError } from "../../errors/model";
+import { clientError } from "../../../errors/model";
 import {
   defaultStoryboardGraphOptions,
   storyboardGraphNodeRadius,
   storyboardGraphCollisionPadding,
   type StoryboardGraphOptions,
-} from "./storyboardGraphOptions";
+} from "./options";
 
 export interface StoryboardGraphVector {
   id: string;

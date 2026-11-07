@@ -10,7 +10,7 @@ export const defaultStoryboardGraphOptions: Readonly<StoryboardGraphOptions> = {
 
 // World-space radii are shared by simulation, rendering and canvas bounds.
 export function storyboardGraphNodeRadius(degree: number) {
-  return 5 + Math.max(0, degree - 4) * 0.2 + Math.max(0, degree - 6) * 0.4;
+  return 6 + Math.max(0, degree - 4) * 0.2 + Math.max(0, degree - 6) * 0.4;
 }
 
 export const storyboardGraphCollisionPadding = 2;

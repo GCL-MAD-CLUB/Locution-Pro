@@ -6,8 +6,11 @@ import "../../../../src/components/panels/StoryboardPanel/StoryboardPanel.css";
 
 const shots = Array.from({ length: 9 }, (_, index) => ({
   id: String(index),
-  startFrame: index * 24,
-  endFrame: (index + 1) * 24,
+  sequence: index + 1,
+  start_frame: index * 24,
+  end_frame: (index + 1) * 24,
+  start_us: index * 1_000_000,
+  end_us: (index + 1) * 1_000_000,
 }));
 const graph = {
   nodes: shots.map((shot, index) => ({
@@ -58,6 +61,12 @@ export function mountGraph(empty = false, spread = 1, nodeRadius = 4) {
     const [selectedShotIds, setSelectedShotIds] = useState(new Set());
     const [activatedShotId, setActivatedShotId] = useState(null);
     const [activations, setActivations] = useState([]);
+    const [shotAnnotations, setShotAnnotations] = useState({});
+    const [sprayActive, setSprayActive] = useState(false);
+    const [sprays, setSprays] = useState([]);
+    window.graphSetAnnotations = setShotAnnotations;
+    window.graphSetSprayActive = setSprayActive;
+    window.graphSprays = sprays;
     window.graphSelection = [...selectedShotIds].sort();
     window.graphActivatedShot = activatedShotId;
     window.graphActivations = activations;
@@ -67,6 +76,15 @@ export function mountGraph(empty = false, spread = 1, nodeRadius = 4) {
       sourceForShot: () => source,
       shotTitle: (shot) => `Shot ${shot.id}`,
       selectedShotIds,
+      shotAnnotations,
+      sprayActive,
+      onExitSpray: () => setSprayActive(false),
+      onSprayShots: (ids, historyGroupId, eraseWithAlt) => {
+        setSprays((current) => [
+          ...current,
+          { ids: [...ids].sort(), historyGroupId, eraseWithAlt },
+        ]);
+      },
       onSelectionChange: setSelectedShotIds,
       onActivateShot: (shot) => {
         setActivatedShotId(shot.id);

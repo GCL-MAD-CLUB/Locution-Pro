@@ -188,7 +188,7 @@
   content: "";
   border: 1px solid var(--color-surface-canvas);
   border-radius: 50%;
-  background: var(--color-storyboard-graph-default);
+  background: var(--storyboard-color-label, var(--color-storyboard-graph-default));
   transition:
     background-color 120ms ease,
     transform 120ms ease;
@@ -213,24 +213,24 @@
 
 .storyboard-graph-selection-rings [data-selection-ring] {
   fill: none;
-  stroke: var(--storyboard-graph-hover);
+  stroke: var(--storyboard-color-label, var(--storyboard-graph-hover));
   stroke-width: 1;
 }
 
 .storyboard-graph-selected-node {
-  fill: var(--storyboard-graph-hover);
+  fill: var(--storyboard-color-label, var(--storyboard-graph-hover));
   stroke: none;
 }
 
 .storyboard-graph-hovered-node {
-  fill: var(--storyboard-graph-hover);
+  fill: var(--storyboard-color-label, var(--storyboard-graph-hover));
   stroke: var(--color-surface-canvas);
 }
 
 .storyboard-graph-dot.is-neighbor::after,
 .storyboard-graph-dot.is-hovered:not(.is-selected)::after,
 .storyboard-graph-dot:focus-visible:not(.is-selected)::after {
-  background: var(--storyboard-graph-hover);
+  background: var(--storyboard-color-label, var(--storyboard-graph-hover));
 }
 
 .storyboard-graph-dot.is-hovered:not(.is-selected)::after,
@@ -260,12 +260,67 @@
   pointer-events: none;
 }
 
+.storyboard-graph-preview.has-color-label .shot-frame-button {
+  background: color-mix(in srgb, var(--storyboard-color-label) 10%, var(--color-surface-thumbnail));
+  box-shadow:
+    0 0 0 1.2px var(--storyboard-color-label),
+    0 0 0 2px var(--color-border-inset);
+}
+
+.storyboard-graph-preview-metadata {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 12px;
+  padding: 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--color-surface-thumbnail) 75%, var(--color-transparent));
+  pointer-events: none;
+}
+
+.storyboard-graph-preview-metadata:empty {
+  display: none;
+}
+
+.storyboard-graph-preview-metadata .shot-thumbnail-flag,
+.storyboard-graph-preview-metadata .shot-thumbnail-keyword-indicator {
+  margin: 0;
+  pointer-events: none;
+}
+
+.storyboard-graph-preview-rating {
+  display: flex;
+  gap: 1px;
+  color: var(--color-annotation-rating);
+}
+
+.storyboard-graph-preview-rating svg {
+  width: 8px;
+  height: 8px;
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+.storyboard-graph-view.is-spraying,
+.storyboard-graph-view.is-spraying .storyboard-graph-dot,
+.storyboard-graph-view.is-spraying .storyboard-graph-preview {
+  cursor: var(--storyboard-spray-cursor, crosshair);
+}
+
+.storyboard-graph-view.is-spraying .storyboard-graph-marquee {
+  border-style: dashed;
+}
+
 .storyboard-graph-view.is-hand .storyboard-graph-preview.is-neighbor,
 .storyboard-graph-preview.is-muted {
   opacity: 0.6;
 }
 
-.storyboard-graph-view.is-pointer .storyboard-graph-preview {
+.storyboard-graph-view .storyboard-graph-preview {
   pointer-events: auto;
 }
 
@@ -290,7 +345,7 @@
     var(--color-border-selection);
 }
 
-.storyboard-graph-preview .shot-semantic-frame {
+.storyboard-graph-preview .shot-frame-button {
   position: relative;
   width: 100%;
   height: auto;
@@ -340,11 +395,11 @@
 }
 
 .storyboard-graph-minimap-content circle {
-  fill: var(--color-storyboard-graph-default);
+  fill: var(--storyboard-color-label, var(--color-storyboard-graph-default));
 }
 
 .storyboard-graph-minimap-content circle.is-selected {
-  fill: var(--storyboard-graph-hover);
+  fill: var(--storyboard-color-label, var(--storyboard-graph-hover));
 }
 
 .storyboard-graph-minimap-viewport {

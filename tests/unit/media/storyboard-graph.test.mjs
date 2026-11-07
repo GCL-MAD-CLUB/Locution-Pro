@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as d3Force from "d3-force";
 import { clientError } from "../../../src/errors/model.ts";
-import { defaultStoryboardGraphOptions } from "../../../src/core/editor/storyboardGraphOptions.ts";
-import * as graphOptions from "../../../src/core/editor/storyboardGraphOptions.ts";
+import { defaultStoryboardGraphOptions } from "../../../src/core/editor/storyboardGraph/options.ts";
+import * as graphOptions from "../../../src/core/editor/storyboardGraph/options.ts";
 import { createModuleLoader } from "../support/module-loader.ts";
-import { storyboardGraphNeighborhood } from "../../../src/core/editor/storyboardGraphLayout.ts";
+import { storyboardGraphNeighborhood } from "../../../src/core/editor/storyboardGraph/camera.ts";
 
 const graphModule = createModuleLoader(import.meta.url)(
-  "../../../src/core/editor/storyboardGraph.ts",
+  "../../../src/core/editor/storyboardGraph/graph.ts",
   {
     "d3-force": d3Force,
-    "../../errors/model": { clientError },
-    "./storyboardGraphOptions": graphOptions,
+    "../../../errors/model": { clientError },
+    "./options": graphOptions,
   },
 );
 const build = (shots, options = defaultStoryboardGraphOptions) =>

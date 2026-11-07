@@ -2,7 +2,7 @@ import { Hand, MousePointer2 } from "lucide-react";
 import type {
   StoryboardGraphSelectionMode,
   StoryboardGraphTool,
-} from "../../../../core/editor/storyboardGraphSelection";
+} from "../../../../core/editor/storyboardGraph/selection";
 
 const modes = [
   ["replace", "替换选择"],
@@ -37,11 +37,13 @@ function SelectionIcon({ mode }: { mode: StoryboardGraphSelectionMode }) {
 export function StoryboardGraphTools({
   tool,
   mode,
+  sprayActive = false,
   onToolChange,
   onModeChange,
 }: {
   tool: StoryboardGraphTool;
   mode: StoryboardGraphSelectionMode;
+  sprayActive?: boolean;
   onToolChange: (tool: StoryboardGraphTool) => void;
   onModeChange: (mode: StoryboardGraphSelectionMode) => void;
 }) {
@@ -59,7 +61,7 @@ export function StoryboardGraphTools({
         type="button"
         aria-label="指针工具"
         title="指针：选择节点"
-        aria-pressed={tool === "pointer"}
+        aria-pressed={tool === "pointer" && !sprayActive}
         onClick={() => onToolChange("pointer")}
       >
         <MousePointer2 aria-hidden="true" />
@@ -73,7 +75,7 @@ export function StoryboardGraphTools({
       >
         <Hand aria-hidden="true" />
       </button>
-      {tool === "pointer" && (
+      {tool === "pointer" && !sprayActive && (
         <div
           className="storyboard-graph-selection-modes"
           role="radiogroup"

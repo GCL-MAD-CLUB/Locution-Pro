@@ -31,6 +31,11 @@ const activated = (page: Page): Promise<string | null> =>
   page.evaluate(() => (window as any).graphActivatedShot);
 const activations = (page: Page): Promise<string[]> =>
   page.evaluate(() => (window as any).graphActivations);
+const sprays = (
+  page: Page,
+): Promise<Array<{ ids: string[]; historyGroupId: string; eraseWithAlt: boolean }>> =>
+  page.evaluate(() => (window as any).graphSprays);
+const enableSpray = (page: Page) => page.evaluate(() => (window as any).graphSetSprayActive(true));
 
 async function topRowMarquee(page: Page) {
   const first = await center(shot(page, 0));
@@ -788,4 +793,205 @@ test("Escape and window blur cancel an active marquee and restore the original s
     await page.mouse.up();
     expect(await activations(page)).toEqual(before);
   }
+});
+
+test("graph annotations update readonly thumbnail badges, colored nodes and concentric rings", async ({
+  page,
+}) => {
+  await mount(page);
+  await page.evaluate(() =>
+    (window as any).graphSetAnnotations({
+      "4": { rating: 3, retained: true, keywordIds: ["keyword"], colorLabel: "red" },
+      "8": { rating: 0, retained: false, colorLabel: "blue" },
+    }),
+  );
+  await shot(page, 4).click();
+  const preview = page.locator('[data-preview-shot-id="4"]');
+  const metadata = preview.locator(".storyboard-graph-preview-metadata");
+  await expect(metadata.getByRole("img", { name: "留用旗标", exact: true })).toBeVisible();
+  await expect(metadata.getByRole("img", { name: "3 星", exact: true })).toBeVisible();
+  await expect(metadata.getByRole("img", { name: "该分镜包含关键字", exact: true })).toBeVisible();
+  await expect(metadata.locator("button")).toHaveCount(0);
+  await expect(metadata).toHaveCSS("pointer-events", "none");
+  const badgeBox = (await metadata.boundingBox())!;
+  const previewBox = (await preview.boundingBox())!;
+  expect(badgeBox.x).toBeGreaterThan(previewBox.x);
+  expect(badgeBox.y).toBeGreaterThan(previewBox.y);
+  expect(badgeBox.x + badgeBox.width).toBeLessThan(previewBox.x + previewBox.width);
+  expect(badgeBox.y + badgeBox.height).toBeLessThan(previewBox.y + previewBox.height);
+  const node = page.locator('[data-selection-node="4"]');
+  const ring = page.locator('[data-selection-ring="4"]');
+  const fill = await node.evaluate((element) => getComputedStyle(element).fill);
+  expect(isGrayscale(fill)).toBe(false);
+  await expect(ring).toHaveCSS("stroke", fill);
+  await expect(preview).toHaveClass(/has-color-label/);
+  expect(
+    await preview
+      .locator(".shot-frame-button")
+      .evaluate((element) => getComputedStyle(element).boxShadow),
+  ).toContain(fill);
+  await shot(page, 0).hover();
+  await expect(shot(page, 8)).toHaveCSS("opacity", "0.2");
+  await expect(shot(page, 4)).toHaveCSS("opacity", "1");
+  await expect(ring).toHaveCSS("stroke", fill);
+  await page.evaluate(() =>
+    (window as any).graphSetAnnotations({
+      "4": { rating: 5, retained: false, excluded: true, customLabel: "自定义" },
+    }),
+  );
+  await expect(metadata.getByRole("img", { name: "排除旗标", exact: true })).toBeVisible();
+  await expect(metadata.getByRole("img", { name: "5 星", exact: true })).toBeVisible();
+  await expect(metadata.getByRole("img", { name: "该分镜包含关键字", exact: true })).toHaveCount(0);
+  await expect(node).not.toHaveCSS("fill", fill);
+  await page.evaluate(() => (window as any).graphSetAnnotations({}));
+  await expect(preview).not.toHaveClass(/has-color-label/);
+  await expect(metadata.locator('[role="img"]')).toHaveCount(0);
+  expect(await selected(page)).toEqual(["4"]);
+});
+
+test("graph thumbnails scrub by pointer position without selecting or seeking the source player", async ({
+  page,
+}) => {
+  await mount(page);
+  await shot(page, 4).click();
+  const before = await activations(page);
+  const preview = page.locator('[data-preview-shot-id="4"]');
+  const frame = preview.getByRole("img", { name: "分镜选帧缩略图", exact: true });
+  const bounds = (await frame.boundingBox())!;
+  const progress = preview.locator(".shot-hover-progress > span");
+  for (const fraction of [0.25, 0.75]) {
+    await page.mouse.move(bounds.x + bounds.width * fraction, bounds.y + bounds.height / 2);
+    await expect
+      .poll(() => progress.evaluate((element) => parseFloat((element as HTMLElement).style.width)))
+      .toBeCloseTo(fraction * 100, 1);
+  }
+  await frame.click();
+  expect(await selected(page)).toEqual(["4"]);
+  expect(await activations(page)).toEqual(before);
+  await page.mouse.move(1100, 700);
+  await expect(progress).toHaveCount(0);
+  await expect(preview).toBeVisible();
+});
+
+test("hand thumbnails allow position preview while preserving neighbor previews and opacity", async ({
+  page,
+}) => {
+  await mount(page);
+  await shot(page, 4).click();
+  const before = await activations(page);
+  await page.getByRole("button", { name: "手型工具", exact: true }).click();
+  await shot(page, 5).hover();
+  await expect(page.locator(".storyboard-graph-preview")).toHaveCount(4);
+  const preview = page.locator('[data-preview-shot-id="5"]');
+  const frame = preview.getByRole("img", { name: "分镜选帧缩略图", exact: true });
+  await frame.hover();
+  await expect(preview.locator(".shot-hover-progress")).toBeVisible();
+  await expect(page.locator(".storyboard-graph-preview")).toHaveCount(4);
+  await expect(preview).toHaveCSS("opacity", "1");
+  for (const id of [3, 6])
+    await expect(page.locator(`[data-preview-shot-id="${id}"]`)).toHaveCSS("opacity", "0.6");
+  await frame.click();
+  expect(await selected(page)).toEqual(["4"]);
+  expect(await activations(page)).toEqual(before);
+  await page.mouse.move(1100, 700);
+  await expect(page.locator(".storyboard-graph-preview")).toHaveCount(1);
+});
+
+test("spray clicks, double-clicks and thumbnail clicks use paint targets without changing selection or playback", async ({
+  page,
+}) => {
+  await mount(page);
+  await shot(page, 8).click();
+  const before = await activations(page);
+  await enableSpray(page);
+  await expect(page.getByRole("radiogroup", { name: "图谱选择模式" })).toHaveCount(0);
+  await shot(page, 4).click();
+  await expect.poll(() => sprays(page)).toHaveLength(1);
+  expect((await sprays(page))[0]).toMatchObject({ ids: ["4"], eraseWithAlt: false });
+  await shot(page, 3).dblclick();
+  const double = (await sprays(page)).slice(-2);
+  expect(double[0].ids).toEqual(["3"]);
+  expect(double[1].ids).toEqual(["2", "3", "4", "5"]);
+  expect(double[0].historyGroupId).toBe(double[1].historyGroupId);
+  await shot(page, 4).click({ modifiers: ["Alt"] });
+  expect((await sprays(page)).at(-1)).toMatchObject({ ids: ["4"], eraseWithAlt: true });
+  const frame = page
+    .locator('[data-preview-shot-id="8"]')
+    .getByRole("img", { name: "分镜选帧缩略图", exact: true });
+  await frame.click();
+  expect((await sprays(page)).at(-1)).toMatchObject({ ids: ["8"], eraseWithAlt: false });
+  await frame.dblclick();
+  expect((await sprays(page)).at(-1)?.ids).toEqual(["7", "8"]);
+  expect(await selected(page)).toEqual(["8"]);
+  expect(await activations(page)).toEqual(before);
+  await page.getByRole("button", { name: "指针工具", exact: true }).click();
+  await expect(page.locator(".storyboard-graph-view")).not.toHaveClass(/is-spraying/);
+  await shot(page, 4).click();
+  expect(await selected(page)).toEqual(["4"]);
+  expect(await activated(page)).toBe("4");
+});
+
+test("spray marquee uses a dashed frame and commits its final region in one history group", async ({
+  page,
+}) => {
+  await mount(page);
+  await shot(page, 8).click();
+  await page.getByRole("radio", { name: "与选择交集", exact: true }).click();
+  const before = await activations(page);
+  const camera = await transform(page);
+  await enableSpray(page);
+  await topRowMarquee(page);
+  await expect(page.locator(".storyboard-graph-marquee")).toHaveCSS("border-top-style", "dashed");
+  expect(await sprays(page)).toEqual([]);
+  expect(await selected(page)).toEqual(["8"]);
+  await page.keyboard.down("Alt");
+  await page.mouse.up();
+  await page.keyboard.up("Alt");
+  await expect.poll(() => sprays(page)).toHaveLength(1);
+  expect((await sprays(page))[0]).toMatchObject({ ids: ["0", "1", "2"], eraseWithAlt: true });
+  expect((await sprays(page))[0].historyGroupId).toBeTruthy();
+  expect(await selected(page)).toEqual(["8"]);
+  expect(await activations(page)).toEqual(before);
+  expect(await transform(page)).toEqual(camera);
+});
+
+test("cancelled spray regions never paint or change selection", async ({ page }) => {
+  await mount(page);
+  await shot(page, 8).click();
+  const before = await activations(page);
+  await enableSpray(page);
+  for (const cancel of ["escape", "blur"] as const) {
+    await topRowMarquee(page);
+    if (cancel === "escape") await page.keyboard.press("Escape");
+    else await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    await expect(page.locator(".storyboard-graph-marquee")).toHaveCount(0);
+    await page.mouse.up();
+    expect(await sprays(page)).toEqual([]);
+    expect(await selected(page)).toEqual(["8"]);
+    expect(await activations(page)).toEqual(before);
+  }
+});
+
+test("spray mode keeps overview navigation available without painting", async ({ page }) => {
+  await mount(page, false, 5);
+  await shot(page, 4).click();
+  const anchor = await center(shot(page, 4));
+  await page.mouse.move(anchor.x, anchor.y);
+  await page.mouse.wheel(0, -400);
+  const before = await transform(page);
+  const beforeActivations = await activations(page);
+  await enableSpray(page);
+  const handle = await center(page.locator("[data-graph-viewport]"));
+  await page.mouse.move(handle.x, handle.y);
+  await page.mouse.down();
+  await page.mouse.move(handle.x - 8, handle.y - 5, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => (await transform(page)).x).toBeGreaterThan(before.x);
+  await assertFrame(page);
+  expect(await sprays(page)).toEqual([]);
+  expect(await selected(page)).toEqual(["4"]);
+  expect(await activations(page)).toEqual(beforeActivations);
+  await page.getByRole("button", { name: "手型工具", exact: true }).click();
+  await expect(page.locator(".storyboard-graph-view")).toHaveClass(/is-hand/);
+  await expect(page.locator(".storyboard-graph-view")).not.toHaveClass(/is-spraying/);
 });

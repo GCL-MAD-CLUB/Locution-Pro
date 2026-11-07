@@ -5,8 +5,8 @@ import {
   storyboardGraphMarqueeHitIds,
   storyboardGraphSelectionRect,
   storyboardGraphSelectionRing,
-} from "../../../src/core/editor/storyboardGraphSelection.ts";
-import { storyboardGraphWorldPoint } from "../../../src/core/editor/storyboardGraphLayout.ts";
+} from "../../../src/core/editor/storyboardGraph/selection.ts";
+import { storyboardGraphWorldPoint } from "../../../src/core/editor/storyboardGraph/camera.ts";
 
 test("selection ring gap stays one pixel through 8px diameter, then grows continuously with displayed size", () => {
   for (const [radius, zoom, expectedGap] of [

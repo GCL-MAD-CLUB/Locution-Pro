@@ -11,7 +11,10 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import type { StoryboardGraph, StoryboardGraphNode } from "../../../../core/editor/storyboardGraph";
+import type {
+  StoryboardGraph,
+  StoryboardGraphNode,
+} from "../../../../core/editor/storyboardGraph/graph";
 import {
   constrainStoryboardGraphCamera,
   fitStoryboardGraphCamera,
@@ -27,7 +30,7 @@ import {
   zoomStoryboardGraphAt,
   type StoryboardGraphCamera,
   type StoryboardGraphRect,
-} from "../../../../core/editor/storyboardGraphLayout";
+} from "../../../../core/editor/storyboardGraph/camera";
 import {
   applyStoryboardGraphSelection,
   storyboardGraphMarqueeHitIds,
@@ -35,12 +38,12 @@ import {
   storyboardGraphSelectionRing,
   type StoryboardGraphSelectionMode,
   type StoryboardGraphTool,
-} from "../../../../core/editor/storyboardGraphSelection";
+} from "../../../../core/editor/storyboardGraph/selection";
 import type { PanelRowSource } from "../../../../core/editor/multiSource";
-import { frameToTimeUs } from "../../../../core/editor/timeline";
+import { annotationColors } from "../../../../runtime/theme";
 import { usePanelActive } from "../../../../runtime/systems/PanelState";
-import type { StoryboardShot } from "../../../../types";
-import { StoryboardSemanticThumbnail } from "./StoryboardShotThumbnail";
+import type { StoryboardShot, StoryboardShotAnnotation } from "../../../../types";
+import { StoryboardGraphThumbnail } from "./StoryboardGraphThumbnail";
 import { StoryboardGraphTools } from "./StoryboardGraphTools";
 import "./StoryboardGraphView.css";
 
@@ -50,12 +53,20 @@ export interface StoryboardGraphCanvasProps {
   sourceForShot: (shot: StoryboardShot) => PanelRowSource;
   shotTitle: (shot: StoryboardShot) => string;
   selectedShotIds: ReadonlySet<string>;
+  shotAnnotations?: Readonly<Record<string, StoryboardShotAnnotation>>;
+  sprayActive?: boolean;
+  onSprayShots?: (
+    shotIds: ReadonlySet<string>,
+    historyGroupId: string,
+    eraseWithAlt: boolean,
+  ) => void;
+  onExitSpray?: () => void;
+  onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
   onSelectionChange: (shotIds: ReadonlySet<string>) => void;
   onActivateShot: (shot: StoryboardShot) => void;
   children?: ReactNode;
 }
 
-const previewResolution = { width: 640, height: 360 } as const;
 const previewMaxWidth = 128;
 const previewTipGap = 2;
 const previewArrowHeight = 5;
@@ -63,6 +74,16 @@ const previewFrameGap = 3;
 const graphDotHoverScale = 1.35;
 const graphHoverMinPixelsPerWorldUnit = 0.4;
 const emptyNodes: StoryboardGraph["nodes"] = [];
+const emptyAnnotations: Readonly<Record<string, StoryboardShotAnnotation>> = {};
+
+function annotationStyle(
+  annotation: StoryboardShotAnnotation | undefined,
+): CSSProperties | undefined {
+  const label = annotation?.customLabel?.trim() ? "custom" : annotation?.colorLabel;
+  return label
+    ? ({ "--storyboard-color-label": annotationColors[label] } as CSSProperties)
+    : undefined;
+}
 
 interface StoryboardGraphPreview {
   node: StoryboardGraphNode;
@@ -85,6 +106,7 @@ interface MarqueeGesture {
   capture: HTMLElement;
   active: boolean;
   timer?: number;
+  spray?: { historyGroupId: string };
 }
 
 export function StoryboardGraphCanvas({
@@ -93,6 +115,11 @@ export function StoryboardGraphCanvas({
   sourceForShot,
   shotTitle,
   selectedShotIds,
+  shotAnnotations = emptyAnnotations,
+  sprayActive = false,
+  onSprayShots,
+  onExitSpray,
+  onContextMenu,
   onSelectionChange,
   onActivateShot,
   children,
@@ -122,7 +149,10 @@ export function StoryboardGraphCanvas({
     }, 180);
   }, [cancelHoverLeave]);
   const [dragging, setDragging] = useState<"canvas" | "overview" | null>(null);
-  const [tool, setTool] = useState<StoryboardGraphTool>("pointer");
+  const [navigationTool, setTool] = useState<StoryboardGraphTool>("pointer");
+  const tool = sprayActive ? "pointer" : navigationTool;
+  const spraySequenceRef = useRef(0);
+  const lastSprayClickRef = useRef<{ id: string; historyGroupId: string } | null>(null);
   const [selectionMode, setSelectionMode] = useState<StoryboardGraphSelectionMode>("replace");
   const [marquee, setMarquee] = useState<StoryboardGraphRect | null>(null);
   const marqueeRef = useRef<MarqueeGesture | null>(null);
@@ -134,8 +164,8 @@ export function StoryboardGraphCanvas({
   } | null>(null);
   const selectionRef = useRef(selectedShotIds);
   selectionRef.current = selectedShotIds;
-  const callbacksRef = useRef({ onSelectionChange, onActivateShot });
-  callbacksRef.current = { onSelectionChange, onActivateShot };
+  const callbacksRef = useRef({ onSelectionChange, onActivateShot, onSprayShots });
+  callbacksRef.current = { onSelectionChange, onActivateShot, onSprayShots };
   const commitSelection = useCallback((ids: ReadonlySet<string>) => {
     selectionRef.current = ids;
     callbacksRef.current.onSelectionChange(ids);
@@ -297,7 +327,8 @@ export function StoryboardGraphCanvas({
         window.clearTimeout(selection.timer);
         if (selection.capture.hasPointerCapture(selection.id))
           selection.capture.releasePointerCapture(selection.id);
-        if (selection.active && restoreSelection) commitSelection(selection.base);
+        if (selection.active && restoreSelection && !selection.spray)
+          commitSelection(selection.base);
       }
       if (pan && stageRef.current?.hasPointerCapture(pan.id))
         stageRef.current.releasePointerCapture(pan.id);
@@ -322,8 +353,9 @@ export function StoryboardGraphCanvas({
   useEffect(() => {
     resetHover();
     lastClickRef.current = null;
+    lastSprayClickRef.current = null;
     cancelGestures(false);
-  }, [graph, visibleNodeKey, cancelGestures, resetHover]);
+  }, [graph, visibleNodeKey, sprayActive, cancelGestures, resetHover]);
 
   useEffect(() => {
     if (!panelActive) {
@@ -414,6 +446,16 @@ export function StoryboardGraphCanvas({
     };
   }
 
+  function marqueeHits(gesture: MarqueeGesture, point: { x: number; y: number }) {
+    const start = storyboardGraphWorldPoint(gesture.start, gesture.camera, size);
+    const end = storyboardGraphWorldPoint(point, gesture.camera, size);
+    return storyboardGraphMarqueeHitIds(visibleNodes, storyboardGraphSelectionRect(start, end));
+  }
+
+  function newSprayHistoryGroup() {
+    return `storyboard-graph-spray-${previewId}-${Date.now()}-${++spraySequenceRef.current}`;
+  }
+
   function updateMarquee(gesture: MarqueeGesture, point: { x: number; y: number }) {
     gesture.active = true;
     gesture.point = point;
@@ -422,13 +464,10 @@ export function StoryboardGraphCanvas({
     resetHover();
     const rect = storyboardGraphSelectionRect(gesture.start, point);
     setMarquee(rect);
-    const start = storyboardGraphWorldPoint(gesture.start, gesture.camera, size);
-    const end = storyboardGraphWorldPoint(point, gesture.camera, size);
-    const hits = storyboardGraphMarqueeHitIds(
-      visibleNodes,
-      storyboardGraphSelectionRect(start, end),
-    );
-    commitSelection(applyStoryboardGraphSelection(gesture.base, hits, gesture.mode));
+    if (!gesture.spray)
+      commitSelection(
+        applyStoryboardGraphSelection(gesture.base, marqueeHits(gesture, point), gesture.mode),
+      );
   }
 
   function startCanvasGesture(event: PointerEvent<HTMLDivElement>) {
@@ -461,6 +500,7 @@ export function StoryboardGraphCanvas({
         camera: cameraRef.current,
         capture,
         active: false,
+        spray: sprayActive ? { historyGroupId: newSprayHistoryGroup() } : undefined,
       };
       gesture.timer = window.setTimeout(() => {
         if (marqueeRef.current === gesture) updateMarquee(gesture, gesture.point);
@@ -508,7 +548,15 @@ export function StoryboardGraphCanvas({
         cancelGestures();
         return;
       }
-      if (selection.active) updateMarquee(selection, canvasPoint(event));
+      if (selection.active) {
+        const point = canvasPoint(event);
+        updateMarquee(selection, point);
+        if (selection.spray) {
+          const hits = marqueeHits(selection, point);
+          if (hits.size)
+            callbacksRef.current.onSprayShots?.(hits, selection.spray.historyGroupId, event.altKey);
+        }
+      }
       marqueeRef.current = null;
       window.clearTimeout(selection.timer);
       setMarquee(null);
@@ -595,18 +643,27 @@ export function StoryboardGraphCanvas({
     event.preventDefault();
     event.stopPropagation();
     if (tool !== "pointer" || suppressClickRef.current || (!group && event.detail > 1)) return;
-    const previous = lastClickRef.current;
-    const base =
-      group && previous?.id === shot.id && previous.mode === selectionMode
-        ? previous.base
-        : new Set(selectionRef.current);
-    if (!group) lastClickRef.current = { id: shot.id, base, mode: selectionMode };
     const hits =
       group && graph
         ? new Set(
             [...storyboardGraphNeighborhood(graph, shot.id)].filter((id) => shotsById.has(id)),
           )
         : new Set([shot.id]);
+    if (sprayActive) {
+      const historyGroupId =
+        group && lastSprayClickRef.current?.id === shot.id
+          ? lastSprayClickRef.current.historyGroupId
+          : newSprayHistoryGroup();
+      if (!group) lastSprayClickRef.current = { id: shot.id, historyGroupId };
+      callbacksRef.current.onSprayShots?.(hits, historyGroupId, event.altKey);
+      return;
+    }
+    const previous = lastClickRef.current;
+    const base =
+      group && previous?.id === shot.id && previous.mode === selectionMode
+        ? previous.base
+        : new Set(selectionRef.current);
+    if (!group) lastClickRef.current = { id: shot.id, base, mode: selectionMode };
     commitSelection(applyStoryboardGraphSelection(base, hits, selectionMode));
     callbacksRef.current.onActivateShot(shot);
   }
@@ -615,6 +672,7 @@ export function StoryboardGraphCanvas({
     cancelGestures();
     resetHover();
     lastClickRef.current = null;
+    onExitSpray?.();
     setTool(next);
   }
 
@@ -635,18 +693,19 @@ export function StoryboardGraphCanvas({
               cy={point.y}
               r={0.8}
               className={selectedShotIds.has(node.id) ? "is-selected" : ""}
+              style={annotationStyle(shotAnnotations[node.id])}
             />
           );
         })}
       </g>
     ),
-    [edges, nodes, overviewCanvas, visibleNodes, selectedShotIds],
+    [edges, nodes, overviewCanvas, visibleNodes, selectedShotIds, shotAnnotations],
   );
 
   return (
     <div
       ref={stageRef}
-      className={`storyboard-graph-view is-${tool} ${hoveredNode ? "has-focus" : ""} ${dragging === "canvas" ? "is-panning" : ""} ${marquee ? "is-selecting" : ""}`}
+      className={`storyboard-graph-view is-${tool} ${sprayActive ? "is-spraying" : ""} ${hoveredNode ? "has-focus" : ""} ${dragging === "canvas" ? "is-panning" : ""} ${marquee ? "is-selecting" : ""}`}
       style={
         {
           "--storyboard-graph-dot-hover-scale": `${graphDotHoverScale}`,
@@ -660,6 +719,10 @@ export function StoryboardGraphCanvas({
       onPointerUp={stopCanvasGesture}
       onPointerCancel={stopCanvasGesture}
       onLostPointerCapture={stopCanvasGesture}
+      onContextMenu={(event) => {
+        if (tool === "pointer" && !sprayActive) onContextMenu?.(event);
+        else event.preventDefault();
+      }}
       onClickCapture={(event) => {
         if (
           event.target instanceof Element &&
@@ -682,7 +745,7 @@ export function StoryboardGraphCanvas({
           )
         )
           return;
-        if (tool === "pointer")
+        if (tool === "pointer" && !sprayActive)
           commitSelection(
             applyStoryboardGraphSelection(selectionRef.current, new Set(), selectionMode),
           );
@@ -722,11 +785,13 @@ export function StoryboardGraphCanvas({
               <button
                 type="button"
                 key={node.id}
+                data-storyboard-shot-id={node.id}
                 className={`storyboard-graph-dot ${selectedShotIds.has(node.id) ? "is-selected" : ""} ${activeHoveredId === node.id ? "is-hovered" : ""} ${neighborhood.has(node.id) ? "is-neighbor" : ""}`}
                 style={
                   {
                     left: node.x,
                     top: node.y,
+                    ...annotationStyle(shotAnnotations[node.id]),
                     "--storyboard-graph-dot-size": `${node.radius * 2}px`,
                   } as CSSProperties
                 }
@@ -745,9 +810,7 @@ export function StoryboardGraphCanvas({
                       }
                     : undefined
                 }
-                onPointerLeave={
-                  hoverEnabled ? (tool === "pointer" ? leaveHover : resetHover) : undefined
-                }
+                onPointerLeave={hoverEnabled ? leaveHover : undefined}
                 onFocus={
                   hoverEnabled
                     ? () => {
@@ -781,6 +844,7 @@ export function StoryboardGraphCanvas({
             return (
               <g
                 key={node.id}
+                style={annotationStyle(shotAnnotations[node.id])}
                 data-overlay-node={node.id}
                 transform={`translate(${point.x}, ${point.y})`}
               >
@@ -811,37 +875,39 @@ export function StoryboardGraphCanvas({
       <div className="storyboard-graph-previews">
         {previews.map((preview) => {
           const isHovered = preview.node.id === hoveredNode?.id;
+          const shot = shotsById.get(preview.node.id)!;
+          const colorStyle = annotationStyle(shotAnnotations[preview.node.id]);
           return (
             <div
               key={preview.node.id}
               id={isHovered ? previewId : undefined}
               role={isHovered ? "tooltip" : undefined}
               data-preview-shot-id={preview.node.id}
-              className={`storyboard-graph-preview ${preview.above ? "is-above" : "is-below"}${selectedShotIds.has(preview.node.id) ? " is-selected" : ""}${!isHovered && !selectedShotIds.has(preview.node.id) ? " is-neighbor" : ""}${previewEmphasis && !previewEmphasis.has(preview.node.id) ? " is-muted" : ""}`}
-              onPointerEnter={
-                tool === "pointer"
-                  ? () => {
-                      cancelHoverLeave();
-                      setHoveredPreviewId(preview.node.id);
-                    }
-                  : undefined
-              }
-              onPointerLeave={
-                tool === "pointer"
-                  ? () => {
-                      setHoveredPreviewId(null);
-                      leaveHover();
-                    }
-                  : undefined
-              }
+              data-storyboard-shot-id={preview.node.id}
+              className={`storyboard-graph-preview ${preview.above ? "is-above" : "is-below"}${colorStyle ? " has-color-label" : ""}${selectedShotIds.has(preview.node.id) ? " is-selected" : ""}${!isHovered && !selectedShotIds.has(preview.node.id) ? " is-neighbor" : ""}${previewEmphasis && !previewEmphasis.has(preview.node.id) ? " is-muted" : ""}`}
+              onPointerEnter={() => {
+                cancelHoverLeave();
+                setHoveredPreviewId(preview.node.id);
+              }}
+              onPointerLeave={() => {
+                setHoveredPreviewId(null);
+                leaveHover();
+              }}
               onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => event.stopPropagation()}
-              onDoubleClick={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (sprayActive) selectNode(event, shot, false);
+              }}
+              onDoubleClick={(event) => {
+                event.stopPropagation();
+                if (sprayActive) selectNode(event, shot, true);
+              }}
               style={
                 {
                   width: previewWidth,
                   left: preview.left,
                   top: preview.top,
+                  ...colorStyle,
                   zIndex:
                     preview.node.id === hoveredPreviewId ? previews.length + 4 : preview.zIndex,
                   "--storyboard-graph-preview-caret": `${preview.caret}px`,
@@ -850,14 +916,11 @@ export function StoryboardGraphCanvas({
                 } as CSSProperties
               }
             >
-              <StoryboardSemanticThumbnail
-                ariaLabel="分镜选帧缩略图"
-                assetId={preview.source.assetId}
-                fingerprint={preview.source.fingerprint}
-                videoPath={preview.source.videoPath}
-                frameRate={preview.source.frameRate}
-                timeUs={frameToTimeUs(preview.node.thumbnailFrame, preview.source.frameRate)}
-                resolution={previewResolution}
+              <StoryboardGraphThumbnail
+                shot={shot}
+                source={preview.source}
+                annotation={shotAnnotations[preview.node.id]}
+                thumbnailFrame={preview.node.thumbnailFrame}
                 priority={preview.priority}
                 requestEnabled={panelActive && Boolean(preview.source.videoPath)}
               />
@@ -869,6 +932,7 @@ export function StoryboardGraphCanvas({
       <StoryboardGraphTools
         tool={tool}
         mode={selectionMode}
+        sprayActive={sprayActive}
         onToolChange={changeTool}
         onModeChange={(next) => {
           cancelGestures();

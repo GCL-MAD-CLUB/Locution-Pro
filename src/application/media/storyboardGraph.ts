@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { StoryboardGraph, StoryboardGraphVector } from "../../core/editor/storyboardGraph";
+import type {
+  StoryboardGraph,
+  StoryboardGraphVector,
+} from "../../core/editor/storyboardGraph/graph";
 import { clientError, invokeCommand, runOperation } from "../../errors";
 import { ensureStoryboardSemanticIndex, type SemanticShot } from "./storyboardSemanticSearch";
 import {
   defaultStoryboardGraphOptions,
   type StoryboardGraphOptions,
-} from "../../core/editor/storyboardGraphOptions";
+} from "../../core/editor/storyboardGraph/options";
 
 type GraphState =
   | { status: "indexing" | "reading" | "neighbors" | "layout"; fraction?: number }

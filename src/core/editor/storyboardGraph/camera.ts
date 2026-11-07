@@ -1,4 +1,4 @@
-import type { StoryboardGraph, StoryboardGraphNode } from "./storyboardGraph";
+import type { StoryboardGraph, StoryboardGraphNode } from "./graph";
 
 export function storyboardGraphNeighborhood(graph: StoryboardGraph, id: string) {
   const index = graph.nodes.findIndex((node) => node.id === id);

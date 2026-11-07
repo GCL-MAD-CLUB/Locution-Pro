@@ -13,7 +13,7 @@ import {
   storyboardGraphWorldPoint,
   storyboardGraphZoomLimits,
   zoomStoryboardGraphAt,
-} from "../../../src/core/editor/storyboardGraphLayout.ts";
+} from "../../../src/core/editor/storyboardGraph/camera.ts";
 
 const size = { width: 800, height: 500 };
 const nodes = [

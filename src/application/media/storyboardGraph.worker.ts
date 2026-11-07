@@ -1,8 +1,8 @@
 import {
   buildStoryboardGraph,
   type StoryboardGraphVector,
-} from "../../core/editor/storyboardGraph";
-import type { StoryboardGraphOptions } from "../../core/editor/storyboardGraphOptions";
+} from "../../core/editor/storyboardGraph/graph";
+import type { StoryboardGraphOptions } from "../../core/editor/storyboardGraph/options";
 
 self.onmessage = (
   event: MessageEvent<{ vectors: StoryboardGraphVector[]; options: StoryboardGraphOptions }>,

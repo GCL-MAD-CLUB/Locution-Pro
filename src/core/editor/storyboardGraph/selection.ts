@@ -1,5 +1,5 @@
-import type { StoryboardGraphNode } from "./storyboardGraph";
-import type { StoryboardGraphRect } from "./storyboardGraphLayout";
+import type { StoryboardGraphNode } from "./graph";
+import type { StoryboardGraphRect } from "./camera";
 
 export type StoryboardGraphTool = "pointer" | "hand";
 export type StoryboardGraphSelectionMode = "replace" | "add" | "subtract" | "intersect";

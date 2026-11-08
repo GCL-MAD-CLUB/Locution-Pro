@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { forceCenter } from "d3-force";
 import {
+  createStoryboardGraphAmbient,
+  remapStoryboardGraphEdges,
+  type StoryboardGraphAmbient,
+  type StoryboardGraphVisualEdge,
+} from "../../../../core/editor/storyboardGraph/ambient";
+import {
   createStoryboardGraphSimulation,
   type StoryboardGraph,
   type StoryboardGraphNode,
@@ -11,14 +17,30 @@ const emptyNodes: StoryboardGraph["nodes"] = [];
 
 // Topology changes immediately; positions, radii, hit targets, links and the
 // overview move together. Preserve velocity when another filter interrupts.
-export function useStoryboardGraphMotion(graph: StoryboardGraph | undefined, active: boolean) {
-  const target = graph?.nodes ?? emptyNodes;
-  const [painted, setPainted] = useState(target);
+export function useStoryboardGraphMotion(
+  graph: StoryboardGraph | undefined,
+  active: boolean,
+  pendingNodes: StoryboardGraph["nodes"] = emptyNodes,
+) {
+  const pending = !graph && pendingNodes.length > 0;
+  const target = graph?.nodes ?? pendingNodes;
+  const ambient = useRef<StoryboardGraphAmbient | null>(null);
+  const [painted, setPainted] = useState(() => {
+    if (!pending) return target;
+    ambient.current = createStoryboardGraphAmbient(target);
+    return ambient.current.nodes.map((node) => ({ ...node }));
+  });
+  const [visual, setVisual] = useState<{
+    owner: StoryboardGraph["nodes"];
+    edges: StoryboardGraphVisualEdge[];
+  } | null>(null);
+  const [collapsing, setCollapsing] = useState(false);
   const motion = useRef(
     new Map<string, { x: number; y: number; radius: number; vx: number; vy: number; vr: number }>(),
   );
   const initialized = useRef(false);
   const springFrame = useRef(0);
+  const ambientTick = useRef<FrameRequestCallback | null>(null);
   type LiveNode = StoryboardGraphNode & StoryboardGraphForceNode;
   const live = useRef<ReturnType<typeof createStoryboardGraphSimulation<LiveNode>> | null>(null);
   const dragged = useRef<LiveNode | null>(null);
@@ -34,8 +56,59 @@ export function useStoryboardGraphMotion(graph: StoryboardGraph | undefined, act
   }, []);
   useLayoutEffect(() => {
     stopLive();
-    const immediate =
-      !initialized.current || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (pending) {
+      const existing = ambient.current;
+      const sameNodes =
+        existing &&
+        existing.nodes.length === target.length &&
+        target.every((node, i) => node.id === existing.nodes[i].id);
+      const world = sameNodes
+        ? existing
+        : createStoryboardGraphAmbient(target, Math.random, existing ?? undefined);
+      world.nodes.forEach((node, i) => {
+        node.thumbnailFrame = target[i].thumbnailFrame;
+      });
+      ambient.current = world;
+      initialized.current = true;
+      setCollapsing(false);
+      let previous = performance.now();
+      const draw = () => {
+        for (const node of world.nodes)
+          motion.current.set(node.id, { ...node, vx: node.vx * 60, vy: node.vy * 60, vr: 0 });
+        publish(world.nodes.map((node) => ({ ...node })));
+        setVisual({ owner: target, edges: world.edges });
+      };
+      draw();
+      const tick = (now: number) => {
+        world.step((now - previous) / 1000);
+        previous = now;
+        draw();
+        springFrame.current = requestAnimationFrame(tick);
+      };
+      ambientTick.current = tick;
+      if (active && !reduced) springFrame.current = requestAnimationFrame(tick);
+      return () => {
+        cancelAnimationFrame(springFrame.current);
+        ambientTick.current = null;
+      };
+    }
+    const provisional = ambient.current;
+    ambient.current = null;
+    const collapse = Boolean(provisional && target.length && !reduced);
+    setCollapsing(collapse);
+    const sourceEdges = provisional
+      ? remapStoryboardGraphEdges(provisional.edges, provisional.nodes, target)
+      : [];
+    const transitionEdges = new Map<string, StoryboardGraphVisualEdge>();
+    const edgeKey = (edge: StoryboardGraphVisualEdge) =>
+      `${Math.min(edge.source, edge.target)}:${Math.max(edge.source, edge.target)}`;
+    for (const edge of sourceEdges) transitionEdges.set(edgeKey(edge), edge);
+    const finalEdges = new Map((graph?.edges ?? []).map((edge) => [edgeKey(edge), edge]));
+    for (const [key, edge] of finalEdges)
+      if (!transitionEdges.has(key)) transitionEdges.set(key, { ...edge, opacity: 0 });
+    if (!collapse) setVisual(null);
+    const immediate = !initialized.current || reduced;
     if (target.length) initialized.current = true;
     for (const node of target) {
       if (immediate || !motion.current.has(node.id))
@@ -52,7 +125,22 @@ export function useStoryboardGraphMotion(graph: StoryboardGraph | undefined, act
       previous = now;
       const steps = Math.max(1, Math.ceil(elapsed * 120));
       const dt = elapsed / steps;
-      let settled = true;
+      let settled = !collapse || now - started >= 600;
+      if (collapse) {
+        const blend = 1 - (1 - Math.min(1, (now - started) / 600)) ** 3;
+        setVisual(
+          blend === 1
+            ? null
+            : {
+                owner: target,
+                edges: [...transitionEdges].map(([key, edge]) => ({
+                  ...edge,
+                  similarity: finalEdges.get(key)?.similarity ?? edge.similarity,
+                  opacity: (edge.opacity ?? 1) * (1 - blend) + (finalEdges.has(key) ? blend : 0),
+                })),
+              },
+        );
+      }
       const next = target.map((node) => {
         const current = motion.current.get(node.id)!;
         for (let step = 0; step < steps; step++) {
@@ -64,7 +152,7 @@ export function useStoryboardGraphMotion(graph: StoryboardGraph | undefined, act
           current.radius += current.vr * dt;
         }
         if (
-          now - started < 1400 &&
+          now - started < (collapse ? 1800 : 1400) &&
           (Math.hypot(node.x - current.x, node.y - current.y, node.radius - current.radius) >
             0.02 ||
             Math.hypot(current.vx, current.vy, current.vr) > 0.1)
@@ -73,6 +161,8 @@ export function useStoryboardGraphMotion(graph: StoryboardGraph | undefined, act
         return { ...node, x: current.x, y: current.y, radius: current.radius };
       });
       if (settled) {
+        setCollapsing(false);
+        setVisual(null);
         for (const node of target) motion.current.set(node.id, { ...node, vx: 0, vy: 0, vr: 0 });
         publish(target);
       } else {
@@ -92,11 +182,27 @@ export function useStoryboardGraphMotion(graph: StoryboardGraph | undefined, act
       cancelAnimationFrame(springFrame.current);
       stopLive();
     };
-  }, [target, graph?.edges, publish, stopLive]);
+  }, [target, graph?.edges, pending, publish, stopLive]);
+
+  useEffect(() => {
+    if (!pending) return;
+    cancelAnimationFrame(springFrame.current);
+    if (
+      active &&
+      ambientTick.current &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    )
+      springFrame.current = requestAnimationFrame(ambientTick.current);
+    return () => {
+      if (ambientTick.current) cancelAnimationFrame(springFrame.current);
+    };
+  }, [pending, active]);
 
   const beginDrag = useCallback(
     (id: string) => {
       cancelAnimationFrame(springFrame.current);
+      setVisual(null);
+      setCollapsing(false);
       if (!live.current && graph) {
         const nodes: LiveNode[] = paintedRef.current.map((node) => ({
           ...node,
@@ -164,5 +270,21 @@ export function useStoryboardGraphMotion(graph: StoryboardGraph | undefined, act
       return previous ? { ...node, x: previous.x, y: previous.y, radius: previous.radius } : node;
     });
   }, [target, painted]);
-  return { nodes, beginDrag, moveDrag, endDrag };
+  const edges = useMemo<StoryboardGraphVisualEdge[]>(
+    () =>
+      visual
+        ? visual.owner === target
+          ? visual.edges
+          : remapStoryboardGraphEdges(visual.edges, visual.owner, target)
+        : (graph?.edges ?? []),
+    [visual, target, graph?.edges],
+  );
+  return {
+    nodes,
+    edges,
+    phase: pending ? "ambient" : collapsing ? "collapse" : "ready",
+    beginDrag,
+    moveDrag,
+    endDrag,
+  };
 }

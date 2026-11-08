@@ -99,11 +99,21 @@ export function mountGraph(empty = false, spread = 1, nodeRadius = 4) {
   createRoot(host).render(React.createElement(Harness));
 }
 
-export function mountLiveGraph(holdIndex = false) {
+export function mountLiveGraph(holdIndex = false, empty = false, count = 9) {
   const nativeWorker = window.Worker;
   window.graphLiveCalls = [];
   window.graphLiveRequests = [];
   window.graphLiveWorkers = 0;
+  window.graphLiveInteractions = { selections: [], activations: [], sprays: [], menus: 0 };
+  const liveShots = Array.from({ length: count }, (_, index) => ({
+    ...shots[0],
+    id: String(index),
+    sequence: index + 1,
+    start_frame: index * 24,
+    end_frame: (index + 1) * 24,
+    start_us: index * 1_000_000,
+    end_us: (index + 1) * 1_000_000,
+  }));
   const pending = [];
   window.graphLiveHold = false;
   const pendingSearch = [];
@@ -173,7 +183,9 @@ export function mountLiveGraph(holdIndex = false) {
   host.style.cssText = "position:absolute;left:24px;top:24px;width:800px;height:500px";
   document.body.append(host);
   function Harness() {
-    const [currentShots, setCurrentShots] = useState(shots);
+    const [currentShots, setCurrentShots] = useState(empty ? [] : liveShots);
+    const [sprayActive, setSprayActive] = useState(false);
+    window.graphLiveSetSprayActive = setSprayActive;
     const [filter, setFilter] = useState(null);
     const [query, setQuery] = useState("");
     const [threshold, setThreshold] = useState(0.5);
@@ -221,8 +233,14 @@ export function mountLiveGraph(holdIndex = false) {
         sourceForShot: () => source,
         shotTitle: (shot) => `Shot ${shot.id}`,
         selectedShotIds: new Set(),
-        onSelectionChange: () => {},
-        onActivateShot: () => {},
+        sprayActive,
+        onSelectionChange: (ids) => window.graphLiveInteractions.selections.push([...ids]),
+        onActivateShot: (shot) => window.graphLiveInteractions.activations.push(shot.id),
+        onSprayShots: (ids) => window.graphLiveInteractions.sprays.push([...ids]),
+        onContextMenu: (event) => {
+          event.preventDefault();
+          window.graphLiveInteractions.menus++;
+        },
       }),
     );
   }

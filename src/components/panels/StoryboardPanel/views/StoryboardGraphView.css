@@ -498,25 +498,7 @@
   cursor: pointer;
 }
 
-.storyboard-graph-message > progress {
-  width: min(240px, 80%);
-  accent-color: var(--color-accent);
-}
-
-.storyboard-graph-spinner {
-  animation: storyboard-graph-spin 1s linear infinite;
-}
-
-@keyframes storyboard-graph-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .storyboard-graph-spinner {
-    animation: none;
-  }
   .storyboard-graph-dot,
   .storyboard-graph-dot-visual,
   .storyboard-graph-node,

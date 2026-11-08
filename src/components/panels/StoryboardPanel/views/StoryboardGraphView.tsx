@@ -1,26 +1,20 @@
-import { Loader2, Network } from "lucide-react";
+import { Network } from "lucide-react";
 import { useMemo } from "react";
 import { useStoryboardGraph } from "../../../../application/media/storyboardGraph";
 import type { SemanticShot } from "../../../../application/media/storyboardSemanticSearch";
 import { usePanelActive } from "../../../../runtime/systems/PanelState";
 import { StoryboardGraphCanvas, type StoryboardGraphCanvasProps } from "./StoryboardGraphCanvas";
 
-interface StoryboardGraphViewProps extends Omit<StoryboardGraphCanvasProps, "graph" | "children"> {
+interface StoryboardGraphViewProps extends Omit<
+  StoryboardGraphCanvasProps,
+  "graph" | "children" | "preparing"
+> {
   semanticShots: readonly SemanticShot[];
   scope: string;
   available: boolean;
 }
 
-const phaseLabels = {
-  indexing: "正在准备分镜语义索引…",
-  reading: "正在读取分镜语义向量…",
-  neighbors: "正在构建近邻图…",
-  layout: "正在计算图谱布局…",
-};
-
-function GraphProgress({ state, graph, retry }: ReturnType<typeof useStoryboardGraph>) {
-  if (state.status === "ready") return null;
-  if (graph && !("message" in state)) return null;
+function GraphError({ state, retry }: ReturnType<typeof useStoryboardGraph>) {
   if ("message" in state)
     return (
       <div className="storyboard-graph-message" role="status">
@@ -30,13 +24,7 @@ function GraphProgress({ state, graph, retry }: ReturnType<typeof useStoryboardG
         </button>
       </div>
     );
-  return (
-    <div className="storyboard-graph-message" role="status" aria-live="polite">
-      <Loader2 className="storyboard-graph-spinner" aria-hidden="true" />
-      <span>{phaseLabels[state.status]}</span>
-      {state.fraction !== undefined && <progress max={1} value={state.fraction} />}
-    </div>
-  );
+  return null;
 }
 
 export function StoryboardGraphView({
@@ -50,20 +38,27 @@ export function StoryboardGraphView({
   const result = useStoryboardGraph(
     semanticShots,
     scope,
-    available && panelActive,
+    available && panelActive && props.shots.length > 0,
     undefined,
     visibleIds,
   );
   const empty = !semanticShots.length || !props.shots.length;
+  if (empty)
+    return <div className="storyboard-graph-view" role="region" aria-label="分镜语义图谱" />;
   return (
-    <StoryboardGraphCanvas key={scope} {...props} graph={result.graph}>
-      {empty || !available ? (
+    <StoryboardGraphCanvas
+      key={scope}
+      {...props}
+      graph={result.graph}
+      preparing={available && !result.graph && !("message" in result.state)}
+    >
+      {!available ? (
         <div className="storyboard-graph-message" role="status">
           <Network aria-hidden="true" />
-          <span>{empty ? "没有可显示的分镜" : "图谱视图需要安装分镜语义检索组件。"}</span>
+          <span>图谱视图需要安装分镜语义检索组件。</span>
         </div>
       ) : (
-        <GraphProgress {...result} />
+        <GraphError {...result} />
       )}
     </StoryboardGraphCanvas>
   );

@@ -11,6 +11,7 @@ async function mount(page: Page) {
     .poll(() => page.evaluate(() => (window as any).graphLiveTarget?.nodes.length))
     .toBe(9);
   await expect(page.locator(".storyboard-graph-dot")).toHaveCount(9);
+  await expect(page.locator(".storyboard-graph-view")).toHaveAttribute("data-graph-phase", "ready");
 }
 
 async function assertConnected(page: Page, ids: string[]) {
@@ -38,6 +39,188 @@ async function assertConnected(page: Page, ids: string[]) {
   });
   expect(connected).toBe(true);
 }
+
+test("initial indexing keeps global progress while the canvas shows a random force network and collapses into the semantic graph", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/tests/browser/support/blank.html");
+  await page.evaluate(async () => {
+    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
+    (await import(/* @vite-ignore */ path)).mountLiveGraph(true);
+  });
+  const view = page.locator(".storyboard-graph-view");
+  await expect(view).toHaveAttribute("data-graph-phase", "ambient");
+  await expect(page.locator("[data-overlay-node]")).toHaveCount(9);
+  await expect(
+    view.locator(".storyboard-graph-message, progress, .storyboard-graph-spinner"),
+  ).toHaveCount(0);
+  await expect(page.locator(".topbar-progress")).toBeVisible();
+  await expect(page.locator(".topbar-progress")).toContainText("正在构建分镜索引");
+  await expect(page.locator(".storyboard-graph-base-edges").first()).toBeVisible();
+  const position = () => page.locator('[data-overlay-node="0"]').getAttribute("transform");
+  const initial = await position();
+  await expect.poll(position).not.toBe(initial);
+  await expect(page.locator(".storyboard-graph-dot, .storyboard-graph-preview")).toHaveCount(0);
+  // Starting semantic search joins the same visible indexing task rather than
+  // suppressing it or launching a duplicate index build.
+  await page.evaluate(() => {
+    (window as any).graphLiveThreshold(0);
+    (window as any).graphLiveQuery("scene");
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window as any).graphLiveSearchStatus))
+    .toBe("pending");
+  await expect(page.locator(".topbar-progress")).toContainText("正在构建分镜索引");
+  expect(
+    await page.evaluate(
+      () =>
+        (window as any).graphLiveCalls.filter(
+          (call: any) => call.command === "select_storyboard_frames",
+        ).length,
+    ),
+  ).toBe(1);
+  // Keep the layout worker pending after indexing completes: the same network
+  // must continue through both stages, without restarting the presentation.
+  await page.evaluate(() => {
+    (window as any).graphLiveHold = true;
+    (window as any).graphLiveReleaseIndex();
+  });
+  await expect.poll(() => page.evaluate(() => (window as any).graphLiveRequests.length)).toBe(1);
+  await expect(view).toHaveAttribute("data-graph-phase", "ambient");
+  const pendingLayout = await position();
+  await expect.poll(position).not.toBe(pendingLayout);
+  await expect(page.locator(".storyboard-graph-message, progress, .topbar-progress")).toHaveCount(
+    0,
+  );
+  await page.evaluate(() => {
+    (window as any).graphInitialTrace = [];
+    const sample = () => {
+      const node = document.querySelector<HTMLElement>(
+        '.storyboard-graph-dot[data-storyboard-shot-id="0"]',
+      );
+      if (node)
+        (window as any).graphInitialTrace.push({
+          x: parseFloat(node.style.left),
+          y: parseFloat(node.style.top),
+        });
+      if ((window as any).graphInitialTrace.length < 120) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+    (window as any).graphLiveRelease();
+  });
+  await expect(view).toHaveAttribute("data-graph-phase", "collapse");
+  await expect(page.locator("[data-overlay-node]")).toHaveCount(9);
+  await expect(view).toHaveAttribute("data-graph-phase", "ready");
+  const target = await page.evaluate(() => (window as any).graphLiveTarget.nodes[0]);
+  const trace = await page.evaluate(
+    () => (window as any).graphInitialTrace as Array<{ x: number; y: number }>,
+  );
+  expect(trace.some((point) => Math.hypot(point.x - target.x, point.y - target.y) > 10)).toBe(true);
+  expect(trace.some((point) => Math.hypot(point.x - target.x, point.y - target.y) < 0.1)).toBe(
+    true,
+  );
+  await assertConnected(page, ["0", "1", "2", "3", "4", "5", "6", "7", "8"]);
+  await expect.poll(() => page.evaluate(() => (window as any).graphLiveSearchStatus)).toBe("ready");
+});
+
+test("preparation allows persistent wheel zoom and minimap navigation while other graph interactions stay disabled", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/tests/browser/support/blank.html");
+  await page.evaluate(async () => {
+    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
+    (await import(/* @vite-ignore */ path)).mountLiveGraph(true, false, 64);
+  });
+  const stage = page.locator(".storyboard-graph-view");
+  await expect(stage).toHaveAttribute("data-graph-phase", "ambient");
+  await expect(page.locator("[data-overlay-node]")).toHaveCount(64);
+  const camera = () =>
+    page.locator(".storyboard-graph-world").evaluate((element) => {
+      const matrix = new DOMMatrix(getComputedStyle(element).transform);
+      return { x: matrix.e, y: matrix.f, zoom: matrix.a };
+    });
+  const bounds = (await stage.boundingBox())!;
+  const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  const initial = await camera();
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.wheel(0, -600);
+  await expect.poll(async () => (await camera()).zoom).toBeGreaterThan(initial.zoom);
+  const zoomed = await camera();
+  // Several live simulation frames must retain the user's transform.
+  const trace = await page.locator(".storyboard-graph-world").evaluate(async (element) => {
+    const trace = [];
+    for (let i = 0; i < 12; i++) {
+      await new Promise(requestAnimationFrame);
+      const matrix = new DOMMatrix(getComputedStyle(element).transform);
+      trace.push({ x: matrix.e, y: matrix.f, zoom: matrix.a });
+    }
+    return trace;
+  });
+  expect(trace.every((sample) => JSON.stringify(sample) === JSON.stringify(zoomed))).toBe(true);
+  const mini = page.locator(".storyboard-graph-minimap");
+  const frame = (await page.locator("[data-graph-viewport]").boundingBox())!;
+  await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(frame.x + frame.width / 2 + 16, frame.y + frame.height / 2 + 8, {
+    steps: 5,
+  });
+  await page.mouse.up();
+  await expect.poll(camera).not.toEqual(zoomed);
+  expect((await camera()).zoom).toBe(zoomed.zoom);
+  const beforeLocate = await camera();
+  const miniBounds = (await mini.boundingBox())!;
+  await page.mouse.click(miniBounds.x + 8, miniBounds.y + 8);
+  await expect.poll(camera).not.toEqual(beforeLocate);
+  const beforeWheel = await camera();
+  await page.mouse.move(miniBounds.x + miniBounds.width / 2, miniBounds.y + miniBounds.height / 2);
+  await page.mouse.wheel(0, 120);
+  await expect.poll(async () => (await camera()).zoom).toBeLessThan(beforeWheel.zoom);
+  const navigated = await camera();
+  await page.mouse.click(point.x, point.y);
+  await page.mouse.dblclick(point.x, point.y);
+  await page.mouse.click(point.x, point.y, { button: "right" });
+  await stage.focus();
+  await stage.press("+");
+  await page.getByRole("button", { name: "手型工具", exact: true }).click();
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + 60, point.y + 35, { steps: 5 });
+  await page.mouse.up();
+  await page.evaluate(() => (window as any).graphLiveSetSprayActive(true));
+  await page.mouse.click(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + 80, point.y + 40, { steps: 5 });
+  await page.mouse.up();
+  expect(await camera()).toEqual(navigated);
+  expect(await page.evaluate(() => (window as any).graphLiveInteractions)).toEqual({
+    selections: [],
+    activations: [],
+    sprays: [],
+    menus: 0,
+  });
+  await expect(
+    page.locator(".storyboard-graph-dot, .storyboard-graph-preview, .storyboard-graph-marquee"),
+  ).toHaveCount(0);
+  await page.evaluate(() => (window as any).graphLiveReleaseIndex());
+  await expect(stage).toHaveAttribute("data-graph-phase", "ready");
+  expect(await camera()).toEqual(navigated);
+});
+
+test("without any cut storyboards the graph remains blank and starts no preparation", async ({
+  page,
+}) => {
+  await page.goto("/tests/browser/support/blank.html");
+  await page.evaluate(async () => {
+    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
+    (await import(/* @vite-ignore */ path)).mountLiveGraph(false, true);
+  });
+  await expect(page.locator(".storyboard-graph-view")).toBeVisible();
+  await expect(page.locator(".storyboard-graph-view")).toBeEmpty();
+  expect(await page.evaluate(() => (window as any).graphLiveCalls)).toEqual([]);
+  expect(await page.evaluate(() => (window as any).graphLiveWorkers)).toBe(0);
+});
 
 test("a single remaining node eases back after release instead of jumping to the center", async ({
   page,

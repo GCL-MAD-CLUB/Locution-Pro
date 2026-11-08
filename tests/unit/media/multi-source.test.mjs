@@ -12,6 +12,7 @@ import {
   sourceRowId,
   sourceRowParts,
   sourceScope,
+  storyboardMergeGroups,
   updateScopedStoryboard,
   updateScopedSubtitles,
 } from "../../../src/core/editor/multiSource.ts";
@@ -33,6 +34,52 @@ function board(keywordId, name) {
     shotAnnotations: { "shot-1": { rating: 1, retained: false, keywordIds: [keywordId] } },
   };
 }
+
+test("merging requires a continuous timeline run within every source regardless of selection order", () => {
+  const shots = Array.from({ length: 4 }, (_, i) => ({
+    ...board("k", "k").shots[0],
+    id: String(i),
+    start_frame: i * 24,
+    end_frame: (i + 1) * 24 - 1,
+  }));
+  const merge = (ids, rows = shots) => storyboardMergeGroups(rows, new Set(ids));
+  assert.equal(merge(["0", "2"]), null);
+  assert.equal(merge(["0", "1", "3"]), null);
+  assert.equal(merge(["0", "missing"]), null);
+  assert.equal(merge([]), null);
+  assert.equal(merge(["0"]), null);
+  assert.deepEqual(
+    merge(["2", "0", "1"], [...shots].reverse()).map((group) => group.map((shot) => shot.id)),
+    [["0", "1", "2"]],
+  );
+  // Deleted or filtered intervals cannot silently be swallowed as part of a span.
+  assert.equal(
+    merge(
+      ["0", "2"],
+      shots.filter((shot) => shot.id !== "1"),
+    ),
+    null,
+  );
+  assert.equal(merge(["0", "1"], [shots[0], { ...shots[1], start_frame: 25 }]), null);
+  assert.equal(merge(["0", "1"], [shots[0], { ...shots[1], start_frame: 23 }]), null);
+  const multi = ["a", "b"].flatMap((source) =>
+    shots.map((shot) => ({ ...shot, id: sourceRowId(source, shot.id) })),
+  );
+  assert.equal(merge([sourceRowId("a", "0"), sourceRowId("b", "1")], multi), null);
+  assert.equal(
+    merge(
+      [sourceRowId("a", "0"), sourceRowId("a", "1"), sourceRowId("b", "0"), sourceRowId("b", "2")],
+      multi,
+    ),
+    null,
+  );
+  assert.deepEqual(
+    merge([sourceRowId("a", "0"), sourceRowId("a", "1"), sourceRowId("b", "2")], multi).map(
+      (group) => group.map((shot) => shot.id),
+    ),
+    [[sourceRowId("a", "0"), sourceRowId("a", "1")], [sourceRowId("b", "2")]],
+  );
+});
 
 test("scope and row identities are unambiguous and independent of selection order", () => {
   assert.equal(sourceScope(["b", "a", "a"]), sourceScope(["a", "b"]));

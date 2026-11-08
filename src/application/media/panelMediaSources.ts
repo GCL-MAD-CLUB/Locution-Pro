@@ -567,7 +567,12 @@ export function usePanelMediaSource(kind: "subtitles" | "storyboard") {
     )
       openSource();
   }, [canOpenSource, openSource, panelActive, panelFocused]);
-  return source;
+  // Shared media follow the actual player even when another panel owns it.
+  // Keep each panel's chosen sources, active source and subtitle track intact.
+  const playbackSource = source.selectedSources.find(
+    (entry) => entry.videoId === playback?.videoId,
+  );
+  return { ...source, playbackSource, playback: playbackSource ? playback : undefined };
 }
 
 /** Workspace history belongs to the panel instance, rather than individual media IDs. */

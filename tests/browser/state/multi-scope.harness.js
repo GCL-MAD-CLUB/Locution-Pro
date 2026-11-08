@@ -20,6 +20,8 @@ import { useStoryboardPanelState } from "../../../src/components/panels/Storyboa
 import { useSubtitlePanelState } from "../../../src/components/panels/SubtitlePanel/subtitlePanelState.ts";
 import { useStoryboardDetection } from "../../../src/components/panels/StoryboardPanel/hooks/useStoryboardDetection.tsx";
 import { emptyStoryboard, sourceScope, sourceRowId } from "../../../src/core/editor/multiSource.ts";
+import { stateHub } from "../../../src/runtime/state/StateHub.ts";
+import { PLAYBACK_STATUS_PROJECTION } from "../../../src/runtime/state/contracts.ts";
 
 const h = React.createElement;
 const pause = () => new Promise((resolve) => setTimeout(resolve, 50));
@@ -113,6 +115,7 @@ function workspace() {
 }
 
 export async function runMultiScopeTests(fullUi = false) {
+  const playbackOwner = { system: "multi-scope-player" };
   const previousNative = window.__TAURI_INTERNALS__;
   let finishDetection;
   const detectionFinishes = new Map();
@@ -244,6 +247,332 @@ export async function runMultiScopeTests(fullUi = false) {
     );
     equal(historySize(), 1, "initial preview creates no extra history");
     results.push("first media import initializes panel sources without extra history");
+    if (fullUi) {
+      await reset();
+      const differentRates = workspace();
+      differentRates.projects[1].streams[0].avg_frame_rate = "60/1";
+      await act(() => snapshots.port.projectOpened(differentRates, "/rates.lcut", "rates"));
+      await act(() => snapshots.board.source.selectVideo("a", "a-1"));
+      await act(() => snapshots.board.source.toggleSource("b"));
+      await act(() => snapshots.sub.source.selectVideo("b", "b-1"));
+      await act(() => snapshots.manager.focusPanel("sub"));
+      await act(() =>
+        snapshots.board.board.shotSelectionReplaced([sourceRowId("a:a:fp", "shot-2")]),
+      );
+      await act(() => snapshots.sub.subtitle.cueSelectionReplaced(["b-1-cue-1"]));
+      await act(() =>
+        snapshots.board.source.selection.setSourceLocked(
+          true,
+          snapshots.board.source.selectedSources,
+        ),
+      );
+      const play = (videoId, currentFrame, sourcePanelId) =>
+        act(() =>
+          stateHub.publish(PLAYBACK_STATUS_PROJECTION, playbackOwner, {
+            active: true,
+            lastFocusedAt: 1,
+            videoId,
+            currentFrame,
+            sourcePanelId,
+            isPlaying: true,
+          }),
+        );
+      const current = (kind) =>
+        Array.from(
+          document.querySelectorAll(
+            kind === "board" ? ".shot-row.is-current" : ".cue-row.is-current",
+          ),
+          (row) => (kind === "board" ? row.dataset.storyboardShotId : row.dataset.subtitleCueId),
+        );
+      const historyBefore = historySize();
+      await play("b", 90, "sub");
+      equal(
+        current("board"),
+        [sourceRowId("b:b:fp", "shot-1")],
+        "board follows a playing subset source without switching its active source",
+      );
+      equal(current("sub"), ["b-1-cue-1"], "subtitle follows playing source");
+      await play("b", 135, "sub");
+      equal(current("board"), [sourceRowId("b:b:fp", "shot-2")], "board follows the next shot");
+      equal(current("sub"), ["b-1-cue-2"], "subtitle uses playing media frame rate");
+      equal(
+        snapshots.board.source.activeVideoId,
+        "a",
+        "follow does not replace the panel active source",
+      );
+      equal(
+        [...snapshots.board.board.selectedShotIds],
+        [sourceRowId("a:a:fp", "shot-2")],
+        "follow preserves shot selection",
+      );
+      equal(
+        [...snapshots.sub.subtitle.selectedCueIds],
+        ["b-1-cue-1"],
+        "follow preserves cue selection",
+      );
+      equal(historySize(), historyBefore, "following playback does not add edit history");
+      await act(() => snapshots.board.source.selection.setSourceLocked(false));
+      await act(() => snapshots.board.source.selectVideo("b", "b-1"));
+      await act(() => snapshots.sub.source.selectVideo("a", "a-1"));
+      await act(() => snapshots.sub.source.toggleSource("b"));
+      await act(() => snapshots.manager.focusPanel("board"));
+      await play("b", 135, "board");
+      equal(current("board"), ["shot-2"], "single-source board follows playback");
+      equal(
+        current("sub"),
+        [sourceRowId("b:b:fp:b-1", "b-1-cue-2")],
+        "subtitle follows the shared source from its larger source set using 60fps",
+      );
+      equal(
+        snapshots.sub.source.activeVideoId,
+        "a",
+        "subtitle source selection remains independent",
+      );
+      await play("outside", 0, "other");
+      equal(current("board"), [], "unrelated playback does not falsely highlight the first shot");
+      equal(current("sub"), [], "unrelated playback does not highlight a subtitle");
+      await act(() => stateHub.remove(PLAYBACK_STATUS_PROJECTION, playbackOwner));
+      results.push(
+        "overlapping / subset media follow playback in both directions without changing selections or history",
+      );
+
+      await reset();
+      const longWorkspace = workspace();
+      for (const project of longWorkspace.projects) {
+        project.asset.duration_us = 320_000_000;
+        for (const track of project.tracks) {
+          track.cue_count = 64;
+          project.cues[track.id] = Array.from({ length: 64 }, (_, index) => ({
+            id: `${track.id}-cue-${index + 1}`,
+            track_id: track.id,
+            sequence: index + 1,
+            start_us: index * 5_000_000,
+            end_us: (index + 1) * 5_000_000,
+            plain_text: `subtitle ${index + 1}`,
+          }));
+        }
+        const frames = project.asset.id === "a" ? 1 : 120;
+        longWorkspace.storyboards[`${project.asset.id}:${project.asset.id}:fp`].shots = Array.from(
+          { length: 64 },
+          (_, index) => ({
+            id: `shot-${index + 1}`,
+            sequence: index + 1,
+            start_frame: index * frames,
+            end_frame: (index + 1) * frames - 1,
+            start_us: (index * frames * 1_000_000) / 24,
+            end_us: ((index + 1) * frames * 1_000_000) / 24 - 1,
+          }),
+        );
+      }
+      await act(() => snapshots.port.projectOpened(longWorkspace, "/scroll.lcut", "scroll"));
+      await act(() => snapshots.board.source.selectVideo("a", "a-1"));
+      await act(() => snapshots.board.source.toggleSource("b"));
+      await act(() => snapshots.sub.source.selectVideo("b", "b-1"));
+      await act(() => snapshots.manager.focusPanel("sub"));
+      await act(() => snapshots.board.board.shotSelectionReplaced([]));
+      await act(() => snapshots.sub.subtitle.cueSelectionReplaced([]));
+      const lists = [document.querySelector(".shot-list"), document.querySelector(".cue-list")];
+      equal(
+        lists.every((list) => list?.clientHeight > 0),
+        true,
+        "both lists have viewports",
+      );
+      lists.forEach((list) => (list.scrollTop = 0));
+      await pause();
+      const publishFrame = (frame, isPlaying = true) =>
+        stateHub.publish(PLAYBACK_STATUS_PROJECTION, playbackOwner, {
+          active: true,
+          lastFocusedAt: 1,
+          videoId: "b",
+          sourcePanelId: "sub",
+          currentFrame: frame,
+          isPlaying,
+        });
+      const assertCentered = (phase) => {
+        for (const [index, list] of lists.entries()) {
+          const row = list.querySelector(
+            index === 0 ? ".shot-row.is-current" : ".cue-row.is-current",
+          );
+          equal(Boolean(row), true, "current row is rendered after following");
+          const bounds = row.getBoundingClientRect();
+          const viewport = list.getBoundingClientRect();
+          const delta = bounds.top + bounds.height / 2 - viewport.top - list.clientHeight / 2;
+          if (Math.abs(delta) >= 2) {
+            throw new Error(
+              `follow center ${phase}: ${JSON.stringify({ index, delta, top: list.scrollTop, row: bounds.toJSON(), viewport: viewport.toJSON(), clientHeight: list.clientHeight })}`,
+            );
+          }
+        }
+      };
+      let rowReads = 0;
+      const getBounds = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = function (...args) {
+        if (this.matches(".shot-row, .cue-row")) rowReads += 1;
+        return getBounds.apply(this, args);
+      };
+      const positions = lists.map(() => []);
+      try {
+        flushSync(() => publishFrame(3600));
+        const startedAt = performance.now();
+        await new Promise((resolve) => {
+          let lastFrame = 3600;
+          const sample = (now) => {
+            const elapsed = now - startedAt;
+            const frame = 3600 + Math.floor((elapsed * 24) / 1000);
+            if (frame !== lastFrame) {
+              flushSync(() => publishFrame(frame));
+              lastFrame = frame;
+            }
+            lists.forEach((list, i) => positions[i].push(list.scrollTop));
+            if (elapsed < 1200) requestAnimationFrame(sample);
+            else resolve();
+          };
+          requestAnimationFrame(sample);
+        });
+      } finally {
+        Element.prototype.getBoundingClientRect = getBounds;
+      }
+      equal(rowReads, 0, "scrolling never synchronously measures fixed-height rows");
+      for (const samples of positions) {
+        const finalOffset = samples.at(-1);
+        equal(finalOffset > 1000, true, "follow reaches a distant row");
+        equal(
+          samples.some((offset) => offset > 1 && offset < finalOffset - 1),
+          true,
+          "long-list follow animates rather than jumping, including mixed source durations",
+        );
+      }
+      assertCentered("initial");
+      await play("b", 1200, "sub");
+      await act(() => publishFrame(1201, false));
+      const pausedOffsets = lists.map((list) => list.scrollTop);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      equal(
+        lists.map((list) => list.scrollTop),
+        pausedOffsets,
+        "pausing cancels follow animation",
+      );
+      const sizes = [snapshots.board.board.thumbnailSize, snapshots.sub.subtitle.thumbnailSize];
+      await act(() => publishFrame(1201));
+      await act(() => {
+        snapshots.board.board.setThumbnailSize(sizes[0] + 10);
+        snapshots.sub.subtitle.setThumbnailSize(sizes[1] + 10);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      assertCentered("resize");
+      await act(() => stateHub.remove(PLAYBACK_STATUS_PROJECTION, playbackOwner));
+      await act(() => {
+        snapshots.board.board.setThumbnailSize(sizes[0]);
+        snapshots.sub.subtitle.setThumbnailSize(sizes[1]);
+      });
+      results.push(
+        "long-list playback follows smoothly without row measurements, pauses and retargets after resize",
+      );
+    }
+
+    await reset();
+    const fourShots = {
+      ...emptyStoryboard(),
+      shots: Array.from({ length: 4 }, (_, index) => ({
+        id: `shot-${index + 1}`,
+        sequence: index + 1,
+        start_frame: index * 60,
+        end_frame: (index + 1) * 60 - 1,
+        start_us: index * 2_500_000,
+        end_us: (index + 1) * 2_500_000 - 1,
+      })),
+    };
+    await act(() => snapshots.port.storyboardUpdated("a:a:fp", "four shots", () => fourShots));
+    await act(() => snapshots.board.board.shotSelectionReplaced(["shot-1", "shot-3"]));
+    const mergeHistory = historySize();
+    await act(() => snapshots.board.board.mergeShots(["shot-1", "shot-3"]));
+    equal(
+      getProjectWorkspaceSnapshot().storyboards["a:a:fp"],
+      fourShots,
+      "nonadjacent merge leaves all intervals untouched",
+    );
+    equal(historySize(), mergeHistory, "invalid merge creates no history");
+    equal(
+      [...snapshots.board.board.selectedShotIds],
+      ["shot-1", "shot-3"],
+      "invalid merge preserves selection",
+    );
+    if (fullUi) {
+      for (const mode of ["list", "grid"]) {
+        await act(() => snapshots.board.board.setViewMode(mode));
+        const row = document.querySelector('[data-storyboard-shot-id="shot-1"]');
+        await act(() =>
+          row.dispatchEvent(
+            new MouseEvent("contextmenu", { bubbles: true, button: 2, clientX: 100, clientY: 150 }),
+          ),
+        );
+        const merge = Array.from(document.querySelectorAll('[role="menuitem"]')).find((item) =>
+          item.textContent.includes("合并(M)"),
+        );
+        equal(merge?.disabled, true, `${mode} disables merge for nonadjacent selected shots`);
+        await act(() =>
+          window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+        );
+      }
+      await act(() => snapshots.board.board.setViewMode("list"));
+    }
+    await act(() => snapshots.board.board.mergeShots(["shot-3", "shot-2"]));
+    equal(
+      getProjectWorkspaceSnapshot().storyboards["a:a:fp"].shots.map((shot) => [
+        shot.id,
+        shot.start_frame,
+        shot.end_frame,
+      ]),
+      [
+        ["shot-1", 0, 59],
+        ["shot-2", 60, 179],
+        ["shot-4", 180, 239],
+      ],
+      "adjacent merge removes only the chosen internal cut",
+    );
+    equal(
+      [...snapshots.board.board.selectedShotIds],
+      ["shot-2"],
+      "merged selection keeps the first chronological shot",
+    );
+    results.push("merge rejects nonadjacent shots and preserves outside intervals");
+    await reset();
+    await act(() => snapshots.port.storyboardUpdated("a:a:fp", "four shots", () => fourShots));
+    await act(() => snapshots.board.source.toggleSource("b"));
+    const aShot = (id) => sourceRowId("a:a:fp", `shot-${id}`);
+    const bShot = (id) => sourceRowId("b:b:fp", `shot-${id}`);
+    const boardsBeforeMerge = getProjectWorkspaceSnapshot().storyboards;
+    const mergeCursor = snapshots.port.projectHistory.cursor;
+    await act(() => snapshots.board.board.mergeShots([aShot(1), aShot(3), bShot(1), bShot(2)]));
+    equal(
+      getProjectWorkspaceSnapshot().storyboards,
+      boardsBeforeMerge,
+      "one nonadjacent source rejects the entire multi-source merge",
+    );
+    equal(snapshots.port.projectHistory.cursor, mergeCursor, "rejected batch creates no history");
+    await act(() => snapshots.board.board.mergeShots([aShot(1), aShot(2), bShot(1), bShot(2)]));
+    equal(
+      getProjectWorkspaceSnapshot().storyboards["a:a:fp"].shots.length,
+      3,
+      "valid batch merges adjacent A shots",
+    );
+    equal(
+      getProjectWorkspaceSnapshot().storyboards["b:b:fp"].shots.length,
+      1,
+      "valid batch merges adjacent B shots",
+    );
+    equal(
+      snapshots.port.projectHistory.cursor,
+      mergeCursor + 1,
+      "valid multi-source merge is one history entry",
+    );
+    await act(() => snapshots.port.projectHistoryJumped(mergeCursor));
+    equal(
+      getProjectWorkspaceSnapshot().storyboards,
+      boardsBeforeMerge,
+      "undo restores all merged sources",
+    );
+    results.push("multi-source merges validate atomically and undo together");
     await reset();
     await act(() => snapshots.board.source.selection.rememberFrame("a", 48));
     await act(() => snapshots.board.board.shotSelectionReplaced(["shot-2"], "shot-2"));
@@ -612,6 +941,7 @@ export async function runMultiScopeTests(fullUi = false) {
     results.push("deleting a pending confirmation target cancels result and preserves undo");
     return results;
   } finally {
+    stateHub.remove(PLAYBACK_STATUS_PROJECTION, playbackOwner);
     flushSync(() => root.unmount());
     host.remove();
     window.__TAURI_INTERNALS__ = previousNative;

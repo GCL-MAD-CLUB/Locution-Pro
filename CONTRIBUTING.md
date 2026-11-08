@@ -77,4 +77,4 @@ npm run docs:build
 
 引入第三方模型、二进制或代码时固定来源并更新[第三方声明](THIRD_PARTY_NOTICES)。保留许可原文，不用主应用版本替换依赖或协议版本。
 
-从最新 main 创建主题分支，PR 说明问题、最终行为和实际验证。提交信息使用 Conventional Commits，通常 squash merge。版本准备、tag 与正式密钥要求见[发布流程](docs/releasing.md)。
+从最新 main 创建主题分支，PR 标题使用英文；PR 说明问题、最终行为和实际验证。提交信息使用 Conventional Commits，通常 squash merge。版本准备、tag 与正式密钥要求见[发布流程](docs/releasing.md)。

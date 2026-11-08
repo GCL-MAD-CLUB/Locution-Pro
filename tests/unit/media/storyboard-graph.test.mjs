@@ -23,6 +23,42 @@ const input = (id, vector) => ({ id, vector, thumbnailFrame: Number(id) * 10 });
 const connect = (edges, vectors) =>
   structuredClone(graphModule.connectStoryboardGraphEdges(edges, vectors));
 
+test("interactive forces tether a grabbed node, move its neighbors and cool after release", () => {
+  const graph = build(Array.from({ length: 9 }, (_, i) => input(String(i), [1, i / 8, 0.2])));
+  const snapshot = structuredClone(graph);
+  const nodes = graph.nodes.map((node) => ({ ...node }));
+  const simulation = graphModule.createStoryboardGraphSimulation(nodes, graph.edges);
+  try {
+    const held = nodes[4];
+    const original = { x: held.x, y: held.y };
+    held.fx = held.x + 120;
+    held.fy = held.y + 60;
+    simulation.alpha(0.3).alphaTarget(0.25).tick(45);
+    assert.equal(held.x, held.fx);
+    assert.equal(held.y, held.fy);
+    assert.ok(
+      nodes.some(
+        (node, i) =>
+          i !== 4 && Math.hypot(node.x - graph.nodes[i].x, node.y - graph.nodes[i].y) > 2,
+      ),
+    );
+    const release = { x: held.x, y: held.y };
+    held.fx = null;
+    held.fy = null;
+    simulation.alphaTarget(0).tick(320);
+    assert.ok(simulation.alpha() < simulation.alphaMin());
+    assert.ok(Math.hypot(held.x - release.x, held.y - release.y) > 2);
+    assert.ok(
+      Math.hypot(held.x - original.x, held.y - original.y) > 1,
+      "settles into a recomputed layout instead of snapping to the original coordinate",
+    );
+    assert.ok(nodes.every((node) => [node.x, node.y, node.vx, node.vy].every(Number.isFinite)));
+    assert.deepEqual(graph, snapshot, "semantic graph and numeric edge indices remain immutable");
+  } finally {
+    simulation.stop();
+  }
+});
+
 test("filters and deletion reconnect visible nodes without repeating cached pair comparisons", () => {
   const shots = Array.from({ length: 12 }, (_, index) =>
     input(String(index), [Math.cos(index / 3), Math.sin(index / 3), 0.2]),

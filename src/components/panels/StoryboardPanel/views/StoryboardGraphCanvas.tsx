@@ -48,6 +48,7 @@ import { usePanelActive } from "../../../../runtime/systems/PanelState";
 import type { StoryboardShot, StoryboardShotAnnotation } from "../../../../types";
 import { StoryboardGraphThumbnail } from "./StoryboardGraphThumbnail";
 import { StoryboardGraphTools } from "./StoryboardGraphTools";
+import { useStoryboardGraphMotion } from "./useStoryboardGraphMotion";
 import "./StoryboardGraphView.css";
 
 export interface StoryboardGraphCanvasProps {
@@ -77,85 +78,8 @@ const previewFrameGap = 3;
 const graphDotHoverScale = 1.1;
 const graphHoverDurationMs = 120;
 const graphHoverMinPixelsPerWorldUnit = 0.35;
-const emptyNodes: StoryboardGraph["nodes"] = [];
 const emptyAnnotations: Readonly<Record<string, StoryboardShotAnnotation>> = {};
 const emptyNeighborhood = new Set<string>();
-
-// Topology changes immediately; positions, radii, hit targets, links and the
-// overview move together. Preserve velocity when another filter interrupts.
-function useGraphNodeMotion(target: StoryboardGraph["nodes"]) {
-  const [painted, setPainted] = useState(target);
-  const motion = useRef(
-    new Map<string, { x: number; y: number; radius: number; vx: number; vy: number; vr: number }>(),
-  );
-  const initialized = useRef(false);
-  useLayoutEffect(() => {
-    const immediate =
-      !initialized.current || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (target.length) initialized.current = true;
-    for (const node of target) {
-      if (immediate || !motion.current.has(node.id))
-        motion.current.set(node.id, { ...node, vx: 0, vy: 0, vr: 0 });
-    }
-    if (immediate || !target.length) {
-      setPainted(target);
-      return;
-    }
-    let frame = 0;
-    let previous = performance.now();
-    const started = previous;
-    const tick = (now: number) => {
-      const elapsed = Math.min(1 / 30, Math.max(0, (now - previous) / 1000));
-      previous = now;
-      const steps = Math.max(1, Math.ceil(elapsed * 120));
-      const dt = elapsed / steps;
-      let settled = true;
-      const next = target.map((node) => {
-        const current = motion.current.get(node.id)!;
-        for (let step = 0; step < steps; step++) {
-          current.vx += ((node.x - current.x) * 180 - current.vx * 20) * dt;
-          current.vy += ((node.y - current.y) * 180 - current.vy * 20) * dt;
-          current.vr += ((node.radius - current.radius) * 180 - current.vr * 20) * dt;
-          current.x += current.vx * dt;
-          current.y += current.vy * dt;
-          current.radius += current.vr * dt;
-        }
-        if (
-          now - started < 1400 &&
-          (Math.hypot(node.x - current.x, node.y - current.y, node.radius - current.radius) >
-            0.02 ||
-            Math.hypot(current.vx, current.vy, current.vr) > 0.1)
-        )
-          settled = false;
-        return { ...node, x: current.x, y: current.y, radius: current.radius };
-      });
-      if (settled) {
-        for (const node of target) motion.current.set(node.id, { ...node, vx: 0, vy: 0, vr: 0 });
-        setPainted(target);
-      } else {
-        setPainted(next);
-        frame = requestAnimationFrame(tick);
-      }
-    };
-    // Paint the retained positions before the first animation frame.
-    setPainted(
-      target.map((node) => {
-        const current = motion.current.get(node.id)!;
-        return { ...node, x: current.x, y: current.y, radius: current.radius };
-      }),
-    );
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [target]);
-  return useMemo(() => {
-    if (painted === target) return target;
-    const byId = new Map(painted.map((node) => [node.id, node]));
-    return target.map((node) => {
-      const previous = byId.get(node.id);
-      return previous ? { ...node, x: previous.x, y: previous.y, radius: previous.radius } : node;
-    });
-  }, [target, painted]);
-}
 
 function annotationStyle(
   annotation: StoryboardShotAnnotation | undefined,
@@ -216,6 +140,16 @@ interface MarqueeGesture {
   active: boolean;
   timer?: number;
   spray?: { historyGroupId: string };
+}
+
+interface NodeDragGesture {
+  id: number;
+  nodeId: string;
+  start: { x: number; y: number };
+  offset: { x: number; y: number };
+  camera: StoryboardGraphCamera;
+  capture: HTMLElement;
+  active: boolean;
 }
 
 type GraphNodeEvent = MouseEvent<HTMLElement>;
@@ -472,7 +406,8 @@ export function StoryboardGraphCanvas({
     },
     [resetHover],
   );
-  const [dragging, setDragging] = useState<"canvas" | "overview" | null>(null);
+  const [dragging, setDragging] = useState<"canvas" | "overview" | "node" | null>(null);
+  const nodeDragRef = useRef<NodeDragGesture | null>(null);
   const [navigationTool, setTool] = useState<StoryboardGraphTool>("pointer");
   const tool = sprayActive ? "pointer" : navigationTool;
   const spraySequenceRef = useRef(0);
@@ -494,9 +429,8 @@ export function StoryboardGraphCanvas({
     selectionRef.current = ids;
     callbacksRef.current.onSelectionChange(ids);
   }, []);
-  const nodes = useGraphNodeMotion(graph?.nodes ?? emptyNodes);
+  const { nodes, beginDrag, moveDrag, endDrag } = useStoryboardGraphMotion(graph, panelActive);
   const canvas = useMemo(() => storyboardGraphCanvas(nodes), [nodes]);
-  const overviewCanvas = useMemo(() => storyboardGraphOverviewCanvas(size, canvas), [size, canvas]);
   const initialCamera = useMemo(
     () => fitStoryboardGraphCamera(nodes, size, canvas),
     [nodes, size, canvas],
@@ -504,11 +438,24 @@ export function StoryboardGraphCanvas({
   const [navigation, setNavigation] = useState<{
     graph: StoryboardGraph | undefined;
     camera: StoryboardGraphCamera;
+    layoutSize?: typeof size;
   } | null>(null);
-  const camera = useMemo(
+  const camera = useMemo(() => {
+    const current = navigation ? navigation.camera : initialCamera;
+    // Moving nodes change the bounds. Preserve the transform through the grab
+    // and cooling; a resize or explicit navigation applies the new bounds.
+    return navigation?.layoutSize === size
+      ? current
+      : constrainStoryboardGraphCamera(current, size, canvas);
+  }, [navigation, initialCamera, size, canvas]);
+  const overviewCanvas = useMemo(
     () =>
-      constrainStoryboardGraphCamera(navigation ? navigation.camera : initialCamera, size, canvas),
-    [navigation, graph, initialCamera, size, canvas],
+      storyboardGraphOverviewCanvas(
+        size,
+        canvas,
+        navigation?.layoutSize === size ? camera : undefined,
+      ),
+    [size, canvas, navigation?.layoutSize, camera],
   );
   const cameraRef = useRef(camera);
   useLayoutEffect(() => {
@@ -561,9 +508,10 @@ export function StoryboardGraphCanvas({
   const edges = useMemo(
     () =>
       graph?.edges.filter(
-        (edge) => shotsById.has(nodes[edge.source].id) && shotsById.has(nodes[edge.target].id),
+        (edge) =>
+          shotsById.has(graph.nodes[edge.source].id) && shotsById.has(graph.nodes[edge.target].id),
       ) ?? [],
-    [graph, nodes, shotsById],
+    [graph, shotsById],
   );
   const neighborhood = activeHoveredId
     ? (neighborhoods.get(activeHoveredId) ?? emptyNeighborhood)
@@ -756,9 +704,16 @@ export function StoryboardGraphCanvas({
       const selection = marqueeRef.current;
       const pan = panRef.current;
       const overview = overviewDragRef.current;
+      const node = nodeDragRef.current;
+      nodeDragRef.current = null;
       marqueeRef.current = null;
       panRef.current = null;
       overviewDragRef.current = null;
+      if (node) {
+        endDrag();
+        suppressClickRef.current = true;
+        if (node.capture.hasPointerCapture(node.id)) node.capture.releasePointerCapture(node.id);
+      }
       if (selection) {
         window.clearTimeout(selection.timer);
         if (selection.capture.hasPointerCapture(selection.id))
@@ -773,7 +728,7 @@ export function StoryboardGraphCanvas({
       setMarquee(null);
       setDragging(null);
     },
-    [commitSelection],
+    [commitSelection, endDrag],
   );
 
   useEffect(() => {
@@ -808,7 +763,7 @@ export function StoryboardGraphCanvas({
     const escape = (event: globalThis.KeyboardEvent) => {
       if (
         event.key !== "Escape" ||
-        (!marqueeRef.current && !panRef.current && !overviewDragRef.current)
+        (!marqueeRef.current && !panRef.current && !overviewDragRef.current && !nodeDragRef.current)
       )
         return;
       event.preventDefault();
@@ -925,6 +880,21 @@ export function StoryboardGraphCanvas({
       const capture = node ?? event.currentTarget;
       capture.focus({ preventScroll: true });
       capture.setPointerCapture(event.pointerId);
+      const nodeId = node?.dataset.storyboardShotId;
+      const graphNode = nodeId ? nodesById.get(nodeId) : undefined;
+      if (graphNode && !sprayActive) {
+        const point = storyboardGraphWorldPoint(canvasPoint(event), cameraRef.current, size);
+        nodeDragRef.current = {
+          id: event.pointerId,
+          nodeId: graphNode.id,
+          start: { x: event.clientX, y: event.clientY },
+          offset: { x: graphNode.x - point.x, y: graphNode.y - point.y },
+          camera: cameraRef.current,
+          capture,
+          active: false,
+        };
+        return;
+      }
       const gesture: MarqueeGesture = {
         id: event.pointerId,
         start: canvasPoint(event),
@@ -955,6 +925,32 @@ export function StoryboardGraphCanvas({
   }
 
   function moveCanvasGesture(event: PointerEvent<HTMLDivElement>) {
+    const node = nodeDragRef.current;
+    if (node?.id === event.pointerId) {
+      event.preventDefault();
+      if (!node.active) {
+        if (Math.hypot(event.clientX - node.start.x, event.clientY - node.start.y) < 4) return;
+        node.active = true;
+        suppressClickRef.current = true;
+        lastClickRef.current = null;
+        setNavigation({ graph, camera: node.camera, layoutSize: size });
+        setDragging("node");
+        resetHover();
+        beginDrag(node.nodeId);
+      }
+      const stage = stageRef.current!;
+      const bounds = stage.getBoundingClientRect();
+      const point = storyboardGraphWorldPoint(
+        {
+          x: event.clientX - bounds.left - stage.clientLeft,
+          y: event.clientY - bounds.top - stage.clientTop,
+        },
+        node.camera,
+        size,
+      );
+      moveDrag({ x: point.x + node.offset.x, y: point.y + node.offset.y });
+      return;
+    }
     const selection = marqueeRef.current;
     if (selection?.id === event.pointerId) {
       event.preventDefault();
@@ -976,6 +972,15 @@ export function StoryboardGraphCanvas({
   }
 
   function stopCanvasGesture(event: PointerEvent<HTMLDivElement>) {
+    const node = nodeDragRef.current;
+    if (node?.id === event.pointerId) {
+      nodeDragRef.current = null;
+      if (node.active) endDrag();
+      if (event.type !== "pointerup") suppressClickRef.current = true;
+      setDragging(null);
+      if (node.capture.hasPointerCapture(node.id)) node.capture.releasePointerCapture(node.id);
+      return;
+    }
     const selection = marqueeRef.current;
     if (selection?.id === event.pointerId) {
       if (event.type !== "pointerup") {
@@ -1160,7 +1165,7 @@ export function StoryboardGraphCanvas({
   return (
     <div
       ref={stageRef}
-      className={`storyboard-graph-view is-${tool} ${sprayActive ? "is-spraying" : ""} ${hoveredNode ? "has-focus" : ""} ${dragging === "canvas" ? "is-panning" : ""} ${marquee ? "is-selecting" : ""}`}
+      className={`storyboard-graph-view is-${tool} ${sprayActive ? "is-spraying" : ""} ${hoveredNode ? "has-focus" : ""} ${dragging === "canvas" ? "is-panning" : ""} ${dragging === "node" ? "is-dragging-node" : ""} ${marquee ? "is-selecting" : ""}`}
       style={
         {
           "--storyboard-graph-dot-hover-scale": `${graphDotHoverScale}`,

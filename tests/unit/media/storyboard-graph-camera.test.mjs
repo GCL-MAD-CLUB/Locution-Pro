@@ -24,6 +24,26 @@ const nodes = [
   { id: "b", x: 1800, y: 800, radius: 4, thumbnailFrame: 10 },
 ];
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, `${a} != ${b}`);
+test("overview contains the retained viewport when a dragged layout shrinks or shifts", () => {
+  const canvas = storyboardGraphCanvas([{ ...nodes[0], x: 0, y: 0 }]);
+  const snapshot = { ...canvas };
+  const camera = { x: -450, y: 210, zoom: 0.5 };
+  const viewport = storyboardGraphViewport(camera, size);
+  const overview = storyboardGraphOverviewCanvas(size, canvas, camera);
+  close(overview.width / overview.height, 16 / 9);
+  for (const rect of [canvas, viewport]) {
+    assert.ok(rect.x >= overview.x - 1e-8);
+    assert.ok(rect.y >= overview.y - 1e-8);
+    assert.ok(rect.x + rect.width <= overview.x + overview.width + 1e-8);
+    assert.ok(rect.y + rect.height <= overview.y + overview.height + 1e-8);
+  }
+  assert.deepEqual(
+    canvas,
+    snapshot,
+    "the actual graph canvas remains its tight bounds plus padding",
+  );
+});
+
 test("cached neighborhoods preserve undirected adjacency and isolated nodes", () => {
   const graph = {
     nodes: [...nodes, { id: "isolated", x: 0, y: 0, radius: 4, thumbnailFrame: 0 }],

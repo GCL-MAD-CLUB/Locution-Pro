@@ -136,6 +136,7 @@ export function mountLiveGraph(holdIndex = false) {
     }
   };
   window.__TAURI_INTERNALS__ = {
+    convertFileSrc: (path) => path,
     transformCallback: () => 1,
     unregisterCallback: () => {},
     invoke: async (command, args) => {

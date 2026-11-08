@@ -90,6 +90,7 @@ export function storyboardGraphNodeScale(zoom: number) {
 export function storyboardGraphOverviewCanvas(
   size: StoryboardGraphSize,
   canvas: StoryboardGraphRect,
+  camera?: StoryboardGraphCamera,
 ): StoryboardGraphRect {
   const { min } = storyboardGraphZoomLimits(size, canvas);
   const height = Math.max(
@@ -98,11 +99,27 @@ export function storyboardGraphOverviewCanvas(
     ((Math.max(1, size.width) / min) * 9) / 16,
   );
   const width = (height * 16) / 9;
-  return {
+  const overview = {
     x: canvas.x + (canvas.width - width) / 2,
     y: canvas.y + (canvas.height - height) / 2,
     width,
     height,
+  };
+  if (!camera) return overview;
+  // Dragging and cooling preserve the camera while graph bounds change. The
+  // overview must contain that retained viewport as well as the full graph.
+  const viewport = storyboardGraphViewport(camera, size);
+  const left = Math.min(overview.x, viewport.x);
+  const top = Math.min(overview.y, viewport.y);
+  const right = Math.max(overview.x + overview.width, viewport.x + viewport.width);
+  const bottom = Math.max(overview.y + overview.height, viewport.y + viewport.height);
+  const fullHeight = Math.max(bottom - top, ((right - left) * 9) / 16);
+  const fullWidth = (fullHeight * 16) / 9;
+  return {
+    x: (left + right - fullWidth) / 2,
+    y: (top + bottom - fullHeight) / 2,
+    width: fullWidth,
+    height: fullHeight,
   };
 }
 

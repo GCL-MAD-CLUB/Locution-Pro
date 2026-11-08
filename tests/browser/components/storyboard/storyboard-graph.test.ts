@@ -37,6 +37,112 @@ const sprays = (
   page.evaluate(() => (window as any).graphSprays);
 const enableSpray = (page: Page) => page.evaluate(() => (window as any).graphSetSprayActive(true));
 
+for (const spread of [1, 5]) {
+  test(`pointer node dragging at spread ${spread} pulls neighbors, preserves selection and playback, then cools to rest`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await mount(page, false, spread);
+    await page.evaluate(() => (window as any).graphSetSelection(new Set(["8"])));
+    const positions = () =>
+      page.locator(".storyboard-graph-dot").evaluateAll((elements) =>
+        elements.map((element) => ({
+          x: parseFloat((element as HTMLElement).style.left),
+          y: parseFloat((element as HTMLElement).style.top),
+        })),
+      );
+    const before = await positions();
+    const initialCamera = await transform(page);
+    const start = await center(shot(page, 4));
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    // Holding a node is a grab candidate; blank space still owns marquee selection.
+    await page.waitForTimeout(220);
+    await expect(page.locator(".storyboard-graph-marquee")).toHaveCount(0);
+    expect(await positions()).toEqual(before);
+    const end = { x: start.x + 100, y: start.y + 65 };
+    await page.mouse.move(end.x, end.y, { steps: 10 });
+    await expect(page.locator(".storyboard-graph-view")).toHaveClass(/is-dragging-node/);
+    await expect
+      .poll(async () => {
+        const point = await center(shot(page, 4));
+        return Math.hypot(point.x - end.x, point.y - end.y);
+      })
+      .toBeLessThan(1);
+    await expect
+      .poll(async () => {
+        const next = await positions();
+        return Math.hypot(next[3].x - before[3].x, next[3].y - before[3].y);
+      })
+      .toBeGreaterThan(2);
+    expect(await transform(page)).toEqual(initialCamera);
+    expect(await selected(page)).toEqual(["8"]);
+    expect(await activations(page)).toEqual([]);
+    await expect(page.locator(".storyboard-graph-marquee")).toHaveCount(0);
+    const held = (await positions())[4];
+    await page.mouse.up();
+    await page.mouse.move(35, 460);
+    await expect(page.locator(".storyboard-graph-view")).not.toHaveClass(/is-dragging-node/);
+    await expect
+      .poll(async () => {
+        const next = (await positions())[4];
+        return Math.hypot(next.x - held.x, next.y - held.y);
+      })
+      .toBeGreaterThan(2);
+    expect(await selected(page)).toEqual(["8"]);
+    expect(await activations(page)).toEqual([]);
+    // Sampling two frames after cooling verifies the live timer really stopped.
+    await expect
+      .poll(() =>
+        page.evaluate(async () => {
+          const read = () =>
+            Array.from(
+              document.querySelectorAll<HTMLElement>(".storyboard-graph-dot"),
+              (node) => node.style.cssText,
+            ).join("|");
+          const previous = read();
+          await new Promise((resolve) => setTimeout(resolve, 80));
+          return read() === previous;
+        }),
+      )
+      .toBe(true);
+    expect(await transform(page)).toEqual(initialCamera);
+    await assertFrame(page);
+    await shot(page, 0).click();
+    expect(await selected(page)).toEqual(["0"]);
+    expect(await activated(page)).toBe("0");
+  });
+}
+
+test("canceling or losing capture releases a dragged node without choosing or seeking it", async ({
+  page,
+}) => {
+  for (const cancel of ["escape", "blur", "pointercancel", "lostcapture"] as const) {
+    await mount(page);
+    const node = shot(page, 4);
+    const start = await center(node);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 50, start.y + 35, { steps: 5 });
+    await expect(page.locator(".storyboard-graph-view")).toHaveClass(/is-dragging-node/);
+    if (cancel === "escape") await page.keyboard.press("Escape");
+    else if (cancel === "blur") await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    else
+      await node.evaluate((element, cancel) => {
+        // A real captured pointer is used; force only the exceptional termination.
+        const pointerId = Array.from({ length: 10 }, (_, i) => i).find((id) =>
+          element.hasPointerCapture(id),
+        )!;
+        if (cancel === "lostcapture") element.releasePointerCapture(pointerId);
+        else element.dispatchEvent(new PointerEvent("pointercancel", { pointerId, bubbles: true }));
+      }, cancel);
+    await expect(page.locator(".storyboard-graph-view")).not.toHaveClass(/is-dragging-node/);
+    await page.mouse.up();
+    expect(await selected(page)).toEqual([]);
+    expect(await activations(page)).toEqual([]);
+  }
+});
+
 async function topRowMarquee(page: Page) {
   const first = await center(shot(page, 0));
   const last = await center(shot(page, 2));
@@ -720,7 +826,7 @@ test("hand pans from nodes without selecting or seeking; pointer zooms and selec
   const bounds = (await overview.boundingBox())!;
   const beforeLocate = await transform(page);
   await page.mouse.click(bounds.x + 5, bounds.y + 5);
-  expect(await transform(page)).not.toEqual(beforeLocate);
+  await expect.poll(() => transform(page)).not.toEqual(beforeLocate);
   await assertFrame(page);
   const beforeKey = await transform(page);
   await overview.press("ArrowRight");

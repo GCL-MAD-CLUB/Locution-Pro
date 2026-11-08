@@ -241,13 +241,50 @@ function seededRandom() {
   };
 }
 
-interface ForceNode extends SimulationNodeDatum {
+export interface StoryboardGraphForceNode extends SimulationNodeDatum {
   id: string;
   radius: number;
 }
 
-interface ForceEdge extends SimulationLinkDatum<ForceNode> {
+interface ForceEdge<Node extends StoryboardGraphForceNode> extends SimulationLinkDatum<Node> {
   similarity: number;
+}
+
+// Worker layouts and interactive dragging use identical forces. D3 mutates only
+// private node/link copies, never the graph or its cached semantic similarities.
+export function createStoryboardGraphSimulation<Node extends StoryboardGraphForceNode>(
+  nodes: Node[],
+  edges: readonly StoryboardGraphEdge[],
+) {
+  const degrees = nodes.map(() => 0);
+  for (const edge of edges) {
+    degrees[edge.source]++;
+    degrees[edge.target]++;
+  }
+  const links: ForceEdge<Node>[] = edges.map((edge) => ({ ...edge }));
+  return forceSimulation(nodes)
+    .stop()
+    .randomSource(seededRandom())
+    .velocityDecay(0.4)
+    .force(
+      "link",
+      forceLink<Node, ForceEdge<Node>>(links)
+        .distance((edge) => 30 + (1 - edge.similarity) * 90)
+        .strength((edge) => {
+          const source = edge.source as Node;
+          const target = edge.target as Node;
+          const degree = Math.max(1, Math.min(degrees[source.index!], degrees[target.index!]));
+          return (0.15 + 0.85 * edge.similarity ** 2) / degree;
+        }),
+    )
+    .force("charge", forceManyBody<Node>().strength(-120).distanceMin(12))
+    .force(
+      "collision",
+      forceCollide<Node>((node) => node.radius + storyboardGraphCollisionPadding).iterations(3),
+    )
+    .force("center", forceCenter(0, 0))
+    .force("x", forceX<Node>(0).strength(0.015))
+    .force("y", forceY<Node>(0).strength(0.015));
 }
 
 function forceDirectedPositions(
@@ -259,41 +296,14 @@ function forceDirectedPositions(
 ) {
   if (shots.length <= 1) return shots.map(() => [0, 0]);
   const positions = new Map(previous.map((node) => [node.id, node]));
-  const nodes: ForceNode[] = shots.map((shot, i) => ({
+  const nodes: StoryboardGraphForceNode[] = shots.map((shot, i) => ({
     id: shot.id,
     radius: storyboardGraphNodeRadius(degrees[i]),
     x: positions.get(shot.id)?.x,
     y: positions.get(shot.id)?.y,
   }));
-  // D3 replaces link indices with node references. Keep those mutations private
-  // to this simulation so the public graph retains serializable numeric edges.
-  const links: ForceEdge[] = edges.map((edge) => ({ ...edge }));
-  const strength = (edge: ForceEdge) => {
-    const source = edge.source as ForceNode;
-    const target = edge.target as ForceNode;
-    const degree = Math.max(1, Math.min(degrees[source.index!], degrees[target.index!]));
-    return (0.15 + 0.85 * edge.similarity ** 2) / degree;
-  };
-  const simulation = forceSimulation(nodes).stop().randomSource(seededRandom());
+  const simulation = createStoryboardGraphSimulation(nodes, edges);
   try {
-    simulation
-      .velocityDecay(0.4)
-      .force(
-        "link",
-        forceLink<ForceNode, ForceEdge>(links)
-          .distance((edge) => 30 + (1 - edge.similarity) * 90)
-          .strength(strength),
-      )
-      .force("charge", forceManyBody<ForceNode>().strength(-120).distanceMin(12))
-      .force(
-        "collision",
-        forceCollide<ForceNode>((node) => node.radius + storyboardGraphCollisionPadding).iterations(
-          3,
-        ),
-      )
-      .force("center", forceCenter(0, 0))
-      .force("x", forceX<ForceNode>(0).strength(0.015))
-      .force("y", forceY<ForceNode>(0).strength(0.015));
     const ticks = Math.ceil(
       Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay()),
     );

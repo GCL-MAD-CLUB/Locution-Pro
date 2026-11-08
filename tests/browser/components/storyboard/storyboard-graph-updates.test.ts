@@ -39,6 +39,65 @@ async function assertConnected(page: Page, ids: string[]) {
   expect(connected).toBe(true);
 }
 
+test("a single remaining node eases back after release instead of jumping to the center", async ({
+  page,
+}) => {
+  await mount(page);
+  await page.evaluate(() => (window as any).graphLiveFilter(["0"]));
+  await assertConnected(page, ["0"]);
+  const node = page.locator('.storyboard-graph-dot[data-storyboard-shot-id="0"]');
+  const box = (await node.boundingBox())!;
+  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 100, start.y + 40, { steps: 6 });
+  await expect
+    .poll(() => node.evaluate((element) => parseFloat((element as HTMLElement).style.left)))
+    .toBeGreaterThan(90);
+  await page.mouse.up();
+  expect(
+    await node.evaluate((element) => parseFloat((element as HTMLElement).style.left)),
+  ).toBeGreaterThan(50);
+  await expect
+    .poll(() => node.evaluate((element) => parseFloat((element as HTMLElement).style.left)))
+    .toBeLessThan(2);
+});
+
+test("filtering during a node drag releases capture and transitions from the live layout", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await mount(page);
+  const node = page.locator('.storyboard-graph-dot[data-storyboard-shot-id="0"]');
+  const box = (await node.boundingBox())!;
+  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 70, start.y + 45, { steps: 6 });
+  await expect(page.locator(".storyboard-graph-view")).toHaveClass(/is-dragging-node/);
+  await page.evaluate(() => (window as any).graphLiveFilter(["0", "2", "4", "6", "8"]));
+  await assertConnected(page, ["0", "2", "4", "6", "8"]);
+  await expect(page.locator(".storyboard-graph-view")).not.toHaveClass(/is-dragging-node/);
+  await page.mouse.up();
+  const target = await page.evaluate(() => (window as any).graphLiveTarget.nodes[0]);
+  await expect
+    .poll(() =>
+      node.evaluate(
+        (element, target) =>
+          Math.hypot(
+            parseFloat((element as HTMLElement).style.left) - target.x,
+            parseFloat((element as HTMLElement).style.top) - target.y,
+          ),
+        target,
+      ),
+    )
+    .toBeLessThan(0.05);
+  await expect(
+    page.locator(".storyboard-graph-message, .topbar-progress, .storyboard-graph-marquee"),
+  ).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).graphLiveWorkers)).toBe(1);
+});
+
 test("filter updates reuse vectors and the worker, keep the scene visible and spring into a connected layout", async ({
   page,
 }) => {

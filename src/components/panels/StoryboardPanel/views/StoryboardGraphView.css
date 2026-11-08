@@ -33,6 +33,11 @@
   cursor: grabbing;
 }
 
+.storyboard-graph-view.is-dragging-node,
+.storyboard-graph-view.is-dragging-node .storyboard-graph-dot {
+  cursor: grabbing;
+}
+
 .storyboard-graph-view.is-hand,
 .storyboard-graph-view.is-hand .storyboard-graph-dot {
   cursor: grab;

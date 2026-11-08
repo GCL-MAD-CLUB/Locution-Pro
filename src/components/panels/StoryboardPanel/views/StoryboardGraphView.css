@@ -287,16 +287,18 @@
 
 .storyboard-graph-preview-metadata {
   position: absolute;
-  top: 4px;
-  left: 4px;
+  top: 3px;
+  left: 3px;
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 12px;
-  padding: 2px;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--color-surface-thumbnail) 75%, var(--color-transparent));
+  box-sizing: border-box;
+  gap: 3px;
+  height: 14px;
+  padding: 1px 3px;
+  border: 1px solid var(--color-border-frame);
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--color-surface-thumbnail) 88%, var(--color-transparent));
   pointer-events: none;
 }
 
@@ -312,15 +314,20 @@
 
 .storyboard-graph-preview-rating {
   display: flex;
+  flex: 0 0 auto;
+  align-items: center;
   gap: 1px;
+  height: 10px;
   color: var(--color-annotation-rating);
+  line-height: 0;
 }
 
 .storyboard-graph-preview-rating svg {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   fill: currentColor;
   stroke: currentColor;
+  stroke-width: 1.25;
 }
 
 .storyboard-graph-view.is-spraying,

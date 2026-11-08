@@ -37,6 +37,49 @@ const sprays = (
   page.evaluate(() => (window as any).graphSprays);
 const enableSpray = (page: Page) => page.evaluate(() => (window as any).graphSetSprayActive(true));
 
+test("eye toggle hides all previews across tools while keeping selection, hover and spray behavior", async ({
+  page,
+}) => {
+  await mount(page);
+  const toggle = page.getByRole("button", { name: "显示缩略图", exact: true });
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(toggle.locator("svg")).toBeVisible();
+  await shot(page, 4).click();
+  await expect(page.locator('[data-preview-shot-id="4"]')).toBeVisible();
+  const beforeCamera = await transform(page);
+  const beforeActivations = await activations(page);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".storyboard-graph-preview")).toHaveCount(0);
+  await shot(page, 0).hover();
+  await expect(shot(page, 0)).toHaveClass(/is-hovered/);
+  await expect(
+    page.locator(".storyboard-graph-preview, .storyboard-graph-hover-bridge"),
+  ).toHaveCount(0);
+  expect(await selected(page)).toEqual(["4"]);
+  expect(await activations(page)).toEqual(beforeActivations);
+  expect(await transform(page)).toEqual(beforeCamera);
+  await page.getByRole("button", { name: "手型工具", exact: true }).click();
+  await shot(page, 0).hover();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".storyboard-graph-preview")).toHaveCount(0);
+  await toggle.click();
+  await shot(page, 0).hover();
+  await expect(page.locator(".storyboard-graph-preview")).toHaveCount(3);
+  await enableSpray(page);
+  await toggle.click();
+  await expect(page.locator(".storyboard-graph-view")).toHaveClass(/is-spraying/);
+  await expect(page.locator(".storyboard-graph-preview")).toHaveCount(0);
+  expect(await sprays(page)).toEqual([]);
+  expect(await selected(page)).toEqual(["4"]);
+  expect(await activations(page)).toEqual(beforeActivations);
+  await toggle.focus();
+  await page.keyboard.press("Space");
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator('[data-preview-shot-id="4"]')).toBeVisible();
+  expect(await sprays(page)).toEqual([]);
+});
+
 for (const spread of [1, 5]) {
   test(`pointer node dragging at spread ${spread} pulls neighbors, preserves selection and playback, then cools to rest`, async ({
     page,
@@ -1068,19 +1111,21 @@ test("unselected pointer hover reveals missing neighbors at 60% while selected p
   const zIndex = (id: number) =>
     preview(id).evaluate((element) => Number(getComputedStyle(element).zIndex));
   const neighborZ = await zIndex(3);
-  // Moving onto a revealed preview preserves the displayed set and the
-  // selected neighbor's opacity, using the existing pointer emphasis rule.
-  await preview(3).hover();
+  // Supplementary previews are visual only; selected and directly hovered
+  // previews keep normal pointer emphasis and stacking behavior.
+  await expect(preview(3)).toHaveCSS("pointer-events", "none");
+  await expect(preview(6)).toHaveCSS("pointer-events", "none");
   expect(await zIndex(3)).toBe(neighborZ);
   expect(await zIndex(3)).toBeLessThan(await zIndex(5));
   await expect(preview(3)).toHaveCSS("opacity", "0.6");
   await expect.poll(displayed).toEqual(["0", "3", "4", "5", "6"]);
   await expect(preview(4)).toHaveCSS("opacity", "1");
-  await expect(preview(0)).toHaveCSS("opacity", "0.6");
+  await expect(preview(0)).toHaveCSS("opacity", "1");
   expect(await selected(page)).toEqual(["0", "4"]);
   expect(await activations(page)).toEqual([]);
   await preview(4).hover();
   expect(await zIndex(4)).toBeGreaterThan(await zIndex(5));
+  await expect(preview(0)).toHaveCSS("opacity", "0.6");
   await preview(5).hover();
   expect(await zIndex(5)).toBeGreaterThan(await zIndex(4));
   await page.mouse.move(1100, 700);
@@ -1092,6 +1137,49 @@ test("unselected pointer hover reveals missing neighbors at 60% while selected p
   await expect(preview(4)).toHaveCSS("opacity", "1");
   await expect(preview(0)).toHaveCSS("opacity", "0.6");
 });
+
+for (const tool of ["pointer", "hand", "spray"] as const) {
+  test(`${tool} mouse events pass through supplementary 60% previews to covered graph nodes`, async ({
+    page,
+  }) => {
+    await mount(page);
+    await shot(page, 4).click();
+    if (tool === "hand") await page.getByRole("button", { name: "手型工具", exact: true }).click();
+    if (tool === "spray") await enableSpray(page);
+    const beforeActivations = await activations(page);
+    await shot(page, 5).hover();
+    const neighbor = page.locator('[data-preview-shot-id="6"]');
+    await expect(neighbor).toHaveCSS("opacity", "0.6");
+    await expect(neighbor).toHaveCSS("pointer-events", "none");
+    await expect(neighbor.locator(".shot-frame-button")).toHaveCSS("pointer-events", "none");
+    const covered = await center(shot(page, 3));
+    const box = (await neighbor.boundingBox())!;
+    expect(covered.x).toBeGreaterThan(box.x);
+    expect(covered.x).toBeLessThan(box.x + box.width);
+    expect(covered.y).toBeGreaterThan(box.y);
+    expect(covered.y).toBeLessThan(box.y + box.height);
+    const hit = await page.evaluate((point) => {
+      const target = document.elementFromPoint(point.x, point.y);
+      return {
+        node: target?.closest<HTMLElement>(".storyboard-graph-dot")?.dataset.storyboardShotId,
+        preview: Boolean(target?.closest(".storyboard-graph-preview")),
+      };
+    }, covered);
+    expect(hit).toEqual({ node: "3", preview: false });
+    // A real move and click must reach the node under the painted thumbnail.
+    await page.mouse.move(covered.x, covered.y);
+    await expect(shot(page, 3)).toHaveClass(/is-hovered/);
+    await page.mouse.click(covered.x, covered.y);
+    if (tool === "pointer") {
+      expect(await selected(page)).toEqual(["3"]);
+      expect(await activated(page)).toBe("3");
+    } else {
+      expect(await selected(page)).toEqual(["4"]);
+      expect(await activations(page)).toEqual(beforeActivations);
+      if (tool === "spray") expect((await sprays(page)).map((spray) => spray.ids)).toEqual([["3"]]);
+    }
+  });
+}
 
 test("pointer preview emphasis dims only already displayed thumbnails without changing selection or playback", async ({
   page,
@@ -1313,7 +1401,7 @@ test("hand thumbnails allow position preview while preserving neighbor previews 
   const frame = preview.getByRole("img", { name: "分镜选帧缩略图", exact: true });
   await frame.hover();
   expect(await stacking()).toEqual(distanceOrder);
-  await page.locator('[data-preview-shot-id="6"]').hover();
+  await expect(page.locator('[data-preview-shot-id="6"]')).toHaveCSS("pointer-events", "none");
   expect(await stacking()).toEqual(distanceOrder);
   await frame.hover();
   await expect(preview.locator(".shot-hover-progress")).toBeVisible();

@@ -117,7 +117,8 @@
   stroke: none;
 }
 
-.storyboard-graph-selection-modes {
+.storyboard-graph-selection-modes,
+.storyboard-graph-thumbnail-controls {
   display: flex;
   align-items: center;
   gap: 1px;
@@ -352,6 +353,11 @@
 
 .storyboard-graph-view .storyboard-graph-preview {
   pointer-events: auto;
+}
+
+.storyboard-graph-view .storyboard-graph-preview.is-neighbor,
+.storyboard-graph-view .storyboard-graph-preview.is-neighbor * {
+  pointer-events: none;
 }
 
 .storyboard-graph-view .storyboard-graph-preview.is-exiting {

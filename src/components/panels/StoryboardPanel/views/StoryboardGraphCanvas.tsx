@@ -386,6 +386,7 @@ export function StoryboardGraphCanvas({
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hoveredPreviewId, setHoveredPreviewId] = useState<string | null>(null);
+  const [showThumbnails, setShowThumbnails] = useState(true);
   const resetHover = useCallback(() => {
     setHoveredId(null);
     setHoveredPreviewId(null);
@@ -469,6 +470,7 @@ export function StoryboardGraphCanvas({
     [],
   );
   const hoverEnabled = camera.zoom > graphHoverMinPixelsPerWorldUnit;
+  const previewsEnabled = hoverEnabled && showThumbnails;
   const nodeScale = storyboardGraphNodeScale(camera.zoom);
   const activeHoveredId = hoverEnabled ? hoveredId : null;
   const panRef = useRef<{ id: number; x: number; y: number; camera: StoryboardGraphCamera } | null>(
@@ -538,7 +540,7 @@ export function StoryboardGraphCanvas({
   );
   const previewHeight = (previewWidth * 9) / 16;
   const previews = useMemo<StoryboardGraphPreview[]>(() => {
-    if (!hoverEnabled) return [];
+    if (!previewsEnabled) return [];
     const ids = new Set(selectedShotIds);
     if (revealNeighbors) for (const id of neighborhood) ids.add(id);
     else if (hoveredNode) ids.add(hoveredNode.id);
@@ -598,7 +600,7 @@ export function StoryboardGraphCanvas({
       };
     });
   }, [
-    hoverEnabled,
+    previewsEnabled,
     hoveredNode,
     revealNeighbors,
     neighborhood,
@@ -678,11 +680,7 @@ export function StoryboardGraphCanvas({
   }, [edges, nodes, viewport]);
   const hoverBridges = hoveredNode
     ? previews
-        .filter(
-          (preview) =>
-            preview.node.id === hoveredNode.id ||
-            (revealNeighbors && !selectedShotIds.has(preview.node.id)),
-        )
+        .filter((preview) => preview.node.id === hoveredNode.id)
         .map((preview) => {
           const point = storyboardGraphScreenPoint(hoveredNode, camera, size);
           const edgeY = preview.above ? preview.top + previewHeight : preview.top;
@@ -1361,6 +1359,11 @@ export function StoryboardGraphCanvas({
         tool={tool}
         mode={selectionMode}
         sprayActive={sprayActive}
+        showThumbnails={showThumbnails}
+        onToggleThumbnails={() => {
+          setShowThumbnails((current) => !current);
+          setHoveredPreviewId(null);
+        }}
         onToolChange={changeTool}
         onModeChange={(next) => {
           cancelGestures();

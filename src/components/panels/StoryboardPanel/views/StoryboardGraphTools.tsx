@@ -1,4 +1,4 @@
-import { Hand, MousePointer2 } from "lucide-react";
+import { Eye, EyeOff, Hand, MousePointer2 } from "lucide-react";
 import type {
   StoryboardGraphSelectionMode,
   StoryboardGraphTool,
@@ -38,12 +38,16 @@ export function StoryboardGraphTools({
   tool,
   mode,
   sprayActive = false,
+  showThumbnails,
+  onToggleThumbnails,
   onToolChange,
   onModeChange,
 }: {
   tool: StoryboardGraphTool;
   mode: StoryboardGraphSelectionMode;
   sprayActive?: boolean;
+  showThumbnails: boolean;
+  onToggleThumbnails: () => void;
   onToolChange: (tool: StoryboardGraphTool) => void;
   onModeChange: (mode: StoryboardGraphSelectionMode) => void;
 }) {
@@ -109,6 +113,17 @@ export function StoryboardGraphTools({
           ))}
         </div>
       )}
+      <div className="storyboard-graph-thumbnail-controls" role="group" aria-label="图谱显示选项">
+        <button
+          type="button"
+          aria-label="显示缩略图"
+          title={showThumbnails ? "隐藏缩略图" : "显示缩略图"}
+          aria-pressed={showThumbnails}
+          onClick={onToggleThumbnails}
+        >
+          {showThumbnails ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}
+        </button>
+      </div>
     </div>
   );
 }

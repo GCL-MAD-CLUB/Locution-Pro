@@ -7,6 +7,7 @@ import {
   scopedStoryboard,
   sourceContexts,
   sourceRowParts,
+  storyboardMergeGroups,
   transformStoryboardSources,
 } from "../../../core/editor/multiSource";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
@@ -17,7 +18,7 @@ import {
   type SearchMode,
   type SearchRule,
 } from "../../../core/editor/textSearch";
-import { removeStoryboardCuts, storyboardSegments } from "../../../core/editor/storyboardCuts";
+import { removeStoryboardCuts } from "../../../core/editor/storyboardCuts";
 import { mediaItemProject, useProjectPort } from "../../../systems/ProjectSystem";
 import { storyboardVideoContext } from "../../../core/editor/storyboardDetection";
 import type {
@@ -1124,29 +1125,17 @@ export function useStoryboardPanelState<Selection>(
     },
     mergeShots: (shotIds) => {
       const ids = new Set(shotIds);
-      const selected = storyboard.shots.filter((shot) => ids.has(shot.id));
-      if (selected.length < 2) return;
-      const primaryIds: string[] = [];
-      commitStoryboard("合并分镜", (current) =>
-        transformStoryboardSources(current, (local) => {
-          const selected = local.shots.filter((shot) => ids.has(shot.id));
-          if (selected.length < 2) {
-            primaryIds.push(...selected.map((shot) => shot.id));
-            return local;
-          }
-          const start = Math.min(...selected.map((shot) => shot.start_frame));
-          const end = Math.max(...selected.map((shot) => shot.start_frame));
-          primaryIds.push(selected.reduce((a, b) => (a.start_frame < b.start_frame ? a : b)).id);
-          return removeStoryboardCuts(
-            local,
-            new Set(
-              storyboardSegments(local)
-                .filter((shot) => shot.start_frame > start && shot.start_frame <= end)
-                .map((shot) => shot.id),
-            ),
-          );
-        }),
-      );
+      const groups = storyboardMergeGroups(storyboard.shots, ids);
+      if (!groups) return;
+      const primaryIds = groups.map((group) => group[0].id);
+      commitStoryboard("合并分镜", (current) => {
+        const currentGroups = storyboardMergeGroups(current.shots, ids);
+        if (!currentGroups) return current;
+        const cuts = new Set(
+          currentGroups.flatMap((group) => group.slice(1).map((shot) => shot.id)),
+        );
+        return transformStoryboardSources(current, (local) => removeStoryboardCuts(local, cuts));
+      });
       uiState.shotSelectionReplaced(primaryIds, primaryIds[0]);
     },
     deleteShots: (shotIds, ripple) => {

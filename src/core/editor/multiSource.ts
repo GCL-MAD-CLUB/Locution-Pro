@@ -1,4 +1,4 @@
-import type { StoryboardState, SubtitleState } from "../../types";
+import type { StoryboardShot, StoryboardState, SubtitleState } from "../../types";
 
 export interface PanelRowSource {
   context: string;
@@ -39,6 +39,34 @@ export function sourceRowParts(id: string): [string, string] | null {
   } catch {
     return null;
   }
+}
+
+// Validate against original timeline intervals, independent of panel sorting,
+// filtering or collapsed stacks. Every source must form one continuous run.
+export function storyboardMergeGroups(
+  shots: readonly StoryboardShot[],
+  selectedIds: ReadonlySet<string>,
+): StoryboardShot[][] | null {
+  const groups = new Map<string | undefined, StoryboardShot[]>();
+  let count = 0;
+  for (const shot of shots) {
+    if (!selectedIds.has(shot.id)) continue;
+    const source = sourceRowParts(shot.id)?.[0];
+    const group = groups.get(source) ?? [];
+    group.push(shot);
+    groups.set(source, group);
+    count++;
+  }
+  if (count !== selectedIds.size) return null;
+  let hasMerge = false;
+  for (const group of groups.values()) {
+    group.sort((a, b) => a.start_frame - b.start_frame);
+    hasMerge ||= group.length >= 2;
+    for (let i = 1; i < group.length; i++) {
+      if (group[i - 1].end_frame + 1 !== group[i].start_frame) return null;
+    }
+  }
+  return hasMerge ? [...groups.values()] : null;
 }
 
 export function emptyStoryboard(): StoryboardState {

@@ -20,7 +20,10 @@ import {
 } from "../../../core/editor/textSearch";
 import { PanelSearch, useSearchNavigation } from "../../common/PanelSearch/PanelSearch";
 import { SourceSelectionNavigation } from "../../common/PanelSearch/SourceSelectionNavigation";
-import { playbackFollowScrollDuration } from "../../common/utils/playbackFollowScroll";
+import {
+  animatePlaybackFollowScroll,
+  playbackFollowScrollDuration,
+} from "../../common/utils/playbackFollowScroll";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowDownAZ,
@@ -34,6 +37,7 @@ import {
 import {
   Fragment,
   useEffect,
+  useCallback,
   useMemo,
   useRef,
   useState,
@@ -45,7 +49,6 @@ import {
 import { createPortal } from "react-dom";
 import { useEditCapability } from "../../../runtime/capabilities/EditCapability";
 import { useExportCapability } from "../../../runtime/capabilities/ExportCapability";
-import { usePlaybackStatus } from "../../../runtime/capabilities/PlaybackCapability";
 import { eventSource } from "../../../runtime/events/EventHub";
 import { publishEvent } from "../../../runtime/events/react";
 import { useStableIdentity } from "../../../runtime/state/react";
@@ -510,12 +513,6 @@ function nextCueIndexAfterCurrentCue(
   return -1;
 }
 
-function easeInOutCubic(progress: number) {
-  return progress < 0.5
-    ? 4 * progress * progress * progress
-    : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-}
-
 function subtitleCueSortValue(
   cue: SubtitleCue,
   columnId: SubtitleSortableColumnId,
@@ -807,7 +804,8 @@ export function SubtitlePanel() {
     activeSource,
     activeVideoId,
     activeTrackId,
-    previewVideoId,
+    playback,
+    playbackSource,
     selectedSources,
     toggleSource,
     previewSource,
@@ -876,12 +874,10 @@ export function SubtitlePanel() {
   const semanticSearchAvailable = useSemanticSearchAvailable();
   const searchMode =
     storedSearchMode === "semantic" && !semanticSearchAvailable ? "filter" : storedSearchMode;
-  const playbackStatus = usePlaybackStatus();
-  const playback = previewVideoId === activeVideoId ? playbackStatus : undefined;
   const panelRef = useRef<HTMLElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const tableHeaderRef = useRef<HTMLDivElement | null>(null);
-  const scrollAnimationRef = useRef<number | null>(null);
+  const scrollAnimationRef = useRef<(() => void) | null>(null);
   const selectionAnchorRef = useRef<string | null>(null);
   const selectionFocusRef = useRef<string | null>(null);
   const marqueeCleanupRef = useRef<(() => void) | null>(null);
@@ -1162,6 +1158,7 @@ export function SubtitlePanel() {
       project?.streams.find((stream) => stream.codec_type === "video");
     return normalizeFrameRate(videoStream?.avg_frame_rate, videoStream?.r_frame_rate);
   }, [project]);
+  const playbackFrameRate = playbackSource?.frameRate ?? frameRate;
   const currentFrame = playback?.currentFrame ?? 0;
   const isPlaying = playback?.isPlaying ?? false;
   const currentFrameRef = useRef(currentFrame);
@@ -1171,20 +1168,24 @@ export function SubtitlePanel() {
       filteredCues
         .filter((cue) => {
           const source = sourceForCue(cue);
-          return source?.videoId === activeVideoId && source.trackId === activeTrackId;
+          return (
+            playbackSource &&
+            source?.videoId === playbackSource.videoId &&
+            source.trackId === playbackSource.trackId
+          );
         })
         .sort((a, b) => a.start_us - b.start_us),
-    [filteredCues, sources, activeVideoId, activeTrackId],
+    [filteredCues, sources, playbackSource],
   );
   const cueFrameRanges = useMemo(() => {
     let maximumEndFrame = 0;
     return playbackCues.map((cue) => {
-      const startFrame = timeUsToFrame(cue.start_us, frameRate);
-      const endFrame = timeUsToFrame(cue.end_us, frameRate);
+      const startFrame = timeUsToFrame(cue.start_us, playbackFrameRate);
+      const endFrame = timeUsToFrame(cue.end_us, playbackFrameRate);
       maximumEndFrame = Math.max(maximumEndFrame, endFrame);
       return { startFrame, endFrame, maximumEndFrame };
     });
-  }, [playbackCues, frameRate]);
+  }, [playbackCues, playbackFrameRate]);
   const chronologicalCurrentCueIndex = useMemo(
     () => currentCueIndexAtFrame(cueFrameRanges, currentFrame),
     [cueFrameRanges, currentFrame],
@@ -1226,12 +1227,15 @@ export function SubtitlePanel() {
     ? sortedCues.findIndex((cue) => cue.id === currentCueId)
     : -1;
   const followCueIndex = followCueId ? sortedCues.findIndex((cue) => cue.id === followCueId) : -1;
+  const getRowKey = useCallback((index: number) => sortedCues[index].id, [sortedCues]);
+  const getRowHeight = useCallback(() => subtitleRowHeight, [subtitleRowHeight]);
+  const getScrollElement = useCallback(() => listRef.current, []);
   const rowVirtualizer = useVirtualizer({
     count: sortedCues.length,
-    getScrollElement: () => listRef.current,
-    estimateSize: () => subtitleRowHeight,
-    getItemKey: (index) => sortedCues[index].id,
-    measureElement: (element) => element.getBoundingClientRect().height,
+    getScrollElement,
+    estimateSize: getRowHeight,
+    getItemKey: getRowKey,
+    measureElement: getRowHeight,
     overscan: 6,
   });
   const captureThumbnailResizeCenter = useTimelineThumbnailListResizeAnchor({
@@ -1601,7 +1605,7 @@ export function SubtitlePanel() {
   useEffect(
     () => () => {
       if (scrollAnimationRef.current !== null) {
-        cancelAnimationFrame(scrollAnimationRef.current);
+        scrollAnimationRef.current();
       }
       marqueeCleanupRef.current?.();
       sprayGestureCleanupRef.current?.();
@@ -1611,7 +1615,7 @@ export function SubtitlePanel() {
   );
 
   useEffect(() => {
-    if (!isPlaying) {
+    if (!isPlaying || !panelActive) {
       return;
     }
     const list = listRef.current;
@@ -1619,12 +1623,14 @@ export function SubtitlePanel() {
     if (!list || !cue || followCueIndex < 0) {
       return;
     }
+    // A row-height change can invalidate measurements earlier in this effect pass.
+    rowVirtualizer.getTotalSize();
     const offsetInfo = rowVirtualizer.getOffsetForIndex(followCueIndex, "center");
     if (!offsetInfo) {
       return;
     }
     if (scrollAnimationRef.current !== null) {
-      cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current();
     }
     const startOffset = list.scrollTop;
     const initialTargetOffset = offsetInfo[0];
@@ -1637,30 +1643,13 @@ export function SubtitlePanel() {
       animationStartFrame,
       range?.startFrame ?? animationStartFrame,
       range?.endFrame ?? animationStartFrame,
-      frameRate,
+      playbackFrameRate,
     );
-    if (distance < 1 || duration <= 0) {
-      list.scrollTop = initialTargetOffset;
-      scrollAnimationRef.current = null;
-      return;
-    }
-    const startedAt = performance.now();
-    const animate = (timestamp: number) => {
-      const progress = clamp((timestamp - startedAt) / duration, 0, 1);
-      const currentOffsetInfo = rowVirtualizer.getOffsetForIndex(followCueIndex, "center");
-      const targetOffset = currentOffsetInfo?.[0] ?? initialTargetOffset;
-      list.scrollTop = startOffset + (targetOffset - startOffset) * easeInOutCubic(progress);
-      if (progress < 1) {
-        scrollAnimationRef.current = requestAnimationFrame(animate);
-      } else {
-        list.scrollTop = targetOffset;
-        scrollAnimationRef.current = null;
-      }
-    };
-    scrollAnimationRef.current = requestAnimationFrame(animate);
+    const cancel = animatePlaybackFollowScroll(list, initialTargetOffset, duration);
+    scrollAnimationRef.current = cancel;
     return () => {
-      if (scrollAnimationRef.current !== null) {
-        cancelAnimationFrame(scrollAnimationRef.current);
+      cancel();
+      if (scrollAnimationRef.current === cancel) {
         scrollAnimationRef.current = null;
       }
     };
@@ -1669,9 +1658,12 @@ export function SubtitlePanel() {
     cueFrameRanges,
     followCueId,
     followCueIndex,
-    frameRate,
+    playbackFrameRate,
     isPlaying,
+    panelActive,
     rowVirtualizer,
+    rowVirtualizer.scrollRect?.height,
+    subtitleRowHeight,
     sortedCues,
   ]);
 
@@ -1823,8 +1815,10 @@ export function SubtitlePanel() {
   }
 
   function syncTableHeaderScroll(event: ReactUIEvent<HTMLDivElement>) {
-    if (tableHeaderRef.current) {
-      tableHeaderRef.current.style.transform = `translateX(${-event.currentTarget.scrollLeft}px)`;
+    const header = tableHeaderRef.current;
+    const transform = `translateX(${-event.currentTarget.scrollLeft}px)`;
+    if (header && header.style.transform !== transform) {
+      header.style.transform = transform;
     }
   }
 

@@ -71,7 +71,11 @@ function checkUserContent(source, label, { readme = false } = {}) {
     }
   } else {
     const versions = source.match(/\b\d+\.\d+\.\d+(?:-[\w.-]+)?\b/gu) ?? [];
-    if (versions.some((version) => version !== applicationVersion)) {
+    // Prereleases keep the existing guide; stable releases must update its baseline.
+    if (
+      !applicationVersion.includes("-") &&
+      versions.some((version) => version !== applicationVersion)
+    ) {
       errors.push(`${label}: 用户指南应统一到 ${applicationVersion} 基线`);
     }
     if (/release-notes|^#{1,6}\s+.*(?:新增功能|更新说明|变更日志)/mu.test(source)) {

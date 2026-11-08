@@ -2212,7 +2212,7 @@ dependencies = [
 
 [[package]]
 name = "locution-pro"
-version = "0.4.2"
+version = "0.4.3-preview"
 dependencies = [
  "bincode",
  "chacha20poly1305",

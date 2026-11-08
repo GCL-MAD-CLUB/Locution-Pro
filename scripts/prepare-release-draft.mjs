@@ -74,6 +74,7 @@ export async function prepareReleaseDraft({
   const options = { repository, version, token, fetcher };
   validateOptions(options);
   const { files } = await checkReleaseAssets({ directory, version, repository });
+  const prerelease = version.includes("-");
   let release = await inspectRelease(options);
   if (!release) {
     await run([
@@ -88,10 +89,21 @@ export async function prepareReleaseDraft({
       `--prerelease=${version.includes("-")}`,
       "--title",
       `Locution Pro v${version}`,
-      "--generate-notes",
+      ...(prerelease ? ["--notes", `Release v${version}`] : ["--generate-notes"]),
     ]);
     release = await inspectRelease(options);
     if (!release) throw new Error("The newly created release draft is missing");
+  } else if (prerelease) {
+    await run([
+      "release",
+      "edit",
+      `v${version}`,
+      "--repo",
+      repository,
+      "--notes",
+      `Release v${version}`,
+      "--latest=false",
+    ]);
   }
   async function assets() {
     const result = await githubJson(
@@ -103,6 +115,9 @@ export async function prepareReleaseDraft({
     return result;
   }
   const existing = await assets();
+  if (existing.some((asset) => !files.some((file) => file.name === asset.name))) {
+    throw new Error("Release draft contains unexpected assets");
+  }
   const matches = (remote, file) =>
     remote.name === file.name &&
     remote.state === "uploaded" &&
@@ -140,7 +155,10 @@ export async function prepareReleaseDraft({
   if (current?.databaseId !== release.databaseId)
     throw new Error("Release draft changed during upload");
   const uploaded = await assets();
-  if (files.some((file) => !uploaded.some((remote) => matches(remote, file)))) {
+  if (
+    uploaded.length !== files.length ||
+    files.some((file) => !uploaded.some((remote) => matches(remote, file)))
+  ) {
     throw new Error("GitHub release assets do not match the verified artifact bytes");
   }
   return release;

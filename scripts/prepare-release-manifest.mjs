@@ -118,14 +118,17 @@ export async function prepareReleaseManifest({
   try {
     for (const asset of assets) await copyFile(asset.file, path.join(stage, asset.name));
     const json = `${JSON.stringify(manifest, null, 2)}\n`;
-    await writeFile(path.join(stage, "latest.json"), json);
-    const manifestHash = createHash("sha256").update(json).digest("hex");
+    const metadataChecksums = [];
+    if (!version.includes("-")) {
+      await writeFile(path.join(stage, "latest.json"), json);
+      const manifestHash = createHash("sha256").update(json).digest("hex");
+      metadataChecksums.push(`${manifestHash}  latest.json\n`);
+    }
     await writeFile(
       path.join(stage, "SHA256SUMS.txt"),
-      [
-        ...assets.map((asset) => `${asset.signature}  ${asset.name}\n`),
-        `${manifestHash}  latest.json\n`,
-      ].join(""),
+      [...assets.map((asset) => `${asset.signature}  ${asset.name}\n`), ...metadataChecksums].join(
+        "",
+      ),
     );
     const previous = await lstat(outputDirectory).catch((error) => {
       if (error.code === "ENOENT") return null;
@@ -188,6 +191,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     throw new Error("Usage: npm run prepare:release -- [--with-macos]");
   }
   console.log(
-    `Release ${manifest.version}: ${Object.keys(manifest.platforms).join(", ")} installers, latest.json and SHA256SUMS.txt ready in src-tauri/target/release-artifacts`,
+    `Release ${manifest.version}: ${Object.keys(manifest.platforms).join(", ")} installers, ${version.includes("-") ? "" : "latest.json and "}SHA256SUMS.txt ready in src-tauri/target/release-artifacts`,
   );
 }

@@ -97,4 +97,6 @@ await prepareReleaseManifest({
   updater: await buildUpdateInstaller(root),
   outputDirectory: releaseArtifacts,
 });
-console.log(`Release installer, latest.json and SHA256SUMS.txt created in ${releaseArtifacts}`);
+console.log(
+  `Release installers, ${version.includes("-") ? "" : "latest.json and "}SHA256SUMS.txt created in ${releaseArtifacts}`,
+);

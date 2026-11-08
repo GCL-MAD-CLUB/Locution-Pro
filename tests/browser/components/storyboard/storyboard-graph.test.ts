@@ -511,16 +511,18 @@ test("maximum zoom gives equal node pixels for small and large graphs and surviv
   }
 });
 
+// The harness host is 800x500 with 1px borders, so the fit camera clamps to a
+// 798x498 content box. This spread puts the 16:9 canvas cover exactly at 0.35.
 for (const [label, spread] of [
-  ["at", 6.434375],
+  ["at", 7.360714285714286],
   ["below", 10],
 ] as const) {
-  test(`all previews stop ${label} 0.4 CSS pixels per unit and resume when zoomed in`, async ({
+  test(`all previews stop ${label} 0.35 CSS pixels per unit and resume when zoomed in`, async ({
     page,
   }) => {
     await mount(page, false, spread);
-    await expect.poll(async () => (await transform(page)).zoom).toBeLessThanOrEqual(0.4);
-    if (label === "at") expect((await transform(page)).zoom).toBe(0.4);
+    await expect.poll(async () => (await transform(page)).zoom).toBeLessThanOrEqual(0.35);
+    if (label === "at") expect((await transform(page)).zoom).toBe(0.35);
     const dot = page.getByRole("button", { name: "Shot 4", exact: true });
     const stage = page.locator(".storyboard-graph-view");
     await dot.hover();
@@ -544,7 +546,7 @@ for (const [label, spread] of [
     const anchor = await center(dot);
     await page.mouse.move(anchor.x, anchor.y);
     await page.mouse.wheel(0, -600);
-    await expect.poll(async () => (await transform(page)).zoom).toBeGreaterThan(0.4);
+    await expect.poll(async () => (await transform(page)).zoom).toBeGreaterThan(0.35);
     await page.mouse.move(30, 30);
     await expect(page.locator(".storyboard-graph-preview.is-selected")).toHaveCount(1);
     await expect(dot).toHaveAttribute("aria-pressed", "true");
@@ -555,7 +557,7 @@ for (const [label, spread] of [
 
     await stage.focus();
     for (let i = 0; i < 8; i++) await stage.press("-");
-    await expect.poll(async () => (await transform(page)).zoom).toBeLessThanOrEqual(0.4);
+    await expect.poll(async () => (await transform(page)).zoom).toBeLessThanOrEqual(0.35);
     await dot.focus();
     await expect(
       page.locator(
@@ -572,7 +574,7 @@ test("resizing below the hover threshold removes existing previews without stale
 }) => {
   await mount(page, false, 5);
   const dot = page.getByRole("button", { name: "Shot 4", exact: true });
-  await expect.poll(async () => (await transform(page)).zoom).toBeGreaterThan(0.4);
+  await expect.poll(async () => (await transform(page)).zoom).toBeGreaterThan(0.35);
   await dot.click();
   await expect(page.getByRole("tooltip")).toBeVisible();
   await page.evaluate(() => {
@@ -580,7 +582,7 @@ test("resizing below the hover threshold removes existing previews without stale
     host.style.width = "420px";
     host.style.height = "220px";
   });
-  await expect.poll(async () => (await transform(page)).zoom).toBeLessThanOrEqual(0.4);
+  await expect.poll(async () => (await transform(page)).zoom).toBeLessThanOrEqual(0.35);
   await expect(
     page.locator(
       ".storyboard-graph-preview, .storyboard-graph-dot.is-hovered, .storyboard-graph-edges line.is-highlighted",
@@ -592,7 +594,7 @@ test("resizing below the hover threshold removes existing previews without stale
     host.style.width = "800px";
     host.style.height = "500px";
   });
-  await expect.poll(async () => (await transform(page)).zoom).toBeGreaterThan(0.4);
+  await expect.poll(async () => (await transform(page)).zoom).toBeGreaterThan(0.35);
   await expect(page.locator(".storyboard-graph-preview.is-selected")).toHaveCount(1);
   await expect(page.getByRole("tooltip")).toHaveCount(0);
   await expect(dot).toHaveAttribute("aria-pressed", "true");

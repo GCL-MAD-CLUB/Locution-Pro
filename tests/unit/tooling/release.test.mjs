@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -150,6 +150,43 @@ test("release generation supports prerelease artifacts without accepting invalid
   await assert.rejects(prepareReleaseManifest({ ...options, pubDate: "bad" }), /date/u);
 });
 
+test("prereleases replace stable metadata with checksums and never contain latest.json", async (t) => {
+  for (const withMacos of [false, true]) {
+    const options = await (withMacos ? macosFixture(t) : fixture(t));
+    await prepareReleaseManifest(options);
+    const version = "0.4.3-preview";
+    await prepareReleaseManifest({ ...options, version });
+    const check = () =>
+      checkReleaseAssets({
+        directory: options.outputDirectory,
+        version,
+        repository: "GCL-MAD-CLUB/Locution-Pro",
+      });
+    const { files, manifest } = await check();
+    assert.equal(manifest, null);
+    assert.equal(files.length, withMacos ? 5 : 3);
+    assert(!(await readdir(options.outputDirectory)).includes("latest.json"));
+    const sums = await readFile(path.join(options.outputDirectory, "SHA256SUMS.txt"), "utf8");
+    assert(!sums.includes("latest.json"));
+    assert.equal(sums.trim().split("\n").length, files.length - 1);
+    for (const file of files.filter((file) => file.name !== "SHA256SUMS.txt")) {
+      assert(sums.includes(`${file.sha256}  ${file.name}\n`));
+    }
+    const installer = path.join(options.outputDirectory, `Locution.Pro_${version}_x64-setup.exe`);
+    const bytes = await readFile(installer);
+    await writeFile(installer, "MZ tampered prerelease");
+    await assert.rejects(check(), /checksum mismatch/u);
+    await writeFile(installer, bytes);
+    await writeFile(path.join(options.outputDirectory, "latest.json"), "{}");
+    await assert.rejects(check(), /exactly/u);
+    await rm(path.join(options.outputDirectory, "latest.json"));
+    if (withMacos) {
+      await rm(path.join(options.outputDirectory, `Locution.Pro_${version}_aarch64.dmg`));
+      await assert.rejects(check(), /exactly/u);
+    }
+  }
+});
+
 test("the manifest links to the repository that actually owns the release", async (t) => {
   const options = await fixture(t);
   const manifest = await prepareReleaseManifest({
@@ -209,6 +246,11 @@ async function publicationFixture(t, { version = "2.1.1", absent = false } = {})
         isPrerelease: version.includes("-"),
         tagName: `v${version}`,
       };
+      return;
+    }
+    if (args[1] === "edit") {
+      assert.equal(version.includes("-"), true);
+      assert.equal(args[args.indexOf("--notes") + 1], `Release v${version}`);
       return;
     }
     assert.equal(args[1], "upload");
@@ -279,7 +321,7 @@ test("precise draft lookup distinguishes an absent release from API failures", a
   );
 });
 
-test("publisher creates a draft with explicit channel flags and uploads latest.json last", async (t) => {
+test("publisher creates channel-specific notes and uploads latest.json only for stable releases", async (t) => {
   for (const version of ["2.1.1", "2.1.1-rc.1"]) {
     const { options, state } = await publicationFixture(t, { version, absent: true });
     await prepareReleaseDraft(options);
@@ -287,9 +329,31 @@ test("publisher creates a draft with explicit channel flags and uploads latest.j
     assert(creation.includes("--draft"));
     assert(creation.includes("--latest=false"));
     assert(creation.includes(`--prerelease=${version.includes("-")}`));
-    assert.equal(uploads.length, 4);
-    assert.equal(path.basename(uploads.at(-1)[3]), "latest.json");
+    if (version.includes("-")) {
+      assert.equal(creation[creation.indexOf("--notes") + 1], `Release v${version}`);
+      assert(!creation.includes("--generate-notes"));
+      assert.equal(uploads.length, 3);
+      assert(uploads.every((args) => path.basename(args[3]) !== "latest.json"));
+    } else {
+      assert(creation.includes("--generate-notes"));
+      assert.equal(uploads.length, 4);
+      assert.equal(path.basename(uploads.at(-1)[3]), "latest.json");
+    }
   }
+});
+
+test("publisher normalizes existing prerelease notes and rejects stale remote assets", async (t) => {
+  const { options, state } = await publicationFixture(t, { version: "0.4.3-preview" });
+  await prepareReleaseDraft(options);
+  assert.equal(state.commands[0][1], "edit");
+  state.commands.length = 0;
+  await prepareReleaseDraft(options);
+  assert.deepEqual(
+    state.commands.map((args) => args[1]),
+    ["edit"],
+  );
+  state.assets.push({ name: "latest.json", state: "uploaded" });
+  await assert.rejects(prepareReleaseDraft(options), /unexpected assets/u);
 });
 
 test("publication retries only the failed file and reuses matching server digests on rerun", async (t) => {

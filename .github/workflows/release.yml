@@ -156,7 +156,7 @@ jobs:
           key: ${{ steps.model-cache.outputs.cache-primary-key }}
       - name: Bundle update-only installer without recompiling
         run: npm run build:update-installer
-      - name: Generate release manifest and checksums
+      - name: Generate release checksums and stable-only manifest
         run: npm run prepare:release
       - name: Verify complete release artifacts
         run: npm run check:release
@@ -308,11 +308,12 @@ jobs:
           set -euo pipefail
           git fetch --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$RELEASE_SHA"
-      # Rehashes both builds and regenerates latest.json and SHA256SUMS.txt with
-      # the darwin-aarch64 entry; the next step verifies the combined set.
-      - name: Add the macOS build to the release manifest
+      # Rehash both builds; prereleases omit latest.json entirely.
+      - name: Combine platform artifacts and generate release metadata
         run: node scripts/prepare-release-manifest.mjs --with-macos
-      - name: Verify artifacts and prepare release draft
+      # Prerelease notes are exactly "Release v<version>"; stable releases retain
+      # generated notes or the existing draft's curated notes.
+      - name: Verify artifacts and prepare release draft with channel-specific notes
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}

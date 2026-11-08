@@ -1,0 +1,514 @@
+.storyboard-graph-view {
+  --storyboard-graph-hover: var(--color-contrast-inverse);
+  --storyboard-graph-hover-duration: 120ms;
+
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: clip;
+  background: var(--color-surface-canvas);
+  border: 1px solid var(--color-border-frame);
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--color-border-frame-inset);
+  outline: none;
+  cursor: default;
+  touch-action: none;
+  overscroll-behavior: contain;
+  user-select: none;
+}
+
+[data-theme="light"] .storyboard-graph-view {
+  --storyboard-graph-hover: var(--color-contrast-strong);
+}
+
+.storyboard-graph-view:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.storyboard-graph-view.is-panning {
+  cursor: grabbing;
+}
+
+.storyboard-graph-view.is-dragging-node,
+.storyboard-graph-view.is-dragging-node .storyboard-graph-dot {
+  cursor: grabbing;
+}
+
+.storyboard-graph-view.is-hand,
+.storyboard-graph-view.is-hand .storyboard-graph-dot {
+  cursor: grab;
+}
+
+.storyboard-graph-view.is-hand.is-panning,
+.storyboard-graph-view.is-hand.is-panning .storyboard-graph-dot {
+  cursor: grabbing;
+}
+
+.storyboard-graph-view.is-selecting {
+  cursor: crosshair;
+}
+
+.storyboard-graph-tools {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid var(--color-border-frame);
+  border-radius: 2px;
+  background: var(--color-surface-raised-default);
+  box-shadow: inset 0 0 0 1px var(--color-border-frame-inset);
+}
+
+.storyboard-graph-tools button {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  border: 0;
+  border-radius: 1px;
+  color: var(--color-text-control);
+  background: var(--color-transparent);
+  cursor: pointer;
+}
+
+.storyboard-graph-tools button:hover {
+  color: var(--color-text-control-hover);
+  background: var(--color-surface-hover-default);
+}
+
+.storyboard-graph-tools button[aria-pressed="true"],
+.storyboard-graph-tools button[aria-checked="true"] {
+  color: var(--color-text-highlight-default);
+  background: var(--color-surface-toolbar-active);
+  box-shadow: inset 0 0 0 1px var(--color-border-overlay-default);
+}
+
+.storyboard-graph-tools button:focus-visible {
+  outline: 1px solid var(--color-text-control-hover);
+  outline-offset: -1px;
+}
+
+.storyboard-graph-tools svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.5;
+}
+
+.storyboard-graph-selection-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-linejoin: miter;
+}
+
+.storyboard-graph-selection-icon .is-intersection {
+  fill: currentColor;
+  stroke: none;
+}
+
+.storyboard-graph-selection-modes,
+.storyboard-graph-thumbnail-controls {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  height: 20px;
+  margin-left: 3px;
+  padding-left: 4px;
+  border-left: 1px solid var(--color-border-overlay-default);
+}
+
+.storyboard-graph-marquee {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  min-width: 1px;
+  min-height: 1px;
+  border: 1px solid var(--storyboard-graph-hover);
+  background: var(--color-text-placeholder);
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.storyboard-graph-world,
+.storyboard-graph-edges,
+.storyboard-graph-hit-nodes,
+.storyboard-graph-nodes {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.storyboard-graph-world {
+  z-index: 1;
+  transform-origin: 0 0;
+}
+
+.storyboard-graph-edges {
+  overflow: visible;
+}
+
+.storyboard-graph-edges path,
+.storyboard-graph-edges line {
+  fill: none;
+  stroke: var(--color-storyboard-graph-default);
+  stroke-width: 0.6;
+  transition:
+    opacity var(--storyboard-graph-hover-duration) ease,
+    stroke var(--storyboard-graph-hover-duration) ease;
+}
+
+.storyboard-graph-view.has-focus .storyboard-graph-base-edges {
+  opacity: 0.025;
+}
+
+.storyboard-graph-edges line.is-highlighted {
+  stroke: var(--storyboard-graph-hover);
+  stroke-width: 1;
+  opacity: 0.8;
+}
+
+.storyboard-graph-edges line.is-exiting {
+  opacity: 0;
+}
+
+@starting-style {
+  .storyboard-graph-edges line.is-highlighted {
+    stroke: var(--color-storyboard-graph-default);
+    opacity: 0.2;
+  }
+}
+
+.storyboard-graph-dot {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-transparent);
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  pointer-events: auto;
+  outline: none;
+  transition: transform var(--storyboard-graph-hover-duration) ease;
+}
+
+.storyboard-graph-dot.is-hovered {
+  transform: translate(-50%, -50%) scale(var(--storyboard-graph-dot-hover-scale));
+  z-index: 1;
+}
+
+.storyboard-graph-dot-visual {
+  transition: opacity var(--storyboard-graph-hover-duration) ease;
+}
+
+.storyboard-graph-hover-bridges {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.storyboard-graph-node {
+  fill: var(--storyboard-color-label, var(--color-storyboard-graph-default));
+  stroke: var(--color-surface-canvas);
+  transition:
+    fill var(--storyboard-graph-hover-duration) ease,
+    stroke var(--storyboard-graph-hover-duration) ease;
+}
+
+.storyboard-graph-node-paint {
+  scale: 1;
+  transform-origin: 0 0;
+  transition: scale var(--storyboard-graph-hover-duration) ease;
+}
+
+.storyboard-graph-dot-visual.is-hovered .storyboard-graph-node-paint {
+  scale: var(--storyboard-graph-dot-hover-scale);
+}
+
+.storyboard-graph-dot-visual.is-neighbor .storyboard-graph-node,
+.storyboard-graph-dot-visual.is-hovered .storyboard-graph-node,
+.storyboard-graph-dot-visual.is-selected .storyboard-graph-node {
+  fill: var(--storyboard-color-label, var(--storyboard-graph-hover));
+}
+
+.storyboard-graph-view.has-focus .storyboard-graph-dot:not(.is-neighbor):not(.is-selected),
+.storyboard-graph-view.has-focus .storyboard-graph-dot-visual:not(.is-neighbor):not(.is-selected) {
+  opacity: 0.2;
+}
+
+.storyboard-graph-selection-rings {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.storyboard-graph-selection-rings [data-selection-ring] {
+  fill: none;
+  stroke: var(--storyboard-color-label, var(--storyboard-graph-hover));
+  stroke-width: 1;
+  pointer-events: none;
+  transition: stroke var(--storyboard-graph-hover-duration) ease;
+}
+
+.storyboard-graph-hover-bridge {
+  fill: var(--color-transparent);
+  stroke: none;
+  pointer-events: all;
+}
+
+.storyboard-graph-previews {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.storyboard-graph-preview {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  transition: opacity var(--storyboard-graph-hover-duration) ease;
+}
+
+.storyboard-graph-preview.has-color-label .shot-frame-button {
+  background: color-mix(in srgb, var(--storyboard-color-label) 10%, var(--color-surface-thumbnail));
+  box-shadow:
+    0 0 0 1.2px var(--storyboard-color-label),
+    0 0 0 2px var(--color-border-inset);
+}
+
+.storyboard-graph-preview-metadata {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  gap: 3px;
+  height: 14px;
+  padding: 1px 3px;
+  border: 1px solid var(--color-border-frame);
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--color-surface-thumbnail) 88%, var(--color-transparent));
+  pointer-events: none;
+}
+
+.storyboard-graph-preview-metadata:empty {
+  display: none;
+}
+
+.storyboard-graph-preview-metadata .shot-thumbnail-flag,
+.storyboard-graph-preview-metadata .shot-thumbnail-keyword-indicator {
+  margin: 0;
+  pointer-events: none;
+}
+
+.storyboard-graph-preview-rating {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1px;
+  height: 10px;
+  color: var(--color-annotation-rating);
+  line-height: 0;
+}
+
+.storyboard-graph-preview-rating svg {
+  width: 7px;
+  height: 7px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.25;
+}
+
+.storyboard-graph-view.is-spraying,
+.storyboard-graph-view.is-spraying .storyboard-graph-dot,
+.storyboard-graph-view.is-spraying .storyboard-graph-preview {
+  cursor: var(--storyboard-spray-cursor, crosshair);
+}
+
+.storyboard-graph-view.is-spraying .storyboard-graph-marquee {
+  border-style: dashed;
+}
+
+.storyboard-graph-preview.is-neighbor,
+.storyboard-graph-preview.is-muted {
+  opacity: 0.6;
+}
+
+.storyboard-graph-view .storyboard-graph-preview {
+  pointer-events: auto;
+}
+
+.storyboard-graph-view .storyboard-graph-preview.is-neighbor,
+.storyboard-graph-view .storyboard-graph-preview.is-neighbor * {
+  pointer-events: none;
+}
+
+.storyboard-graph-view .storyboard-graph-preview.is-exiting {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@starting-style {
+  .storyboard-graph-view .storyboard-graph-preview {
+    opacity: 0;
+  }
+}
+
+.storyboard-graph-preview::after {
+  position: absolute;
+  top: calc(100% + var(--storyboard-graph-preview-arrow-gap, 3px));
+  left: var(--storyboard-graph-preview-caret, 50%);
+  width: 0;
+  height: 0;
+  border-right: 4px solid var(--color-transparent);
+  border-left: 4px solid var(--color-transparent);
+  border-top: var(--storyboard-graph-preview-arrow-height, 5px) solid var(--color-border-selection);
+  transform: translateX(-50%);
+  content: "";
+}
+
+.storyboard-graph-preview.is-below::after {
+  top: auto;
+  bottom: calc(100% + var(--storyboard-graph-preview-arrow-gap, 3px));
+  border-top: 0;
+  border-bottom: var(--storyboard-graph-preview-arrow-height, 5px) solid
+    var(--color-border-selection);
+}
+
+.storyboard-graph-preview .shot-frame-button {
+  position: relative;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  background: var(--color-surface-thumbnail);
+  border: 1px solid var(--color-border-inset);
+  box-shadow:
+    0 0 0 1.2px var(--color-border-selection),
+    0 0 0 2px var(--color-border-inset);
+  transition:
+    background-color var(--storyboard-graph-hover-duration) ease,
+    border-color var(--storyboard-graph-hover-duration) ease,
+    box-shadow var(--storyboard-graph-hover-duration) ease;
+}
+
+.storyboard-graph-navigator {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 5;
+  box-sizing: border-box;
+  width: min(176px, 28%);
+  min-width: 64px;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  border: 1px solid var(--color-border-frame);
+  border-radius: 2px;
+  background: var(--color-surface-raised-default);
+  box-shadow: inset 0 0 0 1px var(--color-border-frame-inset);
+}
+
+.storyboard-graph-minimap {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--color-surface-table-inset);
+  cursor: grab;
+  touch-action: none;
+}
+
+.storyboard-graph-minimap:focus-visible {
+  outline: 1px solid var(--color-text-control-hover);
+  outline-offset: -2px;
+}
+
+.storyboard-graph-minimap-content path {
+  fill: none;
+  stroke: var(--color-storyboard-graph-default);
+  stroke-width: 0.35;
+  opacity: 0.22;
+}
+
+.storyboard-graph-minimap-content circle {
+  fill: var(--storyboard-color-label, var(--color-storyboard-graph-default));
+  transition: fill var(--storyboard-graph-hover-duration) ease;
+}
+
+.storyboard-graph-minimap-content circle.is-selected {
+  fill: var(--storyboard-color-label, var(--storyboard-graph-hover));
+}
+
+.storyboard-graph-minimap-viewport {
+  fill: var(--color-text-control);
+  fill-opacity: 0.08;
+  stroke: var(--color-text-control-hover);
+  stroke-width: 0.75;
+  cursor: grab;
+}
+
+.storyboard-graph-minimap.is-dragging,
+.storyboard-graph-minimap.is-dragging .storyboard-graph-minimap-viewport {
+  cursor: grabbing;
+}
+
+.storyboard-graph-message {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  box-sizing: border-box;
+  color: var(--color-text-placeholder);
+  text-align: center;
+  cursor: default;
+}
+
+.storyboard-graph-message > svg {
+  width: 24px;
+  height: 24px;
+}
+
+.storyboard-graph-message > button {
+  padding: 5px 12px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 4px;
+  color: var(--color-text-field);
+  background: var(--color-surface-active);
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .storyboard-graph-dot,
+  .storyboard-graph-dot-visual,
+  .storyboard-graph-node,
+  .storyboard-graph-node-paint,
+  .storyboard-graph-selection-rings [data-selection-ring],
+  .storyboard-graph-preview,
+  .storyboard-graph-preview .shot-frame-button,
+  .storyboard-graph-minimap-content circle,
+  .storyboard-graph-edges path,
+  .storyboard-graph-edges line {
+    transition: none;
+  }
+}

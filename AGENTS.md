@@ -15,6 +15,10 @@
 - Run `npm run check:layout` and `npm test` after changing repository tooling or
   moving tests. Keep real media encoding and model/GPU checks out of normal CI.
 
+## Pull requests
+
+- Use an English title for pull requests.
+
 ## Code formatting
 
 - TypeScript, TSX, JavaScript, JSON, CSS, HTML, and Markdown are formatted with the

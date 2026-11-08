@@ -15,9 +15,11 @@ mod batch;
 mod cache;
 mod cses;
 mod decode;
+mod graph;
 mod index;
 mod siglip;
 mod storage;
+pub(crate) use graph::read_storyboard_graph_vectors;
 const SIDE: usize = 224;
 const DIMENSIONS: usize = 384;
 #[cfg(test)]

@@ -201,10 +201,13 @@ function useShotFrameThumbnail({
   return thumbnail?.identity === thumbnailIdentity ? thumbnail : null;
 }
 
-export function StoryboardSemanticThumbnail(props: ShotFrameThumbnailProps) {
+export function StoryboardSemanticThumbnail({
+  ariaLabel = "语义检索最高得分帧",
+  ...props
+}: ShotFrameThumbnailProps & { ariaLabel?: string }) {
   const thumbnail = useShotFrameThumbnail(props);
   return (
-    <div className="shot-semantic-frame" role="img" aria-label="语义检索最高得分帧">
+    <div className="shot-semantic-frame" role="img" aria-label={ariaLabel}>
       {thumbnail && (
         <img
           className="shot-frame"
@@ -233,11 +236,12 @@ interface ShotFrameButtonProps {
   resolution: TimelineThumbnailResolution;
   semanticFrame?: number;
   thumbnailTimeUs?: number;
+  previewOnly?: boolean;
   onSelect: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onStartKeywordDrag: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }
 
-function ShotFrameButton({
+export function ShotFrameButton({
   shot,
   assetId,
   fingerprint,
@@ -249,6 +253,7 @@ function ShotFrameButton({
   resolution,
   semanticFrame,
   thumbnailTimeUs,
+  previewOnly = false,
   onSelect,
   onStartKeywordDrag,
 }: ShotFrameButtonProps) {
@@ -318,12 +323,16 @@ function ShotFrameButton({
     <button
       type="button"
       className="shot-frame-button"
+      role={previewOnly ? "img" : undefined}
+      tabIndex={previewOnly ? -1 : undefined}
       onClick={onSelect}
       onPointerDown={onStartKeywordDrag}
-      onDoubleClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => {
+        if (!previewOnly) event.stopPropagation();
+      }}
       onPointerMove={updateHoverPreview}
       onPointerLeave={() => setHoverProgress(null)}
-      aria-label={`从 ${formatDuration(shot.start_us)} 播放此镜头`}
+      aria-label={previewOnly ? "分镜选帧缩略图" : `从 ${formatDuration(shot.start_us)} 播放此镜头`}
     >
       {visibleThumbnail && (
         <img
@@ -336,7 +345,7 @@ function ShotFrameButton({
           draggable={false}
         />
       )}
-      {hoverTargetTimeUs !== null && (
+      {hoverTargetTimeUs !== null && previewSrc && (
         <video
           ref={hoverVideoRef}
           className={`shot-frame shot-hover-frame ${hoverFrameReady ? "is-ready" : ""}`}

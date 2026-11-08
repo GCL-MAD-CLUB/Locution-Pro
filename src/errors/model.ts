@@ -45,6 +45,7 @@ export type OperationKey =
   | "storage.recentPaths"
   | "storyboard.semanticSearch"
   | "storyboard.semanticIndex"
+  | "storyboard.graph"
   | "storyboard.semanticAvailability"
   | "subtitle.semanticSearch"
   | "subtitle.semanticIndex"

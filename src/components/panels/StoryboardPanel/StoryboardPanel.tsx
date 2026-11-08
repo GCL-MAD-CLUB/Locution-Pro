@@ -34,6 +34,7 @@ import {
   List,
   ListFilter,
   Loader2,
+  Network,
   Scissors,
   Star,
 } from "lucide-react";
@@ -113,6 +114,7 @@ import {
   storyboardShotColorLabels,
 } from "./annotations/StoryboardColorLabelButtons";
 import { StoryboardIconView } from "./views/StoryboardIconView";
+import { StoryboardGraphView } from "./views/StoryboardGraphView";
 import { StoryboardKeywordPanel } from "./annotations/StoryboardKeywordPanel";
 import { StoryboardFrameDataPanel } from "./analysis/StoryboardFrameDataPanel";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -395,6 +397,7 @@ const defaultStoryboardFooterAreaVisibility: StoryboardFooterAreaVisibility = {
   sort: {
     list: false,
     grid: true,
+    graph: false,
   },
   thumbnailSize: true,
 };
@@ -1382,8 +1385,8 @@ export function StoryboardPanel() {
     [shotStacks, shots],
   );
   const displayShots = useMemo(
-    () => visibleStoryboardShots(shots, shotStacks),
-    [shotStacks, shots],
+    () => (viewMode === "graph" ? shots : visibleStoryboardShots(shots, shotStacks)),
+    [shotStacks, shots, viewMode],
   );
   const semanticShots = useMemo(
     () =>
@@ -1607,7 +1610,7 @@ export function StoryboardPanel() {
   const footerSortLabel =
     storyboardGridSortOptions.find((option) => option.id === activeShotSort.columnId)?.label ??
     "标题";
-  const footerSortVisible = footerAreaVisibility.sort[viewMode];
+  const footerSortVisible = viewMode !== "graph" && footerAreaVisibility.sort[viewMode];
   const sprayKeywordParseResult = parseStoryboardKeywordInput(sprayKeywordInput);
   const sprayKeywords = sprayKeywordParseResult.paths;
   const sprayRecentKeywordLabels = useMemo(() => {
@@ -1885,8 +1888,11 @@ export function StoryboardPanel() {
   });
   const isEditAuthority = panelActive && panelFocused;
   const selectedAnnotationShotIds = useMemo(
-    () => annotationShotIdsForSelection(selectedShotIds, shotStacksByShotId),
-    [selectedShotIds, shotStacksByShotId],
+    () =>
+      viewMode === "graph"
+        ? new Set(selectedShotIds)
+        : annotationShotIdsForSelection(selectedShotIds, shotStacksByShotId),
+    [selectedShotIds, shotStacksByShotId, viewMode],
   );
   const contextMenuShotIds = useMemo(
     () => Array.from(selectedAnnotationShotIds),
@@ -2236,6 +2242,7 @@ export function StoryboardPanel() {
 
     const handleSelectionKeyDown = (event: KeyboardEvent) => {
       if (
+        viewMode === "graph" ||
         event.defaultPrevented ||
         event.altKey ||
         isEditableKeyboardTarget(event.target) ||
@@ -2531,8 +2538,16 @@ export function StoryboardPanel() {
     setSprayActive(false);
   }
 
-  function applySprayToShot(shotId: string, historyGroupId: string, eraseWithAlt = false) {
-    const targetShotIds = annotationShotIdsForSelection([shotId], shotStacksByShotId);
+  function applySprayToShots(
+    shotIds: Iterable<string>,
+    historyGroupId: string,
+    eraseWithAlt = false,
+  ) {
+    const targetShotIds =
+      viewMode === "graph"
+        ? new Set(shotIds)
+        : annotationShotIdsForSelection(shotIds, shotStacksByShotId);
+    if (targetShotIds.size === 0) return;
     if (sprayMode === "keywords") {
       if (eraseWithAlt) {
         removeShotKeywords(targetShotIds, sprayKeywordInput, historyGroupId);
@@ -2581,7 +2596,7 @@ export function StoryboardPanel() {
   }
 
   function startSprayGesture(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!sprayActive || event.button !== 0 || !event.isPrimary) {
+    if (viewMode === "graph" || !sprayActive || event.button !== 0 || !event.isPrimary) {
       return;
     }
     const initialShotId = sprayShotIdFromPoint(event.target, event.clientX, event.clientY);
@@ -2607,7 +2622,7 @@ export function StoryboardPanel() {
         return;
       }
       paintedShotIds.add(shotId);
-      applySprayToShot(shotId, historyGroupId, altKey && sprayCanEraseWithAlt);
+      applySprayToShots([shotId], historyGroupId, altKey && sprayCanEraseWithAlt);
     };
     const cleanup = () => {
       window.removeEventListener("pointermove", onMove);
@@ -2638,7 +2653,7 @@ export function StoryboardPanel() {
 
     sprayGestureCleanupRef.current = cleanup;
     paintedShotIds.add(initialShotId);
-    applySprayToShot(initialShotId, historyGroupId, event.altKey && sprayCanEraseWithAlt);
+    applySprayToShots([initialShotId], historyGroupId, event.altKey && sprayCanEraseWithAlt);
     window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onFinish);
     window.addEventListener("pointercancel", onFinish);
@@ -2647,6 +2662,7 @@ export function StoryboardPanel() {
 
   function suppressSprayClick(event: ReactMouseEvent<HTMLDivElement>) {
     if (
+      viewMode === "graph" ||
       !sprayActive ||
       event.button !== 0 ||
       !sprayShotIdFromPoint(event.target, event.clientX, event.clientY)
@@ -3887,6 +3903,31 @@ export function StoryboardPanel() {
               shotTitle={(shot) => storyboardShotTitle(shot, shotCount, shotAnnotations[shot.id])}
               shotLabel={(shot) => storyboardShotLabel(shotAnnotations[shot.id])}
             />
+          ) : viewMode === "graph" ? (
+            <StoryboardGraphView
+              semanticShots={semanticShots}
+              scope={JSON.stringify([projectId, selection.workspaceId, videoContext])}
+              available={semanticSearchAvailable}
+              shots={sortedShots}
+              sourceForShot={sourceForShot}
+              shotTitle={(shot) => storyboardShotTitle(shot, shotCount, shotAnnotations[shot.id])}
+              selectedShotIds={selectedShotIds}
+              shotAnnotations={shotAnnotations}
+              sprayActive={sprayActive}
+              onSprayShots={(ids, historyGroupId, eraseWithAlt) => {
+                applySprayToShots(ids, historyGroupId, eraseWithAlt && sprayCanEraseWithAlt);
+              }}
+              onExitSpray={deactivateSprayTool}
+              onContextMenu={openContextMenu}
+              onSelectionChange={(ids) => {
+                shotSelectionReplaced(Array.from(ids), activeShotId);
+              }}
+              onActivateShot={(shot) => {
+                selectionAnchorRef.current = shot.id;
+                selectionFocusRef.current = shot.id;
+                seekToShot(shot, videoContext);
+              }}
+            />
           ) : (
             <StoryboardIconView
               sourceKey={videoContext}
@@ -4003,6 +4044,16 @@ export function StoryboardPanel() {
                 aria-pressed={viewMode === "grid"}
               >
                 <Grid2X2 aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className={viewMode === "graph" ? "active" : ""}
+                onClick={() => setViewMode("graph")}
+                title="图谱视图"
+                aria-label="图谱视图"
+                aria-pressed={viewMode === "graph"}
+              >
+                <Network aria-hidden="true" />
               </button>
               <span className="storyboard-filter-separator storyboard-footer-separator" />
             </div>
@@ -4342,7 +4393,7 @@ export function StoryboardPanel() {
             </button>
           ) : (
             <>
-              {footerAreaVisibility.thumbnailSize && (
+              {viewMode !== "graph" && footerAreaVisibility.thumbnailSize && (
                 <>
                   <span className="storyboard-thumbnail-size-label">缩略图：</span>
                   <input
@@ -4544,20 +4595,22 @@ export function StoryboardPanel() {
             >
               喷涂工具
             </PopupMenuItem>
-            <PopupMenuItem
-              checked={footerSortVisible}
-              onSelect={() =>
-                setFooterAreaVisibility((current) => ({
-                  ...current,
-                  sort: {
-                    ...current.sort,
-                    [viewMode]: !current.sort[viewMode],
-                  },
-                }))
-              }
-            >
-              排序
-            </PopupMenuItem>
+            {viewMode !== "graph" && (
+              <PopupMenuItem
+                checked={footerSortVisible}
+                onSelect={() =>
+                  setFooterAreaVisibility((current) => ({
+                    ...current,
+                    sort: {
+                      ...current.sort,
+                      [viewMode]: !current.sort[viewMode],
+                    },
+                  }))
+                }
+              >
+                排序
+              </PopupMenuItem>
+            )}
             <PopupMenuItem
               checked={footerAreaVisibility.flag}
               onSelect={() =>
@@ -4591,17 +4644,19 @@ export function StoryboardPanel() {
             >
               色标
             </PopupMenuItem>
-            <PopupMenuItem
-              checked={footerAreaVisibility.thumbnailSize}
-              onSelect={() =>
-                setFooterAreaVisibility((current) => ({
-                  ...current,
-                  thumbnailSize: !current.thumbnailSize,
-                }))
-              }
-            >
-              缩略图大小
-            </PopupMenuItem>
+            {viewMode !== "graph" && (
+              <PopupMenuItem
+                checked={footerAreaVisibility.thumbnailSize}
+                onSelect={() =>
+                  setFooterAreaVisibility((current) => ({
+                    ...current,
+                    thumbnailSize: !current.thumbnailSize,
+                  }))
+                }
+              >
+                缩略图大小
+              </PopupMenuItem>
+            )}
           </PopupMenu>,
           document.body,
         )}

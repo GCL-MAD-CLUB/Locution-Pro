@@ -266,19 +266,30 @@ pub(crate) fn normalize_preferences(preferences: Preferences) -> AppResult<Prefe
 }
 
 pub(crate) fn save_preferences(preferences: &Preferences) -> AppResult<()> {
-    fs::create_dir_all(config_root()).map_err(|error| {
-        app_error(
-            ErrorCode::PreferencesWriteFailed,
-            format!("Failed to create the preferences directory: {error}"),
-        )
-    })?;
+    write_preferences_file(&preferences_file(), preferences)
+}
+
+fn write_preferences_file(path: &Path, preferences: &Preferences) -> AppResult<()> {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent).map_err(|error| {
+            app_error(
+                ErrorCode::PreferencesWriteFailed,
+                format!("Failed to create the preferences directory: {error}"),
+            )
+        })?;
+    }
     let body = serde_json::to_vec_pretty(preferences).map_err(|error| {
         app_error(
             ErrorCode::PreferencesWriteFailed,
             format!("Failed to encode preferences: {error}"),
         )
     })?;
-    fs::write(preferences_file(), body).map_err(|error| {
+    // Same temp + sync + rename used for project files, so a crash mid-write
+    // cannot leave a truncated preferences.json for the next launch.
+    crate::project_file::write_atomic(path, &body).map_err(|error| {
         app_error(
             ErrorCode::PreferencesWriteFailed,
             format!("Failed to write preferences: {error}"),
@@ -488,6 +499,38 @@ mod tests {
             configured_auto_save_directory(&changed_cache),
             root.join("cache-a").join("Locution Pro Auto-Save")
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn replaced_preferences_file_stays_decodable() {
+        let root = std::env::temp_dir().join(format!(
+            "locution-pro-preferences-atomic-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let path = root.join("preferences.json");
+        let first = Preferences {
+            cache_dir: "x".repeat(4096),
+            ..Preferences::default()
+        };
+        write_preferences_file(&path, &first).unwrap();
+        let second = Preferences {
+            cache_dir: root.join("cache").to_string_lossy().into_owned(),
+            show_home_on_startup: false,
+            ..Preferences::default()
+        };
+        write_preferences_file(&path, &second).unwrap();
+
+        let body = fs::read_to_string(&path).unwrap();
+        let decoded: Preferences = serde_json::from_str(&body).unwrap();
+        assert_eq!(decoded.cache_dir, second.cache_dir);
+        assert!(!decoded.show_home_on_startup);
+        assert!(!body.contains(&"x".repeat(64)));
+        let names: Vec<_> = fs::read_dir(&root)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["preferences.json".to_string()]);
         fs::remove_dir_all(root).unwrap();
     }
 }

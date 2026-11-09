@@ -64,7 +64,8 @@ export function StoryboardGraphTools({
       <button
         type="button"
         aria-label="指针工具"
-        title="指针：选择节点"
+        title="指针：选择节点（V）"
+        aria-keyshortcuts="V"
         aria-pressed={tool === "pointer" && !sprayActive}
         onClick={() => onToolChange("pointer")}
       >
@@ -73,7 +74,8 @@ export function StoryboardGraphTools({
       <button
         type="button"
         aria-label="手型工具"
-        title="手型：平移画布"
+        title="手型：平移画布（H，按住空格临时切换）"
+        aria-keyshortcuts="H"
         aria-pressed={tool === "hand"}
         onClick={() => onToolChange("hand")}
       >

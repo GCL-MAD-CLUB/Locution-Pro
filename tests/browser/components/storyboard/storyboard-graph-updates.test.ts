@@ -183,6 +183,15 @@ test("preparation allows persistent wheel zoom and minimap navigation while othe
   await page.mouse.click(point.x, point.y, { button: "right" });
   await stage.focus();
   await stage.press("+");
+  await page.keyboard.press("v");
+  await page.keyboard.down("Space");
+  await expect(stage).toHaveClass(/is-hand/);
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + 60, point.y + 35, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up("Space");
+  await expect(stage).toHaveClass(/is-pointer/);
   await page.getByRole("button", { name: "手型工具", exact: true }).click();
   await page.mouse.move(point.x, point.y);
   await page.mouse.down();

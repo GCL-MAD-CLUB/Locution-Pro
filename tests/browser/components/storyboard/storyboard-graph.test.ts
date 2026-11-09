@@ -37,6 +37,107 @@ const sprays = (
   page.evaluate(() => (window as any).graphSprays);
 const enableSpray = (page: Page) => page.evaluate(() => (window as any).graphSetSprayActive(true));
 
+test("V/H switch graph tools without intercepting text entry, modified keys or toolbar Space", async ({
+  page,
+}) => {
+  await mount(page);
+  const stage = page.locator(".storyboard-graph-view");
+  await stage.focus();
+  await page.keyboard.press("h");
+  await expect(stage).toHaveClass(/is-hand/);
+  await expect(page.getByRole("button", { name: "手型工具", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.keyboard.press("v");
+  await expect(stage).toHaveClass(/is-pointer/);
+  for (const key of ["Control+h", "Alt+h", "Meta+h"]) {
+    await page.keyboard.press(key);
+    await expect(stage).toHaveClass(/is-pointer/);
+  }
+  await stage.evaluate((element) => {
+    const input = document.createElement("input");
+    input.id = "graph-test-input";
+    element.appendChild(input);
+  });
+  await page.locator("#graph-test-input").focus();
+  await page.keyboard.type("hv ");
+  await expect(page.locator("#graph-test-input")).toHaveValue("hv ");
+  await expect(stage).toHaveClass(/is-pointer/);
+  await page.locator("#graph-test-input").evaluate((input) => input.remove());
+  await stage.focus();
+  await stage.dispatchEvent("keydown", { key: "h", code: "KeyH", isComposing: true });
+  await expect(stage).toHaveClass(/is-pointer/);
+  await enableSpray(page);
+  await page.keyboard.press("h");
+  await expect(stage).toHaveClass(/is-hand/);
+  await expect(stage).not.toHaveClass(/is-spraying/);
+  await page.keyboard.press("v");
+  await expect(stage).toHaveClass(/is-pointer/);
+  expect(await selected(page)).toEqual([]);
+  expect(await activations(page)).toEqual([]);
+  expect(await sprays(page)).toEqual([]);
+});
+
+for (const original of ["pointer", "hand", "spray"] as const) {
+  test(`Space temporarily pans from nodes and restores ${original} even when released before pointerup`, async ({
+    page,
+  }) => {
+    await mount(page, false, 5);
+    await page.evaluate(() => (window as any).graphSetSelection(new Set(["8"])));
+    const stage = page.locator(".storyboard-graph-view");
+    await stage.focus();
+    if (original === "hand") await page.keyboard.press("h");
+    if (original === "spray") await enableSpray(page);
+    const geometry = () =>
+      page
+        .locator(".storyboard-graph-dot")
+        .evaluateAll((dots) => dots.map((dot) => (dot as HTMLElement).style.cssText));
+    const beforeGeometry = await geometry();
+    const before = await transform(page);
+    await page.keyboard.down("Space");
+    await expect(stage).toHaveClass(/is-hand/);
+    await expect(stage).not.toHaveClass(/is-spraying/);
+    const start = await center(shot(page, 4));
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 35, start.y + 20, { steps: 4 });
+    await expect.poll(async () => (await transform(page)).x).toBeCloseTo(before.x + 35, 0);
+    await expect(stage).toHaveClass(/is-panning/);
+    await page.keyboard.up("Space");
+    await expect(stage).not.toHaveClass(/is-panning/);
+    await expect(stage).toHaveClass(original === "hand" ? /is-hand/ : /is-pointer/);
+    if (original === "spray") await expect(stage).toHaveClass(/is-spraying/);
+    await page.mouse.up();
+    expect(await geometry()).toEqual(beforeGeometry);
+    expect(await selected(page)).toEqual(["8"]);
+    expect(await activations(page)).toEqual([]);
+    expect(await sprays(page)).toEqual([]);
+    await expect(page.locator(".storyboard-graph-marquee")).toHaveCount(0);
+
+    // Space also works over the thumbnail overlay, and a lost window focus
+    // releases the temporary tool even if no keyup reaches the graph.
+    await page.keyboard.down("Space");
+    await shot(page, 4).hover();
+    const preview = page.locator('[data-preview-shot-id="4"]');
+    await expect(preview).toBeVisible();
+    const thumb = await center(preview);
+    const beforePreviewPan = await transform(page);
+    await page.mouse.move(thumb.x, thumb.y);
+    await page.mouse.down();
+    await page.mouse.move(thumb.x + 20, thumb.y + 12, { steps: 4 });
+    await expect.poll(() => transform(page)).not.toEqual(beforePreviewPan);
+    await page.mouse.up();
+    await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    await expect(stage).toHaveClass(original === "hand" ? /is-hand/ : /is-pointer/);
+    if (original === "spray") await expect(stage).toHaveClass(/is-spraying/);
+    await page.keyboard.up("Space");
+    expect(await selected(page)).toEqual(["8"]);
+    expect(await activations(page)).toEqual([]);
+    expect(await sprays(page)).toEqual([]);
+  });
+}
+
 test("eye toggle hides all previews across tools while keeping selection, hover and spray behavior", async ({
   page,
 }) => {
@@ -666,7 +767,7 @@ for (const [label, spread] of [
   ["at", 7.360714285714286],
   ["below", 10],
 ] as const) {
-  test(`all previews stop ${label} 0.35 CSS pixels per unit and resume when zoomed in`, async ({
+  test(`only previews stop ${label} 0.35 CSS pixels per unit while hover remains active`, async ({
     page,
   }) => {
     await mount(page, false, spread);
@@ -676,12 +777,11 @@ for (const [label, spread] of [
     const stage = page.locator(".storyboard-graph-view");
     await dot.hover();
     await dot.focus();
-    await expect(
-      page.locator(
-        ".storyboard-graph-preview, .storyboard-graph-dot.is-hovered, .storyboard-graph-dot.is-neighbor, .storyboard-graph-edges line.is-highlighted",
-      ),
-    ).toHaveCount(0);
-    await expect(stage).not.toHaveClass(/has-focus/);
+    await expect(page.locator(".storyboard-graph-preview")).toHaveCount(0);
+    await expect(dot).toHaveClass(/is-hovered/);
+    await expect(page.locator(".storyboard-graph-dot.is-neighbor")).toHaveCount(3);
+    await expect(page.locator(".storyboard-graph-edges line.is-highlighted")).toHaveCount(3);
+    await expect(stage).toHaveClass(/has-focus/);
     await expect(dot).not.toHaveAttribute("aria-describedby");
     await dot.click();
     await expect(dot).toHaveAttribute("aria-pressed", "true");
@@ -689,6 +789,8 @@ for (const [label, spread] of [
     await page.getByRole("button", { name: "手型工具", exact: true }).click();
     await dot.hover();
     await expect(page.locator(".storyboard-graph-preview")).toHaveCount(0);
+    await expect(dot).toHaveClass(/is-hovered/);
+    await expect(stage).toHaveClass(/has-focus/);
     await page.getByRole("button", { name: "指针工具", exact: true }).click();
 
     await stage.focus();
@@ -708,17 +810,14 @@ for (const [label, spread] of [
     for (let i = 0; i < 8; i++) await stage.press("-");
     await expect.poll(async () => (await transform(page)).zoom).toBeLessThanOrEqual(0.35);
     await dot.focus();
-    await expect(
-      page.locator(
-        ".storyboard-graph-preview, .storyboard-graph-dot.is-hovered, .storyboard-graph-dot.is-neighbor, .storyboard-graph-edges line.is-highlighted",
-      ),
-    ).toHaveCount(0);
-    await expect(stage).not.toHaveClass(/has-focus/);
+    await expect(page.locator(".storyboard-graph-preview")).toHaveCount(0);
+    await expect(dot).toHaveClass(/is-hovered/);
+    await expect(stage).toHaveClass(/has-focus/);
     await expect(dot).toHaveAttribute("aria-pressed", "true");
   });
 }
 
-test("resizing below the hover threshold removes existing previews without stale hover returning", async ({
+test("resizing below the preview threshold hides thumbnails while preserving normal hover", async ({
   page,
 }) => {
   await mount(page, false, 5);
@@ -732,11 +831,10 @@ test("resizing below the hover threshold removes existing previews without stale
     host.style.height = "220px";
   });
   await expect.poll(async () => (await transform(page)).zoom).toBeLessThanOrEqual(0.35);
-  await expect(
-    page.locator(
-      ".storyboard-graph-preview, .storyboard-graph-dot.is-hovered, .storyboard-graph-edges line.is-highlighted",
-    ),
-  ).toHaveCount(0);
+  await expect(page.locator(".storyboard-graph-preview")).toHaveCount(0);
+  await dot.hover();
+  await expect(dot).toHaveClass(/is-hovered/);
+  await expect(page.locator(".storyboard-graph-edges line.is-highlighted")).toHaveCount(3);
   await page.mouse.move(1100, 700);
   await page.evaluate(() => {
     const host = document.querySelector<HTMLElement>("#graph-host")!;

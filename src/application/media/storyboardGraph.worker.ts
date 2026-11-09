@@ -1,10 +1,11 @@
 import {
   buildStoryboardGraph,
   indexStoryboardGraphSimilarities,
+  deserializeStoryboardGraphOptions,
+  type StoryboardGraphWorkerOptions,
   type StoryboardGraphNode,
   type StoryboardGraphVector,
 } from "../../core/editor/storyboardGraph/graph";
-import type { StoryboardGraphOptions } from "../../core/editor/storyboardGraph/options";
 
 let vectors: StoryboardGraphVector[] = [];
 let similarities: ReturnType<typeof indexStoryboardGraphSimilarities> | undefined;
@@ -15,7 +16,7 @@ self.onmessage = (
     vectors?: StoryboardGraphVector[];
     visibleIds: string[];
     positions?: StoryboardGraphNode[];
-    options: StoryboardGraphOptions;
+    options: StoryboardGraphWorkerOptions;
   }>,
 ) => {
   const { requestId, visibleIds, positions, options } = event.data;
@@ -34,7 +35,7 @@ self.onmessage = (
         lastUpdate = now;
         self.postMessage({ type: "progress", requestId, phase, fraction });
       },
-      options,
+      deserializeStoryboardGraphOptions(options),
       { similarities, positions },
     );
     self.postMessage({ type: "ready", requestId, graph });

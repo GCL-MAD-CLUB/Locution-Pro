@@ -10,12 +10,7 @@ import {
   type SimulationNodeDatum,
 } from "d3-force";
 import { clientError } from "../../../errors/model";
-import {
-  defaultStoryboardGraphOptions,
-  storyboardGraphNodeRadius,
-  storyboardGraphCollisionPadding,
-  type StoryboardGraphOptions,
-} from "./options";
+import { defaultStoryboardGraphOptions, type StoryboardGraphOptions } from "./options";
 
 export interface StoryboardGraphVector {
   id: string;
@@ -37,29 +32,65 @@ export interface StoryboardGraphEdge {
   similarity: number;
 }
 
-export interface StoryboardGraph {
+export interface StoryboardGraph extends Omit<
+  StoryboardGraphOptions,
+  "nodeRadius" | "maxVisibleDegree"
+> {
   nodes: StoryboardGraphNode[];
   edges: StoryboardGraphEdge[];
   neighbors: number;
-  minSimilarity: number;
-  maxDegree: number;
+}
+
+export interface StoryboardGraphWorkerOptions extends Omit<
+  StoryboardGraphOptions,
+  "nodeRadius" | "maxVisibleDegree"
+> {
+  nodeRadii: number[];
+}
+
+// Functions cannot cross the worker boundary. Evaluate the caller's radius
+// rule for every possible view degree, preserving custom closures without eval.
+export function serializeStoryboardGraphOptions(
+  options: StoryboardGraphOptions,
+  nodeCount: number,
+): StoryboardGraphWorkerOptions {
+  const { nodeRadius, maxVisibleDegree: _, ...settings } = options;
+  return {
+    ...settings,
+    nodeRadii: Array.from({ length: Math.max(1, nodeCount) }, (_, view_degree) =>
+      nodeRadius(view_degree),
+    ),
+  };
+}
+
+export function deserializeStoryboardGraphOptions(
+  options: StoryboardGraphWorkerOptions,
+): StoryboardGraphOptions {
+  const { nodeRadii, ...settings } = options;
+  return {
+    ...settings,
+    maxVisibleDegree: defaultStoryboardGraphOptions.maxVisibleDegree,
+    nodeRadius: (view_degree) => nodeRadii[view_degree],
+  };
 }
 
 // Apply the same sparse topology to rendering, hover neighbors and link forces.
-// Reserve each node's best link even below the cutoff. Additional links obey
-// the threshold and degree cap; mandatory best links take priority over the cap.
-export function sparsifyStoryboardGraphEdges(
-  edges: readonly StoryboardGraphEdge[],
+// Reserve each node's best minDegree links even below the cutoff. Additional
+// links obey the threshold and cap; mandatory links take priority over the cap.
+export function sparsifyStoryboardGraphEdges<Edge extends StoryboardGraphEdge>(
+  edges: readonly Edge[],
   nodeCount: number,
   options: StoryboardGraphOptions = defaultStoryboardGraphOptions,
 ) {
-  const { minSimilarity, maxDegree } = options;
+  const { minSimilarity, maxDegree, minDegree } = options;
   if (
     !Number.isFinite(minSimilarity) ||
     minSimilarity < 0 ||
     minSimilarity > 1 ||
     !Number.isInteger(maxDegree) ||
-    maxDegree < 1
+    maxDegree < 1 ||
+    !Number.isInteger(minDegree) ||
+    minDegree < 1
   ) {
     throw clientError("UNEXPECTED_ERROR", "Invalid storyboard graph sparsification options");
   }
@@ -67,22 +98,23 @@ export function sparsifyStoryboardGraphEdges(
     (a, b) => b.similarity - a.similarity || a.source - b.source || a.target - b.target,
   );
   const degrees = new Uint32Array(nodeCount);
-  const result: StoryboardGraphEdge[] = [];
-  const strongest: (StoryboardGraphEdge | undefined)[] = Array(nodeCount);
+  const result: Edge[] = [];
+  const strongest: Edge[][] = Array.from({ length: nodeCount }, () => []);
   for (const edge of candidates) {
-    strongest[edge.source] ??= edge;
-    strongest[edge.target] ??= edge;
+    for (const index of [edge.source, edge.target]) {
+      if (strongest[index].length < minDegree) strongest[index].push(edge);
+    }
   }
-  const retained = new Set<StoryboardGraphEdge>();
-  const retain = (edge: StoryboardGraphEdge) => {
+  const retained = new Set<Edge>();
+  const retain = (edge: Edge) => {
     if (retained.has(edge)) return;
     retained.add(edge);
     degrees[edge.source]++;
     degrees[edge.target]++;
     result.push(edge);
   };
-  for (const edge of strongest) {
-    if (edge) retain(edge);
+  for (const links of strongest) {
+    for (const edge of links) retain(edge);
   }
   for (const edge of candidates) {
     if (edge.similarity < minSimilarity || retained.has(edge)) continue;
@@ -138,20 +170,46 @@ export function indexStoryboardGraphSimilarities(input: readonly StoryboardGraph
   };
 }
 
-// Each disconnected component chooses its highest-scoring link to any external
-// node. Search all unit vectors: an outgoing link may be absent from the kNN
-// candidates entirely. Repeat after merging components, adding no redundant
-// bridges. Connectivity takes precedence over the threshold and degree cap.
+// Each disconnected component reserves its best minIslandConnections distinct
+// outgoing links, including when another bridge merges it during the same round.
+// Search all vectors, since kNN candidates may contain no external links. Repeat
+// after merging; connectivity takes precedence over the threshold and degree cap.
 export function connectStoryboardGraphEdges(
   edges: readonly StoryboardGraphEdge[],
   vectors: readonly (readonly number[])[],
   progress = (_: number) => {},
   distance = (source: number, target: number) =>
     normalizedCosineDistance(vectors[source], vectors[target]),
+  options: Pick<StoryboardGraphOptions, "minIslandConnections"> = defaultStoryboardGraphOptions,
 ) {
+  return connectStoryboardGraphComponents(
+    edges,
+    vectors.length,
+    options.minIslandConnections,
+    (labels, consider) => {
+      for (let source = 0; source < vectors.length; source++) {
+        for (let target = source + 1; target < vectors.length; target++) {
+          if (labels[source] === labels[target]) continue;
+          consider({ source, target, similarity: 1 - distance(source, target) });
+        }
+      }
+    },
+    progress,
+  );
+}
+
+function connectStoryboardGraphComponents<Edge extends StoryboardGraphEdge>(
+  edges: readonly Edge[],
+  nodeCount: number,
+  minIslandConnections: number,
+  visitCandidates: (labels: number[], consider: (edge: Edge) => void) => void,
+  progress = (_: number) => {},
+) {
+  if (!Number.isInteger(minIslandConnections) || minIslandConnections < 1)
+    throw clientError("UNEXPECTED_ERROR", "Invalid storyboard graph island connection count");
   const result = [...edges];
-  const parents = Uint32Array.from(vectors, (_, index) => index);
-  let components = vectors.length;
+  const parents = Uint32Array.from({ length: nodeCount }, (_, index) => index);
+  let components = nodeCount;
   const root = (index: number): number => {
     while (parents[index] !== index) {
       parents[index] = parents[parents[index]];
@@ -173,31 +231,74 @@ export function connectStoryboardGraphEdges(
     b.similarity - a.similarity || a.source - b.source || a.target - b.target;
 
   while (components > 1) {
-    const labels = Array.from(vectors, (_, index) => root(index));
-    const strongest: (StoryboardGraphEdge | undefined)[] = Array(vectors.length);
-    for (let source = 0; source < vectors.length; source++) {
-      for (let target = source + 1; target < vectors.length; target++) {
-        if (labels[source] === labels[target]) continue;
-        const edge = {
-          source,
-          target,
-          similarity: 1 - distance(source, target),
-        };
-        for (const component of [labels[source], labels[target]]) {
-          const best = strongest[component];
-          if (!best || compare(edge, best) < 0) strongest[component] = edge;
+    const labels = Array.from({ length: nodeCount }, (_, index) => root(index));
+    const strongest: Edge[][] = Array.from({ length: nodeCount }, () => []);
+    visitCandidates(labels, (edge) => {
+      if (labels[edge.source] === labels[edge.target]) return;
+      for (const component of [labels[edge.source], labels[edge.target]]) {
+        const best = strongest[component];
+        let position = best.length;
+        while (position > 0 && compare(edge, best[position - 1]) < 0) position--;
+        if (position < minIslandConnections) {
+          best.splice(position, 0, edge);
+          if (best.length > minIslandConnections) best.pop();
         }
       }
-    }
-    const bridges = strongest.filter((edge): edge is StoryboardGraphEdge => Boolean(edge));
+    });
+    const bridges = [...new Set(strongest.flat())];
+    // A provisional/front-end candidate pool may have no connecting edge.
+    if (!bridges.length) break;
     bridges.sort(compare);
     for (const edge of bridges) {
-      if (merge(edge)) result.push(edge);
+      merge(edge);
+      result.push(edge);
     }
     progress((initialComponents - components) / (initialComponents - 1));
   }
   progress(1);
   return result;
+}
+
+// Front-end sparsification reuses existing edges only. Mandatory node links
+// and island bridges override the display cap without touching force topology.
+export function storyboardGraphVisibleEdges<Edge extends StoryboardGraphEdge>(
+  edges: readonly Edge[],
+  nodeCount: number,
+  maxVisibleDegree: number,
+  options: Pick<
+    StoryboardGraphOptions,
+    "minDegree" | "minIslandConnections"
+  > = defaultStoryboardGraphOptions,
+): Edge[] {
+  if (maxVisibleDegree >= nodeCount - 1) return [...edges];
+  const sparse = sparsifyStoryboardGraphEdges(edges, nodeCount, {
+    ...defaultStoryboardGraphOptions,
+    ...options,
+    minSimilarity: 0,
+    maxDegree: Math.max(1, Math.floor(maxVisibleDegree)),
+  });
+  return connectStoryboardGraphComponents(
+    sparse,
+    nodeCount,
+    options.minIslandConnections,
+    (_labels, consider) => edges.forEach(consider),
+  );
+}
+
+export function storyboardGraphNodeRadii(
+  nodeCount: number,
+  visibleEdges: readonly StoryboardGraphEdge[],
+  nodeRadius: StoryboardGraphOptions["nodeRadius"] = defaultStoryboardGraphOptions.nodeRadius,
+) {
+  const viewDegrees = new Uint32Array(nodeCount);
+  for (const edge of visibleEdges) {
+    viewDegrees[edge.source]++;
+    viewDegrees[edge.target]++;
+  }
+  const radii = Array.from(viewDegrees, (view_degree) => nodeRadius(view_degree));
+  if (radii.some((radius) => !Number.isFinite(radius) || radius <= 0))
+    throw clientError("UNEXPECTED_ERROR", "Invalid storyboard graph node radius");
+  return radii;
 }
 
 // Exact kNN with O(nk) storage. Self is the first entry and is excluded from edges.
@@ -255,7 +356,10 @@ interface ForceEdge<Node extends StoryboardGraphForceNode> extends SimulationLin
 export function createStoryboardGraphSimulation<Node extends StoryboardGraphForceNode>(
   nodes: Node[],
   edges: readonly StoryboardGraphEdge[],
+  options: Pick<StoryboardGraphOptions, "collisionPadding"> = defaultStoryboardGraphOptions,
 ) {
+  if (!Number.isFinite(options.collisionPadding) || options.collisionPadding <= 0)
+    throw clientError("UNEXPECTED_ERROR", "Invalid storyboard graph collision padding");
   const degrees = nodes.map(() => 0);
   for (const edge of edges) {
     degrees[edge.source]++;
@@ -280,7 +384,7 @@ export function createStoryboardGraphSimulation<Node extends StoryboardGraphForc
     .force("charge", forceManyBody<Node>().strength(-120).distanceMin(12))
     .force(
       "collision",
-      forceCollide<Node>((node) => node.radius + storyboardGraphCollisionPadding).iterations(3),
+      forceCollide<Node>((node) => node.radius + options.collisionPadding).iterations(3),
     )
     .force("center", forceCenter(0, 0))
     .force("x", forceX<Node>(0).strength(0.015))
@@ -290,19 +394,20 @@ export function createStoryboardGraphSimulation<Node extends StoryboardGraphForc
 function forceDirectedPositions(
   shots: readonly StoryboardGraphVector[],
   edges: readonly StoryboardGraphEdge[],
-  degrees: readonly number[],
+  radii: readonly number[],
   progress: (fraction: number) => void,
+  options: StoryboardGraphOptions,
   previous: readonly StoryboardGraphNode[] = [],
 ) {
   if (shots.length <= 1) return shots.map(() => [0, 0]);
   const positions = new Map(previous.map((node) => [node.id, node]));
   const nodes: StoryboardGraphForceNode[] = shots.map((shot, i) => ({
     id: shot.id,
-    radius: storyboardGraphNodeRadius(degrees[i]),
+    radius: radii[i],
     x: positions.get(shot.id)?.x,
     y: positions.get(shot.id)?.y,
   }));
-  const simulation = createStoryboardGraphSimulation(nodes, edges);
+  const simulation = createStoryboardGraphSimulation(nodes, edges, options);
   try {
     const ticks = Math.ceil(
       Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay()),
@@ -335,7 +440,7 @@ export function buildStoryboardGraph(
   }
   const dimensions = shots[0]?.vector.length ?? 0;
   const vectors = shots.map((shot) => unitVector(shot.vector, dimensions));
-  const neighbors = Math.min(15, Math.max(0, shots.length - 1));
+  const neighbors = Math.min(Math.max(15, options.minDegree), Math.max(0, shots.length - 1));
   const distance = reuse.similarities
     ? (source: number, target: number) =>
         reuse.similarities!.distance(shots[source].id, shots[target].id)
@@ -364,34 +469,36 @@ export function buildStoryboardGraph(
     vectors,
     (fraction) => progress("neighbors", 0.85 + fraction * 0.15),
     distance,
+    options,
   );
-  const degrees = shots.map(() => 0);
-  for (const edge of sparseEdges) {
-    degrees[edge.source]++;
-    degrees[edge.target]++;
-  }
+  const radii = storyboardGraphNodeRadii(
+    shots.length,
+    storyboardGraphVisibleEdges(sparseEdges, shots.length, options.maxVisibleDegree, options),
+    options.nodeRadius,
+  );
   const positions = forceDirectedPositions(
     shots,
     sparseEdges,
-    degrees,
+    radii,
     (fraction) => progress("layout", fraction),
+    options,
     reuse.positions,
   );
   if (positions.some((position) => position.length !== 2 || !position.every(Number.isFinite))) {
     throw clientError("UNEXPECTED_ERROR", "Non-finite storyboard graph layout");
   }
   progress("layout", 1);
+  const { nodeRadius: _, maxVisibleDegree: __, ...settings } = options;
   return {
     nodes: shots.map((shot, i) => ({
       id: shot.id,
       thumbnailFrame: shot.thumbnailFrame,
-      radius: storyboardGraphNodeRadius(degrees[i]),
+      radius: radii[i],
       x: positions[i][0],
       y: positions[i][1],
     })),
     edges: sparseEdges,
     neighbors,
-    minSimilarity: options.minSimilarity,
-    maxDegree: options.maxDegree,
+    ...settings,
   };
 }

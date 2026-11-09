@@ -2,12 +2,22 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as d3 from "d3-force";
 import * as options from "../../../src/core/editor/storyboardGraph/options.ts";
+import { clientError } from "../../../src/errors/model.ts";
 import { createModuleLoader } from "../support/module-loader.ts";
 
+const graph = createModuleLoader(import.meta.url)(
+  "../../../src/core/editor/storyboardGraph/graph.ts",
+  {
+    "d3-force": d3,
+    "./options": options,
+    "../../../errors/model": { clientError },
+  },
+);
 const { createStoryboardGraphAmbient: create, remapStoryboardGraphEdges: remap } =
   createModuleLoader(import.meta.url)("../../../src/core/editor/storyboardGraph/ambient.ts", {
     "d3-force": d3,
     "./options": options,
+    "./graph": graph,
   });
 const input = (count) =>
   Array.from({ length: count }, (_, i) => ({
@@ -58,17 +68,33 @@ test("random force preview keeps evolving with finite bounded nodes and attracts
 });
 
 test("nearby force nodes fade their links in and ease radii using the shared degree rule", () => {
-  const world = create(input(9), random());
+  const settings = {
+    ...options.defaultStoryboardGraphOptions,
+    maxVisibleDegree: 3,
+    nodeRadius: (view_degree) => 4 + view_degree * 0.2,
+  };
+  const world = create(input(9), random(), undefined, settings);
   world.nodes.forEach((node, i) =>
     Object.assign(node, { fx: ((i % 3) - 1) * 40, fy: (Math.floor(i / 3) - 1) * 40 }),
   );
   world.step(1 / 60);
-  const expected = options.storyboardGraphNodeRadius(8);
-  assert.ok(world.nodes.every((node) => node.radius < expected));
+  const radii = () =>
+    graph.storyboardGraphNodeRadii(
+      world.nodes.length,
+      graph.storyboardGraphVisibleEdges(
+        world.edges,
+        world.nodes.length,
+        settings.maxVisibleDegree,
+        settings,
+      ),
+      settings.nodeRadius,
+    );
+  assert.ok(world.nodes.some((node, i) => node.radius < radii()[i]));
   assert.ok(world.edges.some((edge) => edge.opacity > 0 && edge.opacity < 1));
   advance(world, 120);
   assert.equal(world.edges.length, 36);
-  assert.ok(world.nodes.every((node) => Math.abs(node.radius - expected) < 0.001));
+  const expected = radii();
+  assert.ok(world.nodes.every((node, i) => Math.abs(node.radius - expected[i]) < 0.001));
   assert.ok(
     world.edges.every(
       (edge) =>

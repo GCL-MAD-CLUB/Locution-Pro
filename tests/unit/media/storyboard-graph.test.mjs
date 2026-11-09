@@ -16,12 +16,35 @@ const graphModule = createModuleLoader(import.meta.url)(
   },
 );
 const build = (shots, options = defaultStoryboardGraphOptions) =>
-  structuredClone(graphModule.buildStoryboardGraph(shots, undefined, options));
+  structuredClone(
+    graphModule.buildStoryboardGraph(shots, undefined, {
+      ...defaultStoryboardGraphOptions,
+      ...options,
+    }),
+  );
 const sparse = (edges, count, options = defaultStoryboardGraphOptions) =>
-  structuredClone(graphModule.sparsifyStoryboardGraphEdges(edges, count, options));
+  structuredClone(
+    graphModule.sparsifyStoryboardGraphEdges(edges, count, {
+      ...defaultStoryboardGraphOptions,
+      ...options,
+    }),
+  );
 const input = (id, vector) => ({ id, vector, thumbnailFrame: Number(id) * 10 });
-const connect = (edges, vectors) =>
-  structuredClone(graphModule.connectStoryboardGraphEdges(edges, vectors));
+const {
+  nodeRadius: _,
+  maxVisibleDegree: __,
+  ...defaultGraphSettings
+} = defaultStoryboardGraphOptions;
+const connect = (
+  edges,
+  vectors,
+  minIslandConnections = defaultStoryboardGraphOptions.minIslandConnections,
+) =>
+  structuredClone(
+    graphModule.connectStoryboardGraphEdges(edges, vectors, undefined, undefined, {
+      minIslandConnections,
+    }),
+  );
 
 test("interactive forces tether a grabbed node, move its neighbors and cool after release", () => {
   const graph = build(Array.from({ length: 9 }, (_, i) => input(String(i), [1, i / 8, 0.2])));
@@ -56,6 +79,91 @@ test("interactive forces tether a grabbed node, move its neighbors and cool afte
     assert.deepEqual(graph, snapshot, "semantic graph and numeric edge indices remain immutable");
   } finally {
     simulation.stop();
+  }
+});
+
+test("visible edge limits preserve minimum links and animation identity without mutating the computed graph", () => {
+  const edges = [
+    { source: 0, target: 1, similarity: 0.99, opacity: 0.8 },
+    { source: 0, target: 2, similarity: 0.8 },
+    { source: 0, target: 3, similarity: 0.7 },
+    { source: 1, target: 2, similarity: 0.9 },
+    { source: 1, target: 3, similarity: 0.6 },
+    { source: 2, target: 3, similarity: 0.5 },
+  ];
+  const snapshot = structuredClone(edges);
+  for (const limit of [0, 1, 2]) {
+    const visible = graphModule.storyboardGraphVisibleEdges(edges, 4, limit);
+    for (let i = 0; i < 4; i++)
+      assert.ok(visible.filter((edge) => edge.source === i || edge.target === i).length >= 2);
+    assert.equal(visible.length, 5);
+    assertConnected([0, 1, 2, 3], visible);
+    assert.ok(
+      visible.every((edge) => edges.includes(edge)),
+      "retain animation identity and opacity",
+    );
+    assert.deepEqual(
+      new Set(graphModule.storyboardGraphVisibleEdges([...edges].reverse(), 4, limit)),
+      new Set(visible),
+    );
+  }
+  assert.deepEqual(Array.from(graphModule.storyboardGraphVisibleEdges(edges, 4, 10)), edges);
+  assert.deepEqual(edges, snapshot);
+});
+
+test("display sparsification repairs islands with existing strongest bridges despite its lower degree cap", () => {
+  const internal = [
+    [0, 1],
+    [0, 2],
+    [1, 2],
+    [3, 4],
+    [3, 5],
+    [4, 5],
+  ].map(([source, target]) => ({ source, target, similarity: 1 }));
+  const bridges = [
+    { source: 2, target: 3, similarity: 0.3 },
+    { source: 1, target: 3, similarity: 0.2 },
+    { source: 0, target: 4, similarity: 0.1 },
+  ];
+  const edges = [...internal, ...bridges];
+  for (const minimum of [1, 2, 3]) {
+    const visible = graphModule.storyboardGraphVisibleEdges(edges, 6, 2, {
+      minDegree: 2,
+      minIslandConnections: minimum,
+    });
+    assert.deepEqual(
+      Array.from(visible).filter((edge) => bridges.includes(edge)),
+      bridges.slice(0, minimum),
+    );
+    assertConnected([0, 1, 2, 3, 4, 5], visible);
+    assert.ok(visible.every((edge) => edges.includes(edge)));
+  }
+  assert.deepEqual(
+    Array.from(graphModule.storyboardGraphVisibleEdges(internal, 6, 2)),
+    internal,
+    "disconnected provisional edge pools never invent a new force link or loop indefinitely",
+  );
+});
+
+test("supplementary display links obey the cap when minimum degree and connectivity already hold", () => {
+  const edges = [];
+  for (let source = 0; source < 20; source++) {
+    for (let target = source + 1; target < 20; target++) {
+      edges.push({
+        source,
+        target,
+        similarity: target === source + 1 || (source === 0 && target === 19) ? 1 : 0.9,
+      });
+    }
+  }
+  for (const limit of [2, 3, 8]) {
+    const visible = graphModule.storyboardGraphVisibleEdges(edges, 20, limit);
+    for (let i = 0; i < 20; i++) {
+      const degree = visible.filter((edge) => edge.source === i || edge.target === i).length;
+      assert.ok(degree >= 2 && degree <= limit);
+    }
+    assertConnected(Array(20), visible);
+    assert.ok(visible.length < edges.length);
   }
 });
 
@@ -104,32 +212,41 @@ function assertConnected(nodes, edges) {
   assert.equal(visited.size, nodes.length, "all nodes belong to one connected component");
 }
 
-test("island repair selects the strongest external link across every point in the component", () => {
+test("island repair reserves the two strongest distinct external links even after the first merges the islands", () => {
   const vectors = [0, 0.3, 1, 1.2].map((angle) => [Math.cos(angle), Math.sin(angle)]);
   const edges = [
     { source: 0, target: 1, similarity: 0.98 },
     { source: 2, target: 3, similarity: 0.99 },
   ];
   const before = structuredClone({ edges, vectors });
-  const repaired = connect(edges, vectors);
+  const repaired = connect(edges, vectors, 2);
   assert.deepEqual(repaired.slice(0, 2), edges);
-  assert.equal(repaired.length, 3);
+  assert.equal(repaired.length, 4);
   assert.deepEqual(repaired[2], {
     source: 1,
     target: 2,
     similarity: 1 - graphModule.normalizedCosineDistance(vectors[1], vectors[2]),
   });
+  assert.deepEqual(repaired[3], {
+    source: 1,
+    target: 3,
+    similarity: 1 - graphModule.normalizedCosineDistance(vectors[1], vectors[3]),
+  });
+  assert.equal(
+    new Set(repaired.map((edge) => `${edge.source}:${edge.target}`)).size,
+    repaired.length,
+  );
   assertConnected(vectors, repaired);
   assert.deepEqual({ edges, vectors }, before);
 });
 
-test("repair repeats after islands merge and only adds the bridges needed for connectivity", () => {
+test("island connection count is configurable and one bridge preserves minimal connectivity repair", () => {
   const vectors = [0, 0.01, 0.1, 0.11, 2, 2.01, 2.1, 2.11].map((angle) => [
     Math.cos(angle),
     Math.sin(angle),
   ]);
   const edges = [0, 2, 4, 6].map((source) => ({ source, target: source + 1, similarity: 1 }));
-  const repaired = connect(edges, vectors);
+  const repaired = connect(edges, vectors, 1);
   assertConnected(vectors, repaired);
   assert.equal(repaired.length - edges.length, 3);
   const bridges = repaired
@@ -142,9 +259,42 @@ test("repair repeats after islands merge and only adds the bridges needed for co
     [5, 6],
   ]);
   assert.deepEqual(
-    connect([...edges].reverse(), vectors).slice(edges.length),
+    connect([...edges].reverse(), vectors, 1).slice(edges.length),
     repaired.slice(edges.length),
   );
+});
+
+test("two outgoing links are reserved for each island and again for newly merged islands", () => {
+  const vectors = [0, 0.01, 0.1, 0.11, 2, 2.01, 2.1, 2.11].map((angle) => [
+    Math.cos(angle),
+    Math.sin(angle),
+  ]);
+  const edges = [0, 2, 4, 6].map((source) => ({ source, target: source + 1, similarity: 1 }));
+  const repaired = connect(edges, vectors, 2);
+  assertConnected(vectors, repaired);
+  const bridges = repaired.slice(edges.length);
+  for (const island of [
+    [0, 1],
+    [2, 3],
+    [4, 5],
+    [6, 7],
+    [0, 1, 2, 3],
+    [4, 5, 6, 7],
+  ]) {
+    assert.ok(
+      bridges.filter((edge) => island.includes(edge.source) !== island.includes(edge.target))
+        .length >= 2,
+    );
+  }
+  assert.equal(
+    new Set(repaired.map((edge) => `${edge.source}:${edge.target}`)).size,
+    repaired.length,
+  );
+  assert.deepEqual(connect([...edges].reverse(), vectors, 2).slice(edges.length), bridges);
+  const pairVectors = vectors.slice(0, 4);
+  for (const minimum of [1, 2, 3, 10]) {
+    assert.equal(connect(edges.slice(0, 2), pairVectors, minimum).length - 2, Math.min(minimum, 4));
+  }
 });
 
 test("island repair leaves connected, empty and single-node graphs unchanged", () => {
@@ -169,12 +319,25 @@ test("island repair leaves connected, empty and single-node graphs unchanged", (
       [1, 0],
       [1, 0],
     ],
+    2,
   );
   assertConnected([0, 1, 2], withoutEdges);
   assert.deepEqual(withoutEdges, [
     { source: 0, target: 1, similarity: 1 },
     { source: 0, target: 2, similarity: 1 },
+    { source: 1, target: 2, similarity: 1 },
   ]);
+  assert.deepEqual(
+    connect(
+      [],
+      [
+        [1, 0],
+        [-1, 0],
+      ],
+    ),
+    [{ source: 0, target: 1, similarity: 0 }],
+    "two singleton islands have only one distinct possible link",
+  );
 });
 
 test("complete graph bridges disconnected kNN islands even below threshold and beyond the degree cap", () => {
@@ -182,34 +345,152 @@ test("complete graph bridges disconnected kNN islands even below threshold and b
     input(String(i).padStart(2, "0"), i < 16 ? [1, 0] : [-1, 0]),
   );
   const original = structuredClone(shots);
-  const options = { minSimilarity: 1, maxDegree: 1 };
+  const options = { minSimilarity: 1, maxDegree: 1, minIslandConnections: 2 };
   const graph = build(shots, options);
   const crossIslandEdges = graph.edges.filter((edge) => edge.source < 16 !== edge.target < 16);
-  assert.deepEqual(crossIslandEdges, [{ source: 0, target: 16, similarity: 0 }]);
+  assert.deepEqual(crossIslandEdges, [
+    { source: 0, target: 16, similarity: 0 },
+    { source: 0, target: 17, similarity: 0 },
+  ]);
   assertConnected(graph.nodes, graph.edges);
-  assert.equal(graph.edges.length, 31);
+  assert.equal(graph.edges.length, 60);
   assert.deepEqual(build([...shots].reverse(), options), graph);
   assert.deepEqual(shots, original);
   for (let i = 0; i < graph.nodes.length; i++) {
     const degree = graph.edges.filter((edge) => edge.source === i || edge.target === i).length;
-    assert.equal(graph.nodes[i].radius, graphOptions.storyboardGraphNodeRadius(degree));
+    assert.equal(graph.nodes[i].radius, defaultStoryboardGraphOptions.nodeRadius(degree));
     assert.ok(Number.isFinite(graph.nodes[i].x) && Number.isFinite(graph.nodes[i].y));
   }
 });
 
-test("low-degree nodes share a radius; higher degrees grow the node and its collision disc", () => {
-  const radius = graphOptions.storyboardGraphNodeRadius;
-  for (const degree of [0, 1, 2, 3]) assert.equal(radius(degree), radius(0));
-  const increment = radius(6) - radius(5);
-  assert.ok(increment > 0);
-  for (let degree = 6; degree <= 100; degree++) {
-    assert.ok(radius(degree) > radius(degree - 1));
-    assert.ok(radius(degree) + graphOptions.storyboardGraphCollisionPadding > radius(degree));
+test("the configured radius rule supplies finite node geometry and a larger collision disc", () => {
+  const radius = defaultStoryboardGraphOptions.nodeRadius;
+  for (let degree = 0; degree <= 100; degree++) {
+    assert.ok(Number.isFinite(radius(degree)) && radius(degree) > 0);
+    assert.ok(radius(degree) + defaultStoryboardGraphOptions.collisionPadding > radius(degree));
   }
   const graph = build(Array.from({ length: 20 }, (_, i) => input(String(i), [1, 0])));
+  const visible = graphModule.storyboardGraphVisibleEdges(
+    graph.edges,
+    graph.nodes.length,
+    defaultStoryboardGraphOptions.maxVisibleDegree,
+    graph,
+  );
   for (let i = 0; i < graph.nodes.length; i++) {
-    const degree = graph.edges.filter((edge) => edge.source === i || edge.target === i).length;
-    assert.equal(graph.nodes[i].radius, radius(degree));
+    const view_degree = visible.filter((edge) => edge.source === i || edge.target === i).length;
+    assert.equal(graph.nodes[i].radius, radius(view_degree));
+  }
+});
+
+test("custom radius closures survive worker serialization and collision padding reaches layout and live dragging", () => {
+  const baseRadius = 9;
+  const settings = {
+    ...defaultStoryboardGraphOptions,
+    nodeRadius: (degree) => baseRadius + degree * 0.3,
+    collisionPadding: 7,
+  };
+  const shots = Array.from({ length: 9 }, (_, i) => input(String(i), [1, i / 9]));
+  const serialized = structuredClone(
+    graphModule.serializeStoryboardGraphOptions(settings, shots.length),
+  );
+  assert.equal("nodeRadius" in serialized, false);
+  assert.equal("maxVisibleDegree" in serialized, false);
+  assert.deepEqual(
+    structuredClone(
+      graphModule.serializeStoryboardGraphOptions(
+        { ...settings, maxVisibleDegree: 0 },
+        shots.length,
+      ),
+    ),
+    serialized,
+    "display changes neither invalidate the worker layout nor enter its payload",
+  );
+  const restored = graphModule.deserializeStoryboardGraphOptions(serialized);
+  const graph = build(shots, restored);
+  assert.deepEqual(graph, build(shots, settings));
+  assert.deepEqual(graph.edges, build(shots, { ...settings, maxVisibleDegree: 0 }).edges);
+  assert.equal(graph.collisionPadding, 7);
+  assert.equal("nodeRadius" in graph, false, "worker results remain structured-cloneable");
+  const visible = graphModule.storyboardGraphVisibleEdges(
+    graph.edges,
+    graph.nodes.length,
+    settings.maxVisibleDegree,
+    graph,
+  );
+  for (let i = 0; i < graph.nodes.length; i++) {
+    const view_degree = visible.filter((edge) => edge.source === i || edge.target === i).length;
+    assert.equal(graph.nodes[i].radius, settings.nodeRadius(view_degree));
+    for (let j = i + 1; j < graph.nodes.length; j++) {
+      const a = graph.nodes[i];
+      const b = graph.nodes[j];
+      assert.ok(
+        Math.hypot(a.x - b.x, a.y - b.y) >=
+          a.radius + b.radius + settings.collisionPadding * 2 - 0.1,
+      );
+    }
+  }
+  const nodes = graph.nodes.slice(0, 2).map((node, i) => ({ ...node, x: i, y: 0 }));
+  const simulation = graphModule
+    .createStoryboardGraphSimulation(nodes, [], graph)
+    .force("charge", null)
+    .force("x", null)
+    .force("y", null);
+  try {
+    simulation.tick(320);
+    assert.ok(
+      Math.hypot(nodes[0].x - nodes[1].x, nodes[0].y - nodes[1].y) >=
+        nodes[0].radius + nodes[1].radius + settings.collisionPadding * 2 - 0.1,
+    );
+  } finally {
+    simulation.stop();
+  }
+  assert.equal(graphModule.serializeStoryboardGraphOptions(settings, 0).nodeRadii[0], baseRadius);
+});
+
+test("nodeRadius receives the final visible degree including mandatory links and island repair", () => {
+  const received = [];
+  const settings = {
+    ...defaultStoryboardGraphOptions,
+    minSimilarity: 0,
+    maxDegree: 18,
+    maxVisibleDegree: 3,
+    nodeRadius: (view_degree) => {
+      received.push(view_degree);
+      return 5 + view_degree * 0.2;
+    },
+  };
+  const graph = build(
+    Array.from({ length: 12 }, (_, i) => input(String(i), [1, 0])),
+    settings,
+  );
+  const visible = graphModule.storyboardGraphVisibleEdges(
+    graph.edges,
+    graph.nodes.length,
+    settings.maxVisibleDegree,
+    graph,
+  );
+  const viewDegrees = graph.nodes.map(
+    (_, i) => visible.filter((edge) => edge.source === i || edge.target === i).length,
+  );
+  assert.deepEqual(received, viewDegrees);
+  assert.ok(
+    viewDegrees.some(
+      (degree, i) =>
+        degree < graph.edges.filter((edge) => edge.source === i || edge.target === i).length,
+    ),
+  );
+  assert.deepEqual(
+    graph.nodes.map((node) => node.radius),
+    viewDegrees.map((degree) => 5 + degree * 0.2),
+  );
+});
+
+test("invalid radius functions and nonpositive collision padding are rejected", () => {
+  for (const radius of [-1, 0, NaN, Infinity]) {
+    assert.throws(() => build([input("0", [1, 0])], { nodeRadius: () => radius }));
+  }
+  for (const collisionPadding of [-1, 0, NaN, Infinity]) {
+    assert.throws(() => build([input("0", [1, 0]), input("1", [0, 1])], { collisionPadding }));
   }
 });
 
@@ -244,15 +525,21 @@ test("zero, one and two shots produce valid force layouts", () => {
     nodes: [],
     edges: [],
     neighbors: 0,
-    ...defaultStoryboardGraphOptions,
+    ...defaultGraphSettings,
   });
   assert.deepEqual(build([input("0", [3, 0])]), {
     nodes: [
-      { id: "0", thumbnailFrame: 0, radius: graphOptions.storyboardGraphNodeRadius(0), x: 0, y: 0 },
+      {
+        id: "0",
+        thumbnailFrame: 0,
+        radius: defaultStoryboardGraphOptions.nodeRadius(0),
+        x: 0,
+        y: 0,
+      },
     ],
     edges: [],
     neighbors: 0,
-    ...defaultStoryboardGraphOptions,
+    ...defaultGraphSettings,
   });
   const graph = build([input("1", [0, 4]), input("0", [3, 0])]);
   assert.equal(graph.nodes.length, 2);
@@ -293,11 +580,26 @@ test("three shots and repeated semantic vectors remain separated by the force si
         const b = graph.nodes[j];
         assert.ok(
           Math.hypot(a.x - b.x, a.y - b.y) >=
-            a.radius + b.radius + graphOptions.storyboardGraphCollisionPadding * 2 - 0.1,
+            a.radius + b.radius + defaultStoryboardGraphOptions.collisionPadding * 2 - 0.1,
           "collision force separates duplicate vectors",
         );
       }
     }
+  }
+});
+
+test("minimum degree expands the kNN candidate count and clamps to available distinct neighbors", () => {
+  const shots = Array.from({ length: 20 }, (_, i) => input(String(i), [Math.cos(i), Math.sin(i)]));
+  for (const minimum of [2, 17, 30]) {
+    const graph = build(shots, { minSimilarity: 1, maxDegree: 1, minDegree: minimum });
+    for (let i = 0; i < shots.length; i++) {
+      assert.ok(
+        graph.edges.filter((edge) => edge.source === i || edge.target === i).length >=
+          Math.min(minimum, shots.length - 1),
+      );
+    }
+    assert.equal(graph.minDegree, minimum);
+    assert.equal(graph.minIslandConnections, defaultStoryboardGraphOptions.minIslandConnections);
   }
 });
 
@@ -316,7 +618,7 @@ test("force layout progress reaches completion and neighbors exclude self from k
   const graph = graphModule.buildStoryboardGraph(
     Array.from({ length: 4 }, (_, i) => input(String(i), [Math.cos(i), Math.sin(i)])),
     (phase, fraction) => progress.push([phase, fraction]),
-    { minSimilarity: 0, maxDegree: 15 },
+    { ...defaultStoryboardGraphOptions, minSimilarity: 0, maxDegree: 15 },
   );
   assert.equal(graph.neighbors, 3);
   assert.equal(graph.edges.length, 6);
@@ -354,14 +656,14 @@ test("sparsification drops weak supplementary links and includes the exact cutof
     { source: 1, target: 3, similarity: 0.799999 },
   ];
   const before = structuredClone(edges);
-  const result = sparse(edges, 4, { minSimilarity: 0.8, maxDegree: 15 });
+  const result = sparse(edges, 4, { minSimilarity: 0.8, maxDegree: 15, minDegree: 1 });
   assert.equal(result.length, 3);
   assert.ok(result.some((edge) => edge.similarity === 0.8));
   assert.ok(result.every((edge) => edge.similarity >= 0.8));
   assert.deepEqual(edges, before);
 });
 
-test("each shot retains its highest-scoring link even below threshold", () => {
+test("each shot retains its two highest-scoring links even below threshold and beyond the cap", () => {
   const edges = [
     { source: 0, target: 1, similarity: 0.7 },
     { source: 0, target: 2, similarity: 0.6 },
@@ -369,19 +671,19 @@ test("each shot retains its highest-scoring link even below threshold", () => {
     { source: 2, target: 3, similarity: 0.65 },
     { source: 1, target: 3, similarity: 0.4 },
   ];
-  const result = sparse(edges, 4, { minSimilarity: 1, maxDegree: 15 });
+  const result = sparse(edges, 4, { minSimilarity: 1, maxDegree: 1 });
   for (let i = 0; i < 4; i++) {
-    const best = Math.max(
-      ...edges
-        .filter((edge) => edge.source === i || edge.target === i)
-        .map((edge) => edge.similarity),
-    );
-    assert.ok(
-      result.some((edge) => (edge.source === i || edge.target === i) && edge.similarity === best),
-    );
+    const best = edges
+      .filter((edge) => edge.source === i || edge.target === i)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 2);
+    for (const edge of best)
+      assert.ok(result.some((link) => link.source === edge.source && link.target === edge.target));
   }
-  assert.ok(result.every((edge) => edge.similarity >= 0.65));
-  assert.deepEqual(sparse([...edges].reverse(), 4, { minSimilarity: 1, maxDegree: 15 }), result);
+  assert.equal(result.length, 5);
+  assert.deepEqual(sparse([...edges].reverse(), 4, { minSimilarity: 1, maxDegree: 1 }), result);
+  assert.equal(sparse(edges, 4, { minSimilarity: 1, minDegree: 1 }).length, 2);
+  assert.equal(sparse(edges, 4, { minSimilarity: 1, minDegree: 3 }).length, edges.length);
 });
 
 test("supplementary links obey the 15-link degree cap in both directions", () => {
@@ -392,7 +694,7 @@ test("supplementary links obey the 15-link degree cap in both directions", () =>
       edges.push({
         source,
         target,
-        similarity: source % 2 === 0 && target === source + 1 ? 1 : 0.9,
+        similarity: target === source + 1 || (source === 0 && target === count - 1) ? 1 : 0.9,
       });
     }
   }
@@ -402,7 +704,7 @@ test("supplementary links obey the 15-link degree cap in both directions", () =>
     degrees[edge.source]++;
     degrees[edge.target]++;
   }
-  assert.ok(degrees.every((degree) => degree >= 1 && degree <= 15));
+  assert.ok(degrees.every((degree) => degree >= 2 && degree <= 15));
   assert.ok(result.length < edges.length);
   assert.equal(new Set(result.map((edge) => `${edge.source}:${edge.target}`)).size, result.length);
 });
@@ -425,7 +727,7 @@ test("raising the threshold keeps all shots and their best links in the simulate
   assert.equal(strict.nodes.length, shots.length);
   assert.ok(strict.edges.length < loose.edges.length);
   for (let i = 0; i < strict.nodes.length; i++) {
-    assert.ok(strict.edges.some((edge) => edge.source === i || edge.target === i));
+    assert.ok(strict.edges.filter((edge) => edge.source === i || edge.target === i).length >= 2);
   }
   assert.ok(strict.nodes.every((node) => Number.isFinite(node.x) && Number.isFinite(node.y)));
   assert.notDeepEqual(
@@ -442,8 +744,12 @@ test("invalid sparsification settings are rejected", () => {
     { minSimilarity: 0.8, maxDegree: 0 },
     { minSimilarity: 0.8, maxDegree: 1.5 },
     { minSimilarity: 0.8, maxDegree: Infinity },
+    { minDegree: 0 },
+    { minDegree: 1.5 },
+    { minDegree: Infinity },
   ])
     assert.throws(() => sparse([], 0, options));
+  for (const count of [0, -1, 1.5, Infinity, NaN]) assert.throws(() => connect([], [], count));
 });
 
 test("invalid and mismatched vectors and duplicate shot IDs fail instead of producing misleading dots", () => {

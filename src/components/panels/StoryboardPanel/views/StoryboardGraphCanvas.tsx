@@ -13,11 +13,16 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import type {
-  StoryboardGraph,
-  StoryboardGraphNode,
+import {
+  storyboardGraphVisibleEdges,
+  storyboardGraphNodeRadii,
+  type StoryboardGraph,
+  type StoryboardGraphNode,
 } from "../../../../core/editor/storyboardGraph/graph";
-import { storyboardGraphNodeRadius } from "../../../../core/editor/storyboardGraph/options";
+import {
+  defaultStoryboardGraphOptions,
+  type StoryboardGraphOptions,
+} from "../../../../core/editor/storyboardGraph/options";
 import {
   constrainStoryboardGraphCamera,
   fitStoryboardGraphCamera,
@@ -55,6 +60,8 @@ import "./StoryboardGraphView.css";
 export interface StoryboardGraphCanvasProps {
   graph?: StoryboardGraph;
   preparing?: boolean;
+  maxVisibleDegree?: number;
+  nodeRadius?: StoryboardGraphOptions["nodeRadius"];
   shots: readonly StoryboardShot[];
   sourceForShot: (shot: StoryboardShot) => PanelRowSource;
   shotTitle: (shot: StoryboardShot) => string;
@@ -368,6 +375,8 @@ function GraphPreviewPresence({
 export function StoryboardGraphCanvas({
   graph,
   preparing = false,
+  maxVisibleDegree = defaultStoryboardGraphOptions.maxVisibleDegree,
+  nodeRadius = defaultStoryboardGraphOptions.nodeRadius,
   shots,
   sourceForShot,
   shotTitle,
@@ -443,12 +452,26 @@ export function StoryboardGraphCanvas({
             id: shot.id,
             x: 0,
             y: 0,
-            radius: storyboardGraphNodeRadius(0),
+            radius: nodeRadius(0),
             thumbnailFrame: shot.start_frame,
           }))
         : [],
-    [preparing, shots],
+    [preparing, shots, nodeRadius],
   );
+  const view = useMemo(() => {
+    if (!graph) return null;
+    const edges = storyboardGraphVisibleEdges(
+      graph.edges,
+      graph.nodes.length,
+      maxVisibleDegree,
+      graph,
+    );
+    const radii = storyboardGraphNodeRadii(graph.nodes.length, edges, nodeRadius);
+    return {
+      edges,
+      graph: { ...graph, nodes: graph.nodes.map((node, i) => ({ ...node, radius: radii[i] })) },
+    };
+  }, [graph, maxVisibleDegree, nodeRadius]);
   const {
     nodes,
     edges: motionEdges,
@@ -456,7 +479,7 @@ export function StoryboardGraphCanvas({
     beginDrag,
     moveDrag,
     endDrag,
-  } = useStoryboardGraphMotion(graph, panelActive, pendingNodes);
+  } = useStoryboardGraphMotion(view?.graph, panelActive, pendingNodes, graph);
   const canvas = useMemo(() => storyboardGraphCanvas(nodes), [nodes]);
   const initialCamera = useMemo(
     () => fitStoryboardGraphCamera(nodes, size, canvas),
@@ -539,17 +562,28 @@ export function StoryboardGraphCanvas({
     [visibleNodes],
   );
   const neighborhoods = useMemo(
-    () => (graph ? indexStoryboardGraphNeighborhoods(graph) : new Map<string, Set<string>>()),
-    [graph],
+    () =>
+      graph && view
+        ? indexStoryboardGraphNeighborhoods({
+            ...graph,
+            edges: view.edges,
+          })
+        : new Map<string, Set<string>>(),
+    [graph, view],
   );
   const edges = useMemo(
     () =>
-      motionEdges.filter(
-        (edge) =>
-          shotsById.has((graph?.nodes ?? pendingNodes)[edge.source].id) &&
-          shotsById.has((graph?.nodes ?? pendingNodes)[edge.target].id),
+      storyboardGraphVisibleEdges(
+        motionEdges.filter(
+          (edge) =>
+            shotsById.has((graph?.nodes ?? pendingNodes)[edge.source].id) &&
+            shotsById.has((graph?.nodes ?? pendingNodes)[edge.target].id),
+        ),
+        nodes.length,
+        maxVisibleDegree,
+        graph ?? defaultStoryboardGraphOptions,
       ),
-    [motionEdges, shotsById, graph?.nodes, pendingNodes],
+    [motionEdges, shotsById, graph, pendingNodes, nodes.length, maxVisibleDegree],
   );
   const neighborhood = activeHoveredId
     ? (neighborhoods.get(activeHoveredId) ?? emptyNeighborhood)
@@ -812,7 +846,15 @@ export function StoryboardGraphCanvas({
     lastClickRef.current = null;
     lastSprayClickRef.current = null;
     cancelGestures(false);
-  }, [graph, visibleNodeKey, sprayActive, cancelGestures, resetHover]);
+  }, [
+    graph,
+    visibleNodeKey,
+    sprayActive,
+    maxVisibleDegree,
+    nodeRadius,
+    cancelGestures,
+    resetHover,
+  ]);
 
   useEffect(() => {
     if (!panelActive) {

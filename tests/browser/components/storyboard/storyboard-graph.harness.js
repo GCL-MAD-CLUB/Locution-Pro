@@ -30,6 +30,9 @@ const graph = {
   neighbors: 8,
   minSimilarity: 0.9,
   maxDegree: 8,
+  minDegree: 2,
+  minIslandConnections: 2,
+  collisionPadding: 2,
 };
 const source = {
   context: "test",
@@ -41,9 +44,19 @@ const source = {
   frameRate: 24,
 };
 
-export function mountGraph(empty = false, spread = 1, nodeRadius = 4) {
+export function mountGraph(empty = false, spread = 1, nodeRadius = 4, dense = false) {
+  const radiusForView = dense ? (view_degree) => nodeRadius + view_degree * 0.1 : () => nodeRadius;
   const renderedGraph = {
     ...graph,
+    edges: dense
+      ? shots.flatMap((_, source) =>
+          shots.slice(source + 1).map((_, offset) => ({
+            source,
+            target: source + offset + 1,
+            similarity: 1 / (offset + 1),
+          })),
+        )
+      : graph.edges,
     nodes: graph.nodes.map((node) => ({
       ...node,
       x: node.x * spread,
@@ -61,6 +74,7 @@ export function mountGraph(empty = false, spread = 1, nodeRadius = 4) {
   reference.style.cssText = "position:fixed;left:-10000px;width:100px;height:100px";
   document.body.append(reference);
   function Harness() {
+    const [maxVisibleDegree, setMaxVisibleDegree] = useState(8);
     const [selectedShotIds, setSelectedShotIds] = useState(new Set());
     const [activatedShotId, setActivatedShotId] = useState(null);
     const [activations, setActivations] = useState([]);
@@ -68,6 +82,8 @@ export function mountGraph(empty = false, spread = 1, nodeRadius = 4) {
     const [sprayActive, setSprayActive] = useState(false);
     const [sprays, setSprays] = useState([]);
     window.graphSetAnnotations = setShotAnnotations;
+    window.graphSetMaxVisibleDegree = setMaxVisibleDegree;
+    window.graphComputedGraph = renderedGraph;
     window.graphSetSelection = setSelectedShotIds;
     window.graphSetSprayActive = setSprayActive;
     window.graphSprays = sprays;
@@ -76,6 +92,8 @@ export function mountGraph(empty = false, spread = 1, nodeRadius = 4) {
     window.graphActivations = activations;
     return React.createElement(StoryboardGraphCanvas, {
       graph: empty ? undefined : renderedGraph,
+      maxVisibleDegree,
+      nodeRadius: radiusForView,
       shots,
       sourceForShot: () => source,
       shotTitle: (shot) => `Shot ${shot.id}`,

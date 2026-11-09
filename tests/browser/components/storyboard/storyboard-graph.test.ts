@@ -37,6 +37,70 @@ const sprays = (
   page.evaluate(() => (window as any).graphSprays);
 const enableSpray = (page: Page) => page.evaluate(() => (window as any).graphSetSprayActive(true));
 
+test("display edge limits update neighbors and radii from view degrees while preserving the computed layout", async ({
+  page,
+}) => {
+  await page.goto("/tests/browser/support/blank.html");
+  await page.evaluate(async () => {
+    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
+    (await import(/* @vite-ignore */ path)).mountGraph(false, 1, 4, true);
+  });
+  const stage = page.locator(".storyboard-graph-view");
+  await expect(page.locator(".storyboard-graph-dot")).toHaveCount(9);
+  const geometry = () =>
+    page.locator(".storyboard-graph-dot").evaluateAll((elements) =>
+      elements.map((element) => ({
+        x: (element as HTMLElement).style.left,
+        y: (element as HTMLElement).style.top,
+      })),
+    );
+  const edgeCount = () =>
+    page
+      .locator(".storyboard-graph-base-edges")
+      .evaluateAll((elements) =>
+        elements.reduce(
+          (count, element) => count + (element.getAttribute("d")?.match(/M/g)?.length ?? 0),
+          0,
+        ),
+      );
+  const miniCount = () =>
+    page
+      .locator(".storyboard-graph-minimap-content > path")
+      .evaluate((path) => path.getAttribute("d")?.match(/M/g)?.length ?? 0);
+  const beforeGeometry = await geometry();
+  const beforeCamera = await transform(page);
+  await expect.poll(edgeCount).toBe(36);
+  await expect.poll(miniCount).toBe(36);
+  for (const limit of [3, 1, 0]) {
+    await page.evaluate((limit) => (window as any).graphSetMaxVisibleDegree(limit), limit);
+    if (limit === 3) await expect.poll(edgeCount).toBeGreaterThan(10);
+    else await expect.poll(edgeCount).toBe(10);
+    const visible = await edgeCount();
+    await expect.poll(miniCount).toBe(visible);
+    await shot(page, 4).hover();
+    await expect(stage).toHaveClass(/has-focus/);
+    const neighborCount = Math.max(2, limit);
+    await expect(page.locator(".storyboard-graph-edges line.is-highlighted")).toHaveCount(
+      neighborCount,
+    );
+    await expect(page.locator(".storyboard-graph-dot.is-neighbor")).toHaveCount(neighborCount + 1);
+    await expect
+      .poll(async () => Number(await page.locator('[data-graph-node="4"]').getAttribute("r")))
+      .toBeCloseTo((4 + neighborCount * 0.1 - 0.5) * 0.8, 4);
+    expect(await geometry()).toEqual(beforeGeometry);
+    expect(await transform(page)).toEqual(beforeCamera);
+    expect(await page.evaluate(() => (window as any).graphComputedGraph.edges.length)).toBe(36);
+    await page.mouse.move(30, 460);
+  }
+  expect(await selected(page)).toEqual([]);
+  expect(await activations(page)).toEqual([]);
+  await shot(page, 4).dblclick();
+  expect(await selected(page)).toEqual(["3", "4", "5"]);
+  await enableSpray(page);
+  await shot(page, 4).dblclick();
+  expect((await sprays(page)).at(-1)?.ids).toEqual(["3", "4", "5"]);
+});
+
 test("V/H switch graph tools without intercepting text entry, modified keys or toolbar Space", async ({
   page,
 }) => {
@@ -77,6 +141,59 @@ test("V/H switch graph tools without intercepting text entry, modified keys or t
   expect(await selected(page)).toEqual([]);
   expect(await activations(page)).toEqual([]);
   expect(await sprays(page)).toEqual([]);
+});
+
+test("view-degree radius changes preserve an already dragged layout and its camera", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/tests/browser/support/blank.html");
+  await page.evaluate(async () => {
+    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
+    (await import(/* @vite-ignore */ path)).mountGraph(false, 5, 4, true);
+  });
+  await expect(page.locator(".storyboard-graph-dot")).toHaveCount(9);
+  const start = await center(shot(page, 4));
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 70, start.y + 35, { steps: 5 });
+  await page.mouse.up();
+  await page.mouse.move(30, 460);
+  const positions = () =>
+    page
+      .locator(".storyboard-graph-dot")
+      .evaluateAll((elements) =>
+        elements.map((element) => [
+          (element as HTMLElement).style.left,
+          (element as HTMLElement).style.top,
+        ]),
+      );
+  await expect
+    .poll(() =>
+      page.evaluate(async () => {
+        const read = () =>
+          [...document.querySelectorAll<HTMLElement>(".storyboard-graph-dot")]
+            .map((element) => element.style.cssText)
+            .join("|");
+        const before = read();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return before === read();
+      }),
+    )
+    .toBe(true);
+  const before = await positions();
+  const camera = await transform(page);
+  const radius = await page.locator('[data-graph-node="4"]').getAttribute("r");
+  await page.evaluate(() => (window as any).graphSetMaxVisibleDegree(2));
+  await expect.poll(() => page.locator('[data-graph-node="4"]').getAttribute("r")).not.toBe(radius);
+  // Wait until the size spring completes; position must stay fixed throughout.
+  for (let i = 0; i < 8; i++) {
+    await page.waitForTimeout(150);
+    expect(await positions()).toEqual(before);
+    expect(await transform(page)).toEqual(camera);
+  }
+  expect(await selected(page)).toEqual([]);
+  expect(await activations(page)).toEqual([]);
 });
 
 for (const original of ["pointer", "hand", "spray"] as const) {

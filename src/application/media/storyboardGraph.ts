@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  StoryboardGraph,
-  StoryboardGraphVector,
+import {
+  serializeStoryboardGraphOptions,
+  type StoryboardGraph,
+  type StoryboardGraphVector,
 } from "../../core/editor/storyboardGraph/graph";
 import { clientError, invokeCommand, runOperation } from "../../errors";
 import { ensureStoryboardSemanticIndex, type SemanticShot } from "./storyboardSemanticSearch";
@@ -26,12 +27,11 @@ export function useStoryboardGraph(
     () => JSON.stringify([scope, [...shots].sort((a, b) => a.id.localeCompare(b.id))]),
     [scope, shots],
   );
-  const key = JSON.stringify([
-    indexKey,
-    [...visibleShotIds].sort(),
-    options.minSimilarity,
-    options.maxDegree,
-  ]);
+  const workerOptions = useMemo(
+    () => serializeStoryboardGraphOptions(options, shots.length),
+    [options, shots.length],
+  );
+  const key = JSON.stringify([indexKey, [...visibleShotIds].sort(), workerOptions]);
   const cachedVectors = useRef<{
     scope: string;
     entries: Map<string, { key: string; vector: StoryboardGraphVector }>;
@@ -51,7 +51,8 @@ export function useStoryboardGraph(
   useEffect(() => {
     if (!enabled) return;
     if (!shots.length) {
-      const graph: StoryboardGraph = { nodes: [], edges: [], neighbors: 0, ...options };
+      const { nodeRadii: _, ...settings } = workerOptions;
+      const graph: StoryboardGraph = { nodes: [], edges: [], neighbors: 0, ...settings };
       lastGraph.current = { scope, graph };
       setResult({ key, state: { status: "ready", graph } });
       return;
@@ -137,7 +138,7 @@ export function useStoryboardGraph(
           vectors: currentLayout.vectors === cache.vectors ? undefined : cache.vectors,
           visibleIds: visibleShotIds,
           positions: lastGraph.current?.scope === scope ? lastGraph.current.graph.nodes : undefined,
-          options,
+          options: workerOptions,
         });
         currentLayout.vectors = cache.vectors;
       });

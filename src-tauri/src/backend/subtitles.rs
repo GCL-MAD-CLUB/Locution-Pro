@@ -567,6 +567,9 @@ pub(crate) fn decode_text(bytes: &[u8]) -> String {
         return text.to_string();
     }
 
+    // `Encoding::decode` sniffs a UTF-8 or UTF-16 BOM and decodes with that
+    // encoding before applying the legacy one. Notepad "Unicode" is UTF-16
+    // with a BOM, so it must stay on this path rather than `decode_without_bom_handling`.
     for encoding in [GBK, BIG5, SHIFT_JIS, WINDOWS_1252] {
         let (decoded, _, had_errors) = encoding.decode(bytes);
         if !had_errors {
@@ -634,6 +637,56 @@ mod tests {
                 .unwrap_err()
                 .is(ErrorCode::TaskCancelled)
         );
+    }
+
+    fn utf16_bytes(text: &str, bom: [u8; 2], little_endian: bool) -> Vec<u8> {
+        let mut bytes = bom.to_vec();
+        for unit in text.encode_utf16() {
+            let encoded = if little_endian {
+                unit.to_le_bytes()
+            } else {
+                unit.to_be_bytes()
+            };
+            bytes.extend(encoded);
+        }
+        bytes
+    }
+
+    #[test]
+    fn decode_text_reads_utf16_bom_and_keeps_utf8() {
+        let text = "1\r\n00:00:01,000 --> 00:00:02,000\r\n你好 Hello\r\n";
+        let expected = text.replace("\r\n", "\n");
+        let utf8 = text.as_bytes();
+        let mut utf8_bom = vec![0xEF, 0xBB, 0xBF];
+        utf8_bom.extend_from_slice(utf8);
+
+        assert_eq!(normalize_newlines(&decode_text(utf8)), expected);
+        assert_eq!(normalize_newlines(&decode_text(&utf8_bom)), expected);
+        assert_eq!(
+            normalize_newlines(&decode_text(&utf16_bytes(text, [0xFF, 0xFE], true))),
+            expected
+        );
+        assert_eq!(
+            normalize_newlines(&decode_text(&utf16_bytes(text, [0xFE, 0xFF], false))),
+            expected
+        );
+
+        let cues = parse_subtitle_text_cancellable(
+            &decode_text(&utf16_bytes(text, [0xFF, 0xFE], true)),
+            "srt",
+            "utf16-le",
+            None,
+        )
+        .unwrap();
+        assert_eq!(cues.len(), 1);
+        assert_eq!(cues[0].plain_text, "你好 Hello");
+        assert_eq!(cues[0].start_us, 1_000_000);
+        assert_eq!(cues[0].end_us, 2_000_000);
+
+        let (gbk, _, had_errors) = GBK.encode("你好");
+        assert!(!had_errors);
+        assert!(std::str::from_utf8(&gbk).is_err());
+        assert_eq!(decode_text(&gbk), "你好");
     }
 
     #[test]

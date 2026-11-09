@@ -1,4 +1,9 @@
-import type { StoryboardGraphEdge, StoryboardGraphNode } from "./graph";
+import {
+  storyboardGraphVisibleEdges,
+  storyboardGraphNodeRadii,
+  type StoryboardGraphEdge,
+  type StoryboardGraphNode,
+} from "./graph";
 import {
   forceCollide,
   forceLink,
@@ -7,11 +12,7 @@ import {
   forceSimulation,
   type SimulationLinkDatum,
 } from "d3-force";
-import {
-  defaultStoryboardGraphOptions,
-  storyboardGraphNodeRadius,
-  storyboardGraphCollisionPadding,
-} from "./options";
+import { defaultStoryboardGraphOptions, type StoryboardGraphOptions } from "./options";
 
 export interface StoryboardGraphVisualEdge extends StoryboardGraphEdge {
   opacity?: number;
@@ -36,6 +37,7 @@ export function createStoryboardGraphAmbient(
   input: readonly StoryboardGraphNode[],
   random = Math.random,
   previous?: StoryboardGraphAmbient,
+  options: StoryboardGraphOptions = defaultStoryboardGraphOptions,
 ): StoryboardGraphAmbient {
   const width = previous?.width ?? Math.max(720, Math.sqrt(input.length) * 100);
   const height = (width * 9) / 16;
@@ -50,7 +52,7 @@ export function createStoryboardGraphAmbient(
       ...node,
       x: old?.x ?? Math.cos(angle) * radius,
       y: old?.y ?? (Math.sin(angle) * radius * 9) / 16,
-      radius: old?.radius ?? storyboardGraphNodeRadius(0),
+      radius: old?.radius ?? options.nodeRadius(0),
       vx: old?.vx ?? (random() - 0.5) * 0.8,
       vy: old?.vy ?? (random() - 0.5) * 0.8,
     };
@@ -60,7 +62,7 @@ export function createStoryboardGraphAmbient(
     .distance(reach * 0.55)
     .strength(0.025);
   const collision = forceCollide<Particle>(
-    (node) => node.radius + storyboardGraphCollisionPadding,
+    (node) => node.radius + options.collisionPadding,
   ).iterations(3);
   let time = 0;
   let ticks = 0;
@@ -122,8 +124,8 @@ export function createStoryboardGraphAmbient(
             const distance = Math.hypot(node.x - neighbor.x, node.y - neighbor.y);
             if (
               distance > reach ||
-              degrees[index] >= defaultStoryboardGraphOptions.maxDegree ||
-              degrees[other] >= defaultStoryboardGraphOptions.maxDegree
+              degrees[index] >= options.maxDegree ||
+              degrees[other] >= options.maxDegree
             )
               continue;
             const key = `${other}:${index}`;
@@ -145,10 +147,20 @@ export function createStoryboardGraphAmbient(
         (edge.opacity ?? 0) + ((active.has(key) ? 1 : 0) - (edge.opacity ?? 0)) * blend;
       if (!active.has(key) && edge.opacity < 0.005) links.delete(key);
     }
+    const radii = storyboardGraphNodeRadii(
+      nodes.length,
+      storyboardGraphVisibleEdges(
+        [...links.values()],
+        nodes.length,
+        options.maxVisibleDegree,
+        options,
+      ),
+      options.nodeRadius,
+    );
     nodes.forEach((node, i) => {
-      node.radius += (storyboardGraphNodeRadius(degrees[i]) - node.radius) * blend;
+      node.radius += (radii[i] - node.radius) * blend;
     });
-    collision.radius((node) => node.radius + storyboardGraphCollisionPadding);
+    collision.radius((node) => node.radius + options.collisionPadding);
     const nextTopology = [...active].join(";");
     if (nextTopology !== topology) {
       topology = nextTopology;

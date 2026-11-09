@@ -21,6 +21,7 @@ export function useStoryboardGraphMotion(
   graph: StoryboardGraph | undefined,
   active: boolean,
   pendingNodes: StoryboardGraph["nodes"] = emptyNodes,
+  layoutGraph: StoryboardGraph | undefined = graph,
 ) {
   const pending = !graph && pendingNodes.length > 0;
   const target = graph?.nodes ?? pendingNodes;
@@ -39,6 +40,7 @@ export function useStoryboardGraphMotion(
     new Map<string, { x: number; y: number; radius: number; vx: number; vy: number; vr: number }>(),
   );
   const initialized = useRef(false);
+  const previousLayout = useRef(layoutGraph);
   const springFrame = useRef(0);
   const ambientTick = useRef<FrameRequestCallback | null>(null);
   type LiveNode = StoryboardGraphNode & StoryboardGraphForceNode;
@@ -55,6 +57,8 @@ export function useStoryboardGraphMotion(
     dragged.current = null;
   }, []);
   useLayoutEffect(() => {
+    const radiusOnly = previousLayout.current === layoutGraph;
+    previousLayout.current = layoutGraph;
     stopLive();
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (pending) {
@@ -93,6 +97,18 @@ export function useStoryboardGraphMotion(
         ambientTick.current = null;
       };
     }
+    // A display-degree change updates size without pulling a dragged layout
+    // back to the worker's old coordinates or reheating its force simulation.
+    const destination =
+      initialized.current && radiusOnly
+        ? target.map((node) => {
+            const current = motion.current.get(node.id);
+            if (!current) return node;
+            current.vx = 0;
+            current.vy = 0;
+            return { ...node, x: current.x, y: current.y };
+          })
+        : target;
     const provisional = ambient.current;
     ambient.current = null;
     const collapse = Boolean(provisional && target.length && !reduced);
@@ -110,12 +126,12 @@ export function useStoryboardGraphMotion(
     if (!collapse) setVisual(null);
     const immediate = !initialized.current || reduced;
     if (target.length) initialized.current = true;
-    for (const node of target) {
+    for (const node of destination) {
       if (immediate || !motion.current.has(node.id))
         motion.current.set(node.id, { ...node, vx: 0, vy: 0, vr: 0 });
     }
     if (immediate || !target.length) {
-      publish(target);
+      publish(destination);
       return;
     }
     let previous = performance.now();
@@ -141,7 +157,7 @@ export function useStoryboardGraphMotion(
               },
         );
       }
-      const next = target.map((node) => {
+      const next = destination.map((node) => {
         const current = motion.current.get(node.id)!;
         for (let step = 0; step < steps; step++) {
           current.vx += ((node.x - current.x) * 180 - current.vx * 20) * dt;
@@ -163,8 +179,9 @@ export function useStoryboardGraphMotion(
       if (settled) {
         setCollapsing(false);
         setVisual(null);
-        for (const node of target) motion.current.set(node.id, { ...node, vx: 0, vy: 0, vr: 0 });
-        publish(target);
+        for (const node of destination)
+          motion.current.set(node.id, { ...node, vx: 0, vy: 0, vr: 0 });
+        publish(destination);
       } else {
         publish(next);
         springFrame.current = requestAnimationFrame(tick);
@@ -172,7 +189,7 @@ export function useStoryboardGraphMotion(
     };
     // Paint the retained positions before the first animation frame.
     publish(
-      target.map((node) => {
+      destination.map((node) => {
         const current = motion.current.get(node.id)!;
         return { ...node, x: current.x, y: current.y, radius: current.radius };
       }),
@@ -182,7 +199,7 @@ export function useStoryboardGraphMotion(
       cancelAnimationFrame(springFrame.current);
       stopLive();
     };
-  }, [target, graph?.edges, pending, publish, stopLive]);
+  }, [target, graph?.edges, pending, publish, stopLive, layoutGraph]);
 
   useEffect(() => {
     if (!pending) return;
@@ -209,7 +226,7 @@ export function useStoryboardGraphMotion(
           vx: (motion.current.get(node.id)?.vx ?? 0) / 60,
           vy: (motion.current.get(node.id)?.vy ?? 0) / 60,
         }));
-        const simulation = createStoryboardGraphSimulation(nodes, graph.edges)
+        const simulation = createStoryboardGraphSimulation(nodes, graph.edges, graph)
           .alphaDecay(0.035)
           // Full-strength centering translates instantly, especially for one
           // node. Ease recentering too, so releasing never jumps the layout.

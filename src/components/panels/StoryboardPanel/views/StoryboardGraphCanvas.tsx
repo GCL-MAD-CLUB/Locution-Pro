@@ -13,11 +13,16 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import type {
-  StoryboardGraph,
-  StoryboardGraphNode,
+import {
+  storyboardGraphVisibleEdges,
+  storyboardGraphNodeRadii,
+  type StoryboardGraph,
+  type StoryboardGraphNode,
 } from "../../../../core/editor/storyboardGraph/graph";
-import { storyboardGraphNodeRadius } from "../../../../core/editor/storyboardGraph/options";
+import {
+  defaultStoryboardGraphOptions,
+  type StoryboardGraphOptions,
+} from "../../../../core/editor/storyboardGraph/options";
 import {
   constrainStoryboardGraphCamera,
   fitStoryboardGraphCamera,
@@ -55,6 +60,8 @@ import "./StoryboardGraphView.css";
 export interface StoryboardGraphCanvasProps {
   graph?: StoryboardGraph;
   preparing?: boolean;
+  maxVisibleDegree?: number;
+  nodeRadius?: StoryboardGraphOptions["nodeRadius"];
   shots: readonly StoryboardShot[];
   sourceForShot: (shot: StoryboardShot) => PanelRowSource;
   shotTitle: (shot: StoryboardShot) => string;
@@ -79,7 +86,7 @@ const previewArrowHeight = 5;
 const previewFrameGap = 3;
 const graphDotHoverScale = 1.1;
 const graphHoverDurationMs = 120;
-const graphHoverMinPixelsPerWorldUnit = 0.35;
+const graphPreviewMinPixelsPerWorldUnit = 0.35;
 const emptyAnnotations: Readonly<Record<string, StoryboardShotAnnotation>> = {};
 const emptyNeighborhood = new Set<string>();
 
@@ -183,7 +190,7 @@ const GraphHitNode = memo(function GraphHitNode({
   neighbor: boolean;
   hoverEnabled: boolean;
   tabIndex: number;
-  previewId: string;
+  previewId?: string;
   onHover: (id: string) => void;
   onLeave: (event: { relatedTarget: EventTarget | null }) => void;
   onBlur: () => void;
@@ -368,12 +375,14 @@ function GraphPreviewPresence({
 export function StoryboardGraphCanvas({
   graph,
   preparing = false,
+  maxVisibleDegree = defaultStoryboardGraphOptions.maxVisibleDegree,
+  nodeRadius = defaultStoryboardGraphOptions.nodeRadius,
   shots,
   sourceForShot,
   shotTitle,
   selectedShotIds,
   shotAnnotations = emptyAnnotations,
-  sprayActive = false,
+  sprayActive: sprayEnabled = false,
   onSprayShots,
   onExitSpray,
   onContextMenu,
@@ -413,7 +422,10 @@ export function StoryboardGraphCanvas({
   const [dragging, setDragging] = useState<"canvas" | "overview" | "node" | null>(null);
   const nodeDragRef = useRef<NodeDragGesture | null>(null);
   const [navigationTool, setTool] = useState<StoryboardGraphTool>("pointer");
-  const tool = sprayActive ? "pointer" : navigationTool;
+  const [temporaryHand, setTemporaryHand] = useState(false);
+  const temporaryHandRef = useRef(false);
+  const sprayActive = sprayEnabled && !temporaryHand;
+  const tool = temporaryHand ? "hand" : sprayActive ? "pointer" : navigationTool;
   const spraySequenceRef = useRef(0);
   const lastSprayClickRef = useRef<{ id: string; historyGroupId: string } | null>(null);
   const [selectionMode, setSelectionMode] = useState<StoryboardGraphSelectionMode>("replace");
@@ -440,12 +452,26 @@ export function StoryboardGraphCanvas({
             id: shot.id,
             x: 0,
             y: 0,
-            radius: storyboardGraphNodeRadius(0),
+            radius: nodeRadius(0),
             thumbnailFrame: shot.start_frame,
           }))
         : [],
-    [preparing, shots],
+    [preparing, shots, nodeRadius],
   );
+  const view = useMemo(() => {
+    if (!graph) return null;
+    const edges = storyboardGraphVisibleEdges(
+      graph.edges,
+      graph.nodes.length,
+      maxVisibleDegree,
+      graph,
+    );
+    const radii = storyboardGraphNodeRadii(graph.nodes.length, edges, nodeRadius);
+    return {
+      edges,
+      graph: { ...graph, nodes: graph.nodes.map((node, i) => ({ ...node, radius: radii[i] })) },
+    };
+  }, [graph, maxVisibleDegree, nodeRadius]);
   const {
     nodes,
     edges: motionEdges,
@@ -453,7 +479,7 @@ export function StoryboardGraphCanvas({
     beginDrag,
     moveDrag,
     endDrag,
-  } = useStoryboardGraphMotion(graph, panelActive, pendingNodes);
+  } = useStoryboardGraphMotion(view?.graph, panelActive, pendingNodes, graph);
   const canvas = useMemo(() => storyboardGraphCanvas(nodes), [nodes]);
   const initialCamera = useMemo(
     () => fitStoryboardGraphCamera(nodes, size, canvas),
@@ -496,8 +522,9 @@ export function StoryboardGraphCanvas({
     },
     [],
   );
-  const hoverEnabled = !preparing && camera.zoom > graphHoverMinPixelsPerWorldUnit;
-  const previewsEnabled = hoverEnabled && showThumbnails;
+  const hoverEnabled = !preparing;
+  const previewsEnabled =
+    hoverEnabled && showThumbnails && camera.zoom > graphPreviewMinPixelsPerWorldUnit;
   const nodeScale = storyboardGraphNodeScale(camera.zoom);
   const activeHoveredId = hoverEnabled ? hoveredId : null;
   const panRef = useRef<{ id: number; x: number; y: number; camera: StoryboardGraphCamera } | null>(
@@ -535,17 +562,28 @@ export function StoryboardGraphCanvas({
     [visibleNodes],
   );
   const neighborhoods = useMemo(
-    () => (graph ? indexStoryboardGraphNeighborhoods(graph) : new Map<string, Set<string>>()),
-    [graph],
+    () =>
+      graph && view
+        ? indexStoryboardGraphNeighborhoods({
+            ...graph,
+            edges: view.edges,
+          })
+        : new Map<string, Set<string>>(),
+    [graph, view],
   );
   const edges = useMemo(
     () =>
-      motionEdges.filter(
-        (edge) =>
-          shotsById.has((graph?.nodes ?? pendingNodes)[edge.source].id) &&
-          shotsById.has((graph?.nodes ?? pendingNodes)[edge.target].id),
+      storyboardGraphVisibleEdges(
+        motionEdges.filter(
+          (edge) =>
+            shotsById.has((graph?.nodes ?? pendingNodes)[edge.source].id) &&
+            shotsById.has((graph?.nodes ?? pendingNodes)[edge.target].id),
+        ),
+        nodes.length,
+        maxVisibleDegree,
+        graph ?? defaultStoryboardGraphOptions,
       ),
-    [motionEdges, shotsById, graph?.nodes, pendingNodes],
+    [motionEdges, shotsById, graph, pendingNodes, nodes.length, maxVisibleDegree],
   );
   const neighborhood = activeHoveredId
     ? (neighborhoods.get(activeHoveredId) ?? emptyNeighborhood)
@@ -761,6 +799,38 @@ export function StoryboardGraphCanvas({
     [commitSelection, endDrag],
   );
 
+  const releaseTemporaryHand = useCallback(() => {
+    if (!temporaryHandRef.current) return;
+    temporaryHandRef.current = false;
+    setTemporaryHand(false);
+    // A pointerup/click can arrive after Space was released. It must still
+    // belong to the pan, rather than select or paint with the restored tool.
+    if (panRef.current) suppressClickRef.current = true;
+    cancelGestures();
+    resetHover();
+  }, [cancelGestures, resetHover]);
+
+  useEffect(() => {
+    const keyup = (event: globalThis.KeyboardEvent) => {
+      if ((event.code === "Space" || event.key === " ") && temporaryHandRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        releaseTemporaryHand();
+      }
+    };
+    const visibility = () => {
+      if (document.hidden) releaseTemporaryHand();
+    };
+    window.addEventListener("keyup", keyup, true);
+    window.addEventListener("blur", releaseTemporaryHand);
+    document.addEventListener("visibilitychange", visibility);
+    return () => {
+      window.removeEventListener("keyup", keyup, true);
+      window.removeEventListener("blur", releaseTemporaryHand);
+      document.removeEventListener("visibilitychange", visibility);
+    };
+  }, [releaseTemporaryHand]);
+
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
@@ -776,14 +846,23 @@ export function StoryboardGraphCanvas({
     lastClickRef.current = null;
     lastSprayClickRef.current = null;
     cancelGestures(false);
-  }, [graph, visibleNodeKey, sprayActive, cancelGestures, resetHover]);
+  }, [
+    graph,
+    visibleNodeKey,
+    sprayActive,
+    maxVisibleDegree,
+    nodeRadius,
+    cancelGestures,
+    resetHover,
+  ]);
 
   useEffect(() => {
     if (!panelActive) {
+      releaseTemporaryHand();
       cancelGestures();
       resetHover();
     }
-  }, [panelActive, cancelGestures, resetHover]);
+  }, [panelActive, releaseTemporaryHand, cancelGestures, resetHover]);
 
   useEffect(() => {
     const blur = () => {
@@ -1160,6 +1239,38 @@ export function StoryboardGraphCanvas({
     setTool(next);
   }
 
+  function toolShortcut(event: KeyboardEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (
+      !panelActive ||
+      event.defaultPrevented ||
+      event.nativeEvent.isComposing ||
+      event.keyCode === 229 ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.altKey ||
+      (target instanceof HTMLElement &&
+        (target.isContentEditable || target.closest("input, textarea, select, [role='textbox']")))
+    )
+      return;
+    const key = event.key.toLowerCase();
+    if (event.code === "Space" || key === " ") {
+      // Keep the toolbar's native Space activation accessible.
+      if (target instanceof Element && target.closest(".storyboard-graph-tools")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (temporaryHandRef.current || event.repeat) return;
+      cancelGestures();
+      resetHover();
+      temporaryHandRef.current = true;
+      setTemporaryHand(true);
+    } else if (key === "v" || key === "h") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) changeTool(key === "v" ? "pointer" : "hand");
+    }
+  }
+
   const overviewEdgePath = useMemo(
     () =>
       edges
@@ -1207,6 +1318,16 @@ export function StoryboardGraphCanvas({
       data-graph-phase={phase}
       aria-label="分镜语义图谱"
       tabIndex={0}
+      onPointerDownCapture={(event) => {
+        if (
+          temporaryHand &&
+          event.target instanceof Element &&
+          event.target.closest(".storyboard-graph-preview")
+        ) {
+          startCanvasGesture(event);
+          event.stopPropagation();
+        }
+      }}
       onPointerDown={startCanvasGesture}
       onPointerMove={moveCanvasGesture}
       onPointerUp={stopCanvasGesture}
@@ -1244,6 +1365,7 @@ export function StoryboardGraphCanvas({
           );
       }}
       onPointerLeave={resetHover}
+      onKeyDownCapture={toolShortcut}
       onKeyDown={navigateKeyboard}
     >
       <svg
@@ -1278,7 +1400,7 @@ export function StoryboardGraphCanvas({
                 neighbor={neighborhood.has(node.id)}
                 hoverEnabled={hoverEnabled}
                 tabIndex={tool === "pointer" ? 0 : -1}
-                previewId={previewId}
+                previewId={previewsEnabled ? previewId : undefined}
                 onHover={hoverNode}
                 onLeave={leaveHover}
                 onBlur={resetHover}

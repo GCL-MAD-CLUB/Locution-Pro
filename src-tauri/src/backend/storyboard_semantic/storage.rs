@@ -35,11 +35,17 @@ pub(super) struct Token {
 
 pub(super) struct Snapshot {
     pub(super) token: Token,
-    file: fs::File,
+    // Shared by every record in one shard so a search does not keep one
+    // descriptor open per shot.
+    file: Arc<Mutex<fs::File>>,
 }
 impl Snapshot {
-    pub(super) fn read(mut self) -> Option<Vec<u8>> {
-        read_payload(&mut self.file, self.token.record)
+    pub(super) fn read(self) -> Option<Vec<u8>> {
+        let mut file = match self.file.lock() {
+            Ok(file) => file,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        read_payload(&mut file, self.token.record)
     }
 }
 
@@ -252,13 +258,22 @@ pub(super) fn locate(directory: &Path, keys: &[Key]) -> Option<Vec<Option<Snapsh
     let lock = media_lock(directory).ok()?;
     let mut state = lock.lock().ok()?;
     let latest = state.latest(directory);
-    // Opening under the lock pins the old inode across concurrent compaction/GC.
-    // No payload I/O or decoding is performed here.
+    // Opening under the lock pins the inode across concurrent compaction.
+    // One handle per shard: opening the same file once per shot exhausts a
+    // 256-descriptor process (the usual macOS limit) partway through a
+    // storyboard, and those later shots then look missing.
+    let mut opened = HashMap::<PathBuf, Arc<Mutex<fs::File>>>::new();
     Some(
         keys.iter()
             .map(|key| {
                 let token = latest.get(key)?.clone();
-                let file = fs::File::open(&token.path).ok()?;
+                let file = if let Some(file) = opened.get(&token.path) {
+                    Arc::clone(file)
+                } else {
+                    let file = Arc::new(Mutex::new(fs::File::open(&token.path).ok()?));
+                    opened.insert(token.path.clone(), Arc::clone(&file));
+                    file
+                };
                 Some(Snapshot { token, file })
             })
             .collect(),
@@ -1395,6 +1410,77 @@ mod tests {
             b"new"
         );
         assert!(directory(&fixture.root, "../bad", b"v1").is_none());
+    }
+
+    #[test]
+    fn locate_reads_a_full_shard_when_only_one_extra_descriptor_fits() {
+        // The probe runs in a child so a lowered process limit cannot make
+        // other tests fail to open files.
+        if cfg!(unix) && env::var_os("LOCUTION_FD_LIMIT_PROBE").is_none() {
+            let status = std::process::Command::new(env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "backend::storyboard_semantic::storage::tests::locate_reads_a_full_shard_when_only_one_extra_descriptor_fits",
+                    "--test-threads=1",
+                ])
+                .env("LOCUTION_FD_LIMIT_PROBE", "1")
+                .status()
+                .unwrap();
+            assert!(status.success());
+            return;
+        }
+        let fixture = Fixture::new();
+        for key in 0..48u8 {
+            fixture.append(key, &[key; 16]);
+        }
+        #[cfg(unix)]
+        tighten_fd_limit_for_one_extra_shard();
+        let keys: Vec<_> = (0..48u8).map(|key| [key; 32]).collect();
+        let snapshots = locate(&fixture.directory, &keys).unwrap();
+        assert!(
+            snapshots.iter().all(Option::is_some),
+            "shots already stored in one shard must stay readable when the process \
+             cannot open one descriptor per shot"
+        );
+        for (key, snapshot) in (0..48u8).zip(snapshots) {
+            assert_eq!(snapshot.unwrap().read().unwrap(), vec![key; 16]);
+        }
+    }
+
+    #[cfg(unix)]
+    fn tighten_fd_limit_for_one_extra_shard() {
+        let open = fs::read_dir("/dev/fd")
+            .map(|entries| entries.count())
+            .unwrap_or(0);
+        // Drop the directory iterator's own descriptor and leave room for the
+        // one shard handle, not one handle per record.
+        let requested = (open as u64).saturating_sub(1).saturating_add(8);
+        unsafe {
+            let mut limit = RLimit { current: 0, max: 0 };
+            assert_eq!(getrlimit(RLIMIT_NOFILE, &mut limit), 0);
+            limit.current = requested.min(limit.max);
+            assert_eq!(setrlimit(RLIMIT_NOFILE, &limit), 0);
+        }
+    }
+
+    #[cfg(unix)]
+    #[repr(C)]
+    struct RLimit {
+        current: u64,
+        max: u64,
+    }
+
+    #[cfg(all(unix, target_os = "linux"))]
+    const RLIMIT_NOFILE: i32 = 7;
+    #[cfg(all(unix, target_os = "macos"))]
+    const RLIMIT_NOFILE: i32 = 8;
+    #[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
+    const RLIMIT_NOFILE: i32 = 7;
+
+    #[cfg(unix)]
+    extern "C" {
+        fn getrlimit(resource: i32, rlim: *mut RLimit) -> i32;
+        fn setrlimit(resource: i32, rlim: *const RLimit) -> i32;
     }
 
     #[test]

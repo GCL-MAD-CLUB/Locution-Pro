@@ -187,6 +187,80 @@ fn load(directory: &Path, media: &MediaIdentity, requests: &[ShotRequest]) -> Op
     Some(index)
 }
 
+/// Explains, for logs only, why requested shots are not searchable. It follows
+/// the same checks as `load` without changing the decoded-record cache.
+fn diagnose(directory: &Path, media: &MediaIdentity, requests: &[ShotRequest]) -> String {
+    const EXAMPLES: usize = 4;
+    let keys = match requests
+        .iter()
+        .map(|request| shot_key(media, request.start_frame, request.end_frame))
+        .collect::<AppResult<Vec<_>>>()
+    {
+        Ok(keys) => keys,
+        Err(error) => return format!("invalid shot key: {error:?}"),
+    };
+    let log = storage::describe(directory);
+    let Some(snapshots) = storage::locate(directory, &keys) else {
+        return format!("locate unavailable; log: {log}");
+    };
+    let cache = WARM.get_or_init(Default::default);
+    let warm_poisoned = cache.is_poisoned();
+    let mut counts = std::collections::BTreeMap::<&str, usize>::new();
+    let mut examples = Vec::new();
+    let mut warm_hits = 0;
+    for (request, snapshot) in requests.iter().zip(snapshots) {
+        let outcome = match snapshot {
+            None => "no_record",
+            Some(snapshot) => {
+                if cache
+                    .lock()
+                    .is_ok_and(|cache| cache.contains(&snapshot.token))
+                {
+                    warm_hits += 1;
+                }
+                match snapshot.read() {
+                    None => "unreadable",
+                    Some(bytes) => match codec().deserialize::<StoredShot>(&bytes) {
+                        Err(_) => "undecodable",
+                        Ok(stored) if stored.recipe != RECIPE => "other_recipe",
+                        Ok(stored) if stored.media != *media => "other_media",
+                        Ok(stored)
+                            if stored.shot.start_frame != request.start_frame
+                                || stored.shot.end_frame != request.end_frame =>
+                        {
+                            "other_range"
+                        }
+                        Ok(stored) if stored.shot.frames != request.frames => "other_frames",
+                        Ok(mut stored) => {
+                            if !repair_shot(&mut stored.shot) {
+                                "invalid"
+                            } else if !stored.shot.complete
+                                || stored.shot.vectors.iter().any(Option::is_none)
+                            {
+                                "incomplete"
+                            } else {
+                                "ready"
+                            }
+                        }
+                    },
+                }
+            }
+        };
+        *counts.entry(outcome).or_default() += 1;
+        if outcome != "ready" && examples.len() < EXAMPLES {
+            examples.push(format!(
+                "{}-{}:{outcome}",
+                request.start_frame, request.end_frame
+            ));
+        }
+    }
+    format!(
+        "requests={} outcomes={counts:?} examples={examples:?} warm_hits={warm_hits} \
+         warm_poisoned={warm_poisoned}; log: {log}",
+        requests.len()
+    )
+}
+
 struct Checkpoint {
     path: PathBuf,
     media: MediaIdentity,
@@ -294,7 +368,13 @@ pub(super) fn read(
     requests: &[ShotRequest],
 ) -> AppResult<Vec<Vec<Vec<f32>>>> {
     let media = MediaIdentity::of(identity);
-    let index = complete(&path(root, &media)?, &media, requests).ok_or_else(incomplete_index)?;
+    let path = path(root, &media)?;
+    let index = complete(&path, &media, requests).ok_or_else(|| {
+        tracing::warn!(fingerprint = %media.fingerprint,
+            diagnosis = %diagnose(&path, &media, requests),
+            "Storyboard semantic index is not searchable at retrieval");
+        incomplete_index()
+    })?;
     let shots = shot_map(&index);
     requests
         .iter()
@@ -344,7 +424,8 @@ pub(super) fn get_or_build(
     }
     tracing::debug!(fingerprint = %media.fingerprint, media_length = media.media_length,
         media_modified_ns = ?media.media_modified_ns, recipe = RECIPE,
-        shots = requests.len(), "Building missing or incomplete storyboard semantic index");
+        shots = requests.len(), diagnosis = %diagnose(&path, &media, requests),
+        "Building missing or incomplete storyboard semantic index");
     let mut index = load(&path, &media, requests).unwrap_or_else(|| empty_index(&media));
     let mut checkpoint = Checkpoint::new(&path, &media);
     let slots = reconcile(&mut index, &media, requests);
@@ -608,6 +689,42 @@ mod tests {
             (0, 1.0)
         );
         assert!(best_frame_similarity(&[], &query).is_err());
+    }
+
+    #[test]
+    fn diagnosis_explains_unsearchable_shots_without_changing_the_index() {
+        let root = cache_directory().join("revision");
+        let identity = identity(10, 60);
+        let cancel = AtomicBool::new(false);
+        let indexed = [request(10, &[10, 20]), request(50, &[50, 60])];
+        build(
+            &root,
+            &identity,
+            &indexed,
+            &cancel,
+            |_, positions, publish| encode_offsets(positions, publish, 0),
+        )
+        .unwrap();
+        let media = MediaIdentity::of(&identity);
+        let directory = path(&root, &media).unwrap();
+        let requests = [
+            request(10, &[10, 20]),
+            request(30, &[30, 40]),
+            request(50, &[50, 55, 60]),
+        ];
+        let diagnosis = diagnose(&directory, &media, &requests);
+        assert!(
+            diagnosis.contains(r#"outcomes={"no_record": 1, "other_frames": 1, "ready": 1}"#),
+            "{diagnosis}"
+        );
+        assert!(
+            diagnosis.contains(r#"examples=["30-40:no_record", "50-60:other_frames"]"#),
+            "{diagnosis}"
+        );
+        assert!(diagnosis.contains("poisoned=false files=1"), "{diagnosis}");
+        assert!(read(&root, &identity, &requests).is_err());
+        assert_eq!(read(&root, &identity, &indexed).unwrap().len(), 2);
+        fs::remove_dir_all(root.parent().unwrap()).unwrap();
     }
 
     #[test]

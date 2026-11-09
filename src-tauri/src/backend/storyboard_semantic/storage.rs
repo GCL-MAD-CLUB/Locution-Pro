@@ -265,6 +265,42 @@ pub(super) fn locate(directory: &Path, keys: &[Key]) -> Option<Vec<Option<Snapsh
     )
 }
 
+/// Describes this process's cached view of a media log next to the files on
+/// disk, for diagnostics only. It never rescans, so a stale view stays visible.
+pub(super) fn describe(directory: &Path) -> String {
+    let lock = match media_lock(directory) {
+        Ok(lock) => lock,
+        Err(error) => return format!("media lock unavailable: {error:?}"),
+    };
+    let (state, poisoned) = match lock.lock() {
+        Ok(state) => (state, false),
+        Err(error) => (error.into_inner(), true),
+    };
+    let files = shards(directory);
+    let mut parts = vec![format!(
+        "poisoned={poisoned} files={} cached_shards={}",
+        files.len(),
+        state.shards.len()
+    )];
+    for path in &files {
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let disk = fs::metadata(path).map(|metadata| metadata.len()).ok();
+        match state.shards.iter().find(|shard| &shard.path == path) {
+            Some(shard) => parts.push(format!(
+                "{name}: disk_len={disk:?} cached_len={} valid_end={} records={}",
+                shard.stamp.0,
+                shard.valid_end,
+                shard.records.len()
+            )),
+            None => parts.push(format!("{name}: disk_len={disk:?} not cached")),
+        }
+    }
+    parts.join("; ")
+}
+
 fn read_payload(file: &mut fs::File, record: Record) -> Option<Vec<u8>> {
     let observed = read_header(file, record.offset.checked_sub(RECORD_HEADER_BYTES)?)?;
     if observed != record || committed(file, record, file.metadata().ok()?.len()).is_none() {
@@ -732,6 +768,9 @@ impl<T> Warm<T> {
         let data = Arc::clone(&entry.1);
         self.entries.push_back(entry);
         Some(data)
+    }
+    pub(super) fn contains(&self, token: &Token) -> bool {
+        self.entries.iter().any(|(key, _, _)| key == token)
     }
     pub(super) fn insert(&mut self, token: Token, data: Arc<T>, bytes: usize) {
         const LIMIT: usize = 32 * 1024 * 1024;

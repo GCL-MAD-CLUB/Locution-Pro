@@ -72,11 +72,11 @@
     "test:rust:thumbnail": "cargo test --manifest-path src-tauri/thumbnail-provider/Cargo.toml --locked"
   },
   "dependencies": {
-    "@tanstack/react-virtual": "^3.14.24",
+    "@tanstack/react-virtual": "^3.14.26",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.8.4",
-    "d3-force": "^3.0.0",
-    "lucide-react": "^1.64.0",
+    "d3-force": "^3.0.1",
+    "lucide-react": "^1.69.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",

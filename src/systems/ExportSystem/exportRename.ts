@@ -186,45 +186,62 @@ export interface ExportFileName {
 /** Maximum output file-name length; mirrors the backend `safe_component` clamp. */
 export const MAX_FILE_NAME_LENGTH = 120;
 
+/** Unicode scalar values, matching Rust `str::chars()` rather than UTF-16 code units. */
+function scalarLength(value: string): number {
+  return Array.from(value).length;
+}
+
+function takeScalars(value: string, count: number): string {
+  if (count <= 0) {
+    return "";
+  }
+  const scalars = Array.from(value);
+  if (scalars.length <= count) {
+    return value;
+  }
+  return scalars.slice(0, count).join("");
+}
+
 /**
- * Truncates a file name to `MAX_FILE_NAME_LENGTH` characters while preserving a
- * trailing extension (a `.` suffix of 2–10 chars). Mirrors the backend
- * `safe_component` clamp so the 示例 preview, the conflict probe, and the
- * on-disk name all agree.
+ * Truncates a file name to `MAX_FILE_NAME_LENGTH` Unicode scalar values while
+ * preserving a trailing extension (a `.` suffix of 2–10 scalars). Mirrors the
+ * backend `safe_component` clamp so the 示例 preview, the conflict probe, and
+ * the on-disk name all agree.
  */
 export function clampFileName(fileName: string): string {
-  if (fileName.length <= MAX_FILE_NAME_LENGTH) {
+  if (scalarLength(fileName) <= MAX_FILE_NAME_LENGTH) {
     return fileName;
   }
   const dot = fileName.lastIndexOf(".");
   const ext = dot > 0 ? fileName.slice(dot) : "";
-  if (ext.length >= 2 && ext.length <= 10) {
-    const keep = MAX_FILE_NAME_LENGTH - ext.length;
-    return `${fileName.slice(0, dot).slice(0, keep)}${ext}`;
+  const extLength = scalarLength(ext);
+  if (extLength >= 2 && extLength <= 10) {
+    const keep = MAX_FILE_NAME_LENGTH - extLength;
+    return `${takeScalars(fileName.slice(0, dot), keep)}${ext}`;
   }
-  return fileName.slice(0, MAX_FILE_NAME_LENGTH);
+  return takeScalars(fileName, MAX_FILE_NAME_LENGTH);
 }
 
 /**
- * Clamps a base name to `maxLength`, preserving a trailing `-N` disambiguation
- * suffix when one is present so truncation never collapses `base-1`/`base-2`
- * into the same name.
+ * Clamps a base name to `maxLength` Unicode scalar values, preserving a
+ * trailing `-N` disambiguation suffix when one is present so truncation never
+ * collapses `base-1`/`base-2` into the same name.
  */
 function clampBaseName(name: string, maxLength: number): string {
-  if (name.length <= maxLength) {
+  if (scalarLength(name) <= maxLength) {
     return name;
   }
   const suffix = name.match(/-(0|[1-9]\d*)$/)?.[0];
-  if (suffix) {
-    return `${name.slice(0, maxLength - suffix.length)}${suffix}`;
+  if (suffix && suffix.length <= maxLength) {
+    return `${takeScalars(name, maxLength - suffix.length)}${suffix}`;
   }
-  return name.slice(0, maxLength);
+  return takeScalars(name, maxLength);
 }
 
 /**
  * Computes the final output filename for every clip: rule base name +
  * disambiguation + extension (cased per `extensionCase`), clamped to the same
- * 120-char budget the backend applies. Used both for the 示例 preview and (sent
+ * 120 Unicode-scalar budget the backend applies. Used both for the 示例 preview and (sent
  * per-clip as `outputName`) for the actual export, so the preview always
  * matches what lands on disk.
  */

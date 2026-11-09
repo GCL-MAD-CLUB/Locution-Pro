@@ -1,6 +1,7 @@
 //! Original-resolution still export; proxy paths never enter this pipeline.
 use super::*;
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 
 static STILL_EXPORT_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -81,29 +82,72 @@ fn read_history() -> AppResult<StillExportHistory> {
     }
 }
 
-fn write_history(history: &StillExportHistory) -> AppResult<()> {
-    let path = history_path();
+fn history_temp_path(path: &Path) -> PathBuf {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "StillExport.json".to_string());
+    parent.join(format!(".{name}.{}.tmp", Uuid::new_v4()))
+}
+
+fn write_history_at(path: &Path, history: &StillExportHistory) -> AppResult<()> {
     let bytes = serde_json::to_vec(history).map_err(|error| {
         app_error(
             ErrorCode::ExportWriteFailed,
             format!("Cannot serialize still export history: {error}"),
         )
     })?;
-    fs::create_dir_all(config_root()).map_err(|error| {
-        app_error(
-            ErrorCode::ExportWriteFailed,
-            format!("Cannot create still export config directory: {error}"),
-        )
-    })?;
-    let temporary = path.with_extension("json.tmp");
-    fs::write(&temporary, bytes)
-        .and_then(|()| fs::rename(&temporary, &path))
-        .map_err(|error| {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent).map_err(|error| {
             app_error(
                 ErrorCode::ExportWriteFailed,
-                format!("Cannot save still export history: {error}"),
+                format!("Cannot create still export config directory: {error}"),
             )
-        })
+        })?;
+    }
+    let temporary = history_temp_path(path);
+    let committed = (|| -> std::io::Result<()> {
+        let mut file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temporary, path)
+    })();
+    if let Err(error) = committed {
+        let _ = fs::remove_file(&temporary);
+        return Err(app_error(
+            ErrorCode::ExportWriteFailed,
+            format!("Cannot save still export history: {error}"),
+        ));
+    }
+    Ok(())
+}
+
+/// The image is already durable. History only feeds the next sequence number,
+/// which `existing_sequence` can recover by scanning the output directory.
+fn accept_published_still(
+    output: &Path,
+    history: &StillExportHistory,
+    history_file: &Path,
+) -> AppResult<String> {
+    if let Err(error) = write_history_at(history_file, history) {
+        tracing::warn!(
+            path = %output.display(),
+            detail = %error,
+            "completed still kept after history persistence failed"
+        );
+    }
+    Ok(output.to_string_lossy().into_owned())
 }
 
 fn media_name_component(name: &str) -> String {
@@ -427,12 +471,9 @@ pub(crate) async fn export_still_frame(
         sequence,
     );
     history.directory = Some(directory.to_string_lossy().into_owned());
-    if let Err(error) = write_history(&history) {
-        let _ = fs::remove_file(&output);
-        return Err(error);
-    }
+    let output_path = accept_published_still(&output, &history, &history_path())?;
     emit_ffmpeg_progress(&app, &task_id, 1.0);
-    Ok(output.to_string_lossy().into_owned())
+    Ok(output_path)
 }
 
 #[cfg(test)]
@@ -586,6 +627,60 @@ mod tests {
         assert_eq!(next_sequence(&history, &directory, "new.mov").unwrap(), 1);
         history.counters.insert("a.mov".into(), 14);
         assert_eq!(next_sequence(&history, &directory, "A.mov").unwrap(), 15);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn history_write_failure_keeps_completed_still() {
+        let directory =
+            env::temp_dir().join(format!("locution-pro-still-history-{}", Uuid::new_v4()));
+        fs::create_dir(&directory).unwrap();
+        let output = directory.join("clip.mov.00_00_00_00.Still001.png");
+        fs::write(&output, b"png-bytes").unwrap();
+        let parent = directory.join("not-a-directory");
+        fs::write(&parent, b"blocker").unwrap();
+        let history = StillExportHistory {
+            counters: HashMap::from([("clip.mov".to_string(), 1)]),
+            directory: Some(directory.to_string_lossy().into_owned()),
+        };
+
+        let saved =
+            accept_published_still(&output, &history, &parent.join("StillExport.json")).unwrap();
+
+        assert_eq!(saved, output.to_string_lossy());
+        assert_eq!(fs::read(&output).unwrap(), b"png-bytes");
+        assert_eq!(existing_sequence(&directory, "clip.mov").unwrap(), 1);
+        assert_eq!(
+            next_sequence(&StillExportHistory::default(), &directory, "clip.mov").unwrap(),
+            2
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn history_replacement_round_trips_and_leaves_no_temp_file() {
+        let directory =
+            env::temp_dir().join(format!("locution-pro-still-history-ok-{}", Uuid::new_v4()));
+        fs::create_dir(&directory).unwrap();
+        let path = directory.join("StillExport.json");
+        let mut history = StillExportHistory {
+            counters: HashMap::from([("a.mov".to_string(), 3)]),
+            directory: Some("a-long-previous-directory-value".to_string()),
+        };
+        write_history_at(&path, &history).unwrap();
+        history.counters.insert("a.mov".to_string(), 4);
+        history.directory = Some("short".to_string());
+        write_history_at(&path, &history).unwrap();
+
+        let restored: StillExportHistory =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(restored.counters.get("a.mov"), Some(&4));
+        assert_eq!(restored.directory.as_deref(), Some("short"));
+        let names: Vec<_> = fs::read_dir(&directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["StillExport.json".to_string()]);
         fs::remove_dir_all(directory).unwrap();
     }
 }

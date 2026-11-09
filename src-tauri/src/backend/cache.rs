@@ -3,6 +3,7 @@
 use crate::error::{app_error, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::io::Write;
 use std::{fs, path::Path};
 
 #[derive(Serialize, Deserialize)]
@@ -106,7 +107,7 @@ where
             format!("Failed to encode the thumbnail cache envelope: {error}"),
         )
     })?;
-    fs::write(path, output).map_err(|error| {
+    write_bytes_atomically(path, &output).map_err(|error| {
         app_error(
             ErrorCode::ThumbnailCacheWriteFailed,
             format!(
@@ -115,6 +116,38 @@ where
             ),
         )
     })
+}
+
+/// Writes `bytes` via a unique temporary file in the same directory. A crash or
+/// a concurrent writer cannot tear the destination or share this temp name.
+fn write_bytes_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "cache".to_string());
+    let temporary = parent.join(format!(".{name}.{}.tmp", uuid::Uuid::new_v4()));
+    let written = (|| -> std::io::Result<()> {
+        let mut file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        Ok(())
+    })();
+    if let Err(error) = written {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    if let Err(error) = fs::rename(&temporary, path) {
+        let _ = fs::remove_file(&temporary);
+        return Err(error);
+    }
+    Ok(())
 }
 
 /// Read older formats only inside our copied cache tree, without a runtime migration.
@@ -213,6 +246,25 @@ mod tests {
             fs::read(&blocker).err().unwrap().kind(),
             std::io::ErrorKind::NotFound
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn replacing_private_cache_reads_back_the_new_value() {
+        let root =
+            std::env::temp_dir().join(format!("locution-cache-replace-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("entry.bin");
+        write_private_cache(&path, "key", b"context", &vec![1u8, 2, 3, 4]).unwrap();
+        write_private_cache(&path, "key", b"context", &vec![9u8, 8]).unwrap();
+
+        let value: Vec<u8> = read_private_cache(&path, "key", b"context").unwrap();
+        assert_eq!(value, vec![9, 8]);
+        let names: Vec<_> = fs::read_dir(&root)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["entry.bin".to_string()]);
         fs::remove_dir_all(root).unwrap();
     }
 }

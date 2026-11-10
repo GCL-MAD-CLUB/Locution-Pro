@@ -1,6 +1,6 @@
 {
   "model_version": 1,
-  "model_origin": "bootstrap_uncalibrated",
+  "model_origin": "threshold_rules_uncalibrated",
   "epsilon": 0.000001,
   "robust_window_radius": 50,
   "candidate_probability_threshold": 0.1,
@@ -30,7 +30,10 @@
   "calibration": null,
   "false_positive_cost": 1.0,
   "false_negative_cost": 2.0,
-  "minimum_event_distance": 3,
-  "short_shot_midpoint": 2.0,
-  "short_shot_softness": 2.0
+  "single_frame_threshold": 0.5,
+  "many_hot_threshold": 0.5,
+  "gradual_transition_mass": 1.5,
+  "minimum_event_gap_seconds": 0.12,
+  "short_shot_midpoint_seconds": 0.12,
+  "short_shot_softness_seconds": 0.12
 }

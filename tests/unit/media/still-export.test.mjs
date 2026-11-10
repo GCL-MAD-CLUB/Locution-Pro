@@ -18,6 +18,9 @@ test("toolbar and timeline cuts reject endpoints, existing cuts and deleted gaps
   const split = cuts.splitStoryboardShot(empty, 40, 25, "new", 100, 4_000_000);
   assert.equal(split.shots.length, 2);
   assert.equal(split.shots[1].start_frame, 40);
+  assert.equal(split.shots[0].end_frame + 1, split.shots[1].start_frame);
+  assert.equal(split.shots[0].end_us, split.shots[1].start_us);
+  assert.equal(split.shots[1].end_us, 4_000_000);
   assert.equal(cuts.canAddStoryboardCut(split, 40, 100), false);
   assert.equal(cuts.canAddStoryboardCut(split, 41, 100), true);
   const deleted = { ...split, shots: [split.shots[0]], deletedShots: [split.shots[1]] };

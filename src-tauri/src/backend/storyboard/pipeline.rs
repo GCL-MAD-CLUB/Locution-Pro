@@ -110,7 +110,7 @@ impl FrameQueue {
 struct StoryboardFrames {
     window: VecDeque<Vec<u8>>,
     decoded_frames: usize,
-    predictions: Vec<f32>,
+    predictions: TransnetPredictions,
 }
 
 impl StoryboardFrames {
@@ -118,7 +118,7 @@ impl StoryboardFrames {
         &mut self,
         frames: Vec<Vec<u8>>,
         cancel: &AtomicBool,
-        infer: &mut impl FnMut(&VecDeque<Vec<u8>>) -> AppResult<Vec<f32>>,
+        infer: &mut impl FnMut(&VecDeque<Vec<u8>>) -> AppResult<TransnetPredictions>,
         progress: &mut impl FnMut(usize, usize),
     ) -> AppResult<()> {
         // Keep the original per-frame assembly: a block boundary must never
@@ -140,16 +140,22 @@ impl StoryboardFrames {
     fn run_ready(
         &mut self,
         cancel: &AtomicBool,
-        infer: &mut impl FnMut(&VecDeque<Vec<u8>>) -> AppResult<Vec<f32>>,
+        infer: &mut impl FnMut(&VecDeque<Vec<u8>>) -> AppResult<TransnetPredictions>,
         progress: &mut impl FnMut(usize, usize),
     ) -> AppResult<()> {
         while self.window.len() >= TRANSNET_WINDOW_FRAMES {
             ensure_not_cancelled(cancel)?;
-            self.predictions.extend(infer(&self.window)?);
+            let window_predictions = infer(&self.window)?;
+            self.predictions
+                .single_frame
+                .extend(window_predictions.single_frame);
+            self.predictions
+                .many_hot
+                .extend(window_predictions.many_hot);
             for _ in 0..TRANSNET_STRIDE_FRAMES {
                 self.window.pop_front();
             }
-            progress(self.predictions.len(), self.decoded_frames);
+            progress(self.predictions.single_frame.len(), self.decoded_frames);
         }
         Ok(())
     }
@@ -157,7 +163,7 @@ impl StoryboardFrames {
     fn finish(
         &mut self,
         cancel: &AtomicBool,
-        infer: &mut impl FnMut(&VecDeque<Vec<u8>>) -> AppResult<Vec<f32>>,
+        infer: &mut impl FnMut(&VecDeque<Vec<u8>>) -> AppResult<TransnetPredictions>,
         progress: &mut impl FnMut(usize, usize),
     ) -> AppResult<()> {
         let last_frame = self
@@ -170,19 +176,20 @@ impl StoryboardFrames {
                 )
             })?
             .clone();
-        while self.predictions.len() < self.decoded_frames {
+        while self.predictions.single_frame.len() < self.decoded_frames {
             ensure_not_cancelled(cancel)?;
             while self.window.len() < TRANSNET_WINDOW_FRAMES {
                 self.window.push_back(last_frame.clone());
             }
             self.run_ready(cancel, infer, progress)?;
         }
-        self.predictions.truncate(self.decoded_frames);
+        self.predictions.single_frame.truncate(self.decoded_frames);
+        self.predictions.many_hot.truncate(self.decoded_frames);
         Ok(())
     }
 }
 
-type PredictionResult = AppResult<(usize, Vec<f32>, String)>;
+type PredictionResult = AppResult<(usize, TransnetPredictions, String)>;
 
 pub(super) struct InferenceTask {
     task_id: String,
@@ -224,7 +231,7 @@ impl InferenceTask {
     fn step(
         &mut self,
         provider: &SessionProvider,
-        infer: &mut impl FnMut(&VecDeque<Vec<u8>>) -> AppResult<Vec<f32>>,
+        infer: &mut impl FnMut(&VecDeque<Vec<u8>>) -> AppResult<TransnetPredictions>,
     ) -> AppResult<bool> {
         ensure_not_cancelled(&self.cancel)?;
         if self
@@ -345,7 +352,7 @@ impl StoryboardConsumer {
         self: &Arc<Self>,
         task: InferenceTask,
         initialize: impl FnOnce() -> AppResult<(M, SessionProvider)> + Send + 'static,
-        mut predict: impl FnMut(&mut M, &VecDeque<Vec<u8>>, &AtomicBool) -> AppResult<Vec<f32>>
+        mut predict: impl FnMut(&mut M, &VecDeque<Vec<u8>>, &AtomicBool) -> AppResult<TransnetPredictions>
             + Send
             + 'static,
     ) -> AppResult<()> {
@@ -498,29 +505,43 @@ mod tests {
             .collect()
     }
 
-    fn predict(window: &VecDeque<Vec<u8>>) -> AppResult<Vec<f32>> {
+    fn predict(window: &VecDeque<Vec<u8>>) -> AppResult<TransnetPredictions> {
         // All 100 frames affect the output, so misplaced context is observable.
         let context = window
             .iter()
             .flatten()
             .map(|byte| *byte as u64)
             .sum::<u64>();
-        Ok(window
+        let single_frame = window
             .iter()
             .skip(25)
             .take(50)
             .map(|frame| ((context + frame[1] as u64 + frame[2] as u64 * 256) % 97) as f32 / 96.0)
-            .collect())
+            .collect::<Vec<_>>();
+        let many_hot = single_frame.iter().map(|value| 1.0 - value).collect();
+        Ok(TransnetPredictions {
+            single_frame,
+            many_hot,
+        })
+    }
+
+    fn extend_predictions(target: &mut TransnetPredictions, next: TransnetPredictions) {
+        target.single_frame.extend(next.single_frame);
+        target.many_hot.extend(next.many_hot);
     }
 
     /// Window snapshots, predictions, and `(predicted, decoded)` progress reports.
-    type SerialReference = (Vec<VecDeque<Vec<u8>>>, Vec<f32>, Vec<(usize, usize)>);
+    type SerialReference = (
+        Vec<VecDeque<Vec<u8>>>,
+        TransnetPredictions,
+        Vec<(usize, usize)>,
+    );
 
     fn serial_reference(frames: &[Vec<u8>]) -> SerialReference {
         // Independent copy of the pre-refactor, frame-at-a-time algorithm.
         let mut window = VecDeque::new();
         let mut windows = Vec::new();
-        let mut predictions = Vec::new();
+        let mut predictions = TransnetPredictions::default();
         let mut progress = Vec::new();
         for (index, frame) in frames.iter().enumerate() {
             if index == 0 {
@@ -529,25 +550,26 @@ mod tests {
             window.push_back(frame.clone());
             while window.len() >= 100 {
                 windows.push(window.clone());
-                predictions.extend(predict(&window).unwrap());
+                extend_predictions(&mut predictions, predict(&window).unwrap());
                 for _ in 0..50 {
                     window.pop_front();
                 }
-                progress.push((predictions.len(), index + 1));
+                progress.push((predictions.single_frame.len(), index + 1));
             }
         }
-        while predictions.len() < frames.len() {
+        while predictions.single_frame.len() < frames.len() {
             while window.len() < 100 {
                 window.push_back(frames.last().unwrap().clone());
             }
             windows.push(window.clone());
-            predictions.extend(predict(&window).unwrap());
+            extend_predictions(&mut predictions, predict(&window).unwrap());
             for _ in 0..50 {
                 window.pop_front();
             }
-            progress.push((predictions.len(), frames.len()));
+            progress.push((predictions.single_frame.len(), frames.len()));
         }
-        predictions.truncate(frames.len());
+        predictions.single_frame.truncate(frames.len());
+        predictions.many_hot.truncate(frames.len());
         (windows, predictions, progress)
     }
 
@@ -584,10 +606,20 @@ mod tests {
                 assert_eq!(progress, expected_progress);
                 let config = StoryboardDecisionConfig::default();
                 assert_eq!(
-                    serde_json::to_value(detect_storyboard_cuts(&state.predictions, &config))
-                        .unwrap(),
-                    serde_json::to_value(detect_storyboard_cuts(&expected_predictions, &config))
-                        .unwrap()
+                    serde_json::to_value(detect_storyboard_cuts(
+                        &state.predictions,
+                        None,
+                        25.0,
+                        &config
+                    ))
+                    .unwrap(),
+                    serde_json::to_value(detect_storyboard_cuts(
+                        &expected_predictions,
+                        None,
+                        25.0,
+                        &config
+                    ))
+                    .unwrap()
                 );
             }
         }

@@ -232,11 +232,13 @@ export function useStoryboardGraphMotion(
           // node. Ease recentering too, so releasing never jumps the layout.
           .force("center", forceCenter(0, 0).strength(0.035));
         simulation.on("tick", () => {
-          const next = nodes.map(({ id, x, y, radius, thumbnailFrame, vx = 0, vy = 0 }) => {
-            // Spring velocities use seconds; D3 velocities use simulation ticks.
-            motion.current.set(id, { x, y, radius, vx: vx * 60, vy: vy * 60, vr: 0 });
-            return { id, x, y, radius, thumbnailFrame };
-          });
+          const next = nodes.map(
+            ({ id, x, y, radius, cluster, thumbnailFrame, vx = 0, vy = 0 }) => {
+              // Spring velocities use seconds; D3 velocities use simulation ticks.
+              motion.current.set(id, { x, y, radius, vx: vx * 60, vy: vy * 60, vr: 0 });
+              return { id, x, y, radius, cluster, thumbnailFrame };
+            },
+          );
           publish(next);
         });
         live.current = simulation;

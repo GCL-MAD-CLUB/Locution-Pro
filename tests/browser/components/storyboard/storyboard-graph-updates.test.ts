@@ -40,6 +40,61 @@ async function assertConnected(page: Page, ids: string[]) {
   expect(connected).toBe(true);
 }
 
+test("toolbar clustering toggle reuses indexed vectors and animates between optimized and ordinary layouts", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await mount(page);
+  const toggle = page.getByRole("button", { name: "聚类优化", exact: true });
+  await expect(page.getByRole("group", { name: "图谱布局选项", exact: true })).toHaveCSS(
+    "border-left-width",
+    "1px",
+  );
+  const nodes = page.locator(".storyboard-graph-dot");
+  const stage = page.locator(".storyboard-graph-view");
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("[data-graph-cluster]").first()).toBeVisible();
+  const before = await page.evaluate(() => ({
+    calls: (window as any).graphLiveCalls.length,
+    edges: (window as any).graphLiveTarget.edges,
+    camera: getComputedStyle(document.querySelector(".storyboard-graph-world")!).transform,
+  }));
+  for (const enabled of [false, true]) {
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", String(enabled));
+    await expect
+      .poll(() => page.evaluate(() => (window as any).graphLiveTarget.clusterEnabled))
+      .toBe(enabled);
+    await expect(nodes).toHaveCount(9);
+    if (enabled) await expect(page.locator("[data-graph-cluster]").first()).toBeVisible();
+    else await expect(page.locator("[data-graph-cluster]")).toHaveCount(0);
+    await expect(stage).toHaveAttribute("data-graph-phase", "ready");
+    expect(await page.evaluate(() => (window as any).graphLiveTarget.edges)).toEqual(before.edges);
+    expect(await page.evaluate(() => (window as any).graphLiveCalls.length)).toBe(before.calls);
+    expect(
+      await page
+        .locator(".storyboard-graph-world")
+        .evaluate((element) => getComputedStyle(element).transform),
+    ).toBe(before.camera);
+    await expect(page.locator(".topbar-progress")).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).graphLiveInteractions)).toEqual({
+      selections: [],
+      activations: [],
+      sprays: [],
+      menus: 0,
+    });
+  }
+  const requests = await page.evaluate(() => (window as any).graphLiveRequests);
+  expect(requests).toHaveLength(3);
+  expect(requests[1].vectors).toBeUndefined();
+  expect(requests[2].vectors).toBeUndefined();
+  expect(requests.map((request: any) => request.options.clusterEnabled)).toEqual([
+    true,
+    false,
+    true,
+  ]);
+});
+
 test("initial indexing keeps global progress while the canvas shows a random force network and collapses into the semantic graph", async ({
   page,
 }) => {

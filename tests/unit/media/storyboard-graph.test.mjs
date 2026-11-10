@@ -4,6 +4,7 @@ import * as d3Force from "d3-force";
 import { clientError } from "../../../src/errors/model.ts";
 import { defaultStoryboardGraphOptions } from "../../../src/core/editor/storyboardGraph/options.ts";
 import * as graphOptions from "../../../src/core/editor/storyboardGraph/options.ts";
+import * as clustering from "../../../src/core/editor/storyboardGraph/clustering.ts";
 import { createModuleLoader } from "../support/module-loader.ts";
 import { storyboardGraphNeighborhood } from "../../../src/core/editor/storyboardGraph/camera.ts";
 
@@ -13,6 +14,7 @@ const graphModule = createModuleLoader(import.meta.url)(
     "d3-force": d3Force,
     "../../../errors/model": { clientError },
     "./options": graphOptions,
+    "./clustering": clustering,
   },
 );
 const build = (shots, options = defaultStoryboardGraphOptions) =>
@@ -45,6 +47,40 @@ const connect = (
       minIslandConnections,
     }),
   );
+
+test("semantic clustering shapes the worker layout and remains independent of display degree", () => {
+  const shots = Array.from({ length: 24 }, (_, i) =>
+    input(
+      String(i).padStart(2, "0"),
+      [0, 1, 2].map((axis) => (axis === Math.floor(i / 8) ? 1 : ((i % 8) + 1) * 0.002)),
+    ),
+  );
+  const graph = build(shots);
+  assert.deepEqual(
+    graph.nodes.map((node) => node.cluster),
+    Array.from({ length: 24 }, (_, i) => Math.floor(i / 8)),
+  );
+  const centers = [0, 1, 2].map((cluster) => {
+    const members = graph.nodes.filter((node) => node.cluster === cluster);
+    const x = members.reduce((sum, node) => sum + node.x, 0) / members.length;
+    const y = members.reduce((sum, node) => sum + node.y, 0) / members.length;
+    return { x, y, radius: Math.max(...members.map((node) => Math.hypot(node.x - x, node.y - y))) };
+  });
+  for (let a = 0; a < centers.length; a++)
+    for (let b = a + 1; b < centers.length; b++)
+      assert.ok(
+        Math.hypot(centers[a].x - centers[b].x, centers[a].y - centers[b].y) >
+          centers[a].radius + centers[b].radius,
+        "semantic groups occupy distinct regions",
+      );
+  const limited = build(shots, { maxVisibleDegree: 2 });
+  assert.deepEqual(
+    limited.nodes.map((node) => node.cluster),
+    graph.nodes.map((node) => node.cluster),
+  );
+  assert.deepEqual(limited.edges, graph.edges);
+  assertConnected(graph.nodes, graph.edges);
+});
 
 test("interactive forces tether a grabbed node, move its neighbors and cool after release", () => {
   const graph = build(Array.from({ length: 9 }, (_, i) => input(String(i), [1, i / 8, 0.2])));
@@ -79,6 +115,36 @@ test("interactive forces tether a grabbed node, move its neighbors and cool afte
     assert.deepEqual(graph, snapshot, "semantic graph and numeric edge indices remain immutable");
   } finally {
     simulation.stop();
+  }
+});
+
+test("disabling clustering preserves semantic topology and restores ordinary force behavior", () => {
+  const shots = Array.from({ length: 12 }, (_, i) =>
+    input(String(i), [Math.cos(i / 3), Math.sin(i / 3), 0.1]),
+  );
+  const clustered = build(shots);
+  const plain = build(shots, { clusterEnabled: false });
+  assert.equal(plain.clusterEnabled, false);
+  assert.ok(plain.nodes.every((node) => node.cluster === undefined));
+  assert.deepEqual(plain.edges, clustered.edges);
+  assert.deepEqual(
+    plain.nodes.map((node) => node.radius),
+    clustered.nodes.map((node) => node.radius),
+  );
+  const withLabels = clustered.nodes.map((node) => ({ ...node }));
+  const withoutLabels = withLabels.map(({ cluster, ...node }) => node);
+  const a = graphModule.createStoryboardGraphSimulation(withLabels, plain.edges, plain);
+  const b = graphModule.createStoryboardGraphSimulation(withoutLabels, plain.edges, plain);
+  try {
+    a.tick(100);
+    b.tick(100);
+    assert.deepEqual(
+      withLabels.map(({ x, y }) => [x, y]),
+      withoutLabels.map(({ x, y }) => [x, y]),
+    );
+  } finally {
+    a.stop();
+    b.stop();
   }
 });
 
@@ -533,6 +599,7 @@ test("zero, one and two shots produce valid force layouts", () => {
         id: "0",
         thumbnailFrame: 0,
         radius: defaultStoryboardGraphOptions.nodeRadius(0),
+        cluster: 0,
         x: 0,
         y: 0,
       },

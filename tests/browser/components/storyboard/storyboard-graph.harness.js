@@ -4,6 +4,7 @@ import { StoryboardGraphCanvas } from "../../../../src/components/panels/Storybo
 import { StoryboardGraphView } from "../../../../src/components/panels/StoryboardPanel/views/StoryboardGraphView.tsx";
 import { useStoryboardSemanticSearch } from "../../../../src/application/media/storyboardSemanticSearch.ts";
 import { TaskProgress } from "../../../../src/systems/TaskSystem";
+import { defaultStoryboardGraphOptions } from "../../../../src/core/editor/storyboardGraph/options.ts";
 import "../../../../src/styles.css";
 import "../../../../src/components/panels/StoryboardPanel/StoryboardPanel.css";
 
@@ -16,6 +17,7 @@ const shots = Array.from({ length: 9 }, (_, index) => ({
   end_us: (index + 1) * 1_000_000,
 }));
 const graph = {
+  ...defaultStoryboardGraphOptions,
   nodes: shots.map((shot, index) => ({
     id: shot.id,
     x: ((index % 3) - 1) * 120,
@@ -44,7 +46,13 @@ const source = {
   frameRate: 24,
 };
 
-export function mountGraph(empty = false, spread = 1, nodeRadius = 4, dense = false) {
+export function mountGraph(
+  empty = false,
+  spread = 1,
+  nodeRadius = 4,
+  dense = false,
+  clustered = false,
+) {
   const radiusForView = dense ? (view_degree) => nodeRadius + view_degree * 0.1 : () => nodeRadius;
   const renderedGraph = {
     ...graph,
@@ -57,11 +65,12 @@ export function mountGraph(empty = false, spread = 1, nodeRadius = 4, dense = fa
           })),
         )
       : graph.edges,
-    nodes: graph.nodes.map((node) => ({
+    nodes: graph.nodes.map((node, index) => ({
       ...node,
       x: node.x * spread,
-      y: node.y * spread,
+      y: clustered === "overlap" ? (Math.floor(index / 3) - 1) * 16 : node.y * spread,
       radius: nodeRadius,
+      cluster: clustered ? Math.floor(index / 3) : undefined,
     })),
   };
   const host = document.createElement("div");

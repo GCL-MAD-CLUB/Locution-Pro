@@ -11,6 +11,7 @@ import {
 } from "d3-force";
 import { clientError } from "../../../errors/model";
 import { defaultStoryboardGraphOptions, type StoryboardGraphOptions } from "./options";
+import { clusterStoryboardGraph, storyboardGraphClusterForce } from "./clustering";
 
 export interface StoryboardGraphVector {
   id: string;
@@ -24,6 +25,7 @@ export interface StoryboardGraphNode {
   y: number;
   thumbnailFrame: number;
   radius: number;
+  cluster?: number;
 }
 
 export interface StoryboardGraphEdge {
@@ -345,6 +347,7 @@ function seededRandom() {
 export interface StoryboardGraphForceNode extends SimulationNodeDatum {
   id: string;
   radius: number;
+  cluster?: number;
 }
 
 interface ForceEdge<Node extends StoryboardGraphForceNode> extends SimulationLinkDatum<Node> {
@@ -356,7 +359,10 @@ interface ForceEdge<Node extends StoryboardGraphForceNode> extends SimulationLin
 export function createStoryboardGraphSimulation<Node extends StoryboardGraphForceNode>(
   nodes: Node[],
   edges: readonly StoryboardGraphEdge[],
-  options: Pick<StoryboardGraphOptions, "collisionPadding"> = defaultStoryboardGraphOptions,
+  options: Pick<StoryboardGraphOptions, "collisionPadding"> &
+    Partial<
+      Pick<StoryboardGraphOptions, "clusterStrength" | "clusterEnabled">
+    > = defaultStoryboardGraphOptions,
 ) {
   if (!Number.isFinite(options.collisionPadding) || options.collisionPadding <= 0)
     throw clientError("UNEXPECTED_ERROR", "Invalid storyboard graph collision padding");
@@ -366,6 +372,17 @@ export function createStoryboardGraphSimulation<Node extends StoryboardGraphForc
     degrees[edge.target]++;
   }
   const links: ForceEdge<Node>[] = edges.map((edge) => ({ ...edge }));
+  const clustered = options.clusterEnabled ?? defaultStoryboardGraphOptions.clusterEnabled;
+  const sameCluster = (edge: ForceEdge<Node>) => {
+    const source = edge.source as Node;
+    const target = edge.target as Node;
+    return (
+      !clustered ||
+      source.cluster === undefined ||
+      target.cluster === undefined ||
+      source.cluster === target.cluster
+    );
+  };
   return forceSimulation(nodes)
     .stop()
     .randomSource(seededRandom())
@@ -373,15 +390,21 @@ export function createStoryboardGraphSimulation<Node extends StoryboardGraphForc
     .force(
       "link",
       forceLink<Node, ForceEdge<Node>>(links)
-        .distance((edge) => 30 + (1 - edge.similarity) * 90)
+        .distance((edge) => (30 + (1 - edge.similarity) * 90) * (sameCluster(edge) ? 1 : 2.2))
         .strength((edge) => {
           const source = edge.source as Node;
           const target = edge.target as Node;
           const degree = Math.max(1, Math.min(degrees[source.index!], degrees[target.index!]));
-          return (0.15 + 0.85 * edge.similarity ** 2) / degree;
+          return ((0.15 + 0.85 * edge.similarity ** 2) / degree) * (sameCluster(edge) ? 1 : 0.3);
         }),
     )
     .force("charge", forceManyBody<Node>().strength(-120).distanceMin(12))
+    .force(
+      "cluster",
+      storyboardGraphClusterForce<Node>(
+        clustered ? (options.clusterStrength ?? defaultStoryboardGraphOptions.clusterStrength) : 0,
+      ),
+    )
     .force(
       "collision",
       forceCollide<Node>((node) => node.radius + options.collisionPadding).iterations(3),
@@ -395,6 +418,7 @@ function forceDirectedPositions(
   shots: readonly StoryboardGraphVector[],
   edges: readonly StoryboardGraphEdge[],
   radii: readonly number[],
+  clusters: readonly (number | undefined)[],
   progress: (fraction: number) => void,
   options: StoryboardGraphOptions,
   previous: readonly StoryboardGraphNode[] = [],
@@ -404,6 +428,7 @@ function forceDirectedPositions(
   const nodes: StoryboardGraphForceNode[] = shots.map((shot, i) => ({
     id: shot.id,
     radius: radii[i],
+    cluster: clusters[i],
     x: positions.get(shot.id)?.x,
     y: positions.get(shot.id)?.y,
   }));
@@ -476,10 +501,23 @@ export function buildStoryboardGraph(
     storyboardGraphVisibleEdges(sparseEdges, shots.length, options.maxVisibleDegree, options),
     options.nodeRadius,
   );
+  if (
+    !Number.isFinite(options.clusterResolution) ||
+    options.clusterResolution <= 0 ||
+    !Number.isFinite(options.clusterStrength) ||
+    options.clusterStrength < 0 ||
+    !Number.isFinite(options.clusterPadding) ||
+    options.clusterPadding < 0
+  )
+    throw clientError("UNEXPECTED_ERROR", "Invalid storyboard graph clustering options");
+  const clusters = options.clusterEnabled
+    ? clusterStoryboardGraph(shots.length, sparseEdges, options.clusterResolution)
+    : Array<undefined>(shots.length).fill(undefined);
   const positions = forceDirectedPositions(
     shots,
     sparseEdges,
     radii,
+    clusters,
     (fraction) => progress("layout", fraction),
     options,
     reuse.positions,
@@ -494,6 +532,7 @@ export function buildStoryboardGraph(
       id: shot.id,
       thumbnailFrame: shot.thumbnailFrame,
       radius: radii[i],
+      cluster: clusters[i],
       x: positions[i][0],
       y: positions[i][1],
     })),

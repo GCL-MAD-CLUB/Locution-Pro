@@ -23,9 +23,11 @@ import {
   defaultStoryboardGraphOptions,
   type StoryboardGraphOptions,
 } from "../../../../core/editor/storyboardGraph/options";
+import { storyboardGraphClusterBoundaries } from "../../../../core/editor/storyboardGraph/clusterBoundary";
 import {
   constrainStoryboardGraphCamera,
   fitStoryboardGraphCamera,
+  rescaleStoryboardGraphCamera,
   panStoryboardGraph,
   storyboardGraphCanvas,
   indexStoryboardGraphNeighborhoods,
@@ -62,6 +64,8 @@ export interface StoryboardGraphCanvasProps {
   preparing?: boolean;
   maxVisibleDegree?: number;
   nodeRadius?: StoryboardGraphOptions["nodeRadius"];
+  clusterEnabled?: boolean;
+  onClusterEnabledChange?: (enabled: boolean) => void;
   shots: readonly StoryboardShot[];
   sourceForShot: (shot: StoryboardShot) => PanelRowSource;
   shotTitle: (shot: StoryboardShot) => string;
@@ -145,7 +149,7 @@ interface MarqueeGesture {
   base: ReadonlySet<string>;
   mode: StoryboardGraphSelectionMode;
   camera: StoryboardGraphCamera;
-  capture: HTMLElement;
+  capture: HTMLElement | SVGPathElement;
   active: boolean;
   timer?: number;
   spray?: { historyGroupId: string };
@@ -377,6 +381,8 @@ export function StoryboardGraphCanvas({
   preparing = false,
   maxVisibleDegree = defaultStoryboardGraphOptions.maxVisibleDegree,
   nodeRadius = defaultStoryboardGraphOptions.nodeRadius,
+  clusterEnabled = graph?.clusterEnabled ?? defaultStoryboardGraphOptions.clusterEnabled,
+  onClusterEnabledChange,
   shots,
   sourceForShot,
   shotTitle,
@@ -398,15 +404,18 @@ export function StoryboardGraphCanvas({
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [hoveredPreviewId, setHoveredPreviewId] = useState<string | null>(null);
+  const [hoveredCluster, setHoveredCluster] = useState<number | null>(null);
   const [showThumbnails, setShowThumbnails] = useState(true);
   const resetHover = useCallback(() => {
     setHoveredId(null);
     setHoveredPreviewId(null);
+    setHoveredCluster(null);
   }, []);
   const hoverNode = useCallback((id: string) => {
     raiseGraphNode(nodePaintRef.current, id);
     setHoveredPreviewId(null);
     setHoveredId(id);
+    setHoveredCluster(null);
   }, []);
   const leaveHover = useCallback(
     (event: { relatedTarget: EventTarget | null }) => {
@@ -469,18 +478,37 @@ export function StoryboardGraphCanvas({
     const radii = storyboardGraphNodeRadii(graph.nodes.length, edges, nodeRadius);
     return {
       edges,
-      graph: { ...graph, nodes: graph.nodes.map((node, i) => ({ ...node, radius: radii[i] })) },
+      graph: {
+        ...graph,
+        clusterEnabled,
+        nodes: graph.nodes.map((node, i) => ({
+          ...node,
+          radius: radii[i],
+          cluster: clusterEnabled ? node.cluster : undefined,
+        })),
+      },
     };
-  }, [graph, maxVisibleDegree, nodeRadius]);
+  }, [graph, maxVisibleDegree, nodeRadius, clusterEnabled]);
   const {
     nodes,
     edges: motionEdges,
     phase,
+    layoutProgress,
     beginDrag,
     moveDrag,
     endDrag,
   } = useStoryboardGraphMotion(view?.graph, panelActive, pendingNodes, graph);
-  const canvas = useMemo(() => storyboardGraphCanvas(nodes), [nodes]);
+  const clusterPadding =
+    (graph?.clusterPadding ?? defaultStoryboardGraphOptions.clusterPadding) * layoutProgress;
+  const canvas = useMemo(
+    () =>
+      storyboardGraphCanvas(
+        nodes.map((node) =>
+          node.cluster === undefined ? node : { ...node, radius: node.radius + clusterPadding },
+        ),
+      ),
+    [nodes, clusterPadding],
+  );
   const initialCamera = useMemo(
     () => fitStoryboardGraphCamera(nodes, size, canvas),
     [nodes, size, canvas],
@@ -490,14 +518,23 @@ export function StoryboardGraphCanvas({
     camera: StoryboardGraphCamera;
     layoutSize?: typeof size;
   } | null>(null);
+  const loadingFrameRef = useRef<{
+    camera: StoryboardGraphCamera;
+    canvas: StoryboardGraphRect;
+    size: typeof size;
+  } | null>(null);
+  const loadingFrame =
+    phase !== "ambient" && navigation?.graph === undefined ? loadingFrameRef.current : null;
   const camera = useMemo(() => {
+    if (loadingFrame?.size === size)
+      return rescaleStoryboardGraphCamera(loadingFrame.camera, loadingFrame.canvas, canvas);
     const current = navigation ? navigation.camera : initialCamera;
     // Moving nodes change the bounds. Preserve the transform through the grab
     // and cooling; a resize or explicit navigation applies the new bounds.
     return navigation?.layoutSize === size
       ? current
       : constrainStoryboardGraphCamera(current, size, canvas);
-  }, [navigation, initialCamera, size, canvas]);
+  }, [navigation, initialCamera, size, canvas, loadingFrame]);
   const overviewCanvas = useMemo(
     () =>
       storyboardGraphOverviewCanvas(
@@ -515,6 +552,13 @@ export function StoryboardGraphCanvas({
   useLayoutEffect(() => {
     cameraRef.current = camera;
   }, [camera]);
+  useLayoutEffect(() => {
+    if (phase === "ambient" && size.width > 1) loadingFrameRef.current = { camera, canvas, size };
+    else if (phase === "ready" && loadingFrameRef.current) {
+      loadingFrameRef.current = null;
+      if (loadingFrame?.size === size) setNavigation({ graph, camera, layoutSize: size });
+    }
+  }, [phase, camera, canvas, size, loadingFrame, graph]);
   const cameraFrameRef = useRef<number | null>(null);
   useEffect(
     () => () => {
@@ -557,6 +601,13 @@ export function StoryboardGraphCanvas({
     () => JSON.stringify(visibleNodes.map((node) => node.id)),
     [visibleNodes],
   );
+  const clusterBoundaries = useMemo(
+    () =>
+      preparing || !clusterEnabled
+        ? []
+        : storyboardGraphClusterBoundaries(visibleNodes, clusterPadding),
+    [preparing, clusterEnabled, visibleNodes, clusterPadding],
+  );
   const nodesById = useMemo(
     () => new Map(visibleNodes.map((node) => [node.id, node])),
     [visibleNodes],
@@ -588,6 +639,15 @@ export function StoryboardGraphCanvas({
   const neighborhood = activeHoveredId
     ? (neighborhoods.get(activeHoveredId) ?? emptyNeighborhood)
     : emptyNeighborhood;
+  const highlightedNodes = useMemo(
+    () =>
+      hoveredCluster !== null && !preparing
+        ? new Set(
+            visibleNodes.filter((node) => node.cluster === hoveredCluster).map((node) => node.id),
+          )
+        : neighborhood,
+    [hoveredCluster, preparing, visibleNodes, neighborhood],
+  );
   const viewport = useMemo(() => storyboardGraphViewport(camera, size), [camera, size]);
   const overviewViewport = storyboardGraphOverviewPoint(viewport, overviewCanvas);
   const hoveredNode = activeHoveredId ? nodesById.get(activeHoveredId) : undefined;
@@ -713,12 +773,15 @@ export function StoryboardGraphCanvas({
   }, [edges, nodes]);
   const highlightedEdges = useMemo(() => {
     const result = new Set<StoryboardGraph["edges"][number]>();
-    for (const id of neighborhood)
+    for (const id of highlightedNodes)
       for (const edge of incidentEdges.get(id) ?? [])
-        if (neighborhood.has(nodes[edge.source].id) && neighborhood.has(nodes[edge.target].id))
+        if (
+          highlightedNodes.has(nodes[edge.source].id) &&
+          highlightedNodes.has(nodes[edge.target].id)
+        )
           result.add(edge);
     return [...result];
-  }, [neighborhood, incidentEdges, nodes]);
+  }, [highlightedNodes, incidentEdges, nodes]);
   // Batch static edges by opacity. Hover updates only the small highlighted
   // neighborhood, rather than thousands of individual SVG attributes.
   const edgePaths = useMemo(() => {
@@ -852,6 +915,7 @@ export function StoryboardGraphCanvas({
     sprayActive,
     maxVisibleDegree,
     nodeRadius,
+    clusterEnabled,
     cancelGestures,
     resetHover,
   ]);
@@ -986,8 +1050,12 @@ export function StoryboardGraphCanvas({
         event.target instanceof Element
           ? event.target.closest<HTMLButtonElement>(".storyboard-graph-dot")
           : null;
-      const capture = node ?? event.currentTarget;
-      capture.focus({ preventScroll: true });
+      const cluster =
+        event.target instanceof Element
+          ? event.target.closest<SVGPathElement>("[data-graph-cluster]")
+          : null;
+      const capture = node ?? cluster ?? event.currentTarget;
+      (node ?? event.currentTarget).focus({ preventScroll: true });
       capture.setPointerCapture(event.pointerId);
       const nodeId = node?.dataset.storyboardShotId;
       const graphNode = nodeId ? nodesById.get(nodeId) : undefined;
@@ -999,7 +1067,7 @@ export function StoryboardGraphCanvas({
           start: { x: event.clientX, y: event.clientY },
           offset: { x: graphNode.x - point.x, y: graphNode.y - point.y },
           camera: cameraRef.current,
-          capture,
+          capture: node!,
           active: false,
         };
         return;
@@ -1316,6 +1384,7 @@ export function StoryboardGraphCanvas({
       }
       role="region"
       data-graph-phase={phase}
+      data-graph-canvas={JSON.stringify(canvas)}
       aria-label="分镜语义图谱"
       tabIndex={0}
       onPointerDownCapture={(event) => {
@@ -1382,6 +1451,43 @@ export function StoryboardGraphCanvas({
           transform: `translate(${size.width / 2 - camera.x * camera.zoom}px, ${size.height / 2 - camera.y * camera.zoom}px) scale(${camera.zoom})`,
         }}
       >
+        <svg className="storyboard-graph-clusters" width={1} height={1} aria-hidden="true">
+          {clusterBoundaries.map(({ cluster, d }) => (
+            <path
+              key={cluster}
+              data-graph-cluster={cluster}
+              className={hoveredCluster === cluster ? "is-hovered" : undefined}
+              d={d}
+              vectorEffect="non-scaling-stroke"
+              onPointerEnter={() => {
+                if (
+                  !preparing &&
+                  !marqueeRef.current?.active &&
+                  !panRef.current &&
+                  !nodeDragRef.current?.active
+                )
+                  setHoveredCluster(cluster);
+              }}
+              onPointerLeave={() =>
+                setHoveredCluster((current) => (current === cluster ? null : current))
+              }
+              onClick={(event) => event.stopPropagation()}
+              onDoubleClick={(event) => {
+                event.stopPropagation();
+                if (preparing || tool !== "pointer" || sprayActive || suppressClickRef.current)
+                  return;
+                event.preventDefault();
+                lastClickRef.current = null;
+                const hits = new Set(
+                  visibleNodes.filter((node) => node.cluster === cluster).map((node) => node.id),
+                );
+                commitSelection(
+                  applyStoryboardGraphSelection(selectionRef.current, hits, selectionMode),
+                );
+              }}
+            />
+          ))}
+        </svg>
         <svg className="storyboard-graph-edges" width={1} height={1} aria-hidden="true">
           {edgePaths}
           <GraphHighlightedEdges edges={highlightedEdges} nodes={nodes} />
@@ -1397,7 +1503,7 @@ export function StoryboardGraphCanvas({
                 title={shotTitle(shotsById.get(node.id)!)}
                 selected={selectedShotIds.has(node.id)}
                 hovered={activeHoveredId === node.id}
-                neighbor={neighborhood.has(node.id)}
+                neighbor={highlightedNodes.has(node.id)}
                 hoverEnabled={hoverEnabled}
                 tabIndex={tool === "pointer" ? 0 : -1}
                 previewId={previewsEnabled ? previewId : undefined}
@@ -1425,7 +1531,7 @@ export function StoryboardGraphCanvas({
             nodeScale={nodeScale}
             selected={selectedShotIds.has(node.id)}
             hovered={activeHoveredId === node.id}
-            neighbor={neighborhood.has(node.id)}
+            neighbor={highlightedNodes.has(node.id)}
             annotation={shotAnnotations[node.id]}
           />
         ))}
@@ -1517,6 +1623,17 @@ export function StoryboardGraphCanvas({
         mode={selectionMode}
         sprayActive={sprayActive}
         showThumbnails={showThumbnails}
+        clusterEnabled={clusterEnabled}
+        onToggleClustering={
+          !preparing && onClusterEnabledChange
+            ? () => {
+                cancelGestures();
+                resetHover();
+                setNavigation({ graph, camera: cameraRef.current, layoutSize: size });
+                onClusterEnabledChange(!clusterEnabled);
+              }
+            : undefined
+        }
         onToggleThumbnails={() => {
           setShowThumbnails((current) => !current);
           setHoveredPreviewId(null);

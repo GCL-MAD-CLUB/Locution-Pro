@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   constrainStoryboardGraphCamera,
   fitStoryboardGraphCamera,
+  rescaleStoryboardGraphCamera,
   panStoryboardGraph,
   storyboardGraphCanvas,
   storyboardGraphOverviewCanvas,
@@ -24,6 +25,21 @@ const nodes = [
   { id: "b", x: 1800, y: 800, radius: 4, thumbnailFrame: 10 },
 ];
 const close = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, `${a} != ${b}`);
+test("loading-to-layout resizing scales the camera with the canvas and preserves navigated framing", () => {
+  const from = { x: -800, y: -450, width: 1600, height: 900 };
+  const camera = { x: 200, y: -100, zoom: 0.8 };
+  for (const scale of [0.6, 1, 1.4, 4]) {
+    const to = { x: 100, y: -900, width: from.width * scale, height: from.height * scale };
+    const next = rescaleStoryboardGraphCamera(camera, from, to);
+    const before = storyboardGraphViewport(camera, size);
+    const after = storyboardGraphViewport(next, size);
+    close(after.width / to.width, before.width / from.width);
+    close(after.height / to.height, before.height / from.height);
+    close((next.x - to.x) / to.width, (camera.x - from.x) / from.width);
+    close((next.y - to.y) / to.height, (camera.y - from.y) / from.height);
+  }
+  close(rescaleStoryboardGraphCamera(camera, from, { ...from, width: 10, height: 5.625 }).zoom, 2);
+});
 test("overview contains the retained viewport when a dragged layout shrinks or shifts", () => {
   const canvas = storyboardGraphCanvas([{ ...nodes[0], x: 0, y: 0 }]);
   const snapshot = { ...canvas };

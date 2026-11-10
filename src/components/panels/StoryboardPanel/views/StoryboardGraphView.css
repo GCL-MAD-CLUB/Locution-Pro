@@ -49,7 +49,11 @@
 }
 
 .storyboard-graph-view.is-selecting {
-  cursor: crosshair;
+  cursor: default;
+}
+
+.storyboard-graph-view.is-selecting .storyboard-graph-dot {
+  cursor: default;
 }
 
 .storyboard-graph-tools {
@@ -100,6 +104,11 @@
   outline-offset: -1px;
 }
 
+.storyboard-graph-tools button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .storyboard-graph-tools svg {
   width: 16px;
   height: 16px;
@@ -118,7 +127,8 @@
 }
 
 .storyboard-graph-selection-modes,
-.storyboard-graph-thumbnail-controls {
+.storyboard-graph-thumbnail-controls,
+.storyboard-graph-cluster-controls {
   display: flex;
   align-items: center;
   gap: 1px;
@@ -141,6 +151,7 @@
 }
 
 .storyboard-graph-world,
+.storyboard-graph-clusters,
 .storyboard-graph-edges,
 .storyboard-graph-hit-nodes,
 .storyboard-graph-nodes {
@@ -157,6 +168,38 @@
 
 .storyboard-graph-edges {
   overflow: visible;
+}
+
+.storyboard-graph-clusters {
+  overflow: visible;
+}
+
+.storyboard-graph-clusters path {
+  fill: var(--color-storyboard-graph-default);
+  fill-opacity: 0.025;
+  stroke: var(--color-storyboard-graph-default);
+  stroke-opacity: 0.32;
+  stroke-width: 1;
+  stroke-dasharray: 5 5;
+  stroke-linejoin: round;
+  pointer-events: fill;
+  transition:
+    opacity 240ms ease,
+    fill-opacity var(--storyboard-graph-hover-duration) ease,
+    stroke-opacity var(--storyboard-graph-hover-duration) ease,
+    stroke var(--storyboard-graph-hover-duration) ease;
+}
+
+.storyboard-graph-clusters path.is-hovered {
+  fill-opacity: 0.075;
+  stroke: var(--storyboard-graph-hover);
+  stroke-opacity: 0.75;
+}
+
+@starting-style {
+  .storyboard-graph-clusters path {
+    opacity: 0;
+  }
 }
 
 .storyboard-graph-edges path,
@@ -507,6 +550,7 @@
   .storyboard-graph-preview,
   .storyboard-graph-preview .shot-frame-button,
   .storyboard-graph-minimap-content circle,
+  .storyboard-graph-clusters path,
   .storyboard-graph-edges path,
   .storyboard-graph-edges line {
     transition: none;

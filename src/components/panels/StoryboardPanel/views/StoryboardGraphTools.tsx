@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Hand, MousePointer2 } from "lucide-react";
+import { Eye, EyeOff, Hand, MousePointer2, Network } from "lucide-react";
 import type {
   StoryboardGraphSelectionMode,
   StoryboardGraphTool,
@@ -40,6 +40,8 @@ export function StoryboardGraphTools({
   sprayActive = false,
   showThumbnails,
   onToggleThumbnails,
+  clusterEnabled,
+  onToggleClustering,
   onToolChange,
   onModeChange,
 }: {
@@ -48,6 +50,8 @@ export function StoryboardGraphTools({
   sprayActive?: boolean;
   showThumbnails: boolean;
   onToggleThumbnails: () => void;
+  clusterEnabled: boolean;
+  onToggleClustering?: () => void;
   onToolChange: (tool: StoryboardGraphTool) => void;
   onModeChange: (mode: StoryboardGraphSelectionMode) => void;
 }) {
@@ -124,6 +128,18 @@ export function StoryboardGraphTools({
           onClick={onToggleThumbnails}
         >
           {showThumbnails ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}
+        </button>
+      </div>
+      <div className="storyboard-graph-cluster-controls" role="group" aria-label="图谱布局选项">
+        <button
+          type="button"
+          aria-label="聚类优化"
+          title={clusterEnabled ? "关闭聚类优化" : "开启聚类优化"}
+          aria-pressed={clusterEnabled}
+          disabled={!onToggleClustering}
+          onClick={onToggleClustering}
+        >
+          <Network aria-hidden="true" />
         </button>
       </div>
     </div>

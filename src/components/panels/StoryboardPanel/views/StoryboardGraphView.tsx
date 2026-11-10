@@ -1,5 +1,6 @@
 import { Network } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { defaultStoryboardGraphOptions } from "../../../../core/editor/storyboardGraph/options";
 import { useStoryboardGraph } from "../../../../application/media/storyboardGraph";
 import type { SemanticShot } from "../../../../application/media/storyboardSemanticSearch";
 import { usePanelActive } from "../../../../runtime/systems/PanelState";
@@ -7,7 +8,7 @@ import { StoryboardGraphCanvas, type StoryboardGraphCanvasProps } from "./Storyb
 
 interface StoryboardGraphViewProps extends Omit<
   StoryboardGraphCanvasProps,
-  "graph" | "children" | "preparing"
+  "graph" | "children" | "preparing" | "clusterEnabled" | "onClusterEnabledChange"
 > {
   semanticShots: readonly SemanticShot[];
   scope: string;
@@ -34,12 +35,19 @@ export function StoryboardGraphView({
   ...props
 }: StoryboardGraphViewProps) {
   const panelActive = usePanelActive();
+  const [clusterEnabled, setClusterEnabled] = useState(
+    defaultStoryboardGraphOptions.clusterEnabled,
+  );
+  const options = useMemo(
+    () => ({ ...defaultStoryboardGraphOptions, clusterEnabled }),
+    [clusterEnabled],
+  );
   const visibleIds = useMemo(() => props.shots.map((shot) => shot.id), [props.shots]);
   const result = useStoryboardGraph(
     semanticShots,
     scope,
     available && panelActive && props.shots.length > 0,
-    undefined,
+    options,
     visibleIds,
   );
   const empty = !semanticShots.length || !props.shots.length;
@@ -50,6 +58,8 @@ export function StoryboardGraphView({
       key={scope}
       {...props}
       graph={result.graph}
+      clusterEnabled={clusterEnabled}
+      onClusterEnabledChange={setClusterEnabled}
       preparing={available && !result.graph && !("message" in result.state)}
     >
       {!available ? (

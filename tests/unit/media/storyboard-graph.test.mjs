@@ -4,6 +4,7 @@ import * as d3Force from "d3-force";
 import { clientError } from "../../../src/errors/model.ts";
 import { defaultStoryboardGraphOptions } from "../../../src/core/editor/storyboardGraph/options.ts";
 import * as graphOptions from "../../../src/core/editor/storyboardGraph/options.ts";
+import * as clustering from "../../../src/core/editor/storyboardGraph/clustering.ts";
 import { createModuleLoader } from "../support/module-loader.ts";
 import { storyboardGraphNeighborhood } from "../../../src/core/editor/storyboardGraph/camera.ts";
 
@@ -13,6 +14,7 @@ const graphModule = createModuleLoader(import.meta.url)(
     "d3-force": d3Force,
     "../../../errors/model": { clientError },
     "./options": graphOptions,
+    "./clustering": clustering,
   },
 );
 const build = (shots, options = defaultStoryboardGraphOptions) =>
@@ -45,6 +47,40 @@ const connect = (
       minIslandConnections,
     }),
   );
+
+test("semantic clustering shapes the worker layout and remains independent of display degree", () => {
+  const shots = Array.from({ length: 24 }, (_, i) =>
+    input(
+      String(i).padStart(2, "0"),
+      [0, 1, 2].map((axis) => (axis === Math.floor(i / 8) ? 1 : ((i % 8) + 1) * 0.002)),
+    ),
+  );
+  const graph = build(shots);
+  assert.deepEqual(
+    graph.nodes.map((node) => node.cluster),
+    Array.from({ length: 24 }, (_, i) => Math.floor(i / 8)),
+  );
+  const centers = [0, 1, 2].map((cluster) => {
+    const members = graph.nodes.filter((node) => node.cluster === cluster);
+    const x = members.reduce((sum, node) => sum + node.x, 0) / members.length;
+    const y = members.reduce((sum, node) => sum + node.y, 0) / members.length;
+    return { x, y, radius: Math.max(...members.map((node) => Math.hypot(node.x - x, node.y - y))) };
+  });
+  for (let a = 0; a < centers.length; a++)
+    for (let b = a + 1; b < centers.length; b++)
+      assert.ok(
+        Math.hypot(centers[a].x - centers[b].x, centers[a].y - centers[b].y) >
+          centers[a].radius + centers[b].radius,
+        "semantic groups occupy distinct regions",
+      );
+  const limited = build(shots, { maxVisibleDegree: 2 });
+  assert.deepEqual(
+    limited.nodes.map((node) => node.cluster),
+    graph.nodes.map((node) => node.cluster),
+  );
+  assert.deepEqual(limited.edges, graph.edges);
+  assertConnected(graph.nodes, graph.edges);
+});
 
 test("interactive forces tether a grabbed node, move its neighbors and cool after release", () => {
   const graph = build(Array.from({ length: 9 }, (_, i) => input(String(i), [1, i / 8, 0.2])));
@@ -82,6 +118,36 @@ test("interactive forces tether a grabbed node, move its neighbors and cool afte
   }
 });
 
+test("disabling clustering preserves semantic topology and restores ordinary force behavior", () => {
+  const shots = Array.from({ length: 12 }, (_, i) =>
+    input(String(i), [Math.cos(i / 3), Math.sin(i / 3), 0.1]),
+  );
+  const clustered = build(shots);
+  const plain = build(shots, { clusterEnabled: false });
+  assert.equal(plain.clusterEnabled, false);
+  assert.ok(plain.nodes.every((node) => node.cluster === undefined));
+  assert.deepEqual(plain.edges, clustered.edges);
+  assert.deepEqual(
+    plain.nodes.map((node) => node.radius),
+    clustered.nodes.map((node) => node.radius),
+  );
+  const withLabels = clustered.nodes.map((node) => ({ ...node }));
+  const withoutLabels = withLabels.map(({ cluster, ...node }) => node);
+  const a = graphModule.createStoryboardGraphSimulation(withLabels, plain.edges, plain);
+  const b = graphModule.createStoryboardGraphSimulation(withoutLabels, plain.edges, plain);
+  try {
+    a.tick(100);
+    b.tick(100);
+    assert.deepEqual(
+      withLabels.map(({ x, y }) => [x, y]),
+      withoutLabels.map(({ x, y }) => [x, y]),
+    );
+  } finally {
+    a.stop();
+    b.stop();
+  }
+});
+
 test("visible edge limits preserve minimum links and animation identity without mutating the computed graph", () => {
   const edges = [
     { source: 0, target: 1, similarity: 0.99, opacity: 0.8 },
@@ -92,8 +158,9 @@ test("visible edge limits preserve minimum links and animation identity without 
     { source: 2, target: 3, similarity: 0.5 },
   ];
   const snapshot = structuredClone(edges);
+  const settings = { ...defaultStoryboardGraphOptions, minDegree: 2 };
   for (const limit of [0, 1, 2]) {
-    const visible = graphModule.storyboardGraphVisibleEdges(edges, 4, limit);
+    const visible = graphModule.storyboardGraphVisibleEdges(edges, 4, limit, settings);
     for (let i = 0; i < 4; i++)
       assert.ok(visible.filter((edge) => edge.source === i || edge.target === i).length >= 2);
     assert.equal(visible.length, 5);
@@ -103,7 +170,7 @@ test("visible edge limits preserve minimum links and animation identity without 
       "retain animation identity and opacity",
     );
     assert.deepEqual(
-      new Set(graphModule.storyboardGraphVisibleEdges([...edges].reverse(), 4, limit)),
+      new Set(graphModule.storyboardGraphVisibleEdges([...edges].reverse(), 4, limit, settings)),
       new Set(visible),
     );
   }
@@ -139,7 +206,12 @@ test("display sparsification repairs islands with existing strongest bridges des
     assert.ok(visible.every((edge) => edges.includes(edge)));
   }
   assert.deepEqual(
-    Array.from(graphModule.storyboardGraphVisibleEdges(internal, 6, 2)),
+    Array.from(
+      graphModule.storyboardGraphVisibleEdges(internal, 6, 2, {
+        ...defaultStoryboardGraphOptions,
+        minDegree: 2,
+      }),
+    ),
     internal,
     "disconnected provisional edge pools never invent a new force link or loop indefinitely",
   );
@@ -345,7 +417,7 @@ test("complete graph bridges disconnected kNN islands even below threshold and b
     input(String(i).padStart(2, "0"), i < 16 ? [1, 0] : [-1, 0]),
   );
   const original = structuredClone(shots);
-  const options = { minSimilarity: 1, maxDegree: 1, minIslandConnections: 2 };
+  const options = { minSimilarity: 1, maxDegree: 1, minDegree: 2, minIslandConnections: 2 };
   const graph = build(shots, options);
   const crossIslandEdges = graph.edges.filter((edge) => edge.source < 16 !== edge.target < 16);
   assert.deepEqual(crossIslandEdges, [
@@ -533,6 +605,7 @@ test("zero, one and two shots produce valid force layouts", () => {
         id: "0",
         thumbnailFrame: 0,
         radius: defaultStoryboardGraphOptions.nodeRadius(0),
+        cluster: 0,
         x: 0,
         y: 0,
       },
@@ -671,7 +744,7 @@ test("each shot retains its two highest-scoring links even below threshold and b
     { source: 2, target: 3, similarity: 0.65 },
     { source: 1, target: 3, similarity: 0.4 },
   ];
-  const result = sparse(edges, 4, { minSimilarity: 1, maxDegree: 1 });
+  const result = sparse(edges, 4, { minSimilarity: 1, maxDegree: 1, minDegree: 2 });
   for (let i = 0; i < 4; i++) {
     const best = edges
       .filter((edge) => edge.source === i || edge.target === i)
@@ -681,7 +754,10 @@ test("each shot retains its two highest-scoring links even below threshold and b
       assert.ok(result.some((link) => link.source === edge.source && link.target === edge.target));
   }
   assert.equal(result.length, 5);
-  assert.deepEqual(sparse([...edges].reverse(), 4, { minSimilarity: 1, maxDegree: 1 }), result);
+  assert.deepEqual(
+    sparse([...edges].reverse(), 4, { minSimilarity: 1, maxDegree: 1, minDegree: 2 }),
+    result,
+  );
   assert.equal(sparse(edges, 4, { minSimilarity: 1, minDegree: 1 }).length, 2);
   assert.equal(sparse(edges, 4, { minSimilarity: 1, minDegree: 3 }).length, edges.length);
 });
@@ -723,7 +799,7 @@ test("raising the threshold keeps all shots and their best links in the simulate
     input(String(i), [Math.cos(i / 5), Math.sin(i / 5), 0.2]),
   );
   const loose = build(shots, { minSimilarity: 0, maxDegree: 15 });
-  const strict = build(shots, { minSimilarity: 1, maxDegree: 15 });
+  const strict = build(shots, { minSimilarity: 1, maxDegree: 15, minDegree: 2 });
   assert.equal(strict.nodes.length, shots.length);
   assert.ok(strict.edges.length < loose.edges.length);
   for (let i = 0; i < strict.nodes.length; i++) {

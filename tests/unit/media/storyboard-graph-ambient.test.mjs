@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as d3 from "d3-force";
 import * as options from "../../../src/core/editor/storyboardGraph/options.ts";
+import * as clustering from "../../../src/core/editor/storyboardGraph/clustering.ts";
 import { clientError } from "../../../src/errors/model.ts";
 import { createModuleLoader } from "../support/module-loader.ts";
 
@@ -10,6 +11,7 @@ const graph = createModuleLoader(import.meta.url)(
   {
     "d3-force": d3,
     "./options": options,
+    "./clustering": clustering,
     "../../../errors/model": { clientError },
   },
 );

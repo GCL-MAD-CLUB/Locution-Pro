@@ -27,6 +27,7 @@ import { storyboardGraphClusterBoundaries } from "../../../../core/editor/storyb
 import {
   constrainStoryboardGraphCamera,
   fitStoryboardGraphCamera,
+  rescaleStoryboardGraphCamera,
   panStoryboardGraph,
   storyboardGraphCanvas,
   indexStoryboardGraphNeighborhoods,
@@ -492,11 +493,13 @@ export function StoryboardGraphCanvas({
     nodes,
     edges: motionEdges,
     phase,
+    layoutProgress,
     beginDrag,
     moveDrag,
     endDrag,
   } = useStoryboardGraphMotion(view?.graph, panelActive, pendingNodes, graph);
-  const clusterPadding = graph?.clusterPadding ?? defaultStoryboardGraphOptions.clusterPadding;
+  const clusterPadding =
+    (graph?.clusterPadding ?? defaultStoryboardGraphOptions.clusterPadding) * layoutProgress;
   const canvas = useMemo(
     () =>
       storyboardGraphCanvas(
@@ -515,14 +518,23 @@ export function StoryboardGraphCanvas({
     camera: StoryboardGraphCamera;
     layoutSize?: typeof size;
   } | null>(null);
+  const loadingFrameRef = useRef<{
+    camera: StoryboardGraphCamera;
+    canvas: StoryboardGraphRect;
+    size: typeof size;
+  } | null>(null);
+  const loadingFrame =
+    phase !== "ambient" && navigation?.graph === undefined ? loadingFrameRef.current : null;
   const camera = useMemo(() => {
+    if (loadingFrame?.size === size)
+      return rescaleStoryboardGraphCamera(loadingFrame.camera, loadingFrame.canvas, canvas);
     const current = navigation ? navigation.camera : initialCamera;
     // Moving nodes change the bounds. Preserve the transform through the grab
     // and cooling; a resize or explicit navigation applies the new bounds.
     return navigation?.layoutSize === size
       ? current
       : constrainStoryboardGraphCamera(current, size, canvas);
-  }, [navigation, initialCamera, size, canvas]);
+  }, [navigation, initialCamera, size, canvas, loadingFrame]);
   const overviewCanvas = useMemo(
     () =>
       storyboardGraphOverviewCanvas(
@@ -540,6 +552,13 @@ export function StoryboardGraphCanvas({
   useLayoutEffect(() => {
     cameraRef.current = camera;
   }, [camera]);
+  useLayoutEffect(() => {
+    if (phase === "ambient" && size.width > 1) loadingFrameRef.current = { camera, canvas, size };
+    else if (phase === "ready" && loadingFrameRef.current) {
+      loadingFrameRef.current = null;
+      if (loadingFrame?.size === size) setNavigation({ graph, camera, layoutSize: size });
+    }
+  }, [phase, camera, canvas, size, loadingFrame, graph]);
   const cameraFrameRef = useRef<number | null>(null);
   useEffect(
     () => () => {
@@ -1365,6 +1384,7 @@ export function StoryboardGraphCanvas({
       }
       role="region"
       data-graph-phase={phase}
+      data-graph-canvas={JSON.stringify(canvas)}
       aria-label="分镜语义图谱"
       tabIndex={0}
       onPointerDownCapture={(event) => {

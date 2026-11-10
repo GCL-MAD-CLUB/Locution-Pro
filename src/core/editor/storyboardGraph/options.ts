@@ -18,7 +18,7 @@ export const defaultStoryboardGraphOptions: Readonly<StoryboardGraphOptions> = {
   maxVisibleDegree: 6,
   minDegree: 1,
   minIslandConnections: 1,
-  nodeRadius: (view_degree) => 6 + Math.max(Math.min(8, view_degree) - 4, 0) * 0.5,
+  nodeRadius: (view_degree) => 6 + Math.max(Math.min(8, view_degree) - 5, 0) * 1,
   collisionPadding: 2,
   clusterEnabled: true,
   clusterResolution: 1,

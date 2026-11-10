@@ -36,6 +36,7 @@ export function useStoryboardGraphMotion(
     edges: StoryboardGraphVisualEdge[];
   } | null>(null);
   const [collapsing, setCollapsing] = useState(false);
+  const [layoutProgress, setLayoutProgress] = useState(pending ? 0 : 1);
   const motion = useRef(
     new Map<string, { x: number; y: number; radius: number; vx: number; vy: number; vr: number }>(),
   );
@@ -76,6 +77,7 @@ export function useStoryboardGraphMotion(
       ambient.current = world;
       initialized.current = true;
       setCollapsing(false);
+      setLayoutProgress(0);
       let previous = performance.now();
       const draw = () => {
         for (const node of world.nodes)
@@ -113,6 +115,7 @@ export function useStoryboardGraphMotion(
     ambient.current = null;
     const collapse = Boolean(provisional && target.length && !reduced);
     setCollapsing(collapse);
+    setLayoutProgress(collapse ? 0 : 1);
     const sourceEdges = provisional
       ? remapStoryboardGraphEdges(provisional.edges, provisional.nodes, target)
       : [];
@@ -144,6 +147,7 @@ export function useStoryboardGraphMotion(
       let settled = !collapse || now - started >= 600;
       if (collapse) {
         const blend = 1 - (1 - Math.min(1, (now - started) / 600)) ** 3;
+        setLayoutProgress(blend);
         setVisual(
           blend === 1
             ? null
@@ -177,6 +181,7 @@ export function useStoryboardGraphMotion(
         return { ...node, x: current.x, y: current.y, radius: current.radius };
       });
       if (settled) {
+        setLayoutProgress(1);
         setCollapsing(false);
         setVisual(null);
         for (const node of destination)
@@ -220,6 +225,7 @@ export function useStoryboardGraphMotion(
       cancelAnimationFrame(springFrame.current);
       setVisual(null);
       setCollapsing(false);
+      setLayoutProgress(1);
       if (!live.current && graph) {
         const nodes: LiveNode[] = paintedRef.current.map((node) => ({
           ...node,
@@ -301,7 +307,8 @@ export function useStoryboardGraphMotion(
   return {
     nodes,
     edges,
-    phase: pending ? "ambient" : collapsing ? "collapse" : "ready",
+    phase: pending ? "ambient" : collapsing || ambient.current ? "collapse" : "ready",
+    layoutProgress,
     beginDrag,
     moveDrag,
     endDrag,

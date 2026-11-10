@@ -158,8 +158,9 @@ test("visible edge limits preserve minimum links and animation identity without 
     { source: 2, target: 3, similarity: 0.5 },
   ];
   const snapshot = structuredClone(edges);
+  const settings = { ...defaultStoryboardGraphOptions, minDegree: 2 };
   for (const limit of [0, 1, 2]) {
-    const visible = graphModule.storyboardGraphVisibleEdges(edges, 4, limit);
+    const visible = graphModule.storyboardGraphVisibleEdges(edges, 4, limit, settings);
     for (let i = 0; i < 4; i++)
       assert.ok(visible.filter((edge) => edge.source === i || edge.target === i).length >= 2);
     assert.equal(visible.length, 5);
@@ -169,7 +170,7 @@ test("visible edge limits preserve minimum links and animation identity without 
       "retain animation identity and opacity",
     );
     assert.deepEqual(
-      new Set(graphModule.storyboardGraphVisibleEdges([...edges].reverse(), 4, limit)),
+      new Set(graphModule.storyboardGraphVisibleEdges([...edges].reverse(), 4, limit, settings)),
       new Set(visible),
     );
   }
@@ -205,7 +206,12 @@ test("display sparsification repairs islands with existing strongest bridges des
     assert.ok(visible.every((edge) => edges.includes(edge)));
   }
   assert.deepEqual(
-    Array.from(graphModule.storyboardGraphVisibleEdges(internal, 6, 2)),
+    Array.from(
+      graphModule.storyboardGraphVisibleEdges(internal, 6, 2, {
+        ...defaultStoryboardGraphOptions,
+        minDegree: 2,
+      }),
+    ),
     internal,
     "disconnected provisional edge pools never invent a new force link or loop indefinitely",
   );
@@ -411,7 +417,7 @@ test("complete graph bridges disconnected kNN islands even below threshold and b
     input(String(i).padStart(2, "0"), i < 16 ? [1, 0] : [-1, 0]),
   );
   const original = structuredClone(shots);
-  const options = { minSimilarity: 1, maxDegree: 1, minIslandConnections: 2 };
+  const options = { minSimilarity: 1, maxDegree: 1, minDegree: 2, minIslandConnections: 2 };
   const graph = build(shots, options);
   const crossIslandEdges = graph.edges.filter((edge) => edge.source < 16 !== edge.target < 16);
   assert.deepEqual(crossIslandEdges, [
@@ -738,7 +744,7 @@ test("each shot retains its two highest-scoring links even below threshold and b
     { source: 2, target: 3, similarity: 0.65 },
     { source: 1, target: 3, similarity: 0.4 },
   ];
-  const result = sparse(edges, 4, { minSimilarity: 1, maxDegree: 1 });
+  const result = sparse(edges, 4, { minSimilarity: 1, maxDegree: 1, minDegree: 2 });
   for (let i = 0; i < 4; i++) {
     const best = edges
       .filter((edge) => edge.source === i || edge.target === i)
@@ -748,7 +754,10 @@ test("each shot retains its two highest-scoring links even below threshold and b
       assert.ok(result.some((link) => link.source === edge.source && link.target === edge.target));
   }
   assert.equal(result.length, 5);
-  assert.deepEqual(sparse([...edges].reverse(), 4, { minSimilarity: 1, maxDegree: 1 }), result);
+  assert.deepEqual(
+    sparse([...edges].reverse(), 4, { minSimilarity: 1, maxDegree: 1, minDegree: 2 }),
+    result,
+  );
   assert.equal(sparse(edges, 4, { minSimilarity: 1, minDegree: 1 }).length, 2);
   assert.equal(sparse(edges, 4, { minSimilarity: 1, minDegree: 3 }).length, edges.length);
 });
@@ -790,7 +799,7 @@ test("raising the threshold keeps all shots and their best links in the simulate
     input(String(i), [Math.cos(i / 5), Math.sin(i / 5), 0.2]),
   );
   const loose = build(shots, { minSimilarity: 0, maxDegree: 15 });
-  const strict = build(shots, { minSimilarity: 1, maxDegree: 15 });
+  const strict = build(shots, { minSimilarity: 1, maxDegree: 15, minDegree: 2 });
   assert.equal(strict.nodes.length, shots.length);
   assert.ok(strict.edges.length < loose.edges.length);
   for (let i = 0; i < strict.nodes.length; i++) {

@@ -42,6 +42,20 @@ export interface StoryboardGraphCamera {
   zoom: number;
 }
 
+// Preserve the relative viewport and its center when the loading network's
+// world rectangle changes into the final graph's rectangle (both are 16:9).
+export function rescaleStoryboardGraphCamera(
+  camera: StoryboardGraphCamera,
+  from: StoryboardGraphRect,
+  to: StoryboardGraphRect,
+): StoryboardGraphCamera {
+  return {
+    x: to.x + ((camera.x - from.x) / from.width) * to.width,
+    y: to.y + ((camera.y - from.y) / from.height) * to.height,
+    zoom: Math.min(2, (camera.zoom * from.width) / to.width),
+  };
+}
+
 function nodeBounds(nodes: readonly StoryboardGraphNode[]): StoryboardGraphRect {
   if (!nodes.length) return { x: -32, y: -32, width: 64, height: 64 };
   let minX = Infinity;

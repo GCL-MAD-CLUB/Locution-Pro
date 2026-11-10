@@ -126,7 +126,7 @@ export function mountGraph(
   createRoot(host).render(React.createElement(Harness));
 }
 
-export function mountLiveGraph(holdIndex = false, empty = false, count = 9) {
+export function mountLiveGraph(holdIndex = false, empty = false, count = 9, layoutScale = 1) {
   const nativeWorker = window.Worker;
   window.graphLiveCalls = [];
   window.graphLiveRequests = [];
@@ -162,7 +162,13 @@ export function mountLiveGraph(holdIndex = false, empty = false, count = 9) {
       super(...args);
       window.graphLiveWorkers++;
       this.addEventListener("message", (event) => {
-        if (event.data.type === "ready") window.graphLiveTarget = event.data.graph;
+        if (event.data.type === "ready") {
+          for (const node of event.data.graph.nodes) {
+            node.x *= layoutScale;
+            node.y *= layoutScale;
+          }
+          window.graphLiveTarget = event.data.graph;
+        }
       });
     }
     postMessage(message) {

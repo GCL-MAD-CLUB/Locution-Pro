@@ -229,15 +229,6 @@ impl BetaCalibration {
         validate_finite("calibration b", self.b)?;
         validate_finite("calibration c", self.c)
     }
-
-    fn calibrate(&self, probability: f64, epsilon: f64) -> f64 {
-        let probability = probability.clamp(epsilon, 1.0 - epsilon);
-        sigmoid(
-            self.a * (probability + epsilon).ln()
-                - self.b * (1.0 - probability + epsilon).ln()
-                - self.c,
-        )
-    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -255,10 +246,6 @@ pub struct StoryboardCut {
 #[derive(Debug, Clone)]
 struct RobustSeries {
     probabilities: Vec<f64>,
-    logits: Vec<f64>,
-    // Locked by the rolling-statistic test. Acceptance uses robust scores.
-    #[allow(dead_code)]
-    probability_medians: Vec<f64>,
     robust_scores: Vec<f64>,
 }
 
@@ -338,7 +325,6 @@ fn robust_series(predictions: &[f32], config: &StoryboardDecisionConfig) -> Robu
         .iter()
         .map(|probability| logit(*probability, config.epsilon))
         .collect::<Vec<_>>();
-    let mut probability_medians = Vec::with_capacity(predictions.len());
     let mut robust_scores = Vec::with_capacity(predictions.len());
     // Probabilities and logits have the same ordering. Maintain their exact
     // middle elements as the window slides, including the even-length edges.
@@ -373,9 +359,10 @@ fn robust_series(predictions: &[f32], config: &StoryboardDecisionConfig) -> Robu
         previous_start = start;
         previous_end = end;
         let middle = sorted.len() / 2;
-        let (mut probability_median, mut logit_median) = sorted[middle];
+        // Logit is strictly increasing, so the central probability-ordered
+        // entries are the logit median, including the even-length average.
+        let mut logit_median = sorted[middle].1;
         if sorted.len() % 2 == 0 {
-            probability_median = (sorted[middle - 1].0 + probability_median) / 2.0;
             logit_median = (sorted[middle - 1].1 + logit_median) / 2.0;
         }
         deviations.clear();
@@ -386,14 +373,11 @@ fn robust_series(predictions: &[f32], config: &StoryboardDecisionConfig) -> Robu
         );
         let scale = 1.4826 * median(&mut deviations) + config.epsilon;
 
-        probability_medians.push(probability_median);
         robust_scores.push((logits[index] - logit_median) / scale);
     }
 
     RobustSeries {
         probabilities,
-        logits,
-        probability_medians,
         robust_scores,
     }
 }
@@ -666,7 +650,7 @@ fn weighted_median_index(weights: &[f64]) -> usize {
             break;
         }
     }
-    low + (high - low + 1) / 2
+    low + (high - low).div_ceil(2)
 }
 
 fn non_maximum_suppression(mut events: Vec<ScoredEvent>, minimum_gap_us: i64) -> Vec<ScoredEvent> {
@@ -878,25 +862,22 @@ mod tests {
                         ..default_config()
                     };
                     let series = robust_series(&predictions[..count], &config);
+                    let logits = series
+                        .probabilities
+                        .iter()
+                        .map(|probability| logit(*probability, epsilon))
+                        .collect::<Vec<_>>();
                     for index in 0..count {
                         let start = index.saturating_sub(radius);
                         let end = index.saturating_add(radius).min(count - 1);
-                        let probability_median =
-                            reference_median(series.probabilities[start..=end].to_vec());
-                        let logit_median = reference_median(series.logits[start..=end].to_vec());
+                        let logit_median = reference_median(logits[start..=end].to_vec());
                         let mad = reference_median(
-                            series.logits[start..=end]
+                            logits[start..=end]
                                 .iter()
                                 .map(|value| (value - logit_median).abs())
                                 .collect(),
                         );
-                        let score =
-                            (series.logits[index] - logit_median) / (1.4826 * mad + epsilon);
-                        assert_eq!(
-                            series.probability_medians[index].to_bits(),
-                            probability_median.to_bits(),
-                            "median count={count} radius={radius} frame={index}"
-                        );
+                        let score = (logits[index] - logit_median) / (1.4826 * mad + epsilon);
                         assert_eq!(
                             series.robust_scores[index].to_bits(),
                             score.to_bits(),
@@ -1126,19 +1107,6 @@ mod tests {
         assert_eq!(cuts[0].cut_frame, 41);
         assert_eq!(cuts[0].event_start, 40);
         assert_eq!(cuts[0].event_end, 42);
-    }
-
-    #[test]
-    fn identity_beta_calibration_preserves_probability() {
-        let calibration = BetaCalibration {
-            a: 1.0,
-            b: 1.0,
-            c: 0.0,
-        };
-
-        let calibrated = calibration.calibrate(0.73, 1.0e-9);
-
-        assert!((calibrated - 0.73).abs() < 1.0e-8);
     }
 
     #[test]

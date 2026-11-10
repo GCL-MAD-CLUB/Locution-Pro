@@ -632,6 +632,7 @@ fn select_release(
     Ok(())
 }
 
+#[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64")))]
 async fn authoritative_installer(client: &reqwest::Client, version: &str) -> AppResult<Installer> {
     stable_version(version)?;
     let published = read_github_release(
@@ -930,7 +931,7 @@ pub(crate) async fn install_update(
     #[cfg(not(any(windows, all(target_os = "macos", target_arch = "aarch64"))))]
     {
         let _ = (app, installer, project_path);
-        return Err(update_error("Updates are unavailable on this platform"));
+        Err(update_error("Updates are unavailable on this platform"))
     }
     #[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64")))]
     let signature = {

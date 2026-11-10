@@ -1130,7 +1130,7 @@ fn hardware_encoder_candidates(container: ExportContainer) -> Vec<ExportVideoEnc
                 break;
             }
         }
-        return candidates;
+        candidates
     }
     #[cfg(not(target_os = "linux"))]
     candidates

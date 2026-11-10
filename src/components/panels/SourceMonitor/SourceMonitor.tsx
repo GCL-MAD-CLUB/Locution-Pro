@@ -794,13 +794,24 @@ export function SourceMonitor() {
       const rangeStartFrame = usToMonitorFrame(
         clamp(Math.min(detail.timeUs, detail.focusEndUs), 0, durationUs),
       );
-      const rangeEndFrame = usToMonitorFrame(
-        clamp(
-          Math.max(detail.timeUs, detail.focusEndUs),
-          frameToClampedUs(rangeStartFrame),
-          durationUs,
-        ),
-      );
+      const focusTarget = detail.focusTarget;
+      const storyboardShot =
+        focusTarget?.kind === "storyboard"
+          ? storyboards[focusTarget.videoContext]?.shots.find(
+              (shot) => shot.id === focusTarget.shotId,
+            )
+          : undefined;
+      // Shot end_us is the exclusive start of the next shot. Playback and the
+      // cue range stay on the inclusive end frame so the next shot is not shown.
+      const rangeEndFrame = storyboardShot
+        ? clampMonitorFrame(Math.max(rangeStartFrame, storyboardShot.end_frame))
+        : usToMonitorFrame(
+            clamp(
+              Math.max(detail.timeUs, detail.focusEndUs),
+              frameToClampedUs(rangeStartFrame),
+              durationUs,
+            ),
+          );
       const focusedRange =
         isExportMonitor && exportRange
           ? {

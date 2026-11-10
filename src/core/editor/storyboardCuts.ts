@@ -17,7 +17,7 @@ export function storyboardSegments(
       start_frame: gap.startFrame,
       end_frame: gap.endFrame - 1,
       start_us: frameToTimeUs(gap.startFrame, frameRate),
-      end_us: frameToTimeUs(gap.endFrame - 1, frameRate),
+      end_us: frameToTimeUs(gap.endFrame, frameRate),
     });
   }
   return segments.sort((a, b) => a.start_frame - b.start_frame);
@@ -157,7 +157,7 @@ export function splitStoryboardShot(
   const shots = sourceStoryboard.shots.flatMap((shot, shotIndex) =>
     shotIndex === index
       ? [
-          { ...shot, end_frame: frame - 1, end_us: frameToTimeUs(frame - 1, frameRate) },
+          { ...shot, end_frame: frame - 1, end_us: frameToTimeUs(frame, frameRate) },
           { ...shot, id: newShotId, start_frame: frame, start_us: frameToTimeUs(frame, frameRate) },
         ]
       : [shot],
@@ -249,7 +249,7 @@ export function moveStoryboardCuts(
       start_frame: start,
       start_us: moveStart ? frameToTimeUs(start, frameRate) : shot.start_us,
       end_frame: end,
-      end_us: moveEnd ? frameToTimeUs(end, frameRate) : shot.end_us,
+      end_us: moveEnd ? frameToTimeUs(end + 1, frameRate) : shot.end_us,
     };
   });
   return changed
@@ -324,7 +324,7 @@ export function resizeStoryboardShot(
             ? {
                 ...shot,
                 end_frame: desiredEnd,
-                end_us: frameToTimeUs(desiredEnd, frameRate),
+                end_us: frameToTimeUs(desiredEnd + 1, frameRate),
               }
             : shot,
         ),

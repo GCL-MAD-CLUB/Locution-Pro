@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
+use super::TransnetPredictions;
 use crate::{app_error, AppResult, ErrorCode};
 
 const FEATURE_NAMES: [&str; 10] = [
@@ -30,21 +31,27 @@ pub(super) struct StoryboardDecisionConfig {
     pub event_relative_floor: f64,
     pub event_robust_floor: f64,
     pub event_boundary_patience: usize,
+    /// Retained so existing event-model files keep a stable schema. Interval
+    /// features no longer drive acceptance.
+    #[allow(dead_code)]
     pub neighbor_radius: usize,
     pub classifier: EventClassifier,
     pub calibration: Option<BetaCalibration>,
     pub false_positive_cost: f64,
     pub false_negative_cost: f64,
-    pub minimum_event_distance: usize,
-    pub short_shot_midpoint: f64,
-    pub short_shot_softness: f64,
+    pub single_frame_threshold: f64,
+    pub many_hot_threshold: f64,
+    pub gradual_transition_mass: f64,
+    pub minimum_event_gap_seconds: f64,
+    pub short_shot_midpoint_seconds: f64,
+    pub short_shot_softness_seconds: f64,
 }
 
 impl Default for StoryboardDecisionConfig {
     fn default() -> Self {
         Self {
             model_version: 1,
-            model_origin: "bootstrap_uncalibrated".to_string(),
+            model_origin: "threshold_rules_uncalibrated".to_string(),
             epsilon: 1.0e-6,
             robust_window_radius: 50,
             candidate_probability_threshold: 0.1,
@@ -66,9 +73,12 @@ impl Default for StoryboardDecisionConfig {
             calibration: None,
             false_positive_cost: 1.0,
             false_negative_cost: 2.0,
-            minimum_event_distance: 3,
-            short_shot_midpoint: 2.0,
-            short_shot_softness: 2.0,
+            single_frame_threshold: 0.5,
+            many_hot_threshold: 0.5,
+            gradual_transition_mass: 1.5,
+            minimum_event_gap_seconds: 0.12,
+            short_shot_midpoint_seconds: 0.12,
+            short_shot_softness_seconds: 0.12,
         }
     }
 }
@@ -102,6 +112,8 @@ impl StoryboardDecisionConfig {
         )?;
         validate_probability("event_probability_floor", self.event_probability_floor)?;
         validate_probability("event_relative_floor", self.event_relative_floor)?;
+        validate_probability("single_frame_threshold", self.single_frame_threshold)?;
+        validate_probability("many_hot_threshold", self.many_hot_threshold)?;
         validate_finite(
             "candidate_robust_threshold",
             self.candidate_robust_threshold,
@@ -129,13 +141,26 @@ impl StoryboardDecisionConfig {
                 "Storyboard false-negative cost must be finite and positive",
             ));
         }
-        if !self.short_shot_midpoint.is_finite() || self.short_shot_midpoint < 0.0 {
+        if !self.gradual_transition_mass.is_finite() || self.gradual_transition_mass < 0.0 {
+            return Err(app_error(
+                ErrorCode::StoryboardInferenceFailed,
+                "Storyboard gradual-transition mass must be finite and non-negative",
+            ));
+        }
+        if !self.minimum_event_gap_seconds.is_finite() || self.minimum_event_gap_seconds < 0.0 {
+            return Err(app_error(
+                ErrorCode::StoryboardInferenceFailed,
+                "Storyboard minimum event gap must be finite and non-negative",
+            ));
+        }
+        if !self.short_shot_midpoint_seconds.is_finite() || self.short_shot_midpoint_seconds < 0.0 {
             return Err(app_error(
                 ErrorCode::StoryboardInferenceFailed,
                 "Storyboard short-shot midpoint must be finite and non-negative",
             ));
         }
-        if !self.short_shot_softness.is_finite() || self.short_shot_softness <= 0.0 {
+        if !self.short_shot_softness_seconds.is_finite() || self.short_shot_softness_seconds <= 0.0
+        {
             return Err(app_error(
                 ErrorCode::StoryboardInferenceFailed,
                 "Storyboard short-shot softness must be finite and positive",
@@ -144,11 +169,13 @@ impl StoryboardDecisionConfig {
         Ok(())
     }
 
-    fn decision_threshold(&self) -> f64 {
-        self.false_positive_cost / (self.false_positive_cost + self.false_negative_cost)
+    fn minimum_event_gap_us(&self) -> i64 {
+        seconds_to_us(self.minimum_event_gap_seconds)
     }
 }
 
+/// Parsed for schema stability. Coefficients are not fitted and are not the
+/// accept/reject rule.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct EventClassifier {
@@ -186,17 +213,6 @@ impl EventClassifier {
         }
         Ok(())
     }
-
-    fn predict(&self, features: &[f64; 10]) -> f64 {
-        let linear_score = self
-            .coefficients
-            .iter()
-            .zip(features)
-            .fold(self.intercept, |score, (coefficient, feature)| {
-                score + coefficient * feature
-            });
-        sigmoid(linear_score)
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -212,15 +228,6 @@ impl BetaCalibration {
         validate_finite("calibration a", self.a)?;
         validate_finite("calibration b", self.b)?;
         validate_finite("calibration c", self.c)
-    }
-
-    fn calibrate(&self, probability: f64, epsilon: f64) -> f64 {
-        let probability = probability.clamp(epsilon, 1.0 - epsilon);
-        sigmoid(
-            self.a * (probability + epsilon).ln()
-                - self.b * (1.0 - probability + epsilon).ln()
-                - self.c,
-        )
     }
 }
 
@@ -239,8 +246,6 @@ pub struct StoryboardCut {
 #[derive(Debug, Clone)]
 struct RobustSeries {
     probabilities: Vec<f64>,
-    logits: Vec<f64>,
-    probability_medians: Vec<f64>,
     robust_scores: Vec<f64>,
 }
 
@@ -251,54 +256,58 @@ struct EventInterval {
 }
 
 #[derive(Debug, Clone)]
-struct CandidateEvent {
+struct ScoredEvent {
     interval: EventInterval,
-    peak_frame: usize,
+    cut_frame: usize,
+    time_us: i64,
     peak_probability: f64,
     robust_prominence: f64,
     area: f64,
     width: usize,
-    features: [f64; 10],
-}
-
-#[derive(Debug, Clone)]
-struct ScoredEvent {
-    event: CandidateEvent,
-    calibrated_probability: f64,
+    strength: f64,
 }
 
 pub(super) fn detect_storyboard_cuts(
-    predictions: &[f32],
+    predictions: &TransnetPredictions,
+    frame_times_us: Option<&[i64]>,
+    frame_rate: f64,
     config: &StoryboardDecisionConfig,
 ) -> Vec<StoryboardCut> {
-    if predictions.is_empty() {
+    let frame_count = predictions.single_frame.len();
+    if frame_count == 0 {
         return Vec::new();
     }
 
-    let series = robust_series(predictions, config);
-    let peaks = candidate_peaks(&series, config);
-    let intervals = candidate_event_intervals(&series, &peaks, config);
-    let mut scored_events = intervals
-        .into_iter()
-        .map(|interval| event_features(&series, interval, config))
-        .map(|event| {
-            let probability = config.classifier.predict(&event.features);
-            let calibrated_probability = config
-                .calibration
-                .as_ref()
-                .map_or(probability, |calibration| {
-                    calibration.calibrate(probability, config.epsilon)
-                });
-            ScoredEvent {
-                event,
-                calibrated_probability,
-            }
-        })
-        .filter(|event| event.calibrated_probability > config.decision_threshold())
-        .collect::<Vec<_>>();
+    let many_hot = predictions
+        .many_hot
+        .len()
+        .eq(&frame_count)
+        .then_some(predictions.many_hot.as_slice());
+    let frame_times = frame_times_us.filter(|times| times.len() == frame_count);
+    let single = robust_series(&predictions.single_frame, config);
+    let many = many_hot.map(|values| robust_series(values, config));
+    let mut peaks = candidate_peaks(&single, config);
+    if let Some(series) = &many {
+        peaks.extend(candidate_peaks(series, config));
+    }
+    peaks.sort_unstable();
+    peaks.dedup();
 
-    scored_events = non_maximum_suppression(scored_events, config.minimum_event_distance);
-    apply_short_shot_constraint(scored_events, config)
+    let mut events = candidate_event_intervals(&single, many.as_ref(), &peaks, config)
+        .into_iter()
+        .filter_map(|interval| {
+            score_event(
+                &single,
+                many.as_ref(),
+                interval,
+                frame_times,
+                frame_rate,
+                config,
+            )
+        })
+        .collect::<Vec<_>>();
+    events = non_maximum_suppression(events, config.minimum_event_gap_us());
+    apply_short_shot_constraint(events, config)
 }
 
 fn robust_series(predictions: &[f32], config: &StoryboardDecisionConfig) -> RobustSeries {
@@ -316,7 +325,6 @@ fn robust_series(predictions: &[f32], config: &StoryboardDecisionConfig) -> Robu
         .iter()
         .map(|probability| logit(*probability, config.epsilon))
         .collect::<Vec<_>>();
-    let mut probability_medians = Vec::with_capacity(predictions.len());
     let mut robust_scores = Vec::with_capacity(predictions.len());
     // Probabilities and logits have the same ordering. Maintain their exact
     // middle elements as the window slides, including the even-length edges.
@@ -351,9 +359,10 @@ fn robust_series(predictions: &[f32], config: &StoryboardDecisionConfig) -> Robu
         previous_start = start;
         previous_end = end;
         let middle = sorted.len() / 2;
-        let (mut probability_median, mut logit_median) = sorted[middle];
+        // Logit is strictly increasing, so the central probability-ordered
+        // entries are the logit median, including the even-length average.
+        let mut logit_median = sorted[middle].1;
         if sorted.len() % 2 == 0 {
-            probability_median = (sorted[middle - 1].0 + probability_median) / 2.0;
             logit_median = (sorted[middle - 1].1 + logit_median) / 2.0;
         }
         deviations.clear();
@@ -364,14 +373,11 @@ fn robust_series(predictions: &[f32], config: &StoryboardDecisionConfig) -> Robu
         );
         let scale = 1.4826 * median(&mut deviations) + config.epsilon;
 
-        probability_medians.push(probability_median);
         robust_scores.push((logits[index] - logit_median) / scale);
     }
 
     RobustSeries {
         probabilities,
-        logits,
-        probability_medians,
         robust_scores,
     }
 }
@@ -407,13 +413,14 @@ fn candidate_peaks(series: &RobustSeries, config: &StoryboardDecisionConfig) -> 
 }
 
 fn candidate_event_intervals(
-    series: &RobustSeries,
+    single: &RobustSeries,
+    many: Option<&RobustSeries>,
     peaks: &[usize],
     config: &StoryboardDecisionConfig,
 ) -> Vec<EventInterval> {
     let mut intervals = peaks
         .iter()
-        .map(|peak| expand_event_interval(series, *peak, config))
+        .map(|peak| expand_event_interval(single, many, *peak, config))
         .collect::<Vec<_>>();
     intervals.sort_by_key(|interval| (interval.start, interval.end));
 
@@ -431,17 +438,14 @@ fn candidate_event_intervals(
 }
 
 fn expand_event_interval(
-    series: &RobustSeries,
+    single: &RobustSeries,
+    many: Option<&RobustSeries>,
     peak: usize,
     config: &StoryboardDecisionConfig,
 ) -> EventInterval {
-    let peak_probability = series.probabilities[peak];
-    let probability_floor = config
-        .event_probability_floor
-        .max(config.event_relative_floor * peak_probability);
     let qualifies = |index: usize| {
-        series.probabilities[index] >= probability_floor
-            || series.robust_scores[index] >= config.event_robust_floor
+        series_qualifies(single, index, peak, config)
+            || many.is_some_and(|series| series_qualifies(series, index, peak, config))
     };
 
     let mut start = peak;
@@ -460,7 +464,7 @@ fn expand_event_interval(
 
     let mut end = peak;
     misses = 0;
-    for index in peak + 1..series.probabilities.len() {
+    for index in peak + 1..single.probabilities.len() {
         if qualifies(index) {
             end = index;
             misses = 0;
@@ -474,141 +478,273 @@ fn expand_event_interval(
     EventInterval { start, end }
 }
 
-fn event_features(
+fn series_qualifies(
     series: &RobustSeries,
+    index: usize,
+    peak: usize,
+    config: &StoryboardDecisionConfig,
+) -> bool {
+    let seeded = series.probabilities[peak] >= config.candidate_probability_threshold
+        || series.robust_scores[peak] >= config.candidate_robust_threshold;
+    if !seeded {
+        // A head that did not produce this candidate must not stretch the
+        // interval across its own background.
+        return series.robust_scores[index] >= config.event_robust_floor;
+    }
+    let floor = config
+        .event_probability_floor
+        .max(config.event_relative_floor * series.probabilities[peak]);
+    series.probabilities[index] >= floor || series.robust_scores[index] >= config.event_robust_floor
+}
+
+fn score_event(
+    single: &RobustSeries,
+    many: Option<&RobustSeries>,
+    interval: EventInterval,
+    frame_times: Option<&[i64]>,
+    frame_rate: f64,
+    config: &StoryboardDecisionConfig,
+) -> Option<ScoredEvent> {
+    let single_probabilities = &single.probabilities[interval.start..=interval.end];
+    let peak_probability = single_probabilities
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let many_peak = many
+        .map(|series| {
+            series.probabilities[interval.start..=interval.end]
+                .iter()
+                .copied()
+                .fold(f64::NEG_INFINITY, f64::max)
+        })
+        .unwrap_or(0.0);
+    let area = single_probabilities.iter().sum::<f64>();
+    let gradual = area >= config.gradual_transition_mass
+        && peak_probability >= config.candidate_probability_threshold;
+    let accepted = peak_probability >= config.single_frame_threshold
+        || many_peak >= config.many_hot_threshold
+        || gradual;
+    if !accepted {
+        return None;
+    }
+
+    let cut_frame = place_cut(single, many, interval, config);
+    let single_prominence = single.robust_scores[interval.start..=interval.end]
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let many_prominence = many
+        .map(|series| {
+            series.robust_scores[interval.start..=interval.end]
+                .iter()
+                .copied()
+                .fold(f64::NEG_INFINITY, f64::max)
+        })
+        .unwrap_or(f64::NEG_INFINITY);
+    Some(ScoredEvent {
+        interval,
+        cut_frame,
+        time_us: frame_time_us(cut_frame, frame_times, frame_rate),
+        peak_probability,
+        robust_prominence: single_prominence.max(many_prominence),
+        area,
+        width: interval.end - interval.start + 1,
+        strength: peak_probability
+            .max(many_peak)
+            .max(config.single_frame_threshold),
+    })
+}
+
+fn place_cut(
+    single: &RobustSeries,
+    many: Option<&RobustSeries>,
     interval: EventInterval,
     config: &StoryboardDecisionConfig,
-) -> CandidateEvent {
-    let event_probabilities = &series.probabilities[interval.start..=interval.end];
-    let peak_probability = event_probabilities
-        .iter()
-        .copied()
-        .fold(f64::NEG_INFINITY, f64::max);
-    let peak_frame = interval.start
-        + event_probabilities
-            .iter()
-            .position(|probability| *probability == peak_probability)
-            .unwrap_or(0);
-    let robust_prominence = series.robust_scores[interval.start..=interval.end]
-        .iter()
-        .copied()
-        .fold(f64::NEG_INFINITY, f64::max);
-    let area = event_probabilities.iter().sum::<f64>();
-    let width = interval.end - interval.start + 1;
-    let concentration = peak_probability / (area + config.epsilon);
-    let left_slope = (peak_probability - series.probabilities[interval.start])
-        / peak_frame.saturating_sub(interval.start).max(1) as f64;
-    let right_slope = (peak_probability - series.probabilities[interval.end])
-        / interval.end.saturating_sub(peak_frame).max(1) as f64;
-    let asymmetry = (left_slope - right_slope).abs();
-    let background_difference = peak_probability - series.probability_medians[peak_frame];
-    let neighbor_start = peak_frame.saturating_sub(config.neighbor_radius);
-    let neighbor_end = peak_frame
-        .saturating_add(config.neighbor_radius)
-        .min(series.probabilities.len() - 1);
-    let neighbor_mass = series.probabilities[neighbor_start..=neighbor_end]
-        .iter()
-        .sum::<f64>();
-    let features = [
-        series.logits[peak_frame],
-        robust_prominence,
-        (area + config.epsilon).ln(),
-        (width as f64).ln(),
-        concentration,
-        left_slope,
-        right_slope,
-        asymmetry,
-        background_difference,
-        neighbor_mass,
-    ];
+) -> usize {
+    let single_excess = excess(
+        &single.probabilities[interval.start..=interval.end],
+        config.single_frame_threshold,
+    );
+    let many_excess = many.map(|series| {
+        excess(
+            &series.probabilities[interval.start..=interval.end],
+            config.many_hot_threshold,
+        )
+    });
+    let weights = localization_weights(
+        &single_excess,
+        many_excess.as_deref(),
+        &single.probabilities[interval.start..=interval.end],
+    );
+    interval.start + weighted_median_index(&weights)
+}
 
-    CandidateEvent {
-        interval,
-        peak_frame,
-        peak_probability,
-        robust_prominence,
-        area,
-        width,
-        features,
+fn localization_weights(
+    single_excess: &[f64],
+    many_excess: Option<&[f64]>,
+    raw_single: &[f64],
+) -> Vec<f64> {
+    let single_total = single_excess.iter().sum::<f64>();
+    let many_total = many_excess
+        .map(|weights| weights.iter().sum::<f64>())
+        .unwrap_or(0.0);
+    if let Some(many_excess) = many_excess {
+        if many_total > 0.0 && mass_concentration(many_excess) > mass_concentration(single_excess) {
+            return many_excess.to_vec();
+        }
+    }
+    if single_total > 0.0 {
+        return single_excess.to_vec();
+    }
+    if let Some(many_excess) = many_excess {
+        if many_total > 0.0 {
+            return many_excess.to_vec();
+        }
+    }
+    raw_single.to_vec()
+}
+
+fn excess(probabilities: &[f64], threshold: f64) -> Vec<f64> {
+    probabilities
+        .iter()
+        .map(|probability| (probability - threshold).max(0.0))
+        .collect()
+}
+
+fn mass_concentration(weights: &[f64]) -> f64 {
+    let total = weights.iter().sum::<f64>();
+    if total <= 0.0 {
+        0.0
+    } else {
+        weights.iter().copied().fold(0.0, f64::max) / total
     }
 }
 
-fn non_maximum_suppression(
-    mut events: Vec<ScoredEvent>,
-    minimum_distance: usize,
-) -> Vec<ScoredEvent> {
+/// Smallest index whose cumulative weight reaches half the total. An equal
+/// plateau that contains more than one median keeps the later central frame.
+fn weighted_median_index(weights: &[f64]) -> usize {
+    if weights.is_empty() {
+        return 0;
+    }
+    let total = weights.iter().sum::<f64>();
+    if !total.is_finite() || total <= 0.0 {
+        return weights.len() / 2;
+    }
+    let half = total * 0.5;
+    let mut cumulative = 0.0;
+    let mut low = weights.len() - 1;
+    for (index, weight) in weights.iter().enumerate() {
+        cumulative += *weight;
+        if cumulative + 1.0e-9 >= half {
+            low = index;
+            break;
+        }
+    }
+    let mut high = low;
+    let plateau = weights[low];
+    while high + 1 < weights.len() && (weights[high + 1] - plateau).abs() <= 1.0e-9 {
+        if cumulative <= half + 1.0e-9 {
+            cumulative += weights[high + 1];
+            high += 1;
+        } else {
+            break;
+        }
+    }
+    low + (high - low).div_ceil(2)
+}
+
+fn non_maximum_suppression(mut events: Vec<ScoredEvent>, minimum_gap_us: i64) -> Vec<ScoredEvent> {
     events.sort_by(compare_event_priority);
     let mut retained = Vec::<ScoredEvent>::new();
-    let mut retained_frames = BTreeSet::new();
+    let mut retained_times = BTreeSet::new();
     for event in events {
-        let frame = event.event.peak_frame;
-        // Preserve strict distance and greedy priority, without scanning every
-        // previously accepted event (quadratic for long, densely cut videos).
-        let radius = minimum_distance.saturating_sub(1);
-        let conflicts = minimum_distance > 0
-            && retained_frames
-                .range(frame.saturating_sub(radius)..=frame.saturating_add(radius))
+        let time = event.time_us;
+        let conflicts = minimum_gap_us > 0
+            && retained_times
+                .range(
+                    time.saturating_sub(minimum_gap_us.saturating_sub(1))
+                        ..=time.saturating_add(minimum_gap_us.saturating_sub(1)),
+                )
                 .next()
                 .is_some();
         if !conflicts {
-            retained_frames.insert(frame);
+            retained_times.insert(time);
             retained.push(event);
         }
     }
-    retained.sort_by_key(|event| event.event.peak_frame);
+    retained.sort_by_key(|event| event.cut_frame);
     retained
 }
 
 fn compare_event_priority(left: &ScoredEvent, right: &ScoredEvent) -> std::cmp::Ordering {
     right
-        .calibrated_probability
-        .total_cmp(&left.calibrated_probability)
-        .then_with(|| {
-            right
-                .event
-                .peak_probability
-                .total_cmp(&left.event.peak_probability)
-        })
-        .then_with(|| {
-            right
-                .event
-                .robust_prominence
-                .total_cmp(&left.event.robust_prominence)
-        })
-        .then_with(|| left.event.peak_frame.cmp(&right.event.peak_frame))
+        .strength
+        .total_cmp(&left.strength)
+        .then_with(|| right.peak_probability.total_cmp(&left.peak_probability))
+        .then_with(|| right.robust_prominence.total_cmp(&left.robust_prominence))
+        .then_with(|| left.time_us.cmp(&right.time_us))
+        .then_with(|| left.cut_frame.cmp(&right.cut_frame))
 }
 
 fn apply_short_shot_constraint(
     events: Vec<ScoredEvent>,
     config: &StoryboardDecisionConfig,
 ) -> Vec<StoryboardCut> {
-    let decision_threshold = config.decision_threshold();
-    let mut previous_frame = None;
+    let mut previous_time = None;
     let mut cuts = Vec::new();
 
-    for scored in events {
-        let length_factor = previous_frame.map_or(1.0, |previous: usize| {
-            let distance = scored.event.peak_frame.saturating_sub(previous) as f64;
-            sigmoid((distance - config.short_shot_midpoint) / config.short_shot_softness)
+    for event in events {
+        let length_factor = previous_time.map_or(1.0, |previous: i64| {
+            let distance_seconds =
+                event.time_us.saturating_sub(previous).max(0) as f64 / 1_000_000.0;
+            sigmoid(
+                (distance_seconds - config.short_shot_midpoint_seconds)
+                    / config.short_shot_softness_seconds,
+            )
         });
-        let confidence = scored.calibrated_probability * length_factor;
-        if confidence <= decision_threshold {
+        let confidence = event.strength * length_factor;
+        if confidence < config.single_frame_threshold {
             continue;
         }
 
-        previous_frame = Some(scored.event.peak_frame);
+        previous_time = Some(event.time_us);
         cuts.push(StoryboardCut {
-            cut_frame: scored.event.peak_frame,
+            cut_frame: event.cut_frame,
             confidence,
-            event_start: scored.event.interval.start,
-            event_end: scored.event.interval.end,
-            peak_probability: scored.event.peak_probability,
-            robust_prominence: scored.event.robust_prominence,
-            event_area: scored.event.area,
-            event_width: scored.event.width,
+            event_start: event.interval.start,
+            event_end: event.interval.end,
+            peak_probability: event.peak_probability,
+            robust_prominence: event.robust_prominence,
+            event_area: event.area,
+            event_width: event.width,
         });
     }
     cuts
+}
+
+fn frame_time_us(frame: usize, frame_times: Option<&[i64]>, frame_rate: f64) -> i64 {
+    frame_times
+        .and_then(|times| times.get(frame).copied())
+        .unwrap_or_else(|| synthetic_frame_time_us(frame, frame_rate))
+}
+
+pub(super) fn synthetic_frame_time_us(frame: usize, frame_rate: f64) -> i64 {
+    if !frame_rate.is_finite() || frame_rate <= 0.0 {
+        return 0;
+    }
+    let micros = (frame as f64 / frame_rate) * 1_000_000.0;
+    if !micros.is_finite() {
+        return 0;
+    }
+    micros.round().clamp(i64::MIN as f64, i64::MAX as f64) as i64
+}
+
+fn seconds_to_us(seconds: f64) -> i64 {
+    let micros = seconds * 1_000_000.0;
+    if !micros.is_finite() || micros <= 0.0 {
+        return 0;
+    }
+    micros.round().clamp(0.0, i64::MAX as f64) as i64
 }
 
 fn validate_probability(name: &str, value: f64) -> AppResult<()> {
@@ -680,6 +816,17 @@ mod tests {
         }
     }
 
+    fn predictions_of(single_frame: Vec<f32>) -> TransnetPredictions {
+        TransnetPredictions {
+            single_frame,
+            many_hot: Vec::new(),
+        }
+    }
+
+    fn detect(single_frame: Vec<f32>) -> Vec<StoryboardCut> {
+        detect_storyboard_cuts(&predictions_of(single_frame), None, 25.0, &default_config())
+    }
+
     #[test]
     fn rolling_statistics_match_independent_sorted_reference() {
         let mut seed = 42u32;
@@ -715,25 +862,22 @@ mod tests {
                         ..default_config()
                     };
                     let series = robust_series(&predictions[..count], &config);
+                    let logits = series
+                        .probabilities
+                        .iter()
+                        .map(|probability| logit(*probability, epsilon))
+                        .collect::<Vec<_>>();
                     for index in 0..count {
                         let start = index.saturating_sub(radius);
                         let end = index.saturating_add(radius).min(count - 1);
-                        let probability_median =
-                            reference_median(series.probabilities[start..=end].to_vec());
-                        let logit_median = reference_median(series.logits[start..=end].to_vec());
+                        let logit_median = reference_median(logits[start..=end].to_vec());
                         let mad = reference_median(
-                            series.logits[start..=end]
+                            logits[start..=end]
                                 .iter()
                                 .map(|value| (value - logit_median).abs())
                                 .collect(),
                         );
-                        let score =
-                            (series.logits[index] - logit_median) / (1.4826 * mad + epsilon);
-                        assert_eq!(
-                            series.probability_medians[index].to_bits(),
-                            probability_median.to_bits(),
-                            "median count={count} radius={radius} frame={index}"
-                        );
+                        let score = (logits[index] - logit_median) / (1.4826 * mad + epsilon);
                         assert_eq!(
                             series.robust_scores[index].to_bits(),
                             score.to_bits(),
@@ -751,45 +895,40 @@ mod tests {
         let events = (0..2048)
             .map(|index| {
                 seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
-                let frame = if index % 31 == 0 {
-                    usize::MAX - index
+                let time_us = if index % 31 == 0 {
+                    i64::MAX - index as i64
                 } else {
-                    seed as usize % 3000
+                    (seed as i64) % 3000
                 };
                 ScoredEvent {
-                    event: CandidateEvent {
-                        interval: EventInterval {
-                            start: frame,
-                            end: frame,
-                        },
-                        peak_frame: frame,
-                        peak_probability: (index % 7) as f64 / 7.0,
-                        robust_prominence: (index % 3) as f64,
-                        area: 1.0,
-                        width: 1,
-                        features: [0.0; 10],
-                    },
-                    calibrated_probability: (index % 11) as f64 / 11.0,
+                    interval: EventInterval { start: 0, end: 0 },
+                    cut_frame: index,
+                    time_us,
+                    peak_probability: (index % 7) as f64 / 7.0,
+                    robust_prominence: (index % 3) as f64,
+                    area: 1.0,
+                    width: 1,
+                    strength: (index % 11) as f64 / 11.0,
                 }
             })
             .collect::<Vec<_>>();
-        for distance in [0, 1, 2, 3, 50, usize::MAX] {
+        for distance in [0, 1, 2, 3, 50, i64::MAX] {
             let mut sorted = events.clone();
             sorted.sort_by(compare_event_priority);
             let mut expected = Vec::<ScoredEvent>::new();
             for event in sorted {
-                if !expected
-                    .iter()
-                    .any(|known| known.event.peak_frame.abs_diff(event.event.peak_frame) < distance)
-                {
+                if !expected.iter().any(|known| {
+                    distance > 0 && known.time_us.abs_diff(event.time_us) < distance as u64
+                }) {
                     expected.push(event);
                 }
             }
-            expected.sort_by_key(|event| event.event.peak_frame);
+            expected.sort_by_key(|event| event.cut_frame);
             let actual = non_maximum_suppression(events.clone(), distance);
             assert_eq!(actual.len(), expected.len());
             for (actual, expected) in actual.iter().zip(&expected) {
-                assert_eq!(actual.event.peak_frame, expected.event.peak_frame);
+                assert_eq!(actual.time_us, expected.time_us);
+                assert_eq!(actual.cut_frame, expected.cut_frame);
                 assert_eq!(
                     compare_event_priority(actual, expected),
                     std::cmp::Ordering::Equal
@@ -809,7 +948,7 @@ mod tests {
         let mut predictions = vec![0.01; 120];
         predictions[60] = 0.9;
 
-        let cuts = detect_storyboard_cuts(&predictions, &default_config());
+        let cuts = detect(predictions);
 
         assert_eq!(cuts.len(), 1);
         assert_eq!(cuts[0].cut_frame, 60);
@@ -820,9 +959,12 @@ mod tests {
 
     #[test]
     fn flat_high_sequence_has_no_robust_candidate() {
-        let predictions = vec![0.9; 80];
+        let predictions = TransnetPredictions {
+            single_frame: vec![0.9; 80],
+            many_hot: vec![0.9; 80],
+        };
 
-        let cuts = detect_storyboard_cuts(&predictions, &default_config());
+        let cuts = detect_storyboard_cuts(&predictions, None, 25.0, &default_config());
 
         assert!(cuts.is_empty());
     }
@@ -835,56 +977,131 @@ mod tests {
         let series = robust_series(&predictions, &config);
 
         let peaks = candidate_peaks(&series, &config);
-        let cuts = detect_storyboard_cuts(&predictions, &config);
+        let cuts = detect(predictions);
 
         assert_eq!(peaks, vec![60]);
         assert!(cuts.is_empty());
     }
 
     #[test]
-    fn concentrated_lower_probability_peak_is_retained() {
+    fn concentrated_subthreshold_peak_is_rejected() {
         let mut predictions = vec![0.01; 120];
         predictions[60] = 0.13;
 
-        let cuts = detect_storyboard_cuts(&predictions, &default_config());
+        let cuts = detect(predictions);
+
+        assert!(cuts.is_empty());
+    }
+
+    #[test]
+    fn wide_dissolve_hump_is_kept_at_its_mass_center() {
+        let mut predictions = vec![0.01; 120];
+        predictions[57..=63].copy_from_slice(&[0.2, 0.35, 0.6, 0.9, 0.6, 0.35, 0.2]);
+
+        let cuts = detect(predictions);
+
+        assert_eq!(cuts.len(), 1);
+        assert_eq!(cuts[0].event_start, 57);
+        assert_eq!(cuts[0].event_end, 63);
+        assert_eq!(cuts[0].cut_frame, 60);
+    }
+
+    #[test]
+    fn asymmetric_dissolve_cut_is_weighted_median_not_leftmost_peak() {
+        let mut predictions = vec![0.01; 100];
+        // Binary-exact excesses so half the mass falls on frame 43, after the
+        // peak at 42 and after the first frame above the threshold at 41.
+        predictions[40..47].copy_from_slice(&[0.25, 0.625, 1.0, 0.875, 0.75, 0.625, 0.25]);
+
+        let cuts = detect(predictions);
+
+        assert_eq!(cuts.len(), 1);
+        assert_eq!(cuts[0].event_start, 40);
+        assert_eq!(cuts[0].event_end, 46);
+        assert_eq!(cuts[0].cut_frame, 43);
+    }
+
+    #[test]
+    fn equal_peak_plateau_does_not_prefer_the_earliest_frame() {
+        let mut predictions = vec![0.01; 80];
+        predictions[39..=41].fill(0.9);
+
+        let cuts = detect(predictions);
+
+        assert_eq!(cuts.len(), 1);
+        assert_eq!(cuts[0].event_start, 39);
+        assert_eq!(cuts[0].event_end, 41);
+        assert_eq!(cuts[0].cut_frame, 40);
+
+        assert_eq!(weighted_median_index(&[0.4, 0.4]), 1);
+        assert_eq!(weighted_median_index(&[0.4, 0.4, 0.4]), 1);
+    }
+
+    #[test]
+    fn many_hot_head_accepts_and_localizes_a_gradual_transition() {
+        let single_frame = vec![0.05; 120];
+        let mut many_hot = vec![0.02; 120];
+        many_hot[50..61].copy_from_slice(&[
+            0.20, 0.35, 0.55, 0.70, 0.85, 0.95, 0.80, 0.60, 0.40, 0.25, 0.15,
+        ]);
+
+        let cuts = detect_storyboard_cuts(
+            &TransnetPredictions {
+                single_frame,
+                many_hot,
+            },
+            None,
+            25.0,
+            &default_config(),
+        );
+
+        assert_eq!(cuts.len(), 1);
+        assert_eq!(cuts[0].cut_frame, 55);
+    }
+
+    #[test]
+    fn hard_cut_stays_on_the_single_frame_peak_when_many_hot_is_wide() {
+        let mut single_frame = vec![0.01; 120];
+        let mut many_hot = vec![0.02; 120];
+        single_frame[60] = 0.95;
+        many_hot[57..=63].copy_from_slice(&[0.4, 0.6, 0.8, 0.9, 0.8, 0.6, 0.4]);
+
+        let cuts = detect_storyboard_cuts(
+            &TransnetPredictions {
+                single_frame,
+                many_hot,
+            },
+            None,
+            25.0,
+            &default_config(),
+        );
 
         assert_eq!(cuts.len(), 1);
         assert_eq!(cuts[0].cut_frame, 60);
     }
 
     #[test]
-    fn broad_motion_like_probability_hump_is_rejected() {
+    fn bayes_cost_does_not_reject_a_threshold_peak() {
+        let mut config = default_config();
+        config.false_positive_cost = 100.0;
+        config.false_negative_cost = 1.0;
         let mut predictions = vec![0.01; 120];
-        predictions[57..=63].copy_from_slice(&[0.2, 0.35, 0.6, 0.9, 0.6, 0.35, 0.2]);
+        predictions[60] = 0.9;
 
-        let cuts = detect_storyboard_cuts(&predictions, &default_config());
+        let cuts = detect_storyboard_cuts(&predictions_of(predictions), None, 25.0, &config);
 
-        assert!(cuts.is_empty());
+        assert_eq!(cuts.len(), 1);
+        assert_eq!(cuts[0].cut_frame, 60);
     }
 
     #[test]
-    fn equal_peak_plateau_uses_earliest_peak_frame() {
-        let mut predictions = vec![0.01; 80];
-        predictions[39..=41].fill(0.9);
-
-        let series = robust_series(&predictions, &default_config());
-        let peaks = candidate_peaks(&series, &default_config());
-        let intervals = candidate_event_intervals(&series, &peaks, &default_config());
-        let event = event_features(&series, intervals[0], &default_config());
-
-        assert_eq!(peaks, vec![39]);
-        assert_eq!(event.peak_frame, 39);
-        assert_eq!(event.width, 3);
-    }
-
-    #[test]
-    fn adjacent_peak_candidates_merge_into_one_event() {
+    fn adjacent_peak_candidates_merge_into_one_weighted_cut() {
         let mut predictions = vec![0.01; 100];
         predictions[40] = 0.9;
         predictions[41] = 0.95;
         predictions[42] = 0.92;
 
-        let cuts = detect_storyboard_cuts(&predictions, &default_config());
+        let cuts = detect(predictions);
 
         assert_eq!(cuts.len(), 1);
         assert_eq!(cuts[0].cut_frame, 41);
@@ -893,48 +1110,51 @@ mod tests {
     }
 
     #[test]
-    fn identity_beta_calibration_preserves_probability() {
-        let calibration = BetaCalibration {
-            a: 1.0,
-            b: 1.0,
-            c: 0.0,
-        };
+    fn minimum_distance_and_short_shots_use_seconds() {
+        let mut predictions = vec![0.01; 80];
+        predictions[40] = 0.95;
+        predictions[44] = 0.95;
+        let predictions = predictions_of(predictions);
 
-        let calibrated = calibration.calibrate(0.73, 1.0e-9);
+        let close = detect_storyboard_cuts(&predictions, None, 100.0, &default_config());
+        let separated = detect_storyboard_cuts(&predictions, None, 10.0, &default_config());
 
-        assert!((calibrated - 0.73).abs() < 1.0e-8);
-    }
-
-    #[test]
-    fn false_positive_cost_controls_decision_threshold() {
-        let mut config = default_config();
-        config.false_positive_cost = 3.0;
-        config.false_negative_cost = 1.0;
-
-        assert_eq!(config.decision_threshold(), 0.75);
+        assert_eq!(
+            close.iter().map(|cut| cut.cut_frame).collect::<Vec<_>>(),
+            vec![40]
+        );
+        assert_eq!(
+            separated
+                .iter()
+                .map(|cut| cut.cut_frame)
+                .collect::<Vec<_>>(),
+            vec![40, 44]
+        );
     }
 
     #[test]
     fn short_shot_constraint_is_soft_and_uses_last_accepted_cut() {
         let config = default_config();
-        let event = |peak_frame, probability| ScoredEvent {
-            event: CandidateEvent {
-                interval: EventInterval {
-                    start: peak_frame,
-                    end: peak_frame,
-                },
-                peak_frame,
-                peak_probability: probability,
-                robust_prominence: 10.0,
-                area: probability,
-                width: 1,
-                features: [0.0; 10],
+        let event = |cut_frame, time_us, strength| ScoredEvent {
+            interval: EventInterval {
+                start: cut_frame,
+                end: cut_frame,
             },
-            calibrated_probability: probability,
+            cut_frame,
+            time_us,
+            peak_probability: strength,
+            robust_prominence: 10.0,
+            area: strength,
+            width: 1,
+            strength,
         };
 
         let cuts = apply_short_shot_constraint(
-            vec![event(20, 0.9), event(21, 0.8), event(40, 0.9)],
+            vec![
+                event(20, 800_000, 0.9),
+                event(21, 840_000, 0.8),
+                event(40, 1_600_000, 0.9),
+            ],
             &config,
         );
 
@@ -948,37 +1168,34 @@ mod tests {
     }
 
     #[test]
-    fn nms_uses_probability_then_peak_then_prominence_then_time() {
-        let event =
-            |peak_frame, calibrated_probability, peak_probability, prominence| ScoredEvent {
-                event: CandidateEvent {
-                    interval: EventInterval {
-                        start: peak_frame,
-                        end: peak_frame,
-                    },
-                    peak_frame,
-                    peak_probability,
-                    robust_prominence: prominence,
-                    area: peak_probability,
-                    width: 1,
-                    features: [0.0; 10],
-                },
-                calibrated_probability,
-            };
+    fn nms_uses_strength_then_peak_then_prominence_then_time() {
+        let event = |cut_frame, time_us, strength, peak_probability, prominence| ScoredEvent {
+            interval: EventInterval {
+                start: cut_frame,
+                end: cut_frame,
+            },
+            cut_frame,
+            time_us,
+            peak_probability,
+            robust_prominence: prominence,
+            area: peak_probability,
+            width: 1,
+            strength,
+        };
 
         let retained = non_maximum_suppression(
             vec![
-                event(10, 0.8, 0.9, 10.0),
-                event(11, 0.9, 0.8, 9.0),
-                event(20, 0.7, 0.7, 7.0),
+                event(10, 400_000, 0.8, 0.9, 10.0),
+                event(11, 440_000, 0.9, 0.8, 9.0),
+                event(20, 800_000, 0.7, 0.7, 7.0),
             ],
-            3,
+            120_000,
         );
 
         assert_eq!(
             retained
                 .iter()
-                .map(|candidate| candidate.event.peak_frame)
+                .map(|candidate| candidate.cut_frame)
                 .collect::<Vec<_>>(),
             vec![11, 20]
         );

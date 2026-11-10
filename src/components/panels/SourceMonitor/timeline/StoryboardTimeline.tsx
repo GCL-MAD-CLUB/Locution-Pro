@@ -12,7 +12,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { formatMonitorFrame, parseMonitorFrame } from "../../../../core/editor/time";
-import { timeUsToFrame } from "../../../../core/editor/timeline";
 import {
   moveStoryboardCuts,
   canAddStoryboardCut,
@@ -183,9 +182,7 @@ export function StoryboardTimeline({
     previousShotsRef.current = shots;
     if (!cueRange || previous === shots) return;
     const oldFirst = previous.find((shot) => shot.start_frame === cueRange.startFrame);
-    const oldLast = previous.find(
-      (shot) => timeUsToFrame(shot.end_us, frameRate) === cueRange.endFrame,
-    );
+    const oldLast = previous.find((shot) => shot.end_frame === cueRange.endFrame);
     if (!oldFirst || !oldLast) return;
     const first =
       shots.find((shot) => shot.id === oldFirst.id) ??
@@ -199,16 +196,14 @@ export function StoryboardTimeline({
         (shot) => shot.start_frame <= oldLast.end_frame && shot.end_frame >= oldLast.end_frame,
       );
     const nextRange =
-      first && last
-        ? { startFrame: first.start_frame, endFrame: timeUsToFrame(last.end_us, frameRate) }
-        : null;
+      first && last ? { startFrame: first.start_frame, endFrame: last.end_frame } : null;
     if (
       !nextRange ||
       nextRange.startFrame !== cueRange.startFrame ||
       nextRange.endFrame !== cueRange.endFrame
     )
       onCueRangeChange(nextRange);
-  }, [shots, segments, editingId, cueRange, frameRate, onCueRangeChange]);
+  }, [shots, segments, editingId, cueRange, onCueRangeChange]);
 
   function focusTimeline() {
     rootRef.current?.focus({ preventScroll: true });

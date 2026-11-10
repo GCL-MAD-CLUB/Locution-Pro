@@ -31,7 +31,9 @@ use ort::session::Session;
 
 mod decision;
 mod pipeline;
-use decision::{detect_storyboard_cuts, StoryboardCut, StoryboardDecisionConfig};
+use decision::{
+    detect_storyboard_cuts, synthetic_frame_time_us, StoryboardCut, StoryboardDecisionConfig,
+};
 use pipeline::{
     FrameBlock, FrameQueue, FrameSender, InferenceTask, ProducerMessage, StoryboardConsumer,
 };
@@ -46,6 +48,11 @@ const STORYBOARD_FRAME_CHANNELS: usize = 3;
 const STORYBOARD_FRAME_BYTES: usize =
     STORYBOARD_FRAME_WIDTH * STORYBOARD_FRAME_HEIGHT * STORYBOARD_FRAME_CHANNELS;
 const TRANSNET_WINDOW_FRAMES: usize = 100;
+/// Single-frame head. cls_layer1 → Sigmoid, shape [1, 100, 1].
+const TRANSNET_SINGLE_FRAME_OUTPUT: &str = "534";
+/// Many-hot head. cls_layer2 → Sigmoid, shape [1, 100, 1].
+const TRANSNET_MANY_HOT_OUTPUT: &str = "535";
+const TRANSNET_OUTPUT_SHAPE: [i64; 3] = [1, TRANSNET_WINDOW_FRAMES as i64, 1];
 const TRANSNET_CENTER_START: usize = 25;
 const TRANSNET_CENTER_END: usize = 75;
 const TRANSNET_STRIDE_FRAMES: usize = 50;
@@ -162,7 +169,13 @@ struct StoryboardDetectionRequest<'a> {
     cancel: Arc<AtomicBool>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(super) struct TransnetPredictions {
+    pub single_frame: Vec<f32>,
+    pub many_hot: Vec<f32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StoryboardShot {
     id: String,
     sequence: usize,
@@ -298,7 +311,19 @@ async fn run_storyboard_detection(
         StoryboardExtractionScheduler::new(core_limit)
     });
     let extraction_slot = scheduler.acquire(&cancel).await?;
-    let child = spawn_storyboard_ffmpeg(project, stream_index, preferences, scheduler.threads)?;
+    let presentation_log = std::env::temp_dir().join(format!(
+        "locution-storyboard-pts-{}-{}.txt",
+        task_id,
+        Uuid::new_v4()
+    ));
+    let _presentation_log_guard = PresentationLogGuard(presentation_log.clone());
+    let child = spawn_storyboard_ffmpeg(
+        project,
+        stream_index,
+        preferences,
+        scheduler.threads,
+        &presentation_log,
+    )?;
     let process_id = Uuid::new_v4().to_string();
     let consumer = STORYBOARD_CONSUMER.get_or_init(|| Arc::new(StoryboardConsumer::default()));
     let (sender, queue) = consumer.queue();
@@ -381,12 +406,35 @@ async fn run_storyboard_detection(
 
     let pipeline_ms = started.elapsed().as_millis() as u64;
     let duration_us = project.asset.duration_us;
+    let frame_times =
+        load_presentation_timestamps(&presentation_log, predictions.single_frame.len());
+    let time_source = if frame_times.is_some() {
+        "presentation_timestamps"
+    } else {
+        tracing::warn!(
+            task_id,
+            decoded_frames,
+            "Presentation timestamps did not align with decoded frames; shot times fall back to a constant frame rate"
+        );
+        "constant_frame_rate"
+    };
     let (cuts, shots, decision_ms) =
         spawn_blocking_cancellable(cancel.clone(), "storyboard decision", move |cancel| {
             let started = std::time::Instant::now();
-            let cuts = detect_storyboard_cuts(&predictions, &decision_config);
+            let cuts = detect_storyboard_cuts(
+                &predictions,
+                frame_times.as_deref(),
+                frame_rate,
+                &decision_config,
+            );
             ensure_not_cancelled(cancel)?;
-            let shots = storyboard_cuts_to_shots(predictions.len(), &cuts, frame_rate, duration_us);
+            let shots = storyboard_cuts_to_shots(
+                predictions.single_frame.len(),
+                &cuts,
+                frame_rate,
+                duration_us,
+                frame_times.as_deref(),
+            );
             Ok((cuts, shots, started.elapsed().as_millis() as u64))
         })
         .await?;
@@ -395,6 +443,7 @@ async fn run_storyboard_detection(
         task_id,
         provider,
         decoded_frames,
+        time_source,
         pipeline_ms,
         decision_ms,
         total_ms = started.elapsed().as_millis() as u64,
@@ -416,8 +465,9 @@ fn spawn_storyboard_ffmpeg(
     stream_index: i32,
     preferences: &Preferences,
     threads: usize,
+    presentation_log: &std::path::Path,
 ) -> AppResult<Child> {
-    let args = storyboard_ffmpeg_args(&project.asset.path, stream_index, threads);
+    let args = storyboard_ffmpeg_args(&project.asset.path, stream_index, threads, presentation_log);
     tracing::info!(threads, "Configured storyboard FFmpeg extraction threads");
     let mut command = StdCommand::new(ffmpeg_program(preferences));
     #[cfg(windows)]
@@ -435,7 +485,12 @@ fn spawn_storyboard_ffmpeg(
         })
 }
 
-fn storyboard_ffmpeg_args(path: &str, stream_index: i32, threads: usize) -> Vec<String> {
+fn storyboard_ffmpeg_args(
+    path: &str,
+    stream_index: i32,
+    threads: usize,
+    presentation_log: &std::path::Path,
+) -> Vec<String> {
     let mut args = vec![
         "-hide_banner".to_string(),
         "-loglevel".to_string(),
@@ -460,7 +515,8 @@ fn storyboard_ffmpeg_args(path: &str, stream_index: i32, threads: usize) -> Vec<
         "-dn".to_string(),
         "-vf".to_string(),
         format!(
-            "scale={STORYBOARD_FRAME_WIDTH}:{STORYBOARD_FRAME_HEIGHT}:flags=bilinear,format=rgb24"
+            "scale={STORYBOARD_FRAME_WIDTH}:{STORYBOARD_FRAME_HEIGHT}:flags=bilinear,format=rgb24,metadata=mode=add:key=sb:value=1,metadata=mode=print:file='{}':direct=1",
+            escape_ffmpeg_filter_value(&presentation_log.display().to_string())
         ),
         // FFmpeg 9 removed -vsync; -fps_mode (FFmpeg 5.1+) is the replacement.
         "-fps_mode".to_string(),
@@ -474,6 +530,71 @@ fn storyboard_ffmpeg_args(path: &str, stream_index: i32, threads: usize) -> Vec<
         "pipe:1".to_string(),
     ]);
     args
+}
+
+struct PresentationLogGuard(std::path::PathBuf);
+
+impl Drop for PresentationLogGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+fn escape_ffmpeg_filter_value(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        if matches!(character, '\\' | '\'' | ':' | ',' | '[' | ']' | ';') {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
+}
+
+fn load_presentation_timestamps(path: &std::path::Path, frame_count: usize) -> Option<Vec<i64>> {
+    let body = fs::read_to_string(path).ok()?;
+    parse_storyboard_presentation_timestamps(&body, frame_count)
+}
+
+fn parse_storyboard_presentation_timestamps(body: &str, frame_count: usize) -> Option<Vec<i64>> {
+    if frame_count == 0 {
+        return None;
+    }
+    let mut times = Vec::with_capacity(frame_count);
+    for line in body.lines() {
+        let line = line.trim();
+        if !line.starts_with("frame:") {
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        let frame_index = parts
+            .next()?
+            .strip_prefix("frame:")?
+            .parse::<usize>()
+            .ok()?;
+        if frame_index != times.len() {
+            return None;
+        }
+        let pts = parts.next()?.strip_prefix("pts:")?;
+        let pts_time = parts.next()?.strip_prefix("pts_time:")?;
+        if pts.eq_ignore_ascii_case("N/A") || pts_time.eq_ignore_ascii_case("N/A") {
+            return None;
+        }
+        let seconds = pts_time.parse::<f64>().ok()?;
+        if !seconds.is_finite() || seconds < 0.0 {
+            return None;
+        }
+        let micros = (seconds * 1_000_000.0).round();
+        if !micros.is_finite() || micros > i64::MAX as f64 {
+            return None;
+        }
+        let micros = micros as i64;
+        if times.last().is_some_and(|previous| micros <= *previous) {
+            return None;
+        }
+        times.push(micros);
+    }
+    (times.len() == frame_count).then_some(times)
 }
 
 fn read_storyboard_frame<R: Read>(reader: &mut R, frame: &mut [u8]) -> AppResult<bool> {
@@ -722,18 +843,49 @@ impl TransnetSession {
             vec![0.0; TRANSNET_WINDOW_FRAMES * STORYBOARD_FRAME_BYTES],
         ))
         .map_err(|error| storyboard_ort_error("create TransNetV2 input tensor", error))?;
-        let output_name = session.run(None, |session| {
-            session
+        session.run(None, |session| {
+            let names = session
                 .outputs
-                .first()
-                .map(|output| output.name.clone())
-                .ok_or_else(|| ort::Error::new("TransNetV2 has no prediction output"))
+                .iter()
+                .map(|output| output.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let single = session
+                .outputs
+                .iter()
+                .find(|output| output.name == TRANSNET_SINGLE_FRAME_OUTPUT);
+            let many = session
+                .outputs
+                .iter()
+                .find(|output| output.name == TRANSNET_MANY_HOT_OUTPUT);
+            let (Some(single), Some(many)) = (single, many) else {
+                return Err(ort::Error::new(format!(
+                    "TransNetV2 outputs [{names}] do not include {TRANSNET_SINGLE_FRAME_OUTPUT} and {TRANSNET_MANY_HOT_OUTPUT}"
+                )));
+            };
+            for output in [single, many] {
+                match &output.output_type {
+                    ort::value::ValueType::Tensor { dimensions, .. }
+                        if dimensions.as_slice() == TRANSNET_OUTPUT_SHAPE => {}
+                    _ => {
+                        return Err(ort::Error::new(format!(
+                            "TransNetV2 output {} must be a float tensor shaped [1, {TRANSNET_WINDOW_FRAMES}, 1]",
+                            output.name
+                        )));
+                    }
+                }
+            }
+            Ok(())
         })?;
-        // The detector consumes only the first head. Do not request the unused
-        // second head, or copy either entire output into an intermediate Vec.
+        // Request both heads. Model order is single-frame then many-hot, and
+        // the selector lists them in that same order.
         let options = RunOptions::new()
             .map_err(|error| storyboard_ort_error("create TransNetV2 run options", error))?
-            .with_outputs(OutputSelector::no_default().with(&output_name));
+            .with_outputs(
+                OutputSelector::no_default()
+                    .with(TRANSNET_SINGLE_FRAME_OUTPUT)
+                    .with(TRANSNET_MANY_HOT_OUTPUT),
+            );
         Ok(Self {
             session,
             input,
@@ -777,11 +929,32 @@ fn fill_transnet_input(input: &mut [f32], window: &VecDeque<Vec<u8>>) -> AppResu
     Ok(())
 }
 
+fn center_head_probabilities(values: &[f32], head: &str) -> ort::Result<Vec<f32>> {
+    if values.len() < TRANSNET_CENTER_END {
+        return Err(ort::Error::new(format!(
+            "TransNetV2 {head} output is too short: {} values, expected at least {TRANSNET_CENTER_END}",
+            values.len()
+        )));
+    }
+    let center = &values[TRANSNET_CENTER_START..TRANSNET_CENTER_END];
+    let needs_sigmoid = center.iter().any(|value| *value < 0.0 || *value > 1.0);
+    Ok(center
+        .iter()
+        .map(|value| {
+            if needs_sigmoid {
+                1.0 / (1.0 + (-*value).exp())
+            } else {
+                value.clamp(0.0, 1.0)
+            }
+        })
+        .collect())
+}
+
 fn run_transnet_window(
     model: &mut TransnetSession,
     window: &VecDeque<Vec<u8>>,
     cancel: &AtomicBool,
-) -> AppResult<Vec<f32>> {
+) -> AppResult<TransnetPredictions> {
     let packing_started = std::time::Instant::now();
     let (_, input) = model
         .input
@@ -792,23 +965,18 @@ fn run_transnet_window(
     let inference_started = std::time::Instant::now();
     let predictions = model.session.run(Some(cancel), |session| {
         let outputs = session.run_with_options([model.input.view().into()], &model.options)?;
-        if outputs.len() == 0 {
-            return Err(ort::Error::new("TransNetV2 produced no output tensors"));
-        }
-        let (_, values) = outputs[0].try_extract_raw_tensor::<f32>()?;
-        if values.len() < TRANSNET_CENTER_END {
+        if outputs.len() != 2 {
             return Err(ort::Error::new(format!(
-                "TransNetV2 output is too short: {} values, expected at least {TRANSNET_CENTER_END}",
-                values.len()
+                "TransNetV2 produced {} outputs, expected the single-frame and many-hot heads",
+                outputs.len()
             )));
         }
-        let needs_sigmoid = values.iter().any(|value| *value < 0.0 || *value > 1.0);
-        Ok(values[TRANSNET_CENTER_START..TRANSNET_CENTER_END]
-            .iter()
-            .map(|value| {
-                if needs_sigmoid { 1.0 / (1.0 + (-*value).exp()) } else { value.clamp(0.0, 1.0) }
-            })
-            .collect())
+        let (_, single_frame) = outputs[0].try_extract_raw_tensor::<f32>()?;
+        let (_, many_hot) = outputs[1].try_extract_raw_tensor::<f32>()?;
+        Ok(TransnetPredictions {
+            single_frame: center_head_probabilities(single_frame, TRANSNET_SINGLE_FRAME_OUTPUT)?,
+            many_hot: center_head_probabilities(many_hot, TRANSNET_MANY_HOT_OUTPUT)?,
+        })
     })?;
     model.inference_time += inference_started.elapsed();
     model.windows += 1;
@@ -921,11 +1089,16 @@ fn expected_frame_count(duration_us: i64, frame_rate: f64) -> usize {
     ((duration_us as f64 / 1_000_000.0) * frame_rate).ceil() as usize
 }
 
-fn frame_to_time_us(frame: usize, frame_rate: f64, duration_us: i64) -> i64 {
-    if !frame_rate.is_finite() || frame_rate <= 0.0 {
-        return 0;
-    }
-    (((frame as f64 / frame_rate) * 1_000_000.0).round() as i64).clamp(0, duration_us.max(0))
+fn raw_frame_time_us(
+    frame: usize,
+    frame_count: usize,
+    frame_times_us: Option<&[i64]>,
+    frame_rate: f64,
+) -> i64 {
+    frame_times_us
+        .filter(|times| times.len() == frame_count)
+        .and_then(|times| times.get(frame).copied())
+        .unwrap_or_else(|| synthetic_frame_time_us(frame, frame_rate))
 }
 
 fn storyboard_cuts_to_shots(
@@ -933,6 +1106,7 @@ fn storyboard_cuts_to_shots(
     cuts: &[StoryboardCut],
     frame_rate: f64,
     duration_us: i64,
+    frame_times_us: Option<&[i64]>,
 ) -> Vec<StoryboardShot> {
     if frame_count == 0 {
         return Vec::new();
@@ -951,23 +1125,22 @@ fn storyboard_cuts_to_shots(
         raw_ranges.push((start, frame_count - 1));
     }
 
+    let duration_us = duration_us.max(0);
     let final_range_index = raw_ranges.len().saturating_sub(1);
     raw_ranges
         .into_iter()
         .enumerate()
         .map(|(index, (start_frame, end_frame))| {
-            let start_us = frame_to_time_us(start_frame, frame_rate, duration_us);
+            let start_us = raw_frame_time_us(start_frame, frame_count, frame_times_us, frame_rate)
+                .clamp(0, duration_us);
+            // Non-final shots end at the next frame's presentation time, which
+            // is also the next shot's start. The last shot ends at the media
+            // duration. Missing or misaligned timestamps use a constant rate.
             let end_us = if index == final_range_index {
-                let exclusive_end =
-                    frame_to_time_us(end_frame.saturating_add(1), frame_rate, duration_us);
-                if exclusive_end <= start_us {
-                    (start_us + frame_to_time_us(1, frame_rate, duration_us).max(1))
-                        .min(duration_us.max(start_us))
-                } else {
-                    exclusive_end
-                }
+                duration_us.max(start_us)
             } else {
-                frame_to_time_us(end_frame, frame_rate, duration_us)
+                raw_frame_time_us(end_frame + 1, frame_count, frame_times_us, frame_rate)
+                    .clamp(start_us, duration_us.max(start_us))
             };
             StoryboardShot {
                 id: format!("shot:{start_frame}:{end_frame}"),
@@ -1072,7 +1245,8 @@ mod tests {
     fn extraction_args_scope_hardware_decode_and_threads_to_the_input() {
         let path = "D:\\media files\\input.mp4";
         let scheduler = StoryboardExtractionScheduler::new(storyboard_core_limit(Some(16), 22));
-        let args = storyboard_ffmpeg_args(path, 2, scheduler.threads);
+        let presentation_log = PathBuf::from("C:/storyboard pts/log.txt");
+        let args = storyboard_ffmpeg_args(path, 2, scheduler.threads, &presentation_log);
         let value = |option: &str| {
             let index = args.iter().position(|arg| arg == option).unwrap();
             (index, args[index + 1].as_str())
@@ -1101,7 +1275,10 @@ mod tests {
         assert!(output > input);
         assert_eq!(threads, "5");
         assert_eq!(value("-map").1, "0:2");
-        assert_eq!(value("-vf").1, "scale=48:27:flags=bilinear,format=rgb24");
+        assert_eq!(
+            value("-vf").1,
+            "scale=48:27:flags=bilinear,format=rgb24,metadata=mode=add:key=sb:value=1,metadata=mode=print:file='C\\:/storyboard pts/log.txt':direct=1"
+        );
         assert_eq!(value("-fps_mode").1, "passthrough");
         assert_eq!(value("-f").1, "rawvideo");
         assert_eq!(args.last().unwrap(), "pipe:1");
@@ -1117,7 +1294,10 @@ mod tests {
         let config =
             storyboard_decision_config(Some(&model_path)).expect("packaged model must be valid");
 
-        assert_eq!(config.model_origin, "bootstrap_uncalibrated");
+        assert_eq!(config.model_origin, "threshold_rules_uncalibrated");
+        assert_eq!(config.single_frame_threshold, 0.5);
+        assert_eq!(config.many_hot_threshold, 0.5);
+        assert_eq!(config.minimum_event_gap_seconds, 0.12);
     }
 
     #[test]
@@ -1178,19 +1358,17 @@ mod tests {
                 .session
                 .run(None, |session| {
                     let outputs = session.run([tensor.view().into()])?;
-                    let (_, values) = outputs[0].try_extract_raw_tensor::<f32>().unwrap();
-                    let needs_sigmoid = values.iter().any(|value| *value < 0.0 || *value > 1.0);
-                    let values = values[TRANSNET_CENTER_START..TRANSNET_CENTER_END]
-                        .iter()
-                        .map(|value| {
-                            if needs_sigmoid {
-                                1.0 / (1.0 + (-*value).exp())
-                            } else {
-                                value.clamp(0.0, 1.0)
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    Ok(values)
+                    let (_, single_frame) = outputs[0].try_extract_raw_tensor::<f32>().unwrap();
+                    let (_, many_hot) = outputs[1].try_extract_raw_tensor::<f32>().unwrap();
+                    Ok(TransnetPredictions {
+                        single_frame: center_head_probabilities(
+                            single_frame,
+                            TRANSNET_SINGLE_FRAME_OUTPUT,
+                        )
+                        .unwrap(),
+                        many_hot: center_head_probabilities(many_hot, TRANSNET_MANY_HOT_OUTPUT)
+                            .unwrap(),
+                    })
                 })
                 .unwrap();
             assert_eq!(
@@ -1256,13 +1434,27 @@ mod tests {
         assert_transnet_reuse_matches_fresh_tensors(session);
     }
 
+    fn single_predictions(values: Vec<f32>) -> TransnetPredictions {
+        TransnetPredictions {
+            single_frame: values,
+            many_hot: Vec::new(),
+        }
+    }
+
     #[test]
     fn storyboard_predictions_split_at_isolated_event_peak() {
         let mut predictions = vec![0.01; 120];
         predictions[60] = 0.8;
+        let predictions = single_predictions(predictions);
 
-        let cuts = detect_storyboard_cuts(&predictions, &StoryboardDecisionConfig::default());
-        let shots = storyboard_cuts_to_shots(predictions.len(), &cuts, 25.0, 4_800_000);
+        let cuts = detect_storyboard_cuts(
+            &predictions,
+            None,
+            25.0,
+            &StoryboardDecisionConfig::default(),
+        );
+        let shots =
+            storyboard_cuts_to_shots(predictions.single_frame.len(), &cuts, 25.0, 4_800_000, None);
 
         assert_eq!(shots.len(), 2);
         assert_eq!(shots[0].start_frame, 0);
@@ -1278,8 +1470,15 @@ mod tests {
         predictions[41] = 0.95;
         predictions[42] = 0.92;
 
-        let cuts = detect_storyboard_cuts(&predictions, &StoryboardDecisionConfig::default());
-        let shots = storyboard_cuts_to_shots(predictions.len(), &cuts, 25.0, 4_000_000);
+        let predictions = single_predictions(predictions);
+        let cuts = detect_storyboard_cuts(
+            &predictions,
+            None,
+            25.0,
+            &StoryboardDecisionConfig::default(),
+        );
+        let shots =
+            storyboard_cuts_to_shots(predictions.single_frame.len(), &cuts, 25.0, 4_000_000, None);
 
         assert_eq!(cuts.len(), 1);
         assert_eq!(cuts[0].cut_frame, 41);
@@ -1315,7 +1514,7 @@ mod tests {
             },
         ];
 
-        let shots = storyboard_cuts_to_shots(100, &cuts, 25.0, 4_000_000);
+        let shots = storyboard_cuts_to_shots(100, &cuts, 25.0, 4_000_000, None);
 
         assert_eq!(shots.len(), 3);
         assert_eq!(shots[0].end_frame + 1, shots[1].start_frame);
@@ -1323,19 +1522,16 @@ mod tests {
         assert_eq!(shots[0].end_frame, 40);
         assert_eq!(shots[1].start_frame, 41);
         assert_eq!(shots[1].end_frame, 45);
-        assert_eq!(shots[0].end_us, frame_to_time_us(40, 25.0, 4_000_000));
-        assert_eq!(shots[1].start_us, frame_to_time_us(41, 25.0, 4_000_000));
-        assert_eq!(shots[1].end_us, frame_to_time_us(45, 25.0, 4_000_000));
-        assert_eq!(shots[2].start_us, frame_to_time_us(46, 25.0, 4_000_000));
+        assert_eq!(shots[0].end_us, synthetic_frame_time_us(41, 25.0));
+        assert_eq!(shots[0].end_us, shots[1].start_us);
+        assert_eq!(shots[1].end_us, synthetic_frame_time_us(46, 25.0));
+        assert_eq!(shots[1].end_us, shots[2].start_us);
         assert_eq!(shots[2].end_us, 4_000_000);
-        assert_eq!(
-            shots[1].start_us - shots[0].end_us,
-            frame_to_time_us(1, 25.0, 4_000_000)
-        );
+        assert_eq!(shots[1].start_us - shots[0].end_us, 0);
     }
 
     #[test]
-    fn storyboard_single_frame_shot_has_an_inclusive_zero_length_time_range() {
+    fn storyboard_single_frame_shot_meets_the_next_shot() {
         let cuts = vec![StoryboardCut {
             cut_frame: 0,
             confidence: 0.9,
@@ -1347,12 +1543,13 @@ mod tests {
             event_width: 1,
         }];
 
-        let shots = storyboard_cuts_to_shots(10, &cuts, 25.0, 400_000);
+        let shots = storyboard_cuts_to_shots(10, &cuts, 25.0, 400_000, None);
 
         assert_eq!(shots[0].start_frame, 0);
         assert_eq!(shots[0].end_frame, 0);
         assert_eq!(shots[0].start_us, 0);
-        assert_eq!(shots[0].end_us, 0);
+        assert_eq!(shots[0].end_us, synthetic_frame_time_us(1, 25.0));
+        assert_eq!(shots[0].end_us, shots[1].start_us);
         assert_eq!(shots[1].end_us, 400_000);
     }
 
@@ -1361,13 +1558,91 @@ mod tests {
         let mut predictions = vec![0.01; 100];
         predictions[5] = 0.95;
 
-        let cuts = detect_storyboard_cuts(&predictions, &StoryboardDecisionConfig::default());
-        let shots = storyboard_cuts_to_shots(predictions.len(), &cuts, 25.0, 4_000_000);
+        let predictions = single_predictions(predictions);
+        let cuts = detect_storyboard_cuts(
+            &predictions,
+            None,
+            25.0,
+            &StoryboardDecisionConfig::default(),
+        );
+        let shots =
+            storyboard_cuts_to_shots(predictions.single_frame.len(), &cuts, 25.0, 4_000_000, None);
 
         assert_eq!(shots.len(), 2);
         assert_eq!(shots[0].start_frame, 0);
         assert_eq!(shots[0].end_frame, 5);
         assert_eq!(shots[1].start_frame, 6);
         assert_eq!(shots[1].end_frame, 99);
+    }
+
+    #[test]
+    fn shot_ranges_follow_presentation_timestamps_without_a_frame_gap() {
+        let cuts = vec![StoryboardCut {
+            cut_frame: 2,
+            confidence: 0.9,
+            event_start: 2,
+            event_end: 3,
+            peak_probability: 0.9,
+            robust_prominence: 8.0,
+            event_area: 1.4,
+            event_width: 2,
+        }];
+        let times = vec![0, 10_000, 80_000, 90_000, 250_000, 400_000];
+
+        let shots = storyboard_cuts_to_shots(times.len(), &cuts, 25.0, 1_000_000, Some(&times));
+
+        assert_eq!(shots.len(), 2);
+        assert_eq!(shots[0].start_frame, 0);
+        assert_eq!(shots[0].end_frame, 2);
+        assert_eq!(shots[0].start_us, times[0]);
+        assert_eq!(shots[0].end_us, times[3]);
+        assert_eq!(shots[1].start_frame, 3);
+        assert_eq!(shots[1].start_us, times[3]);
+        assert_eq!(shots[0].end_us, shots[1].start_us);
+        assert_eq!(shots[1].end_frame, 5);
+        assert_eq!(shots[1].end_us, 1_000_000);
+    }
+
+    #[test]
+    fn missing_presentation_timestamps_fall_back_to_a_closed_constant_rate() {
+        let cuts = vec![StoryboardCut {
+            cut_frame: 40,
+            confidence: 0.9,
+            event_start: 40,
+            event_end: 40,
+            peak_probability: 0.9,
+            robust_prominence: 8.0,
+            event_area: 0.9,
+            event_width: 1,
+        }];
+
+        let missing = storyboard_cuts_to_shots(100, &cuts, 25.0, 4_000_000, None);
+        let short = storyboard_cuts_to_shots(100, &cuts, 25.0, 4_000_000, Some(&[0, 40_000]));
+        let parsed = parse_storyboard_presentation_timestamps(
+            "frame:0 pts:0 pts_time:N/A\nframe:1 pts:1 pts_time:0.04\n",
+            2,
+        );
+
+        assert!(parsed.is_none());
+        assert_eq!(missing, short);
+        assert_eq!(missing[0].end_us, missing[1].start_us);
+        assert_eq!(missing[0].end_us, synthetic_frame_time_us(41, 25.0));
+        assert_eq!(missing[1].end_us, 4_000_000);
+        assert!(parse_storyboard_presentation_timestamps(
+            "\
+frame:0    pts:0       pts_time:0
+sb=1
+frame:1    pts:512     pts_time:0.021333
+sb=1
+frame:2    pts:1536    pts_time:0.064
+",
+            3,
+        )
+        .is_some_and(|times| times == vec![0, 21_333, 64_000]));
+        assert!(parse_storyboard_presentation_timestamps(
+            "frame:0 pts:0 pts_time:0.2\nframe:1 pts:1 pts_time:0.1\n",
+            2,
+        )
+        .is_none());
     }
 }

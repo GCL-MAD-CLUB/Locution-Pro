@@ -1,4 +1,5 @@
 # Intercom — Style Reference
+
 > Warm cream editorial spread
 
 **Theme:** light
@@ -9,25 +10,26 @@ Intercom's design language reads like an editorial magazine printed on warm crea
 
 ## Tokens — Colors
 
-| Name | Value | Token | Role |
-|------|-------|-------|------|
+| Name            | Value     | Token                     | Role                                                                                                                                                                                                         |
+| --------------- | --------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Electric Violet | `#0007cb` | `--color-electric-violet` | Brand accent — used sparingly for emphasis moments, selected icon strokes, and tag punctuation; the only saturated color in the system creates instant focus when it appears against the warm neutral canvas |
-| Pure White | `#ffffff` | `--color-pure-white` | Card surfaces, product screenshot backgrounds, inverted button text |
-| Canvas Cream | `#faf9f6` | `--color-canvas-cream` | Primary page canvas — the warm off-white that defines the entire surface temperature; every screen lives on this tone |
-| Linen | `#f1eee9` | `--color-linen` | Secondary surface for sectioned blocks, elevated cards, and alternating content bands — one step warmer than canvas |
-| Stone | `#d3cec6` | `--color-stone` | Decorative texture wash, large background fields, subtle warmth blocks |
-| Hairline | `#dedbd6` | `--color-hairline` | Hairline borders, dividers, input outlines, nav separators — the warm border tone that never feels cold |
-| Ink | `#111111` | `--color-ink` | Primary text, headings, body copy — slightly softer than pure black for comfortable reading on cream |
-| Carbon | `#000000` | `--color-carbon` | Dark supporting neutral for text, icons, and strong contrast. Do not promote it to the primary CTA color |
-| Iron | `#414141` | `--color-iron` | Secondary text, supporting copy, muted descriptions |
-| Graphite | `#585858` | `--color-graphite` | Tertiary text, helper copy, less-prominent body |
-| Smoke | `#888888` | `--color-smoke` | Disabled state text, placeholder copy, very muted labels |
-| Ash | `#a0a0a0` | `--color-ash` | Muted headings in secondary contexts, low-emphasis text |
-| Silver | `#b8b8b8` | `--color-silver` | Icon strokes in resting state, low-emphasis glyphs |
+| Pure White      | `#ffffff` | `--color-pure-white`      | Card surfaces, product screenshot backgrounds, inverted button text                                                                                                                                          |
+| Canvas Cream    | `#faf9f6` | `--color-canvas-cream`    | Primary page canvas — the warm off-white that defines the entire surface temperature; every screen lives on this tone                                                                                        |
+| Linen           | `#f1eee9` | `--color-linen`           | Secondary surface for sectioned blocks, elevated cards, and alternating content bands — one step warmer than canvas                                                                                          |
+| Stone           | `#d3cec6` | `--color-stone`           | Decorative texture wash, large background fields, subtle warmth blocks                                                                                                                                       |
+| Hairline        | `#dedbd6` | `--color-hairline`        | Hairline borders, dividers, input outlines, nav separators — the warm border tone that never feels cold                                                                                                      |
+| Ink             | `#111111` | `--color-ink`             | Primary text, headings, body copy — slightly softer than pure black for comfortable reading on cream                                                                                                         |
+| Carbon          | `#000000` | `--color-carbon`          | Dark supporting neutral for text, icons, and strong contrast. Do not promote it to the primary CTA color                                                                                                     |
+| Iron            | `#414141` | `--color-iron`            | Secondary text, supporting copy, muted descriptions                                                                                                                                                          |
+| Graphite        | `#585858` | `--color-graphite`        | Tertiary text, helper copy, less-prominent body                                                                                                                                                              |
+| Smoke           | `#888888` | `--color-smoke`           | Disabled state text, placeholder copy, very muted labels                                                                                                                                                     |
+| Ash             | `#a0a0a0` | `--color-ash`             | Muted headings in secondary contexts, low-emphasis text                                                                                                                                                      |
+| Silver          | `#b8b8b8` | `--color-silver`          | Icon strokes in resting state, low-emphasis glyphs                                                                                                                                                           |
 
 ## Tokens — Typography
 
 ### Saans — Primary typeface for everything — display headlines at weight 300 (80px/54px/40px), headings at 300 (32px/24px), body at 400 (16px/20px). The 300-weight display is the signature: most brands shout at 700–800, Intercom whispers at 300 and achieves authority through restraint. Use weight 400 only for body and supporting text where readability is paramount. · `--font-saans`
+
 - **Substitute:** Inter, Söhne, Untitled Sans
 - **Weights:** 300, 400
 - **Sizes:** 14px, 16px, 20px, 24px, 32px, 40px, 54px, 80px
@@ -37,6 +39,7 @@ Intercom's design language reads like an editorial magazine printed on warm crea
 - **Role:** Primary typeface for everything — display headlines at weight 300 (80px/54px/40px), headings at 300 (32px/24px), body at 400 (16px/20px). The 300-weight display is the signature: most brands shout at 700–800, Intercom whispers at 300 and achieves authority through restraint. Use weight 400 only for body and supporting text where readability is paramount.
 
 ### SaansMono — Monospace labeling system — nav micro-labels, tab labels, tag chips, section metadata. Always paired with wide positive tracking to function as typographic badges. The 100em spacing on 12px is a 'shout' weight for the smallest text, making it readable as a label rather than body copy. · `--font-saansmono`
+
 - **Substitute:** JetBrains Mono, IBM Plex Mono, Geist Mono
 - **Weights:** 300, 400, 500
 - **Sizes:** 12px, 14px
@@ -45,6 +48,7 @@ Intercom's design language reads like an editorial magazine printed on warm crea
 - **Role:** Monospace labeling system — nav micro-labels, tab labels, tag chips, section metadata. Always paired with wide positive tracking to function as typographic badges. The 100em spacing on 12px is a 'shout' weight for the smallest text, making it readable as a label rather than body copy.
 
 ### Serrif — Editorial counterpoint — appears in select body paragraphs and pull quotes at 16px/300 to add a humanist, almost literary quality. The contrast of serif at 300 against Saans display at 300 creates the magazine-spread rhythm that defines Intercom's voice. · `--font-serrif`
+
 - **Substitute:** Source Serif Pro, Newsreader, Tiempos Text
 - **Weights:** 300
 - **Sizes:** 16px
@@ -53,6 +57,7 @@ Intercom's design language reads like an editorial magazine printed on warm crea
 - **Role:** Editorial counterpoint — appears in select body paragraphs and pull quotes at 16px/300 to add a humanist, almost literary quality. The contrast of serif at 300 against Saans display at 300 creates the magazine-spread rhythm that defines Intercom's voice.
 
 ### MediumLL — Secondary utility face for small UI labels and nav micro-copy where a condensed, tight feel is needed. Used sparingly — only 15 occurrences. · `--font-mediumll`
+
 - **Substitute:** Inter, Söhne
 - **Weights:** 400
 - **Sizes:** 14px, 16px
@@ -62,17 +67,17 @@ Intercom's design language reads like an editorial magazine printed on warm crea
 
 ### Type Scale
 
-| Role | Family | Weight | Size | Line Height | Letter Spacing | Token |
-|------|--------|--------|------|-------------|----------------|-------|
-| caption | — | — | 12px | 1.4 | 1.2px | `--text-caption` |
-| body-sm | — | — | 14px | 1.4 | 0px | `--text-body-sm` |
-| body | — | — | 16px | 1.5 | -0.16px | `--text-body` |
-| subheading | — | — | 20px | 1.25 | -0.2px | `--text-subheading` |
-| heading-sm | — | — | 24px | 1.4 | -0.48px | `--text-heading-sm` |
-| heading | — | — | 32px | 1.43 | -0.64px | `--text-heading` |
-| heading-lg | — | — | 40px | 1.25 | -1.2px | `--text-heading-lg` |
-| display | — | — | 54px | 1 | -1.62px | `--text-display` |
-| display-lg | — | — | 80px | 0.95 | -2.4px | `--text-display-lg` |
+| Role       | Family | Weight | Size | Line Height | Letter Spacing | Token               |
+| ---------- | ------ | ------ | ---- | ----------- | -------------- | ------------------- |
+| caption    | —      | —      | 12px | 1.4         | 1.2px          | `--text-caption`    |
+| body-sm    | —      | —      | 14px | 1.4         | 0px            | `--text-body-sm`    |
+| body       | —      | —      | 16px | 1.5         | -0.16px        | `--text-body`       |
+| subheading | —      | —      | 20px | 1.25        | -0.2px         | `--text-subheading` |
+| heading-sm | —      | —      | 24px | 1.4         | -0.48px        | `--text-heading-sm` |
+| heading    | —      | —      | 32px | 1.43        | -0.64px        | `--text-heading`    |
+| heading-lg | —      | —      | 40px | 1.25        | -1.2px         | `--text-heading-lg` |
+| display    | —      | —      | 54px | 1           | -1.62px        | `--text-display`    |
+| display-lg | —      | —      | 80px | 0.95        | -2.4px         | `--text-display-lg` |
 
 ## Tokens — Spacing & Shapes
 
@@ -82,32 +87,32 @@ Intercom's design language reads like an editorial magazine printed on warm crea
 
 ### Spacing Scale
 
-| Name | Value | Token |
-|------|-------|-------|
-| 4 | 4px | `--spacing-4` |
-| 8 | 8px | `--spacing-8` |
-| 12 | 12px | `--spacing-12` |
-| 16 | 16px | `--spacing-16` |
-| 20 | 20px | `--spacing-20` |
-| 24 | 24px | `--spacing-24` |
-| 32 | 32px | `--spacing-32` |
-| 40 | 40px | `--spacing-40` |
-| 48 | 48px | `--spacing-48` |
-| 64 | 64px | `--spacing-64` |
-| 80 | 80px | `--spacing-80` |
-| 96 | 96px | `--spacing-96` |
-| 112 | 112px | `--spacing-112` |
-| 216 | 216px | `--spacing-216` |
+| Name | Value | Token           |
+| ---- | ----- | --------------- |
+| 4    | 4px   | `--spacing-4`   |
+| 8    | 8px   | `--spacing-8`   |
+| 12   | 12px  | `--spacing-12`  |
+| 16   | 16px  | `--spacing-16`  |
+| 20   | 20px  | `--spacing-20`  |
+| 24   | 24px  | `--spacing-24`  |
+| 32   | 32px  | `--spacing-32`  |
+| 40   | 40px  | `--spacing-40`  |
+| 48   | 48px  | `--spacing-48`  |
+| 64   | 64px  | `--spacing-64`  |
+| 80   | 80px  | `--spacing-80`  |
+| 96   | 96px  | `--spacing-96`  |
+| 112  | 112px | `--spacing-112` |
+| 216  | 216px | `--spacing-216` |
 
 ### Border Radius
 
 | Element | Value |
-|---------|-------|
-| nav | 4px |
-| tags | 4px |
-| cards | 4px |
-| inputs | 4px |
-| buttons | 4px |
+| ------- | ----- |
+| nav     | 4px   |
+| tags    | 4px   |
+| cards   | 4px   |
+| inputs  | 4px   |
+| buttons | 4px   |
 
 ### Layout
 
@@ -119,71 +124,85 @@ Intercom's design language reads like an editorial magazine printed on warm crea
 ## Components
 
 ### Filled Primary Button
+
 **Role:** Primary action trigger (e.g., 'Start free trial')
 
 Background #000000, text #ffffff, 4px border-radius, padding 14px 16px, Saans 14px/400. No shadow, no gradient — just a solid black block that anchors visually against the warm cream canvas. The starkness of the black-on-cream pairing is the signature.
 
 ### Ghost Text Button
+
 **Role:** Secondary action (e.g., 'View demo', 'Contact sales')
 
 No background, text #111111, 4px optional border, padding 14px 16px, Saans 14px/400. Renders as plain text or with a thin outline; never filled. Sits beside the filled primary without competing for weight.
 
 ### Outlined CTA Button
+
 **Role:** High-emphasis secondary action (e.g., 'Fin AI Agent')
 
 White background #ffffff, 1px solid #111111 border, 4px radius, padding 14px 16px, Saans 14px/400 with #111111 text. Used for product-feature CTAs that need to stand apart from the standard filled/ghost pair.
 
 ### Announcement Banner
+
 **Role:** Top-of-page promotional strip
 
 Full-width band, light neutral background (#f1eee9 or #faf9f6), Saans 12–14px body text in #111111 with an inline link underlined. Dismissible with × icon at right. No background color — sits as a quiet info layer.
 
 ### Top Navigation Bar
+
 **Role:** Primary site navigation
 
 White or transparent over canvas, 4px radius on interactive elements. Left: logo mark + 4 nav items (Product, Customers, Resources, Pricing) with dropdown carets. Right: icon, 'Contact sales', 'View demo', filled black 'Start free trial', outlined 'Fin AI Agent →'. Saans 14px/400, 16px horizontal padding in nav items.
 
 ### Hero Display Headline
+
 **Role:** Primary page-level headline
 
 Saans weight 300, 80px on desktop, 54px tablet, line-height 0.95, letter-spacing -2.4px at 80px, color #111111. Multi-line, left-aligned, fills roughly 60% of viewport width. The whisper-weight at extreme size is the defining Intercom signature — no other SaaS brand uses 300 at this scale.
 
 ### Hero Subtext Block
+
 **Role:** Supporting description beside the headline
 
 Saans 16px/1.5 or Serrif 16px/1.4 weight 300, color #414141 or #585858, max-width 380–420px. Sits to the right of the headline or below it, constrained to a narrow column to preserve the editorial feel.
 
 ### Image Grid Strip
+
 **Role:** Decorative/brand imagery showcase
 
 6–7 image tiles in a single horizontal row, each ~120–160px square, full-bleed, no gap or 4px gap. Mix of photography, illustration, and abstract art. Serves as visual texture and social proof of the brand's human side.
 
 ### Tab Navigation
+
 **Role:** Section-level content switcher
 
 Horizontal row of 4 tab labels, Saans 14–16px/400, active tab has a black underline bar (2px) beneath. Inactive tabs in #888888. No background change — the underline is the only state indicator.
 
 ### Product Screenshot Panel
+
 **Role:** In-context product UI showcase
 
 Large rounded container (4px radius) holding a product screenshot on a warm background (#f1eee9 or textured). Screenshot itself has subtle internal 4px radius. The warm surround makes the product UI feel embedded, not floating.
 
 ### Customer Logo Grid
+
 **Role:** Social proof and brand association
 
 6-column grid of customer wordmarks, each rendered in #b8b8b8 or #888888 (monochrome gray), no color logos. Saans 16–20px display weight. The grayscale treatment is intentional — it prevents competing brand colors from polluting the warm cream system.
 
 ### Two-Column Feature Section
+
 **Role:** Text + image editorial block
 
 50/50 split. Left column: Saans 300 display headline (40–54px) + body copy (Serrif 16px/300 or Saans 400) + button pair. Right column: editorial illustration or product visual on warm background. Generous 64–96px vertical padding above and below.
 
 ### Nav Dropdown Caret
+
 **Role:** Dropdown indicator on nav items
 
 Tiny downward chevron icon, 8px, stroke 1.5px, color #111111. No background, no border — just the glyph appended to nav labels with 6px spacing.
 
 ### Section Divider
+
 **Role:** Visual break between content blocks
 
 Invisible — no lines, no gradients. Sections are separated purely by warm background tone shifts (#faf9f6 → #f1eee9 → #d3cec6) and vertical spacing (64–96px). The absence of hard dividers reinforces the editorial flow.
@@ -191,6 +210,7 @@ Invisible — no lines, no gradients. Sections are separated purely by warm back
 ## Do's and Don'ts
 
 ### Do
+
 - Set all display headlines at weight 300, not 400 or 700 — the whisper-weight is the brand's most recognizable choice
 - Use warm cream (#faf9f6) as the default page background, not pure white or cool gray — the warmth is non-negotiable
 - Apply SaansMono at 12px with 1.2px letter-spacing for any tag, label, or micro-copy element
@@ -203,6 +223,7 @@ Invisible — no lines, no gradients. Sections are separated purely by warm back
 - Render all third-party customer logos in grayscale (#b8b8b8 or #888888) to maintain system color discipline
 
 ### Don't
+
 - Never set display type at weight 700 or above — the 300-weight whisper is the entire identity
 - Never use pure white (#ffffff) as the primary page canvas — always use warm cream (#faf9f6)
 - Never apply border-radius above 4px — no 8px, no 12px, no 9999px pills
@@ -216,12 +237,12 @@ Invisible — no lines, no gradients. Sections are separated purely by warm back
 
 ## Surfaces
 
-| Level | Name | Value | Purpose |
-|-------|------|-------|---------|
-| 0 | Canvas | `#faf9f6` | Primary page background — warm off-white that defines the system's temperature |
-| 1 | Section Warm | `#f1eee9` | Alternating section background — one step warmer, creates slow visual rhythm down the page |
-| 2 | Textured Stone | `#d3cec6` | Accent block background — used for large warm fields, decorative texture, and feature surrounds |
-| 3 | Card White | `#ffffff` | Inverted surface for product screenshots, cards on cream backgrounds, and embedded media |
+| Level | Name           | Value     | Purpose                                                                                         |
+| ----- | -------------- | --------- | ----------------------------------------------------------------------------------------------- |
+| 0     | Canvas         | `#faf9f6` | Primary page background — warm off-white that defines the system's temperature                  |
+| 1     | Section Warm   | `#f1eee9` | Alternating section background — one step warmer, creates slow visual rhythm down the page      |
+| 2     | Textured Stone | `#d3cec6` | Accent block background — used for large warm fields, decorative texture, and feature surrounds |
+| 3     | Card White     | `#ffffff` | Inverted surface for product screenshots, cards on cream backgrounds, and embedded media        |
 
 ## Elevation
 
@@ -238,6 +259,7 @@ Intercom uses a max-width 1200px centered container with generous side padding (
 ## Agent Prompt Guide
 
 **Quick Color Reference**
+
 - text primary: #111111
 - background canvas: #faf9f6
 - border hairline: #dedbd6
@@ -290,10 +312,16 @@ Intercom's typographic system is defined by what it does NOT do: it never sets d
   --color-silver: #b8b8b8;
 
   /* Typography — Font Families */
-  --font-saans: 'Saans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-saansmono: 'SaansMono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-serrif: 'Serrif', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mediumll: 'MediumLL', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-saans:
+    "Saans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  --font-saansmono: "SaansMono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-serrif:
+    "Serrif", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  --font-mediumll:
+    "MediumLL", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
 
   /* Typography — Scale */
   --text-caption: 12px;
@@ -390,10 +418,16 @@ Intercom's typographic system is defined by what it does NOT do: it never sets d
   --color-silver: #b8b8b8;
 
   /* Typography */
-  --font-saans: 'Saans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-saansmono: 'SaansMono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-serrif: 'Serrif', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mediumll: 'MediumLL', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-saans:
+    "Saans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  --font-saansmono: "SaansMono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-serrif:
+    "Serrif", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  --font-mediumll:
+    "MediumLL", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
 
   /* Typography — Scale */
   --text-caption: 12px;

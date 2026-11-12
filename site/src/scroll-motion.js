@@ -6,6 +6,8 @@ export function initScrollMotion() {
     ),
   ];
   const hero = document.querySelector(".hero");
+  const heroCopy = hero?.querySelector(".hero-copy");
+  const header = document.querySelector(".site-header");
   const main = document.querySelector("main");
   const footer = document.querySelector(".site-footer");
   let frame = 0;
@@ -19,14 +21,12 @@ export function initScrollMotion() {
       const rect = story.getBoundingClientRect();
       // Reveal a whole spread once, so scrolling back never hides its controls.
       if (rect.top < height * 0.88) story.classList.add("is-revealed");
-      story.style.setProperty(
-        "--scene-enter",
-        String(clamp((height - rect.top) / (height * 0.72))),
-      );
     }
-    if (hero) {
-      const rect = hero.getBoundingClientRect();
-      hero.style.setProperty("--hero-scroll", String(clamp(-rect.top / rect.height)));
+    header?.classList.toggle("is-scrolled", window.scrollY > 8);
+    if (heroCopy) {
+      // Progress of the first screen leaving the viewport drives the hand-off to the preview.
+      const rect = heroCopy.getBoundingClientRect();
+      hero.style.setProperty("--hero-exit", String(clamp(-rect.top / rect.height)));
     }
     if (main && footer) {
       const bottom = main.getBoundingClientRect().bottom;

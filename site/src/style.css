@@ -15,6 +15,8 @@
   --muted: #414141;
   --rule: #dedbd6;
   --gutter: clamp(20px, 4vw, 48px);
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-link: cubic-bezier(0.16, 1, 0.3, 1);
   --sans: "Locution UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-family: var(--sans);
   color: var(--ink);
@@ -42,6 +44,8 @@ main {
   overflow-x: clip;
   position: relative;
   z-index: 1;
+  /* Lets full-width decorations size against the page instead of the viewport scrollbar. */
+  container-type: inline-size;
   background: var(--paper);
 }
 a {
@@ -113,8 +117,14 @@ p {
   top: 0;
   z-index: 20;
   padding-top: env(safe-area-inset-top);
-  border-bottom: 1px solid var(--rule);
-  background: rgb(250 249 246 / 96%);
+  border-bottom: 1px solid transparent;
+  background: rgb(250 249 246 / 82%);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  transition: border-color 300ms;
+}
+.site-header.is-scrolled {
+  border-bottom-color: var(--rule);
 }
 .header-inner {
   display: flex;
@@ -162,7 +172,11 @@ p {
   line-height: 1.5;
   transition:
     background-color 160ms,
-    border-color 160ms;
+    border-color 160ms,
+    transform 160ms var(--ease-out-strong);
+}
+.button:active {
+  transform: scale(0.97);
 }
 .button-primary {
   color: var(--white);
@@ -186,15 +200,188 @@ p {
   font-size: 14px;
 }
 .hero {
+  padding-bottom: 96px;
+}
+/* Editorial spread filling the first screen below the header: display name on the left,
+   introduction column on the right, a film-themed composition behind. */
+.hero-copy {
+  position: relative;
+  isolation: isolate;
   display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  align-items: center;
-  min-height: min(780px, calc(100svh - 64px));
-  padding-block: 100px;
-  gap: 48px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 1fr);
+  align-items: end;
+  align-content: center;
+  min-height: calc(100svh - 65px - env(safe-area-inset-top));
+  padding-block: 64px 136px;
+  gap: 40px 64px;
+}
+/* The composition spans the full viewport width (container units exclude the scrollbar);
+   copy stays in the 1200px column. */
+.hero-art {
+  --art-edge: clamp(16px, 2vw, 32px);
+  --art-film-width: clamp(44px, 3.6vw, 72px);
+  position: absolute;
+  z-index: -1;
+  /* Ends on the ruler baseline, which acts as the ground line for every form. */
+  inset-block: 0 48px;
+  left: calc(50% - 50vw);
+  width: 100vw;
+  /* Nothing from the first screen spills into the product window below. */
+  overflow: clip;
+  pointer-events: none;
+}
+@supports (width: 1cqw) {
+  .hero-art {
+    left: calc(50% - 50cqw);
+    width: 100cqw;
+  }
+}
+.hero-art svg {
+  position: absolute;
+  overflow: visible;
+  stroke-width: 1;
+}
+.art-film {
+  top: 18%;
+  left: calc(var(--art-edge) + 2vw);
+  width: var(--art-film-width);
+  height: 82%;
+  transform: rotate(-3deg);
+}
+.art-film-base {
+  fill: var(--linen);
+}
+.art-film-holes {
+  fill: var(--paper);
+}
+.art-film-cells {
+  fill: var(--paper);
+}
+.art-film-mark {
+  fill: #d3cec6;
+}
+/* Large forms share one 1600 x 900 drawing: a tilted plane, the lens disc, a diagonal band
+   and a gutter bar. One even-odd fill knocks out every overlap, and masks tuck the ring
+   under the band and the frame under the plane on one side so the lines weave. */
+.art-planes {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+.art-shapes {
+  fill: var(--linen);
+}
+.art-frame-outline {
+  stroke: #bdb7ae;
+}
+.art-wave {
+  bottom: 76px;
+  left: calc(var(--art-edge) + 2vw + var(--art-film-width) + 7vw);
+  width: 22vw;
+  height: 72px;
+  stroke: #d3cec6;
+  stroke-width: 2;
+}
+.art-ring {
+  stroke: var(--rule);
+}
+.art-focus-ring {
+  stroke: #d3cec6;
+  stroke-dasharray: 2 10;
+}
+.art-crosshair {
+  stroke: #d3cec6;
+}
+.art-viewfinder {
+  top: 28px;
+  left: var(--art-edge);
+  width: calc(100% - 2 * var(--art-edge));
+  height: calc(100% - 92px);
+  stroke: #bdb7ae;
+  stroke-width: 1.5;
+}
+.art-timeline {
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 24px;
+  stroke: #d3cec6;
+}
+.art-minor-ticks {
+  stroke: var(--rule);
+}
+/* Distance scale engraved along the outer lens ring. */
+.art-focus-scale {
+  stroke: #c9c3ba;
+}
+.art-focus-minor {
+  stroke: var(--rule);
+}
+.art-focus-scale text {
+  fill: #a8a29a;
+  stroke: none;
+  font:
+    12px Consolas,
+    monospace;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+/* A video track sits on the ruler; the clip under the playhead is the found frame. */
+.art-track {
+  bottom: 32px;
+  left: 0;
+  width: 100%;
+  height: 22px;
+  fill: var(--linen);
+  stroke: var(--rule);
+}
+.art-track-current {
+  fill: #d3cec6;
+  stroke: #bdb7ae;
+}
+.art-label,
+.art-timecode {
+  position: absolute;
+  color: var(--muted);
+  font:
+    11px Consolas,
+    monospace;
+  letter-spacing: 1.2px;
+  white-space: nowrap;
+}
+.art-label-clip {
+  top: 44px;
+  left: calc(var(--art-edge) + 2vw + var(--art-film-width) + 32px);
+}
+.art-label-rate {
+  right: calc(var(--art-edge) + 56px);
+  bottom: 76px;
+}
+.art-playhead {
+  position: absolute;
+  bottom: 0;
+  left: 62%;
+  width: 2px;
+  height: 168px;
+  background: var(--accent);
+}
+.art-playhead::before {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  content: "";
+}
+.art-timecode {
+  top: -8px;
+  left: 16px;
+  color: var(--accent);
 }
 .hero h1 {
-  font-size: clamp(52px, 5.8vw, 80px);
+  font-size: clamp(56px, 7.4vw, 104px);
   font-weight: 300;
   line-height: 1.05;
   letter-spacing: -0.03em;
@@ -213,7 +400,6 @@ p {
   letter-spacing: -0.04em;
 }
 .hero-description {
-  margin-top: 16px;
   color: var(--muted);
   font-size: 17px;
   line-height: 1.9;
@@ -221,7 +407,7 @@ p {
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
-  margin-top: 36px;
+  margin-top: 28px;
   gap: 12px;
 }
 .hero-note {
@@ -231,6 +417,8 @@ p {
 }
 .hero-preview {
   display: block;
+  margin-top: clamp(40px, 8vh, 96px);
+  transform-origin: center top;
   border: 1px solid var(--rule);
   border-radius: 4px;
   background: var(--white);
@@ -245,8 +433,7 @@ p {
   grid-template-columns: 1fr 1fr;
   align-items: center;
   min-height: 500px;
-  padding-block: 80px;
-  background: var(--linen);
+  padding-block: 96px;
   gap: 64px;
 }
 .local-copy {
@@ -269,6 +456,18 @@ p {
 .inline-link:hover {
   text-decoration: underline;
   text-underline-offset: 4px;
+}
+.feature-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 16px;
+  padding-block: 72px 24px;
+  font-size: 14px;
+}
+.feature-more .inline-link {
+  margin-top: 0;
 }
 .faq-section {
   display: grid;
@@ -395,31 +594,33 @@ p {
   font-size: 12px;
   color: var(--muted);
 }
-@media (min-width: 1400px) {
-  .hero {
-    grid-template-columns: 0.9fr 1.3fr;
-  }
-  .hero-preview {
-    width: 100%;
-  }
-}
 @media (max-width: 959px) {
   .hero {
-    grid-template-columns: 1fr;
-    min-height: auto;
-    padding-block: 80px;
-    gap: 56px;
+    padding-bottom: 64px;
     text-align: center;
+  }
+  .hero-copy {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding-block: 48px 128px;
+    gap: 28px;
   }
   .hero-actions {
     justify-content: center;
   }
-  .hero-preview {
-    width: min(100%, 720px);
-    margin-inline: auto;
+  /* Narrow screens show the middle of the drawing at a fixed 16:9 instead of cropping it. */
+  .art-planes {
+    top: 4%;
+    left: -35%;
+    width: 170%;
+    height: auto;
+    aspect-ratio: 16 / 9;
   }
-  .local-section {
-    padding-block: 64px;
+  .art-wave {
+    width: 32vw;
+  }
+  .art-playhead {
+    height: 104px;
   }
 }
 @media (max-width: 599px) {
@@ -429,9 +630,16 @@ p {
   .header-actions > .guide-link:not(.button) {
     display: none;
   }
-  .hero {
-    padding-block: 64px;
-    gap: 40px;
+  /* Phones keep the lens, viewfinder, diagonal and timeline around the centred copy. */
+  .art-film,
+  .art-wave,
+  .art-label,
+  .art-timecode {
+    display: none;
+  }
+  .art-planes {
+    left: -60%;
+    width: 210%;
   }
   .hero h1 {
     font-size: clamp(42px, 11vw, 60px);
@@ -559,24 +767,50 @@ h2 {
   font-weight: 300;
   letter-spacing: -0.03em;
 }
+/* Each feature is a linen spread anchored to the viewport edge on its copy side;
+   content stays inside the 1200px column. */
 .product-story {
+  position: relative;
+  isolation: isolate;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2.6fr);
   align-items: center;
-  padding-block: 80px;
-  gap: 64px;
+  padding: 56px calc(var(--gutter) + 48px);
+  gap: 48px;
+}
+.product-story::before {
+  position: absolute;
+  z-index: -1;
+  inset-block: 0;
+  left: calc(50% - 50vw);
+  right: var(--gutter);
+  border-radius: 0 4px 4px 0;
+  background: var(--linen);
+  content: "";
 }
 .story-reverse {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 2.6fr) minmax(0, 1fr);
+}
+.story-reverse::before {
+  left: var(--gutter);
+  right: calc(50% - 50vw);
+  border-radius: 4px 0 0 4px;
+}
+.product-story + .product-story {
+  margin-top: 40px;
 }
 .story-reverse .story-copy {
   order: 2;
 }
+.product-story h2 {
+  font-size: clamp(28px, 2.6vw, 36px);
+  line-height: 1.35;
+}
 .story-copy > p {
   max-width: 30em;
-  margin-top: 24px;
+  margin-top: 20px;
   color: var(--muted);
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.9;
 }
 .story-copy > .story-note {
@@ -681,7 +915,7 @@ h2 {
   gap: 12px;
   border: 1px solid var(--rule);
   border-radius: 4px;
-  background: var(--paper);
+  background: var(--white);
 }
 .media-file svg {
   width: 50%;
@@ -759,6 +993,7 @@ h2 {
   color: var(--accent);
 }
 .letter-paper > .letter-handwriting {
+  width: fit-content;
   margin-top: 24px;
   font-size: 18px;
   line-height: 1.6;
@@ -766,10 +1001,10 @@ h2 {
 }
 .letter-signature {
   display: block;
-  margin-top: 8px;
+  width: fit-content;
+  margin: 8px 0 0 auto;
   font-size: 36px;
   line-height: 1.5;
-  text-align: right;
 }
 .support-section {
   display: flex;
@@ -800,6 +1035,7 @@ h2 {
   border: 1px solid var(--rule);
   border-radius: 4px;
   background: var(--white);
+  transition: border-color 200ms;
 }
 .support-icon {
   width: 36px;
@@ -808,6 +1044,10 @@ h2 {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transition: stroke 200ms;
+}
+.support-card:hover .support-icon {
+  stroke: var(--ink);
 }
 .support-card h3 {
   margin-top: 20px;
@@ -826,9 +1066,16 @@ h2 {
   font-size: 22px;
   line-height: 1;
   color: #888;
+  transition:
+    transform 300ms var(--ease-link),
+    color 200ms;
 }
 .support-card:hover {
   border-color: #a0a0a0;
+}
+.support-card:hover .support-arrow {
+  color: var(--ink);
+  transform: translate(3px, -3px);
 }
 .support-star {
   display: flex;
@@ -847,42 +1094,202 @@ h2 {
 .support-star:hover {
   background: var(--muted);
 }
-.motion-ready .hero-preview {
-  transform: translateY(calc(var(--hero-scroll, 0) * -72px))
-    scale(calc(1 + var(--hero-scroll, 0) * 0.06));
+.support-star path {
+  fill: transparent;
+  transition: fill 200ms;
 }
-.motion-ready .hero-copy {
-  transform: translateY(calc(var(--hero-scroll, 0) * 28px));
-  opacity: calc(1 - var(--hero-scroll, 0) * 0.5);
+.support-star:hover path {
+  fill: currentColor;
+}
+.support-star:hover svg {
+  animation: star-pop 550ms var(--ease-link);
+}
+@keyframes star-pop {
+  45% {
+    transform: scale(1.3) rotate(14deg);
+  }
+}
+/* Hand-off from the first screen to the product window, driven by --hero-exit (0 → 1 as
+   the first screen scrolls away). The composition leaves in depth: large forms rise faster
+   than the page, the film strip slower, and the whole layer is gone by about 60%. The copy
+   lifts slightly while the window rises and settles to full size. */
+.motion-ready :is(.hero-heading, .hero-intro) {
+  transform: translateY(calc(var(--hero-exit, 0) * -48px));
+  opacity: calc(1 - var(--hero-exit, 0) * 0.9);
+}
+.motion-ready .hero-art {
+  opacity: max(0, calc(1 - var(--hero-exit, 0) * 1.25));
+}
+.motion-ready .art-planes {
+  translate: 0 calc(var(--hero-exit, 0) * -140px);
+}
+.motion-ready .art-film {
+  translate: 0 calc(var(--hero-exit, 0) * -56px);
+}
+.motion-ready .hero-preview {
+  transform: translateY(calc((1 - min(1, var(--hero-exit, 0) * 1.5)) * 72px))
+    scale(min(1, calc(0.92 + var(--hero-exit, 0) * 0.12)));
 }
 .motion-ready .hero-entering .hero-letter {
   stroke: currentColor;
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
   stroke-dasharray: 1;
-  animation: hero-letter-draw 850ms cubic-bezier(0.23, 1, 0.32, 1) both;
-  animation-delay: calc(80ms + var(--glyph-index) * 65ms);
+  animation: hero-letter-draw 2000ms cubic-bezier(0.45, 0, 0.2, 1) both;
+  animation-delay: calc(300ms + var(--glyph-index) * 110ms);
 }
+/* Copy surfaces slowly after the name, each line easing out of a soft blur. */
 .motion-ready .hero-entering .hero-tagline,
 .motion-ready .hero-entering .hero-description,
 .motion-ready .hero-entering .hero-actions,
 .motion-ready .hero-entering .hero-note {
-  animation: hero-copy-in 700ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation: hero-copy-in 1600ms var(--ease-out-strong) both;
 }
 .motion-ready .hero-entering .hero-tagline {
-  animation-delay: 280ms;
+  animation-delay: 1500ms;
 }
 .motion-ready .hero-entering .hero-description {
-  animation-delay: 420ms;
+  animation-delay: 1800ms;
 }
 .motion-ready .hero-entering .hero-actions {
-  animation-delay: 560ms;
+  animation-delay: 2050ms;
 }
 .motion-ready .hero-entering .hero-note {
-  animation-delay: 640ms;
+  animation-delay: 2250ms;
 }
+/* Ends last: its animationend clears the entering state for the whole hero. */
 .motion-ready .hero-entering .hero-preview {
-  animation: hero-preview-in 1250ms cubic-bezier(0.23, 1, 0.32, 1) 450ms both;
+  animation: hero-preview-in 1800ms var(--ease-out-strong) 2300ms both;
+}
+/* The whole composition surfaces from a soft blur at the same pace as the copy, while its
+   parts draw in one after another. Everything settles before the preview finishes. */
+.motion-ready .hero-entering .hero-art {
+  animation: art-surface 2600ms cubic-bezier(0.45, 0, 0.2, 1) both;
+}
+.motion-ready .hero-entering .art-crosshair {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.motion-ready .hero-entering .art-viewfinder {
+  transform-origin: center;
+  animation: art-focus 2600ms var(--ease-out-strong) 200ms both;
+}
+/* The planes open like an iris from the lens centre. */
+.motion-ready .hero-entering .art-planes {
+  animation: art-iris 3200ms cubic-bezier(0.45, 0, 0.2, 1) 200ms both;
+}
+.motion-ready .hero-entering :is(.art-ring, .art-frame-outline) {
+  stroke-dasharray: 1;
+  animation: art-draw 3200ms cubic-bezier(0.45, 0, 0.2, 1) 500ms both;
+}
+.motion-ready .hero-entering .art-frame-outline {
+  animation-duration: 2600ms;
+  animation-delay: 1200ms;
+}
+.motion-ready .hero-entering .art-focus-ring {
+  animation:
+    art-turn 90s linear infinite,
+    art-fade 2400ms linear 1200ms both;
+}
+.motion-ready .hero-entering .art-crosshair {
+  animation: art-grow 1600ms var(--ease-out-strong) 2000ms both;
+}
+.motion-ready .hero-entering .art-timeline {
+  animation: art-wipe 3000ms cubic-bezier(0.45, 0, 0.2, 1) 600ms both;
+}
+.motion-ready .hero-entering .art-playhead {
+  animation: art-playhead-in 2800ms var(--ease-out-strong) 1100ms both;
+}
+.motion-ready .hero-entering .art-film {
+  animation: art-film-in 3000ms var(--ease-out-strong) 300ms both;
+}
+.motion-ready .hero-entering .art-wave {
+  animation: art-wipe 2600ms cubic-bezier(0.45, 0, 0.2, 1) 1300ms both;
+}
+.motion-ready .hero-entering .art-label {
+  animation: art-fade 1400ms linear 2300ms both;
+}
+.motion-ready .hero-entering .art-track {
+  animation: art-wipe 2800ms cubic-bezier(0.45, 0, 0.2, 1) 900ms both;
+}
+.motion-ready .hero-entering .art-focus-scale {
+  animation: art-fade 1600ms linear 2100ms both;
+}
+/* The strip advances into place like film through a gate. */
+@keyframes art-film-in {
+  from {
+    opacity: 0;
+    transform: rotate(-3deg) translateY(-10%);
+  }
+}
+/* The focus ring keeps turning slowly, like a lens being adjusted. It stays first in the
+   animation list so clearing the entering state does not restart it. */
+.motion-ready .art-focus-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: art-turn 90s linear infinite;
+}
+@keyframes art-surface {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+@keyframes art-iris {
+  from {
+    clip-path: circle(0 at 80% 44%);
+  }
+  to {
+    clip-path: circle(150% at 80% 44%);
+  }
+}
+@keyframes art-grow {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes art-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes art-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes art-focus {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+@keyframes art-wipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+@keyframes art-playhead-in {
+  from {
+    opacity: 0;
+    transform: translateX(-32vw);
+  }
+}
+@keyframes art-turn {
+  to {
+    transform: rotate(1turn);
+  }
 }
 .hero-actions:focus-within {
   animation: none !important;
@@ -904,18 +1311,20 @@ h2 {
 }
 @keyframes hero-copy-in {
   from {
-    transform: translateY(18px);
+    transform: translateY(14px);
     opacity: 0;
+    filter: blur(6px);
   }
   to {
     transform: none;
     opacity: 1;
+    filter: none;
   }
 }
 @keyframes hero-preview-in {
   from {
     opacity: 0;
-    filter: blur(10px);
+    filter: blur(14px);
   }
   to {
     opacity: 1;
@@ -925,7 +1334,7 @@ h2 {
 .motion-ready .product-story {
   --spread-direction: -1;
   transition:
-    transform 900ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 900ms var(--ease-out-strong),
     opacity 700ms linear;
 }
 .motion-ready .product-story.story-reverse {
@@ -939,37 +1348,122 @@ h2 {
   transform: none;
   opacity: 1;
 }
-.motion-ready .local-copy,
-.motion-ready .faq-section > h2,
-.motion-ready .download-copy {
-  transform: translateY(calc((1 - var(--scene-enter, 0)) * 36px));
-  opacity: calc(0.3 + var(--scene-enter, 0) * 0.7);
+/* One-shot reveals: content is hidden only while motion is enabled and its spread has not
+   entered the viewport or received focus, then stays visible. */
+.motion-ready
+  :is(
+    .local-copy,
+    .media-file,
+    .project-file,
+    .faq-section > h2,
+    .faq-list details,
+    .download-copy,
+    .creator-letter,
+    .support-section > h2,
+    .support-card,
+    .support-star
+  ) {
+  --reveal-delay: calc(var(--reveal-order, 0) * 90ms);
+  transition:
+    opacity 600ms linear var(--reveal-delay),
+    transform 900ms var(--ease-out-strong) var(--reveal-delay),
+    border-color 200ms;
 }
-.motion-ready .project-file {
-  transform: translateY(calc((1 - var(--scene-enter, 0)) * 32px))
-    scale(calc(0.86 + var(--scene-enter, 0) * 0.14));
+.motion-ready
+  :is(.local-section, .faq-section, .download-section, .support-section):not(
+    .is-revealed,
+    :focus-within
+  )
+  :is(
+    .local-copy,
+    .faq-section > h2,
+    .faq-list details,
+    .download-copy,
+    .support-section > h2,
+    .support-card,
+    .support-star
+  ) {
+  opacity: 0;
+  transform: translateY(28px);
 }
-.motion-ready .media-video {
-  transform: translate(
-      calc((1 - var(--scene-enter, 0)) * -48px),
-      calc((1 - var(--scene-enter, 0)) * -24px)
-    )
-    rotate(-9deg);
+.faq-list details:nth-child(1) {
+  --reveal-order: 1;
 }
-.motion-ready .media-audio {
-  transform: translateX(calc((1 - var(--scene-enter, 0)) * 48px)) rotate(9deg);
+.faq-list details:nth-child(2) {
+  --reveal-order: 2;
 }
-.motion-ready .media-image {
-  transform: translateY(calc((1 - var(--scene-enter, 0)) * 40px)) rotate(-5deg);
+.faq-list details:nth-child(3) {
+  --reveal-order: 3;
+}
+.support-card:nth-child(1) {
+  --reveal-order: 1;
+}
+.support-card:nth-child(2) {
+  --reveal-order: 2;
+}
+.support-card:nth-child(3) {
+  --reveal-order: 3;
+}
+.support-star {
+  --reveal-order: 4;
+}
+/* Media files fly in and settle around the project file; links then flow toward it. */
+.media-video {
+  --reveal-order: 2;
+}
+.media-audio {
+  --reveal-order: 3;
+}
+.media-image {
+  --reveal-order: 4;
+}
+.project-file {
+  --reveal-order: 1;
+}
+.motion-ready .local-section:not(.is-revealed) .media-file,
+.motion-ready .local-section:not(.is-revealed) .project-file {
+  opacity: 0;
+}
+.motion-ready .local-section:not(.is-revealed) .media-video {
+  transform: translate(-48px, -24px) rotate(-18deg);
+}
+.motion-ready .local-section:not(.is-revealed) .media-audio {
+  transform: translate(48px, 0) rotate(20deg);
+}
+.motion-ready .local-section:not(.is-revealed) .media-image {
+  transform: translate(0, 40px) rotate(-14deg);
+}
+.motion-ready .local-section:not(.is-revealed) .project-file {
+  transform: scale(0.86);
+}
+.motion-ready .local-section.is-revealed .project-connections path {
+  animation: connection-flow 1200ms linear 900ms infinite;
+}
+@keyframes connection-flow {
+  to {
+    stroke-dashoffset: -20;
+  }
 }
 .motion-ready .creator-letter {
-  transform: translateY(calc((1 - var(--scene-enter, 0)) * 40px))
-    rotate(calc((1 - var(--scene-enter, 0)) * 4deg));
-  opacity: calc(0.3 + var(--scene-enter, 0) * 0.7);
+  --reveal-order: 2;
 }
-.motion-ready .support-card {
-  transform: translateY(calc((1 - var(--scene-enter, 0)) * 40px));
-  opacity: calc(0.3 + var(--scene-enter, 0) * 0.7);
+.motion-ready .download-section:not(.is-revealed, :focus-within) .creator-letter {
+  opacity: 0;
+  transform: translateY(40px) rotate(3deg);
+}
+/* The closing line and signature are written in after the letter lands. */
+.motion-ready :is(.letter-handwriting, .letter-signature) {
+  clip-path: inset(-30% -10% -30% 0);
+  transition: clip-path 1400ms var(--ease-out-strong) 900ms;
+}
+.motion-ready .letter-signature {
+  transition-duration: 1000ms;
+  transition-delay: 1700ms;
+}
+.motion-ready
+  .download-section:not(.is-revealed, :focus-within)
+  :is(.letter-handwriting, .letter-signature) {
+  clip-path: inset(-30% 100% -30% 0);
 }
 .motion-ready .footer-signature span {
   transform: translateY(calc((1 - var(--footer-reveal, 1)) * 45%));
@@ -1016,8 +1510,16 @@ h2 {
   .story-reverse {
     grid-template-columns: 1fr;
     min-height: auto;
-    padding-block: 72px;
-    gap: 36px;
+    padding: 56px var(--gutter);
+    gap: 32px;
+  }
+  .product-story::before,
+  .story-reverse::before {
+    inset-inline: 0;
+    border-radius: 0;
+  }
+  .product-story + .product-story {
+    margin-top: 16px;
   }
   .story-reverse .story-copy {
     order: 0;
@@ -1080,17 +1582,12 @@ h2 {
 }
 /* DESIGN.md defines the website shell; software screenshots keep their native UI. */
 .hero-preview {
-  padding: 20px;
+  padding: clamp(12px, 2.6vw, 32px);
   background: var(--linen);
   border: 0;
 }
 .hero-preview img {
   border: 1px solid var(--rule);
-}
-.story-visual {
-  padding: 24px;
-  border-radius: 4px;
-  background: var(--linen);
 }
 .demo-screen {
   border-color: var(--rule);
@@ -1109,18 +1606,11 @@ h2 {
 .download-section {
   padding-block: 80px;
 }
-.site-header,
 .site-footer,
 .footer-legal {
   border: 0;
 }
 @media (max-width: 599px) {
-  .hero-preview {
-    padding: 12px;
-  }
-  .story-visual {
-    padding: 12px;
-  }
   .local-section,
   .download-section {
     padding-block: 64px;

@@ -1,5 +1,5 @@
 import type { ImportEntry } from "../../../src/components/panels/ImportWorkspace/browser/importBrowserModel";
-import type { Project } from "../../../src/types";
+import type { MediaDocument } from "../../../src/types";
 import type { ExportResult } from "../../../src/systems/ExportSystem/exportTypes";
 
 export const mediaEntries: ImportEntry[] = (
@@ -49,7 +49,7 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
   HTMLMediaElement.prototype.pause = () => {};
   let sequence = 0;
   const callbacks = new Map<number, (...args: any[]) => void>();
-  const projects: Record<string, Project> = {};
+  let mediaSequence = 0;
   // One static PNG, wrapped in the backend's thumbnail batch protocol.
   const thumbnail = Uint8Array.from(
     atob(
@@ -125,8 +125,6 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
       case "save_project_panel_state":
       case "save_project_state":
       case "prune_project_states":
-      case "sync_project_workspace":
-      case "close_project":
       case "open_external_url":
         return null;
       case "load_workspace_config":
@@ -231,10 +229,10 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
           has_audio: /\.wav$/i.test(path),
         }));
       case "register_import_media": {
-        const id = `asset-${Object.keys(projects).length + 1}`;
+        const id = `asset-${++mediaSequence}`;
         const file_name = args.path.split(/[\\/]/).pop();
         const audio = /\.wav$/i.test(args.path);
-        const project: Project = {
+        const project: MediaDocument = {
           asset: {
             id,
             path: args.path,
@@ -267,11 +265,10 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
           proxy_path: null,
           cache_dir: "C:/cache",
         };
-        projects[id] = project;
         return { project, warnings: [] };
       }
       case "analyze_imported_media":
-        return { project: projects[args.assetId], warnings: [] };
+        return { project: args.mediaSources[args.assetId], warnings: [] };
       case "copy_import_media":
         return `${args.directory}/${args.path.split(/[\\/]/).pop()}`;
       case "save_project_file":

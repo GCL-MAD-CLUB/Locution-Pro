@@ -1,7 +1,7 @@
 ﻿import { parseFrameRate } from "../../core/editor/timeline";
 import { expandedStoryboardKeywordText } from "../../components/panels/StoryboardPanel/annotations/storyboardKeywords";
 import { storyboardShotDefaultTitle } from "../../core/editor/storyboard";
-import type { MediaBinItem, MediaStream, Project, StoryboardState } from "../../types";
+import type { MediaBinItem, MediaStream, MediaDocument, StoryboardState } from "../../types";
 import {
   isMediaItemEnabled,
   isMediaItemOffline,
@@ -26,7 +26,7 @@ function parseAspectRatio(value?: string | null) {
 }
 
 function sourceMediaFromProject(
-  project: Project,
+  project: MediaDocument,
   resolvedAudioStream: MediaStream | null,
 ): ExportSourceMedia {
   const videoStream =
@@ -61,7 +61,7 @@ function sourceMediaFromProject(
 function clipFromProject(
   id: string,
   videoId: string,
-  project: Project,
+  project: MediaDocument,
   label: string,
   startUs: number,
   endUs: number,
@@ -94,8 +94,8 @@ function clipFromProject(
 
 function exportAudioContext(
   videoId: string,
-  project: Project,
-  projects: Record<string, Project>,
+  project: MediaDocument,
+  projects: Record<string, MediaDocument>,
   mediaItems: MediaBinItem[],
   detachedVideoIds: Set<string>,
 ) {
@@ -117,7 +117,7 @@ function exportAudioContext(
 }
 
 /** Media-bin display name of a source video (may be a virtual rename). */
-function videoMediaBinName(mediaItems: MediaBinItem[], videoId: string, project: Project) {
+function videoMediaBinName(mediaItems: MediaBinItem[], videoId: string, project: MediaDocument) {
   return (
     mediaItems.find((item) => item.id === videoId && item.kind === "video")?.file_name ??
     project.asset.file_name
@@ -126,7 +126,7 @@ function videoMediaBinName(mediaItems: MediaBinItem[], videoId: string, project:
 
 function activeVideoProject(
   mediaItems: MediaBinItem[],
-  projects: Record<string, Project>,
+  projects: Record<string, MediaDocument>,
   videoId: string,
 ) {
   const video = mediaItems.find(
@@ -158,7 +158,7 @@ export interface StoryboardExportInput {
   shotIds: string[];
   storyboards: Record<string, StoryboardState>;
   mediaItems: MediaBinItem[];
-  projects: Record<string, Project>;
+  projects: Record<string, MediaDocument>;
   detachedVideoIds: Set<string>;
 }
 
@@ -225,7 +225,7 @@ export interface SubtitleExportInput {
   trackId: string;
   cueIds: string[];
   mediaItems: MediaBinItem[];
-  projects: Record<string, Project>;
+  projects: Record<string, MediaDocument>;
   detachedVideoIds: Set<string>;
 }
 
@@ -292,7 +292,7 @@ function subtitleLabel(cue: { sequence: number; plain_text: string }) {
 export interface MediaBinExportInput {
   itemIds: string[];
   mediaItems: MediaBinItem[];
-  projects: Record<string, Project>;
+  projects: Record<string, MediaDocument>;
   detachedVideoIds: Set<string>;
 }
 
@@ -353,7 +353,7 @@ export function buildMediaBinExportSource({
 export function refreshExportClipAudioBindings(
   clips: ExportClip[],
   mediaItems: MediaBinItem[],
-  projects: Record<string, Project>,
+  projects: Record<string, MediaDocument>,
   detachedVideoIds: Set<string>,
 ): ExportClip[] {
   return clips.flatMap((clip) => {
@@ -392,7 +392,7 @@ export function refreshExportClipAudioBindings(
 export function refreshExportSourceAudioBindings(
   source: ExportSource,
   mediaItems: MediaBinItem[],
-  projects: Record<string, Project>,
+  projects: Record<string, MediaDocument>,
   detachedVideoIds: Set<string>,
 ): ExportSource {
   return {

@@ -143,7 +143,8 @@ export interface StoryboardDetectionResult {
   shots: StoryboardShot[];
 }
 
-export interface Project {
+/** One imported media source; the whole project document is ProjectWorkspace. */
+export interface MediaDocument {
   asset: MediaAsset;
   streams: MediaStream[];
   tracks: SubtitleTrack[];
@@ -247,7 +248,7 @@ export interface ProjectExportState {
 }
 
 export interface ProjectWorkspace {
-  projects: Project[];
+  projects: MediaDocument[];
   media_bin: ProjectMediaBinState;
   editor: ProjectEditorState;
   subtitles?: Record<string, SubtitleState>;
@@ -269,7 +270,7 @@ export interface DemuxMediaResult {
 }
 
 export interface ImportResult {
-  project: Project;
+  project: MediaDocument;
   warnings: UserNotice[];
 }
 

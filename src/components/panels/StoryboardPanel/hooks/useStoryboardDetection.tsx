@@ -27,7 +27,7 @@ import {
 } from "../../../../core/editor/storyboardDetection";
 import type {
   MediaBinItem,
-  Project,
+  MediaDocument,
   StoryboardDetectionResult,
   StoryboardState,
 } from "../../../../types";
@@ -44,7 +44,7 @@ const detectionEventSource = eventSource("storyboard-detection");
  * Pickers must apply this predicate to the videos they offer, or they will present entries that
  * cannot act.
  */
-export function canDetectStoryboard(item: MediaBinItem, project: Project | undefined) {
+export function canDetectStoryboard(item: MediaBinItem, project: MediaDocument | undefined) {
   return (
     isTauriRuntime() &&
     item.kind === "video" &&
@@ -56,7 +56,7 @@ export function canDetectStoryboard(item: MediaBinItem, project: Project | undef
 
 interface StoryboardDetectionOptions {
   item: MediaBinItem;
-  project: Project;
+  project: MediaDocument;
   mode: StoryboardDetectionMode;
   updateStoryboard: (
     context: string,

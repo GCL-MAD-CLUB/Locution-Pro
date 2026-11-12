@@ -1,4 +1,4 @@
-use super::{Project, UserNotice};
+use super::{MediaDocument, UserNotice};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 
@@ -179,7 +179,7 @@ pub(crate) struct ProjectStoryboardState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ProjectWorkspace {
-    pub(crate) projects: Vec<Project>,
+    pub(crate) projects: Vec<MediaDocument>,
     pub(crate) media_bin: ProjectMediaBinState,
     pub(crate) editor: ProjectEditorState,
     #[serde(default)]

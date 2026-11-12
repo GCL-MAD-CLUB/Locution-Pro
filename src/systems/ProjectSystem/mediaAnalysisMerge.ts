@@ -1,7 +1,7 @@
-import type { Project } from "../../types";
+import type { MediaDocument } from "../../types";
 
 /** Analysis owns newly discovered embedded tracks, never the user's edits or links. */
-export function mergeMediaAnalysis(current: Project, analyzed: Project): Project {
+export function mergeMediaAnalysis(current: MediaDocument, analyzed: MediaDocument): MediaDocument {
   if (
     current.asset.path !== analyzed.asset.path ||
     current.asset.fingerprint !== analyzed.asset.fingerprint

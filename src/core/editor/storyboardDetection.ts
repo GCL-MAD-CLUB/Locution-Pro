@@ -1,4 +1,4 @@
-import type { Project, StoryboardDetectionResult, StoryboardState } from "../../types";
+import type { MediaDocument, StoryboardDetectionResult, StoryboardState } from "../../types";
 import { storyboardShotDefaultTitle } from "./storyboard";
 import { mergeDetectedStoryboardShots } from "./storyboardCuts";
 
@@ -9,7 +9,7 @@ export type StoryboardDetectionMode = "merge" | "overwrite";
  * Every producer and consumer of a storyboard must build this string the same way, because the
  * detection pipeline matches results against it by exact equality.
  */
-export function storyboardVideoContext(videoId: string, project: Project | null | undefined) {
+export function storyboardVideoContext(videoId: string, project: MediaDocument | null | undefined) {
   return `${videoId}:${project?.asset.id ?? ""}:${project?.asset.fingerprint ?? ""}`;
 }
 

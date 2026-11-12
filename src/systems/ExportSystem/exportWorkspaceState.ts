@@ -53,7 +53,7 @@ export interface ExportWorkspaceState {
   rangeHistoryCursor: number;
   selectedClipIds: Set<string>;
   settings: ExportSettings;
-  /** Project id whose recorded settings back `settings`; null before any project load. */
+  /** MediaDocument id whose recorded settings back `settings`; null before any project load. */
   settingsProjectId: string | null;
   results: ExportResult | null;
   status: ExportWorkspaceStatus;

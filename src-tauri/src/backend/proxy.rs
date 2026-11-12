@@ -1,7 +1,7 @@
 use super::*;
 
 pub(crate) fn proxy_output_path(
-    project: &Project,
+    project: &MediaDocument,
     preferences: &Preferences,
     options: &ProxyOptions,
 ) -> AppResult<PathBuf> {

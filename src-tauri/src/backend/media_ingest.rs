@@ -3,21 +3,16 @@ use super::*;
 /// Check disk caches as well as project data, including projects reopened after cache cleanup.
 #[tauri::command]
 pub(crate) async fn find_media_needing_analysis(
+    media_sources: crate::MediaSources,
     asset_ids: Vec<String>,
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<Vec<String>> {
     let preferences = preferences_clone(&state)?;
     let projects = {
-        let projects = state.projects.lock().map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?;
         asset_ids
             .into_iter()
             .filter_map(|id| {
-                let project = projects.get(&id)?;
+                let project = media_sources.0.get(&id)?;
                 let missing_subtitles = project.streams.iter().any(|stream| {
                     stream.codec_type == "subtitle"
                         && is_text_subtitle_codec(&stream.codec_name)
@@ -172,7 +167,7 @@ pub(crate) async fn register_import_media(
         })
         .collect::<Vec<_>>();
 
-    let project = Project {
+    let project = MediaDocument {
         asset,
         streams,
         tracks: Vec::new(),
@@ -181,16 +176,6 @@ pub(crate) async fn register_import_media(
         proxy_path: proxy_path_str,
     };
     task.check_cancelled()?;
-    state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .insert(project.asset.id.clone(), project.clone());
     Ok(ImportResult {
         project,
         warnings: Vec::new(),
@@ -199,6 +184,7 @@ pub(crate) async fn register_import_media(
 
 #[tauri::command]
 pub(crate) async fn analyze_imported_media(
+    media_sources: crate::MediaSources,
     asset_id: String,
     task_id: String,
     app: tauri::AppHandle,
@@ -210,7 +196,7 @@ pub(crate) async fn analyze_imported_media(
     const COVER_PROGRESS_END: f64 = 0.99;
     let task = register_task(&task_id, state.inner())?;
     let preferences = preferences_clone(&state)?;
-    let source = project_clone(&asset_id, &state)?;
+    let source = media_sources.get(&asset_id)?.clone();
     let path = source.asset.path.clone();
     let input_path = PathBuf::from(&path);
     let mut tracks = Vec::new();
@@ -335,7 +321,7 @@ pub(crate) async fn analyze_imported_media(
         ));
     }
 
-    let project = Project {
+    let project = MediaDocument {
         tracks,
         cues,
         ..source.clone()
@@ -373,44 +359,6 @@ pub(crate) async fn analyze_imported_media(
     }
     task.check_cancelled()?;
     emit_ffmpeg_progress(&app, &task_id, COVER_PROGRESS_END);
-    {
-        let mut projects = state.projects.lock().map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?;
-        if let Some(current) = projects.get_mut(&asset_id) {
-            if current.asset.path == source.asset.path
-                && current.asset.fingerprint == source.asset.fingerprint
-            {
-                for track in &project.tracks {
-                    if !current.cues.contains_key(&track.id) {
-                        if let Some(repaired) = project.cues.get(&track.id) {
-                            current.cues.insert(track.id.clone(), repaired.clone());
-                            if let Some(existing) = current
-                                .tracks
-                                .iter_mut()
-                                .find(|existing| existing.id == track.id)
-                            {
-                                existing.cue_count = track.cue_count;
-                                existing.warning = None;
-                            }
-                        }
-                    }
-                    if !current.tracks.iter().any(|existing| {
-                        matches!(existing.source_type, SubtitleSourceType::Embedded)
-                            && existing.stream_index == track.stream_index
-                    }) {
-                        current.tracks.push(track.clone());
-                        if let Some(cues) = project.cues.get(&track.id) {
-                            current.cues.insert(track.id.clone(), cues.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
     emit_ffmpeg_progress(&app, &task_id, 1.0);
     Ok(ImportResult { project, warnings })
 }
@@ -426,5 +374,7 @@ pub(crate) async fn import_media(
 ) -> CommandResult<ImportResult> {
     let registered =
         register_import_media(path, task_id.clone(), asset_id, app.clone(), state.clone()).await?;
-    analyze_imported_media(registered.project.asset.id, task_id, app, state).await
+    let asset_id = registered.project.asset.id.clone();
+    let media_sources = MediaSources(HashMap::from([(asset_id.clone(), registered.project)]));
+    analyze_imported_media(media_sources, asset_id, task_id, app, state).await
 }

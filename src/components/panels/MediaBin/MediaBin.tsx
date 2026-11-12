@@ -41,7 +41,6 @@ import {
   isMediaVideoDetached,
   isVirtualMediaItem,
   mediaItemProject,
-  getProjectWorkspaceSnapshot,
   useProjectPort,
 } from "../../../systems/ProjectSystem";
 import {
@@ -933,31 +932,6 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     if (isReadOnly || selectedIds.size === 0) {
       return;
     }
-    if (isTauriRuntime()) {
-      const removedIds = new Set(selectedItems.map((item) => item.id));
-      const remainingItems = mediaItems.filter((item) => !removedIds.has(item.id));
-      const projectIdsToClose = new Set(
-        selectedItems
-          .filter((item) => item.origin === "imported" && item.kind !== "subtitle")
-          .map((item) => mediaItemProject(item, projects, mediaItems)?.asset.id)
-          .filter((projectId): projectId is string => Boolean(projectId))
-          .filter(
-            (projectId) =>
-              !remainingItems.some(
-                (item) => item.id === projectId || item.source_video_id === projectId,
-              ),
-          ),
-      );
-      const closeOutcomes = await Promise.all(
-        Array.from(projectIdsToClose).map((assetId) =>
-          runOperation("media.closeBackend", () => invokeCommand("close_project", { assetId })),
-        ),
-      );
-      if (closeOutcomes.some((outcome) => outcome.status !== "success")) {
-        await restoreBackendWorkspace();
-        return;
-      }
-    }
     mediaBinEntriesRemoved(
       selectedFolders.map((folder) => folder.id),
       directlySelectedItems.map((item) => item.id),
@@ -1169,16 +1143,6 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     }
   }
 
-  async function restoreBackendWorkspace() {
-    if (!isTauriRuntime()) {
-      return true;
-    }
-    const outcome = await runOperation("project.restoreBackend", () =>
-      invokeCommand("sync_project_workspace", { workspace: getProjectWorkspaceSnapshot() }),
-    );
-    return outcome.status === "success";
-  }
-
   async function relinkMediaItem(item: MediaBinItem, path: string, historyLabel: string) {
     const currentProject = mediaItemProject(item, projects, mediaItems);
     if (!currentProject) {
@@ -1204,9 +1168,6 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
 
     const linkedKind = outcome.result.project.asset.video_stream_index !== null ? "video" : "audio";
     if (linkedKind !== item.kind) {
-      if (!(await restoreBackendWorkspace())) {
-        return false;
-      }
       messagePublished(
         `${item.file_name} 需要${item.kind === "video" ? "视频" : "音频"}文件，所选文件类型不匹配。`,
       );

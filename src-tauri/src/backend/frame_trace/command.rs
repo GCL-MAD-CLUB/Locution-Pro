@@ -11,6 +11,7 @@ use std::time::Duration;
 
 #[tauri::command]
 pub(crate) async fn storyboard_frame_trace(
+    media_sources: crate::MediaSources,
     asset_id: String,
     start_frame: i64,
     end_frame: i64,
@@ -18,7 +19,7 @@ pub(crate) async fn storyboard_frame_trace(
     on_samples: tauri::ipc::Channel<FrameTraceBatch>,
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<FrameTraceData> {
-    let source = frame_trace_source(&asset_id, start_frame, end_frame, &state)?;
+    let source = frame_trace_source(&asset_id, start_frame, end_frame, &media_sources)?;
     let preferences = preferences_clone(&state)?;
     let task = register_task(&task_id, &state)?;
     // Establish registration before the frontend retries an early cancellation.

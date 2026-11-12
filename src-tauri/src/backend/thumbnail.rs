@@ -234,26 +234,11 @@ fn timeline_thumbnail_scale_filter(resolution: TimelineThumbnailResolution) -> S
 
 #[tauri::command]
 pub(crate) async fn get_cached_video_cover_thumbnail(
+    media_sources: crate::MediaSources,
     asset_id: String,
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<Option<Vec<u8>>> {
-    let fingerprint = state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .get(&asset_id)
-        .map(|project| project.asset.fingerprint.clone())
-        .ok_or_else(|| {
-            app_error(
-                ErrorCode::MediaNotFound,
-                format!("Media asset was not found: {asset_id}"),
-            )
-        })?;
+    let fingerprint = media_sources.get(&asset_id)?.asset.fingerprint.clone();
     let preferences = preferences_clone(&state)?;
     // Generation belongs to the media-analysis queue, including cache repair.
     tokio::task::spawn_blocking(move || {
@@ -274,29 +259,14 @@ pub(crate) async fn get_cached_video_cover_thumbnail(
 
 #[tauri::command]
 pub(crate) async fn get_cached_subtitle_thumbnails(
+    media_sources: crate::MediaSources,
     asset_id: String,
     time_us: i64,
     widths: Vec<usize>,
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<tauri::ipc::Response> {
     validate_timeline_thumbnail_widths(&widths)?;
-    let project = state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .get(&asset_id)
-        .cloned()
-        .ok_or_else(|| {
-            app_error(
-                ErrorCode::MediaNotFound,
-                format!("Media asset was not found: {asset_id}"),
-            )
-        })?;
+    let project = media_sources.get(&asset_id)?.clone();
     let preferences = preferences_clone(&state)?;
     let fingerprint = project.asset.fingerprint.clone();
     let duration_us = project.asset.duration_us;
@@ -341,6 +311,7 @@ pub(crate) async fn get_cached_subtitle_thumbnails(
 
 #[tauri::command]
 pub(crate) async fn generate_subtitle_thumbnails(
+    media_sources: crate::MediaSources,
     asset_id: String,
     time_us: i64,
     widths: Vec<usize>,
@@ -352,23 +323,7 @@ pub(crate) async fn generate_subtitle_thumbnails(
         .iter()
         .map(|width| timeline_thumbnail_resolution(Some(*width)))
         .collect::<AppResult<Vec<_>>>()?;
-    let project = state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .get(&asset_id)
-        .cloned()
-        .ok_or_else(|| {
-            app_error(
-                ErrorCode::MediaNotFound,
-                format!("Media asset was not found: {asset_id}"),
-            )
-        })?;
+    let project = media_sources.get(&asset_id)?.clone();
     let stream_index = project.asset.video_stream_index.ok_or_else(|| {
         app_error(
             ErrorCode::VideoStreamMissing,
@@ -410,6 +365,7 @@ pub(crate) async fn generate_subtitle_thumbnails(
 
 #[tauri::command]
 pub(crate) async fn cache_subtitle_thumbnail(
+    media_sources: crate::MediaSources,
     asset_id: String,
     time_us: i64,
     width: Option<usize>,
@@ -418,23 +374,7 @@ pub(crate) async fn cache_subtitle_thumbnail(
 ) -> CommandResult<()> {
     let resolution = timeline_thumbnail_resolution(width)?;
     validate_timeline_thumbnail_jpeg(&bytes)?;
-    let project = state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .get(&asset_id)
-        .cloned()
-        .ok_or_else(|| {
-            app_error(
-                ErrorCode::MediaNotFound,
-                format!("Media asset was not found: {asset_id}"),
-            )
-        })?;
+    let project = media_sources.get(&asset_id)?.clone();
     let preferences = preferences_clone(&state)?;
     tokio::task::spawn_blocking(move || {
         write_subtitle_thumbnail_cache(
@@ -457,29 +397,14 @@ pub(crate) async fn cache_subtitle_thumbnail(
 
 #[tauri::command]
 pub(crate) async fn get_cached_storyboard_thumbnails(
+    media_sources: crate::MediaSources,
     asset_id: String,
     time_us: i64,
     widths: Vec<usize>,
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<tauri::ipc::Response> {
     validate_timeline_thumbnail_widths(&widths)?;
-    let project = state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .get(&asset_id)
-        .cloned()
-        .ok_or_else(|| {
-            app_error(
-                ErrorCode::MediaNotFound,
-                format!("Media asset was not found: {asset_id}"),
-            )
-        })?;
+    let project = media_sources.get(&asset_id)?.clone();
     let preferences = preferences_clone(&state)?;
     let fingerprint = project.asset.fingerprint.clone();
     let duration_us = project.asset.duration_us;
@@ -512,6 +437,7 @@ pub(crate) async fn get_cached_storyboard_thumbnails(
 
 #[tauri::command]
 pub(crate) async fn generate_storyboard_thumbnails(
+    media_sources: crate::MediaSources,
     asset_id: String,
     time_us: i64,
     widths: Vec<usize>,
@@ -523,23 +449,7 @@ pub(crate) async fn generate_storyboard_thumbnails(
         .iter()
         .map(|width| timeline_thumbnail_resolution(Some(*width)))
         .collect::<AppResult<Vec<_>>>()?;
-    let project = state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .get(&asset_id)
-        .cloned()
-        .ok_or_else(|| {
-            app_error(
-                ErrorCode::MediaNotFound,
-                format!("Media asset was not found: {asset_id}"),
-            )
-        })?;
+    let project = media_sources.get(&asset_id)?.clone();
     let stream_index = project.asset.video_stream_index.ok_or_else(|| {
         app_error(
             ErrorCode::VideoStreamMissing,
@@ -581,6 +491,7 @@ pub(crate) async fn generate_storyboard_thumbnails(
 
 #[tauri::command]
 pub(crate) async fn cache_storyboard_thumbnail(
+    media_sources: crate::MediaSources,
     asset_id: String,
     time_us: i64,
     width: Option<usize>,
@@ -589,23 +500,7 @@ pub(crate) async fn cache_storyboard_thumbnail(
 ) -> CommandResult<()> {
     let resolution = timeline_thumbnail_resolution(width)?;
     validate_timeline_thumbnail_jpeg(&bytes)?;
-    let project = state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .get(&asset_id)
-        .cloned()
-        .ok_or_else(|| {
-            app_error(
-                ErrorCode::MediaNotFound,
-                format!("Media asset was not found: {asset_id}"),
-            )
-        })?;
+    let project = media_sources.get(&asset_id)?.clone();
     let preferences = preferences_clone(&state)?;
     tokio::task::spawn_blocking(move || {
         write_storyboard_thumbnail_cache(
@@ -634,7 +529,7 @@ pub(crate) fn has_video_cover_cache(fingerprint: &str, preferences: &Preferences
 }
 
 pub(crate) async fn ensure_video_cover_thumbnail(
-    project: &Project,
+    project: &MediaDocument,
     preferences: &Preferences,
     cancel: Option<Arc<AtomicBool>>,
     progress: Option<&CoverProgressCallback>,
@@ -1865,7 +1760,7 @@ mod tests {
             cache_dir: root.to_string_lossy().into_owned(),
             ..Preferences::default()
         };
-        let project: Project = serde_json::from_value(serde_json::json!({
+        let project: MediaDocument = serde_json::from_value(serde_json::json!({
             "asset": { "id": "legacy", "path": "missing-video", "file_name": "legacy.mp4",
                 "file_size": 0, "modified_at": 0, "fingerprint": "legacy-cover-test",
                 "duration_us": 120000000, "start_time_us": 0,

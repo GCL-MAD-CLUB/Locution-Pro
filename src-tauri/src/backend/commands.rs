@@ -222,10 +222,7 @@ pub(crate) async fn auto_save_project_snapshot(
 }
 
 #[tauri::command]
-pub(crate) async fn open_project_file(
-    path: String,
-    state: tauri::State<'_, AppState>,
-) -> CommandResult<OpenProjectResult> {
+pub(crate) async fn open_project_file(path: String) -> CommandResult<OpenProjectResult> {
     let input_path = PathBuf::from(path);
     let read_path = input_path.clone();
     let (mut workspace, project_id, migrated) =
@@ -379,69 +376,12 @@ pub(crate) async fn open_project_file(
         }
     }
 
-    let mut projects = state.projects.lock().map_err(|_| {
-        app_error(
-            ErrorCode::ProjectStateUnavailable,
-            "Project state lock is poisoned",
-        )
-    })?;
-    projects.clear();
-    projects.extend(
-        workspace
-            .projects
-            .iter()
-            .map(|project| (project.asset.id.clone(), project.clone())),
-    );
-    drop(projects);
-
     Ok(OpenProjectResult {
         path: input_path.to_string_lossy().into_owned(),
         project_id,
         workspace,
         warnings,
     })
-}
-
-#[tauri::command]
-pub(crate) fn sync_project_workspace(
-    workspace: ProjectWorkspace,
-    state: tauri::State<'_, AppState>,
-) -> CommandResult<()> {
-    let mut projects = state.projects.lock().map_err(|_| {
-        app_error(
-            ErrorCode::ProjectStateUnavailable,
-            "Project state lock is poisoned",
-        )
-    })?;
-    projects.clear();
-    projects.extend(
-        workspace
-            .projects
-            .into_iter()
-            .map(|project| (project.asset.id.clone(), project)),
-    );
-    Ok(())
-}
-
-#[tauri::command]
-pub(crate) fn close_project(
-    asset_id: Option<String>,
-    state: tauri::State<'_, AppState>,
-) -> CommandResult<bool> {
-    let Some(asset_id) = asset_id else {
-        return Ok(false);
-    };
-    Ok(state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .remove(&asset_id)
-        .is_some())
 }
 
 #[tauri::command]
@@ -974,13 +914,14 @@ pub(crate) fn open_log_directory(app: tauri::AppHandle) -> CommandResult<()> {
 
 #[tauri::command]
 pub(crate) async fn demux_media_streams(
+    media_sources: crate::MediaSources,
     asset_id: String,
     task_id: String,
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<DemuxMediaResult> {
     let task = register_task(&task_id, state.inner())?;
-    let mut project = project_clone(&asset_id, &state)?;
+    let mut project = media_sources.get(&asset_id)?.clone();
     emit_ffmpeg_progress(&app, &task_id, 0.0);
     task.check_cancelled()?;
 
@@ -1015,16 +956,6 @@ pub(crate) async fn demux_media_streams(
         })
         .collect::<Vec<_>>();
     task.check_cancelled()?;
-    state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .insert(asset_id, project);
     emit_ffmpeg_progress(&app, &task_id, 1.0);
 
     Ok(DemuxMediaResult {
@@ -1035,6 +966,7 @@ pub(crate) async fn demux_media_streams(
 
 #[tauri::command]
 pub(crate) async fn generate_proxy(
+    media_sources: crate::MediaSources,
     asset_id: String,
     options: ProxyOptions,
     task_id: String,
@@ -1043,7 +975,7 @@ pub(crate) async fn generate_proxy(
 ) -> CommandResult<ProxyResult> {
     let task = register_task(&task_id, state.inner())?;
     let preferences = preferences_clone(&state)?;
-    let project = project_clone(&asset_id, &state)?;
+    let project = media_sources.get(&asset_id)?.clone();
     let proxy_path = proxy_output_path(&project, &preferences, &options)?;
     emit_ffmpeg_progress(&app, &task_id, 0.0);
     if let Some(parent) = proxy_path.parent() {
@@ -1109,19 +1041,6 @@ pub(crate) async fn generate_proxy(
 
     task.check_cancelled()?;
     let proxy_string = proxy_path.to_string_lossy().into_owned();
-    let mut updated_project = project;
-    updated_project.proxy_path = Some(proxy_string.clone());
-    task.check_cancelled()?;
-    state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .insert(asset_id, updated_project);
     emit_ffmpeg_progress(&app, &task_id, 1.0);
     Ok(ProxyResult {
         proxy_path: proxy_string,
@@ -1130,6 +1049,7 @@ pub(crate) async fn generate_proxy(
 
 #[tauri::command]
 pub(crate) async fn add_external_subtitles(
+    media_sources: crate::MediaSources,
     asset_id: String,
     paths: Vec<String>,
     task_id: String,
@@ -1137,23 +1057,7 @@ pub(crate) async fn add_external_subtitles(
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<AddExternalSubtitlesResult> {
     let task = register_task(&task_id, state.inner())?;
-    // Only validate existence; cloning every previously loaded cue here is wasted work.
-    if !state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .contains_key(&asset_id)
-    {
-        return Err(app_error(
-            ErrorCode::ProjectNotLoaded,
-            format!("Project is not loaded for media asset: {asset_id}"),
-        ));
-    }
+    media_sources.get(&asset_id)?;
     let mut new_tracks = Vec::new();
     let mut new_cues: HashMap<String, Vec<SubtitleCue>> = HashMap::new();
     let mut warnings = Vec::new();
@@ -1175,60 +1079,12 @@ pub(crate) async fn add_external_subtitles(
     }
 
     task.check_cancelled()?;
-    {
-        let mut projects = state.projects.lock().map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?;
-        let current = projects.get_mut(&asset_id).ok_or_else(|| {
-            app_error(
-                ErrorCode::ProjectNotLoaded,
-                format!("Project is not loaded for media asset: {asset_id}"),
-            )
-        })?;
-        for track in &new_tracks {
-            if !current
-                .tracks
-                .iter()
-                .any(|existing| existing.id == track.id)
-            {
-                current.tracks.push(track.clone());
-            }
-        }
-        current.cues.extend(new_cues.clone());
-    }
-
     emit_ffmpeg_progress(&app, &task_id, 1.0);
     Ok(AddExternalSubtitlesResult {
         tracks: new_tracks,
         cues: new_cues,
         warnings,
     })
-}
-
-pub(crate) fn project_clone(
-    asset_id: &str,
-    state: &tauri::State<'_, AppState>,
-) -> AppResult<Project> {
-    state
-        .projects
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::ProjectStateUnavailable,
-                "Project state lock is poisoned",
-            )
-        })?
-        .get(asset_id)
-        .cloned()
-        .ok_or_else(|| {
-            app_error(
-                ErrorCode::ProjectNotLoaded,
-                format!("Project is not loaded for media asset: {asset_id}"),
-            )
-        })
 }
 
 pub(crate) fn preferences_clone(state: &tauri::State<'_, AppState>) -> AppResult<Preferences> {

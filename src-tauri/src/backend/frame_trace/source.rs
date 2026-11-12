@@ -1,5 +1,5 @@
 use crate::backend::parse_frame_rate;
-use crate::{app_error, AppResult, AppState, ErrorCode};
+use crate::{app_error, AppResult, ErrorCode};
 
 pub(super) struct FrameTraceSource {
     pub(super) path: String,
@@ -13,7 +13,7 @@ pub(super) fn frame_trace_source(
     asset_id: &str,
     start_frame: i64,
     end_frame: i64,
-    state: &AppState,
+    media_sources: &crate::MediaSources,
 ) -> AppResult<FrameTraceSource> {
     let frame_count = end_frame
         .checked_sub(start_frame)
@@ -25,18 +25,7 @@ pub(super) fn frame_trace_source(
                 "Invalid frame trace range",
             )
         })?;
-    let projects = state.projects.lock().map_err(|_| {
-        app_error(
-            ErrorCode::ProjectStateUnavailable,
-            "Project state lock is poisoned",
-        )
-    })?;
-    let project = projects.get(asset_id).ok_or_else(|| {
-        app_error(
-            ErrorCode::MediaNotFound,
-            format!("Media asset was not found: {asset_id}"),
-        )
-    })?;
+    let project = media_sources.get(asset_id)?;
     let stream_index = project.asset.video_stream_index.ok_or_else(|| {
         app_error(
             ErrorCode::VideoStreamMissing,

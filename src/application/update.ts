@@ -141,8 +141,8 @@ export function checkForUpdate(): Promise<UpdateCheckResult> {
         return { status: "available", release };
       } catch (error) {
         captureOperationError("help.checkUpdates", error);
-        // Release discovery succeeded. Missing metadata, failed downloads and
-        // hash failures all retain the original manual update path.
+        // CDN release discovery succeeded. Download or verification failures
+        // retain the user-initiated manual download option.
         return { status: "manual", release };
       }
     })

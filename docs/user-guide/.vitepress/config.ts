@@ -207,6 +207,7 @@ export default defineConfig({
             text: "浏览、排序和选择分镜",
             link: "/storyboard/browse-shots",
           },
+          { text: "使用分镜图谱", link: "/storyboard/graph" },
           {
             text: "按标题和关键字查找分镜",
             link: "/storyboard/text-search",

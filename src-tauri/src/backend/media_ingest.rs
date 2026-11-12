@@ -11,8 +11,8 @@ pub(crate) async fn find_media_needing_analysis(
     let projects = {
         asset_ids
             .into_iter()
-            .filter_map(|id| {
-                let project = media_sources.0.get(&id)?;
+            .map(|id| {
+                let project = media_sources.get(&id)?;
                 let missing_subtitles = project.streams.iter().any(|stream| {
                     stream.codec_type == "subtitle"
                         && is_text_subtitle_codec(&stream.codec_name)
@@ -23,9 +23,9 @@ pub(crate) async fn find_media_needing_analysis(
                         })
                 });
                 // Do not clone potentially large subtitle cue collections for a cache check.
-                Some((project.asset.clone(), missing_subtitles))
+                Ok((project.asset.clone(), missing_subtitles))
             })
-            .collect::<Vec<_>>()
+            .collect::<CommandResult<Vec<_>>>()?
     };
     tokio::task::spawn_blocking(move || {
         Ok(projects

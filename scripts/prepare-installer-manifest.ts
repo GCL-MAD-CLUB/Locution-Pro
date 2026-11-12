@@ -1,0 +1,184 @@
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, resolve, win32 } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+export const reusableRoots = ["transnetv2", "semantic-search", "storyboard-semantic"];
+
+export interface InstallerManifestFile {
+  path: string;
+  size: number;
+  sha256: string;
+  group: string;
+  bundleInUpdate?: boolean;
+}
+
+interface InstallerManifest {
+  version: number;
+  files: InstallerManifestFile[];
+}
+
+interface TauriConfig {
+  mainBinaryName?: string;
+  bundle: {
+    resources?: unknown;
+    externalBin?: unknown;
+  };
+}
+
+// Update packages carry application code and metadata; FFmpeg, model weights
+// and inference runtimes are reused from the installed copy.
+export function bundleInUpdate(path: string, group: string): boolean {
+  return (
+    group === "core" ||
+    (group !== "ffmpeg" &&
+      !/\.(?:onnx|onnx_data|safetensors|dll|dylib|exe|bin|pt|pth)$/iu.test(path))
+  );
+}
+
+export async function prepareInstallerManifest(
+  root = repository,
+  target = "x86_64-pc-windows-msvc",
+): Promise<string> {
+  const tauri = join(root, "src-tauri");
+  const config = JSON.parse(await readFile(join(tauri, "tauri.conf.json"), "utf8")) as TauriConfig;
+  const files: InstallerManifestFile[] = [];
+  const destinations = new Set<string>();
+  async function add(source: string, destination: string, group: string): Promise<void> {
+    const path = destination.replaceAll("/", "\\");
+    if (
+      win32.isAbsolute(path) ||
+      path.split("\\").some((part) => !part || part === "." || part === "..") ||
+      /[\x00-\x1f<>:"|?*\[\]=]/u.test(path) ||
+      path
+        .split("\\")
+        .some(
+          (part) =>
+            /[. ]$/u.test(part) ||
+            /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(part),
+        )
+    )
+      throw new Error(`Unsafe installer destination: ${destination}`);
+    const metadata = await lstat(source);
+    if (metadata.isSymbolicLink()) throw new Error(`Linked bundle input: ${source}`);
+    if (metadata.isDirectory()) {
+      for (const child of (await readdir(source)).sort()) {
+        await add(join(source, child), `${path}\\${child}`, group);
+      }
+      return;
+    }
+    if (!metadata.isFile()) throw new Error(`Unsupported bundle input: ${source}`);
+    const key = path.toLowerCase();
+    if (destinations.has(key)) throw new Error(`Duplicate installer destination: ${path}`);
+    destinations.add(key);
+    const hash = createHash("sha256");
+    for await (const chunk of createReadStream(source)) hash.update(chunk);
+    files.push({
+      path,
+      size: metadata.size,
+      sha256: hash.digest("hex"),
+      group,
+      bundleInUpdate: bundleInUpdate(path, group),
+    });
+  }
+  const resources = config.bundle?.resources;
+  if (!resources || Array.isArray(resources) || typeof resources !== "object") {
+    throw new Error("Installer hashing requires explicit resource destination mappings");
+  }
+  for (const [source, destination] of Object.entries(resources as Record<string, string>)) {
+    const prefix = destination.replaceAll("/", "\\").split("\\")[0].toLowerCase();
+    const group = reusableRoots.includes(prefix) ? prefix : "core";
+    await add(resolve(tauri, source), destination, group);
+  }
+  const externalBin = config.bundle?.externalBin;
+  if (!Array.isArray(externalBin)) {
+    throw new Error("Installer hashing requires bundled external binaries");
+  }
+  for (const binary of externalBin as string[]) {
+    const name = win32.basename(binary.replaceAll("/", "\\"));
+    if (!["ffmpeg", "ffprobe"].includes(name)) {
+      throw new Error(`Assign a cleanup policy before bundling ${binary}`);
+    }
+    await add(resolve(tauri, `${binary}-${target}.exe`), `${name}.exe`, "ffmpeg");
+  }
+  // NSIS refreshes this entry after Tauri patches/signs the compiled executable.
+  const mainBinary = config.mainBinaryName ?? "locution-pro";
+  await add(resolve(tauri, `target/release/${mainBinary}.exe`), `${mainBinary}.exe`, "core");
+  files.sort((left, right) => left.path.localeCompare(right.path, "en"));
+  const output = join(tauri, "target", "installer", "payload-manifest.json");
+  await mkdir(dirname(output), { recursive: true });
+  await writeFile(output, `${JSON.stringify({ version: 1, files }, null, 2)}\n`);
+  return output;
+}
+
+// Tauri patches/signs the executable after beforeBundleCommand. NSIS invokes
+// this against the final File input, before embedding its own manifest copy.
+export async function finalizeInstallerManifest(
+  manifestPath: string,
+  binaryPath: string,
+  binaryName: string,
+): Promise<string> {
+  if (
+    win32.basename(binaryName) !== binaryName ||
+    !/^[^\x00-\x1f<>:"|?*]+\.exe$/iu.test(binaryName)
+  ) {
+    throw new Error(`Invalid main executable destination: ${binaryName}`);
+  }
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as InstallerManifest;
+  if (manifest.version !== 1 || !Array.isArray(manifest.files)) {
+    throw new Error("Unsupported installer manifest");
+  }
+  const metadata = await lstat(binaryPath);
+  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new Error(`Invalid main executable input: ${binaryPath}`);
+  }
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(binaryPath)) hash.update(chunk);
+  manifest.files = manifest.files.filter(
+    (entry) => entry.path.toLowerCase() !== binaryName.toLowerCase(),
+  );
+  manifest.files.push({
+    path: binaryName,
+    size: metadata.size,
+    sha256: hash.digest("hex"),
+    group: "core",
+  });
+  for (const entry of manifest.files) {
+    if (typeof entry.path !== "string" || /[\x00-\x1f"]/u.test(entry.path)) {
+      throw new Error("Invalid installer resource path");
+    }
+    entry.bundleInUpdate = bundleInUpdate(entry.path, entry.group);
+  }
+  manifest.files.sort((left, right) => left.path.localeCompare(right.path, "en"));
+  const output = `${manifestPath}.nsis.json`;
+  await writeFile(output, `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile(
+    `${output}.nsh`,
+    manifest.files
+      .filter((entry) => entry.bundleInUpdate)
+      .map(
+        (entry) => `!define "LOCUTION_UPDATE_BUNDLE_${entry.path.replaceAll("$", () => "$$")}" 1\n`,
+      )
+      .join(""),
+  );
+  return output;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  const args = process.argv.slice(2);
+  if (args.length && (args[0] !== "--finalize-main" || args.length !== 4)) {
+    throw new Error(
+      "Usage: prepare-installer-manifest.ts [--finalize-main <manifest> <binary> <name>]",
+    );
+  }
+  let output: string;
+  if (args.length) {
+    const [, manifestPath, binaryPath, binaryName] = args;
+    output = await finalizeInstallerManifest(manifestPath, binaryPath, binaryName);
+  } else {
+    output = await prepareInstallerManifest(repository, process.env.TAURI_ENV_TARGET_TRIPLE);
+  }
+  console.log(`Prepared installer SHA-256 manifest: ${output}`);
+}

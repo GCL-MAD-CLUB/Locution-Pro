@@ -66,14 +66,14 @@ jobs:
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
           export GITHUB_REF_TYPE=tag
           export GITHUB_REF_NAME="$RELEASE_TAG"
-          node scripts/check-version-consistency.mjs
+          node scripts/check-version-consistency.ts
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Check existing release state
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: node scripts/prepare-release-draft.mjs --check
+        run: node scripts/prepare-release-draft.ts --check
 
   build-windows:
     name: Build Windows release artifacts
@@ -128,12 +128,12 @@ jobs:
           path: |
             src-tauri/resources/semantic-search
             src-tauri/resources/storyboard-semantic
-          key: model-assets-${{ runner.os }}-${{ hashFiles('scripts/prepare-semantic-assets.mjs', 'scripts/prepare-storyboard-semantic-assets.mjs', 'src-tauri/resources/*/MODEL.md') }}
+          key: model-assets-${{ runner.os }}-${{ hashFiles('scripts/prepare-semantic-assets.ts', 'scripts/prepare-storyboard-semantic-assets.ts', 'src-tauri/resources/*/MODEL.md') }}
       - name: Cache verified FFmpeg download
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/ffmpeg-assets/*/*.zip
-          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/prepare-ffmpeg-assets.mjs') }}
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/prepare-ffmpeg-assets.ts') }}
       - name: Prepare verified FFmpeg bundle assets
         run: npm run prepare:ffmpeg
       # tauri-build validates bundle resources during Rust compilation, before beforeBundleCommand.
@@ -222,7 +222,7 @@ jobs:
           path: |
             src-tauri/resources/semantic-search
             src-tauri/resources/storyboard-semantic
-          key: model-assets-${{ runner.os }}-${{ hashFiles('scripts/prepare-semantic-assets.mjs', 'scripts/prepare-storyboard-semantic-assets.mjs', 'src-tauri/resources/*/MODEL.md') }}
+          key: model-assets-${{ runner.os }}-${{ hashFiles('scripts/prepare-semantic-assets.ts', 'scripts/prepare-storyboard-semantic-assets.ts', 'src-tauri/resources/*/MODEL.md') }}
       - name: Prepare verified FFmpeg bundle assets
         run: |
           set -euo pipefail
@@ -310,11 +310,11 @@ jobs:
           test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$RELEASE_SHA"
       # Rehash both builds; prereleases omit latest.json entirely.
       - name: Combine platform artifacts and generate release metadata
-        run: node scripts/prepare-release-manifest.mjs --with-macos
+        run: node scripts/prepare-release-manifest.ts --with-macos
       # Prerelease notes are exactly "Release v<version>"; stable releases retain
       # generated notes or the existing draft's curated notes.
       - name: Verify artifacts and prepare release draft with channel-specific notes
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
-        run: node scripts/prepare-release-draft.mjs
+        run: node scripts/prepare-release-draft.ts

@@ -8,8 +8,8 @@ on:
       - ".github/workflows/deploy-site.yml"
       - "package.json"
       - "package-lock.json"
-      - "scripts/check-site.mjs"
-      - "scripts/build-site.mjs"
+      - "scripts/check-site.ts"
+      - "scripts/build-site.ts"
       - "wrangler.jsonc"
       - "site/**"
   workflow_dispatch:

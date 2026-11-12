@@ -82,7 +82,7 @@ export async function checkSite(siteRoot) {
     errors.push("index.html: fallback release version does not match the download contract");
 
   function assertReference(file, reference) {
-    if (apiRoutes.has(reference)) return;
+    if (apiRoutes.has(reference.split("?")[0])) return;
     if (/^(?:https?:|mailto:|tel:|data:|\/\/)/iu.test(reference)) return;
     if (/^[\w+.-]+:/u.test(reference) || reference.includes("\\")) {
       errors.push(`${file}: unsupported reference: ${reference}`);

@@ -95,7 +95,7 @@ npm run docs:build
 npm run format:check
 ```
 
-确定性网站构建与校验测试在 `tests/unit/tooling/site.test.mjs`，下载回退测试在 `tests/unit/site/download.test.mjs`，普通 CI 会构建官网。官网先读 OpenList 的 `latest.json`，失败再读 GitHub，均失败时直接使用固定 0.4.1 的 GitHub 地址，避免依赖 CDN 中已移除的旧版本文件；版本标签动态更新，所有安装按钮使用同源 `/api/download` 探测下载源，可用时以 302 重定向让浏览器直连 CDN，探测失败时回退到同版本 GitHub。Worker 只读取可执行文件头，不转发安装包数据。清单和发布同步契约见[发布流程](../docs/releasing.md)。不要在官网加入媒体编码、模型或 GPU 检查。
+确定性网站构建与校验测试在 `tests/unit/tooling/site.test.mjs`，下载回退测试在 `tests/unit/site/download.test.mjs`，普通 CI 会构建官网。官网先读 OpenList 的 `latest.json`，失败再读 GitHub，均失败时直接使用固定 0.4.1 的 GitHub 地址，避免依赖 CDN 中已移除的旧版本文件；版本标签动态更新，所有安装按钮使用同源 `/api/download` 探测下载源（macOS 按钮附带 `?platform=macos`），可用时以 302 重定向让浏览器直连 CDN，探测失败时回退到同版本 GitHub。Worker 只读取安装包文件头，不转发安装包数据；清单没有 macOS 安装包时，macOS 按钮转到 GitHub 的最新 Release 页面。清单和发布同步契约见[发布流程](../docs/releasing.md)。不要在官网加入媒体编码、模型或 GPU 检查。
 
 Cloudflare 参考：[Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/)、[CI 发布](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/)、[Worker 高级模式](https://developers.cloudflare.com/pages/functions/advanced-mode/)、[调用路由](https://developers.cloudflare.com/pages/functions/routing/)、[静态文件与缓存](https://developers.cloudflare.com/pages/configuration/serving-pages/)、[自定义域名](https://developers.cloudflare.com/pages/configuration/custom-domains/)。
 

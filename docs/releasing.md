@@ -29,10 +29,10 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D w
 cargo clippy --manifest-path src-tauri/thumbnail-provider/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
-准备正式 0.4.2 时，应在审查后的改动中统一 `package.json`、`package-lock.json`（含根包）、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 主包和 `src-tauri/tauri.conf.json` 的版本。仅做发布准备时直接修改这些清单，再运行检查；不能仅创建 tag 来绕过清单检查。需要本地统一版本并生成完整安装包时使用：
+准备正式 0.4.3 时，应在审查后的改动中统一 `package.json`、`package-lock.json`（含根包）、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 主包和 `src-tauri/tauri.conf.json` 的版本。仅做发布准备时直接修改这些清单，再运行检查；不能仅创建 tag 来绕过清单检查。需要本地统一版本并生成完整安装包时使用：
 
 ```powershell
-npm run release:build -- 0.4.2
+npm run release:build -- 0.4.3
 ```
 
 该命令会修改版本文件、检查密钥、格式化相关文件、准备 FFmpeg 并启动锁定依赖的构建，不是只读检查。构建钩子还会下载并校验语义模型。完整安装包、更新专用安装包、`latest.json` 和 `SHA256SUMS.txt` 统一输出到 `src-tauri/target/release-artifacts/`。仅更新文档时不运行它。
@@ -59,18 +59,18 @@ npm run release:build -- 0.4.2
 版本 PR 合并后，在对应 main 提交创建 tag。以下命令仅用于已准备好正式版本的提交：
 
 ```powershell
-git tag -a v0.4.2 -m "Locution Pro 0.4.2"
-git push origin v0.4.2
+git tag -a v0.4.3 -m "Locution Pro 0.4.3"
+git push origin v0.4.3
 ```
 
-预发布 tag 应与清单完整一致，例如 `v0.4.2-preview`。包含连字符的 tag 由工作流标记为 prerelease。
+预发布 tag 应与清单完整一致，例如 `v0.4.3-preview`。包含连字符的 tag 由工作流标记为 prerelease。
 
 发布校验要求该提交已有 main 分支 push 触发的成功 CI 运行。tag 推送不经过分支保护，因此在 CI 完成前打 tag 会让发布工作流直接失败；等 CI 通过后重跑发布工作流即可。构建固定使用通过校验的提交 SHA，上传前再次确认 tag 未移动。相同 tag 的手动触发和自动触发共用并发锁。发布附件按 `Locution.Pro_<版本>_x64-setup.exe` 命名，产品名与安装路径仍为 `Locution Pro`。
 
 需要使用 main 上修正后的工作流重跑已有 tag 时，从受保护的 main 手动触发，并明确指定应用 tag。不要移动既有 tag 来更新工作流：
 
 ```powershell
-gh workflow run release.yml --ref main -f tag=v0.4.2
+gh workflow run release.yml --ref main -f tag=v0.4.3
 ```
 
 ## 自动发布内容

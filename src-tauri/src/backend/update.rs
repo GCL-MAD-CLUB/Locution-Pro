@@ -179,6 +179,16 @@ fn stable_version(value: &str) -> AppResult<semver::Version> {
     Ok(version)
 }
 
+fn newer_version(candidate: &str, current: &str) -> AppResult<bool> {
+    let candidate =
+        semver::Version::parse(candidate).map_err(|error| invalid_update(error.to_string()))?;
+    let current =
+        semver::Version::parse(current).map_err(|error| invalid_update(error.to_string()))?;
+    // Preview builds receive the same stable releases. Build metadata and
+    // publication dates do not affect SemVer precedence.
+    Ok(candidate.cmp_precedence(&current).is_gt())
+}
+
 fn cached_installer_path(
     app: &tauri::AppHandle,
     version: &str,
@@ -217,15 +227,6 @@ fn launch_failure(arguments: impl IntoIterator<Item = String>) -> Option<UpdateF
 
 #[tauri::command]
 pub(crate) async fn update_startup(app: tauri::AppHandle) -> CommandResult<UpdateStartup> {
-    if stable_version(env!("CARGO_PKG_VERSION")).is_err() {
-        return Ok(UpdateStartup {
-            pending: None,
-            notes: None,
-            failure: None,
-            ignored: false,
-            ignored_versions: Vec::new(),
-        });
-    }
     let mut startup = tauri::async_runtime::spawn_blocking(move || startup_state(app))
         .await
         .map_err(|error| update_error(error.to_string()))??;
@@ -257,7 +258,7 @@ fn startup_state(app: tauri::AppHandle) -> CommandResult<UpdateStartup> {
         stable_version(&cached.release.version).is_ok()
             && validate_installer(&cached.installer, &cached.release.version, "update").is_ok()
     }) {
-        if stable_version(&cached.release.version)? > stable_version(current)? {
+        if newer_version(&cached.release.version, current)? {
             let path = cached_installer_path(&app, &cached.release.version, &cached.installer)?;
             if verify_download(&path, &cached.installer.signature).is_ok() {
                 updates()
@@ -277,7 +278,7 @@ fn startup_state(app: tauri::AppHandle) -> CommandResult<UpdateStartup> {
             notes = Some(cached.release);
         }
     }
-    if seen.iter().any(|version| version == current) {
+    if stable_version(current).is_err() || seen.iter().any(|version| version == current) {
         notes = None;
     } else {
         let release = notes.unwrap_or_else(|| LatestRelease {
@@ -696,17 +697,6 @@ async fn fill_release_notes(client: &reqwest::Client, release: &mut LatestReleas
 
 #[tauri::command]
 pub(crate) async fn fetch_latest_release() -> CommandResult<LatestRelease> {
-    let current = match stable_version(env!("CARGO_PKG_VERSION")) {
-        Ok(current) => current,
-        Err(_) => {
-            return Ok(LatestRelease {
-                version: env!("CARGO_PKG_VERSION").into(),
-                title: String::new(),
-                body: String::new(),
-                url: String::new(),
-            })
-        }
-    };
     let client = release_client(Duration::from_secs(8))?;
     let (mut release, installer) = discover_release(
         &client,
@@ -718,7 +708,7 @@ pub(crate) async fn fetch_latest_release() -> CommandResult<LatestRelease> {
     )
     .await?;
     fill_release_notes(&client, &mut release).await;
-    let newer = stable_version(&release.version)? > current;
+    let newer = newer_version(&release.version, env!("CARGO_PKG_VERSION"))?;
     if let Some(installer) = installer.filter(|_| newer) {
         // An unavailable auto-update cache must not hide a discovered release.
         if let Ok(mut state) = updates().lock() {

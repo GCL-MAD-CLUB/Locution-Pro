@@ -118,7 +118,7 @@ FFmpeg 下载包按准备脚本缓存，复用时仍核对固定 SHA-256；语�
 
 平台键为 `windows-x86_64` 与 `darwin-aarch64`，不追加安装器类型或版本号；`darwin-aarch64` 可以缺省，仅含 Windows 的清单（本地 `release:build`）仍然有效，官网下载入口只读取 `windows-x86_64`。平台顶层地址用于完整安装，`updater` 专供桌面更新。两者的 `signature` 分别是实际文件的 SHA-256 摘要，不是字符串 `SHA-256`，也不是 Tauri 自动更新器的签名。`pub_date` 是附件生成时间，使用 UTC。`SHA256SUMS.txt` 包含全部安装包、更新包和 `latest.json` 的摘要。CI 与本地构建共用生成器；已有完整 Tauri 安装包时先运行 `npm run build:update-installer`，再运行 `npm run prepare:release` 生成附件，运行 `npm run check:release` 只读复验。更新打包复用已编译的程序和完整文件清单，不重复编译、下载模型或构建缩略图组件。CI 中 GitHub 附件链接使用实际发布仓库。
 
-桌面端依次读取 CDN 清单、GitHub 清单和 GitHub 最新正式 Release，比较全部有效来源并选择最高正式版本，同版本优先保留 GitHub 清单中的更新包。预发布版本和标为预发布的 Release 一律忽略，不下载、不提示；预发布构建本身也跳过更新检测与首次版本提示。发现更高的正式版本后自动下载 `updater`，网络失败、错误响应、文件头或 SHA-256 不匹配时回退同版本 GitHub 文件。完整校验通过后才提示“立即更新”或“保存后更新”。取消保存、保存失败、保存期间工作区变化或仍有运行任务时不启动安装。旧清单缺少 `updater` 时不会自动运行完整安装器。
+桌面端依次读取 CDN 清单、GitHub 清单和 GitHub 最新正式 Release，比较全部有效来源并选择最高正式版本，同版本优先保留 GitHub 清单中的更新包。
 
 CDN 仅提供版本线索和文件传输，不能独立授权自动执行。更新包摘要必须来自固定 GitHub 仓库的清单；启动安装前再次读取该版本 GitHub 附件中的 `latest.json`，确认版本和摘要后重新校验本地文件。GitHub 无法确认时回退发布页，不能使用 CDN 提供的摘要继续执行。这依赖 GitHub 发布权限及 HTTPS，不是离线公钥签名。当前更新包只支持非提权的 `currentUser` 安装，模板在其他安装模式下拒绝编译。
 

@@ -124,7 +124,6 @@ export function isStableUpdateVersion(version: string) {
 }
 
 export function checkForUpdate(): Promise<UpdateCheckResult> {
-  if (!isStableUpdateVersion(currentVersion)) return Promise.resolve({ status: "latest" });
   if (activeCheck) return activeCheck;
   const request = invokeCommand<ReleaseInfo>("fetch_latest_release")
     .then(async (release): Promise<UpdateCheckResult> => {

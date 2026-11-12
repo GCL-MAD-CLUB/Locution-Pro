@@ -139,10 +139,6 @@ test("toolbar clustering toggle reuses indexed vectors and animates between opti
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await mount(page);
   const toggle = page.getByRole("button", { name: "聚类优化", exact: true });
-  await expect(page.getByRole("group", { name: "图谱布局选项", exact: true })).toHaveCSS(
-    "border-left-width",
-    "1px",
-  );
   const nodes = page.locator(".storyboard-graph-dot");
   const stage = page.locator(".storyboard-graph-view");
   await expect(toggle).toHaveAttribute("aria-pressed", "true");

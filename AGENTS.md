@@ -6,6 +6,12 @@
   Do not create standalone Rust test files, external test modules, or Rust test directories.
 - Keep deterministic frontend tests in `tests/unit/`, manual browser tests in
   `tests/browser/`, and external-tool tests in `tests/integration/`.
+- Do not add or run browser E2E tests for the official website (`site/`). Validate
+  the website through static checks and deterministic unit tests instead.
+- E2E tests verify behavior: user actions, state changes, validation, persistence,
+  focus, and command dispatch. Do not assert UI coordinates, spacing, dimensions,
+  typography, or decorative alignment. Geometry may drive pointer interactions or
+  verify functional canvas navigation, dragging, and selection; avoid fixed layout expectations.
 - `scripts/` contains executable build, asset preparation, release, and repository
   check commands only. Every script needs a `package.json` entry point. Do not put
   tests, experiments, or documentation inventories there.

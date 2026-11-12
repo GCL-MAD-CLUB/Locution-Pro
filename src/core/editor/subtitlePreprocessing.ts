@@ -1,4 +1,4 @@
-import type { Project, SubtitleCue } from "../../types";
+import type { MediaDocument, SubtitleCue } from "../../types";
 
 interface ProcessedSubtitles {
   cues: SubtitleCue[];
@@ -7,8 +7,8 @@ interface ProcessedSubtitles {
 }
 
 const cueCache = new WeakMap<readonly SubtitleCue[], ProcessedSubtitles>();
-const projectCache = new WeakMap<Project, Project>();
-const projectsCache = new WeakMap<Record<string, Project>, Record<string, Project>>();
+const projectCache = new WeakMap<MediaDocument, MediaDocument>();
+const projectsCache = new WeakMap<Record<string, MediaDocument>, Record<string, MediaDocument>>();
 
 /** A shared read view; parsed cues and source files are never changed. */
 export function preprocessSubtitleCues(cues: SubtitleCue[]): ProcessedSubtitles {
@@ -51,7 +51,7 @@ export function subtitleSourceCueIds(cues: SubtitleCue[], cueIds: Iterable<strin
   return new Set(Array.from(cueIds).flatMap((id) => mergedCueIds.get(id) ?? [id]));
 }
 
-export function preprocessProjectSubtitles(project: Project): Project {
+export function preprocessProjectSubtitles(project: MediaDocument): MediaDocument {
   const cached = projectCache.get(project);
   if (cached) return cached;
   let cues = project.cues;
@@ -74,7 +74,7 @@ export function preprocessProjectSubtitles(project: Project): Project {
   return result;
 }
 
-export function preprocessProjectsSubtitles(projects: Record<string, Project>) {
+export function preprocessProjectsSubtitles(projects: Record<string, MediaDocument>) {
   const cached = projectsCache.get(projects);
   if (cached) return cached;
   let result = projects;

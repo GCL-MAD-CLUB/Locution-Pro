@@ -68,10 +68,11 @@ fn read_completed_vectors(
 
 #[tauri::command]
 pub(crate) async fn read_storyboard_graph_vectors(
+    media_sources: crate::MediaSources,
     shots: Vec<SemanticShot>,
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<Vec<StoryboardGraphVector>> {
-    let sources = resolve_shots(shots, &state)?;
+    let sources = resolve_shots(shots, &media_sources)?;
     let preferences = preferences_clone(&state)?;
     let selection_root = cache::root(&preferences);
     let semantic_root = index::root(&preferences);

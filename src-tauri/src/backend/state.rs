@@ -1,7 +1,7 @@
 //! Application state and task lifetime ownership.
 use super::{ensure_not_cancelled, load_preferences, remove_cleanup_paths};
 use crate::error::{app_error, AppError, AppResult, ErrorCode};
-use crate::models::{Preferences, Project};
+use crate::models::Preferences;
 use crate::PROJECT_FILE_EXTENSION;
 use std::{
     collections::HashMap,
@@ -14,7 +14,6 @@ use std::{
 };
 
 pub(crate) struct AppState {
-    pub(crate) projects: Mutex<HashMap<String, Project>>,
     pub(crate) preferences: Mutex<Preferences>,
     pub(crate) startup_preferences_error: Mutex<Option<AppError>>,
     pub(crate) launch_project_path: Mutex<Option<String>>,
@@ -36,7 +35,6 @@ impl AppState {
             Err(error) => (Preferences::default(), Some(error)),
         };
         Self {
-            projects: Mutex::new(HashMap::new()),
             preferences: Mutex::new(preferences),
             startup_preferences_error: Mutex::new(startup_preferences_error),
             launch_project_path: Mutex::new(

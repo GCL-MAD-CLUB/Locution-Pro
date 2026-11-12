@@ -1,3 +1,4 @@
+import { registerMediaSources } from "../../runtime/mediaSources";
 import { defaultThemeColor } from "../../runtime/theme";
 import {
   normalizedStoryboardKeywords,
@@ -30,7 +31,7 @@ import type {
   MediaBinItem,
   MediaStream,
   Preferences,
-  Project,
+  MediaDocument,
   ProjectExportState,
   ProjectWorkspace,
   StoryboardState,
@@ -49,12 +50,12 @@ import {
 } from "../../core/editor/subtitlePreprocessing";
 
 interface ProjectCommands {
-  projectImported: (project: Project) => void;
+  projectImported: (project: MediaDocument) => void;
   projectCreated: (projectId: string) => void;
   projectOpened: (workspace: ProjectWorkspace, path: string, projectId: string) => void;
   projectSaved: (path: string, projectId: string) => void;
   projectClosed: () => void;
-  mediaProjectsAdded: (projects: Project[]) => void;
+  mediaProjectsAdded: (projects: MediaDocument[]) => void;
   mediaAnalysisCompleted: (result: ImportResult, projectId: string | null) => void;
   mediaItemsAdded: (items: MediaBinItem[], historyLabel?: string) => void;
   mediaBinEntriesAdded: (
@@ -82,7 +83,7 @@ interface ProjectCommands {
   mediaItemRelinked: (
     itemId: string,
     path: string,
-    linkedProject: Project | null,
+    linkedProject: MediaDocument | null,
     historyLabel?: string,
   ) => void;
   mediaProxyPathChanged: (itemId: string, path: string | null) => void;
@@ -148,8 +149,8 @@ interface ProjectCommands {
 }
 
 interface ProjectSystemState {
-  project: Project | null;
-  projects: Record<string, Project>;
+  project: MediaDocument | null;
+  projects: Record<string, MediaDocument>;
   mediaFolders: MediaBinFolder[];
   mediaItems: MediaBinItem[];
   activeVideoId: string;
@@ -207,7 +208,7 @@ export function isMediaItemOffline(item: MediaBinItem) {
 }
 
 export function mediaDisplayName(
-  project: Project | null,
+  project: MediaDocument | null,
   mediaItems: MediaBinItem[],
   itemId?: string,
 ) {
@@ -231,7 +232,7 @@ export function isVirtualMediaItem(
 
 export function mediaItemProject(
   item: MediaBinItem,
-  projects: Record<string, Project>,
+  projects: Record<string, MediaDocument>,
   mediaItems: MediaBinItem[] = [],
 ) {
   const directProject =
@@ -266,7 +267,7 @@ export interface ResolvedMediaAudioSource {
   stream: MediaStream | null;
 }
 
-function projectAudioTrackIndex(project: Project, streamIndex: number | null) {
+function projectAudioTrackIndex(project: MediaDocument, streamIndex: number | null) {
   if (streamIndex === null) {
     return -1;
   }
@@ -283,8 +284,8 @@ function projectAudioTrackIndex(project: Project, streamIndex: number | null) {
  */
 export function resolvedMediaAudioSources(
   videoId: string,
-  project: Project,
-  projects: Record<string, Project>,
+  project: MediaDocument,
+  projects: Record<string, MediaDocument>,
   mediaItems: MediaBinItem[],
   detachedVideoIds: Set<string>,
 ): ResolvedMediaAudioSource[] {
@@ -392,7 +393,7 @@ export function resolvedMediaAudioSources(
   return sources;
 }
 
-function projectMediaItem(project: Project): MediaBinItem {
+function projectMediaItem(project: MediaDocument): MediaBinItem {
   const isVideo = project.asset.video_stream_index !== null;
   const hasAudio = project.asset.audio_stream_index !== null;
   const stream = project.streams.find((item) =>
@@ -425,7 +426,7 @@ function projectMediaItem(project: Project): MediaBinItem {
   };
 }
 
-function externalSubtitleItems(project: Project): MediaBinItem[] {
+function externalSubtitleItems(project: MediaDocument): MediaBinItem[] {
   return project.tracks
     .filter((track) => track.source_type === "external" && track.source_path)
     .map((track, index) => ({
@@ -452,7 +453,7 @@ function externalSubtitleItems(project: Project): MediaBinItem[] {
 }
 
 /** Unbinding hides a track; it does not discard its parsed or edited cues. */
-export function canReuseSubtitleTrack(item: MediaBinItem, project: Project) {
+export function canReuseSubtitleTrack(item: MediaBinItem, project: MediaDocument) {
   if (item.kind !== "subtitle" || !item.subtitle_track_id) return false;
   const track = project.tracks.find((candidate) => candidate.id === item.subtitle_track_id);
   return Boolean(
@@ -466,10 +467,10 @@ export function canReuseSubtitleTrack(item: MediaBinItem, project: Project) {
 }
 
 export function visibleSubtitleTracks(
-  project: Project | null,
+  project: MediaDocument | null,
   mediaItems: MediaBinItem[],
   videoId: string,
-  projects: Record<string, Project> = project ? { [project.asset.id]: project } : {},
+  projects: Record<string, MediaDocument> = project ? { [project.asset.id]: project } : {},
 ) {
   if (!project) {
     return [];
@@ -515,8 +516,8 @@ export function visibleSubtitleTracks(
 }
 
 export function subtitleTrackContext(
-  project: Project | null,
-  projects: Record<string, Project>,
+  project: MediaDocument | null,
+  projects: Record<string, MediaDocument>,
   mediaItems: MediaBinItem[],
   videoId: string,
   trackId: string,
@@ -544,8 +545,8 @@ export function subtitleTrackContext(
 }
 
 export function subtitleTrackCues(
-  project: Project | null,
-  projects: Record<string, Project>,
+  project: MediaDocument | null,
+  projects: Record<string, MediaDocument>,
   mediaItems: MediaBinItem[],
   videoId: string,
   trackId: string,
@@ -580,8 +581,8 @@ function subtitleCuesAfterDeletion(
 }
 
 function preferredTrackId(
-  project: Project | null,
-  projects: Record<string, Project>,
+  project: MediaDocument | null,
+  projects: Record<string, MediaDocument>,
   mediaItems: MediaBinItem[],
   videoId: string,
 ) {
@@ -591,7 +592,7 @@ function preferredTrackId(
   );
 }
 
-function initialProjectState(project: Project | null) {
+function initialProjectState(project: MediaDocument | null) {
   if (!project) {
     return {
       project: null,
@@ -1159,7 +1160,7 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
           }
           const projects = { ...state.projects };
           const nextItems = [...state.mediaItems];
-          let firstVideo: Project | null = null;
+          let firstVideo: MediaDocument | null = null;
           for (const loadedProject of loadedProjects) {
             const item = projectMediaItem(loadedProject);
             projects[loadedProject.asset.id] = loadedProject;
@@ -1530,7 +1531,7 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
         }
 
         const projectId = currentProject.asset.id;
-        const project: Project = {
+        const project: MediaDocument = {
           ...linkedProject,
           asset: { ...linkedProject.asset, id: projectId },
           tracks: linkedProject.tracks.map((track) => ({ ...track, asset_id: projectId })),
@@ -2006,7 +2007,7 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
             return state;
           }
           const nextCues = subtitleCuesAfterDeletion(sourceCues, deletedCueIds, ripple);
-          const nextProject: Project = {
+          const nextProject: MediaDocument = {
             ...context.project,
             tracks: context.project.tracks.map((track) =>
               track.id === trackId ? { ...track, cue_count: nextCues.length } : track,
@@ -2066,7 +2067,7 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
             return { ...cue, start_us: startUs, end_us: endUs };
           });
           if (!changed) return state;
-          const nextProject: Project = {
+          const nextProject: MediaDocument = {
             ...context.project,
             cues: { ...context.project.cues, [trackId]: nextCues },
           };
@@ -2363,3 +2364,5 @@ export function getProjectWorkspaceSnapshot(): ProjectWorkspace {
     storyboards: state.storyboards,
   };
 }
+
+registerMediaSources(() => projectState.getState().projects);

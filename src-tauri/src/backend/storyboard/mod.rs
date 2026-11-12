@@ -162,7 +162,7 @@ struct StoryboardDetectionRequest<'a> {
     app: &'a tauri::AppHandle,
     state: &'a AppState,
     task_id: &'a str,
-    project: &'a Project,
+    project: &'a MediaDocument,
     stream_index: i32,
     preferences: &'a Preferences,
     runtime: &'a StoryboardRuntimePaths,
@@ -198,6 +198,7 @@ pub struct StoryboardDetectionResult {
 
 #[tauri::command]
 pub(crate) async fn detect_storyboard_shots(
+    media_sources: crate::MediaSources,
     asset_id: String,
     task_id: String,
     app: tauri::AppHandle,
@@ -205,7 +206,7 @@ pub(crate) async fn detect_storyboard_shots(
 ) -> CommandResult<StoryboardDetectionResult> {
     let task = register_task(&task_id, state.inner())?;
     emit_ffmpeg_progress(&app, &task_id, 0.0);
-    let project = project_clone(&asset_id, &state)?;
+    let project = media_sources.get(&asset_id)?.clone();
     let stream_index = project.asset.video_stream_index.ok_or_else(|| {
         app_error(
             ErrorCode::VideoStreamMissing,
@@ -461,7 +462,7 @@ async fn run_storyboard_detection(
 }
 
 fn spawn_storyboard_ffmpeg(
-    project: &Project,
+    project: &MediaDocument,
     stream_index: i32,
     preferences: &Preferences,
     threads: usize,
@@ -1045,7 +1046,7 @@ impl StoryboardProgressReporter {
     }
 }
 
-fn storyboard_frame_rate(project: &Project) -> f64 {
+fn storyboard_frame_rate(project: &MediaDocument) -> f64 {
     let stream = project
         .streams
         .iter()

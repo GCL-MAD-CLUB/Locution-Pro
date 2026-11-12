@@ -27,7 +27,7 @@ import {
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import { formatMonitorTime } from "../../../../core/editor/time";
 import { normalizeFrameRate } from "../../../../core/editor/timeline";
-import type { MediaBinFolder, MediaBinItem, Project } from "../../../../types";
+import type { MediaBinFolder, MediaBinItem, MediaDocument } from "../../../../types";
 import type { MediaBinViewMode } from "../mediaBinState";
 import { MediaBinVideoThumbnail } from "./MediaBinVideoThumbnail";
 import { MediaBinFolderIcon, OfflineFileIcon } from "./MediaBinFolderIcon";
@@ -46,7 +46,7 @@ interface MediaBinTableProps {
   rows: MediaBinTableRow[];
   hasItems: boolean;
   mediaItems: MediaBinItem[];
-  projects: Record<string, Project>;
+  projects: Record<string, MediaDocument>;
   detachedVideoIds: Set<string>;
   gridCardWidth: number;
   listIconScale: number;
@@ -102,7 +102,7 @@ type ResizableColumnWidths = Record<ResizableColumnId, number>;
 interface PointerMediaDragPreview {
   item?: MediaBinItem;
   folder?: MediaBinFolder;
-  project?: Project;
+  project?: MediaDocument;
   x: number;
   y: number;
 }
@@ -201,7 +201,7 @@ function isMediaEntryNameTarget(target: EventTarget | null) {
 
 function itemIcon(
   item: MediaBinItem,
-  project?: Project,
+  project?: MediaDocument,
   isDetachedVideo = false,
   hasBoundAudio = false,
 ) {
@@ -249,7 +249,7 @@ function SubtitleBadgeIcon() {
   );
 }
 
-function itemFrameRate(item: MediaBinItem, project: Project | undefined) {
+function itemFrameRate(item: MediaBinItem, project: MediaDocument | undefined) {
   if (item.kind === "audio") {
     const stream =
       project?.streams.find(
@@ -266,13 +266,13 @@ function itemFrameRate(item: MediaBinItem, project: Project | undefined) {
   return `${frameRate.toFixed(frameRate % 1 === 0 ? 2 : 3)} fps`;
 }
 
-function formatItemTime(item: MediaBinItem, project: Project | undefined, valueUs: number) {
+function formatItemTime(item: MediaBinItem, project: MediaDocument | undefined, valueUs: number) {
   const stream = project?.streams.find((candidate) => candidate.codec_type === "video");
   const frameRate = normalizeFrameRate(stream?.avg_frame_rate, stream?.r_frame_rate);
   return formatMonitorTime(valueUs, frameRate);
 }
 
-function formatGridItemDuration(item: MediaBinItem, project: Project | undefined) {
+function formatGridItemDuration(item: MediaBinItem, project: MediaDocument | undefined) {
   const timecode = formatItemTime(item, project, item.duration_us);
   const fields = timecode.split(":");
   const firstNonZeroField = fields.findIndex((field) => Number(field) !== 0);
@@ -314,7 +314,7 @@ const mediaNameCollator = new Intl.Collator(undefined, {
   sensitivity: "base",
 });
 
-function itemProject(item: MediaBinItem, projects: Record<string, Project>) {
+function itemProject(item: MediaBinItem, projects: Record<string, MediaDocument>) {
   return (
     projects[item.id] ??
     (item.source_video_id ? projects[item.source_video_id] : undefined) ??
@@ -325,7 +325,7 @@ function itemProject(item: MediaBinItem, projects: Record<string, Project>) {
 function itemMediaStream(
   item: MediaBinItem,
   codecType: "video" | "audio",
-  projects: Record<string, Project>,
+  projects: Record<string, MediaDocument>,
 ) {
   const project = itemProject(item, projects);
   if (!project) {
@@ -357,7 +357,7 @@ function formatPixelAspectRatio(value: string | null | undefined) {
   return ratio.toFixed(3).replace(/0+$/, "").replace(/\.$/, ".0");
 }
 
-function itemVideoInfo(item: MediaBinItem, projects: Record<string, Project>) {
+function itemVideoInfo(item: MediaBinItem, projects: Record<string, MediaDocument>) {
   if (item.kind !== "video") {
     return "";
   }
@@ -398,7 +398,7 @@ function audioCompressionDescription(codecName: string) {
   return /^(?:pcm(?:_|$)|dsd_|s302m$)/i.test(codecName) ? "未压缩" : "已压缩";
 }
 
-function itemAudioInfo(item: MediaBinItem, projects: Record<string, Project>) {
+function itemAudioInfo(item: MediaBinItem, projects: Record<string, MediaDocument>) {
   if (item.kind === "subtitle") {
     return "";
   }
@@ -419,7 +419,7 @@ function itemAudioInfo(item: MediaBinItem, projects: Record<string, Project>) {
 function itemSortValue(
   item: MediaBinItem,
   columnId: SortableColumnId,
-  projects: Record<string, Project>,
+  projects: Record<string, MediaDocument>,
 ) {
   if (columnId === "label") {
     return item.color;
@@ -483,7 +483,7 @@ function compareSortValues(left: string | number, right: string | number) {
 function sortMediaRows(
   rows: MediaBinTableProps["rows"],
   sort: MediaBinSort | null,
-  projects: Record<string, Project>,
+  projects: Record<string, MediaDocument>,
 ) {
   if (!sort) {
     return rows;

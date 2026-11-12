@@ -109,8 +109,6 @@ pub fn run() {
             auto_save_project_snapshot,
             open_project_file,
             recent_project_sizes,
-            sync_project_workspace,
-            close_project,
             path_is_file,
             path_is_directory,
             list_media_link_files,

@@ -5,15 +5,15 @@ import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import { extractVideoCover } from "../../../../application/media/thumbnail";
 import { useMediaCoverDeferred } from "../../../../application/media/mediaAnalysisTask";
 import { frameDurationUs, normalizeFrameRate } from "../../../../core/editor/timeline";
-import type { MediaBinItem, Project } from "../../../../types";
+import type { MediaBinItem, MediaDocument } from "../../../../types";
 
 interface MediaBinVideoThumbnailProps {
   item: MediaBinItem;
-  project: Project;
+  project: MediaDocument;
   hoverProgress: number | null;
 }
 
-function hoverThumbnailTimeUs(project: Project, progress: number) {
+function hoverThumbnailTimeUs(project: MediaDocument, progress: number) {
   const videoStream =
     project.streams.find((stream) => stream.index === project.asset.video_stream_index) ??
     project.streams.find((stream) => stream.codec_type === "video");

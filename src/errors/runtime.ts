@@ -1,3 +1,4 @@
+import { commandMediaSources } from "../runtime/mediaSources";
 import { invoke } from "@tauri-apps/api/core";
 import { clientError, ERROR_CATEGORIES, errorDiagnostic } from "./model";
 import { incidentRecovery } from "./recovery";
@@ -104,7 +105,7 @@ export async function invokeCommand<T>(
   args?: Record<string, unknown>,
 ): Promise<T> {
   try {
-    return await invoke<T>(command, args);
+    return await invoke<T>(command, commandMediaSources(command, args));
   } catch (error) {
     throw normalizeError(error, `tauri:${command}`);
   }

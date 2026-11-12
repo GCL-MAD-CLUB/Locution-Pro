@@ -1,4 +1,5 @@
 use super::UserNotice;
+use crate::error::{app_error, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -86,7 +87,7 @@ pub(crate) struct SubtitleCue {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct Project {
+pub(crate) struct MediaDocument {
     pub(crate) asset: MediaAsset,
     pub(crate) streams: Vec<MediaStream>,
     pub(crate) tracks: Vec<SubtitleTrack>,
@@ -120,6 +121,53 @@ pub(crate) struct DemuxMediaResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ImportResult {
-    pub(crate) project: Project,
+    pub(crate) project: MediaDocument,
     pub(crate) warnings: Vec<UserNotice>,
+}
+
+/// Immutable input for one native operation, supplied by the authoritative document.
+/// Never retained in AppState or written back by a background task.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(transparent)]
+pub(crate) struct MediaSources(pub(crate) HashMap<String, MediaDocument>);
+
+impl MediaSources {
+    pub(crate) fn get(&self, asset_id: &str) -> AppResult<&MediaDocument> {
+        self.0
+            .get(asset_id)
+            .filter(|media| media.asset.id == asset_id)
+            .ok_or_else(|| {
+                app_error(
+                    ErrorCode::MediaNotFound,
+                    format!("Media asset missing from operation input: {asset_id}"),
+                )
+            })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn source(path: &str) -> MediaSources {
+        serde_json::from_value(serde_json::json!({"a": {
+            "asset": {"id":"a", "path":path, "file_name":"a.mp4", "file_size":0,
+                "modified_at":0, "fingerprint":"hash", "duration_us":100,
+                "start_time_us":0, "video_stream_index":0, "audio_stream_index":null},
+            "streams":[], "tracks":[], "cues":{}, "cache_dir":"cache", "proxy_path":null
+        }}))
+        .unwrap()
+    }
+
+    #[test]
+    fn operation_inputs_are_independent_and_missing_media_fails_closed() {
+        let original = source("original.mp4");
+        let relinked = source("relinked.mp4");
+        assert_eq!(original.get("a").unwrap().asset.path, "original.mp4");
+        assert_eq!(relinked.get("a").unwrap().asset.path, "relinked.mp4");
+        assert!(MediaSources(HashMap::new()).get("a").is_err());
+        let mut mismatched = original.clone();
+        mismatched.0.get_mut("a").unwrap().asset.id = "b".into();
+        assert!(mismatched.get("a").is_err());
+    }
 }

@@ -791,18 +791,6 @@ function AppContent() {
     [],
   );
 
-  async function removeBackendProject(assetId?: string) {
-    if (!isTauriRuntime()) {
-      return;
-    }
-    const assetIds = assetId
-      ? [assetId]
-      : mediaItems
-          .filter((item) => item.origin === "imported" && item.kind !== "subtitle")
-          .map((item) => item.id);
-    await Promise.all(assetIds.map((id) => invokeCommand("close_project", { assetId: id })));
-  }
-
   async function exitApplication() {
     if (!isTauriRuntime()) {
       window.close();
@@ -954,7 +942,6 @@ function AppContent() {
     }
 
     const outcome = await runOperation("project.new", async () => {
-      await removeBackendProject();
       // A brand-new document gets its own identity, persisted on first save.
       projectCreated(crypto.randomUUID());
       setActiveWorkspace("import");
@@ -1032,7 +1019,6 @@ function AppContent() {
 
   async function closeProjectImmediately() {
     const outcome = await runOperation("project.close", async () => {
-      await removeBackendProject();
       projectClosed();
     });
     if (outcome.status === "success") {
@@ -1214,25 +1200,13 @@ function AppContent() {
     if (!canRestoreProject) {
       return;
     }
-    const previousCursor = projectHistory.cursor;
     setHistoryNavigating(true);
     const restored = projectRestored();
     if (!restored) {
       setHistoryNavigating(false);
       return;
     }
-    const outcome = await runOperation("project.history", async () => {
-      if (isTauriRuntime()) {
-        await invokeCommand("sync_project_workspace", {
-          workspace: getProjectWorkspaceSnapshot(),
-        });
-      }
-    });
-    if (outcome.status !== "success") {
-      projectHistoryJumped(previousCursor);
-      setHistoryNavigating(false);
-      return;
-    }
+
     messagePublished("已还原到上次保存状态。");
     setHistoryNavigating(false);
   }
@@ -1368,29 +1342,16 @@ function AppContent() {
       return false;
     }
 
-    const outcome = await runOperation("project.history", async () => {
-      if (isTauriRuntime()) {
-        await invokeCommand("sync_project_workspace", {
-          workspace: getProjectWorkspaceSnapshot(),
-        });
-      }
-    });
-    if (outcome.status === "success") {
-      const target = Math.max(0, Math.min(targetCursor, projectHistory.entries.length));
-      if (Math.abs(target - previousCursor) > 1) {
-        messagePublished("已跳转到所选历史记录。");
-      } else if (target < previousCursor) {
-        messagePublished("已撤销上一步操作。");
-      } else {
-        messagePublished("已重做下一步操作。");
-      }
-      setHistoryNavigating(false);
-      return true;
+    const target = Math.max(0, Math.min(targetCursor, projectHistory.entries.length));
+    if (Math.abs(target - previousCursor) > 1) {
+      messagePublished("已跳转到所选历史记录。");
+    } else if (target < previousCursor) {
+      messagePublished("已撤销上一步操作。");
     } else {
-      projectHistoryJumped(previousCursor);
-      setHistoryNavigating(false);
-      return false;
+      messagePublished("已重做下一步操作。");
     }
+    setHistoryNavigating(false);
+    return true;
   }
 
   async function undoProjectOperation() {

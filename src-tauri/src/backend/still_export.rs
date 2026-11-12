@@ -352,6 +352,7 @@ fn still_ffmpeg_args(
 
 #[tauri::command]
 pub(crate) async fn export_still_frame(
+    media_sources: crate::MediaSources,
     asset_id: String,
     options: StillExportOptions,
     task_id: String,
@@ -359,7 +360,7 @@ pub(crate) async fn export_still_frame(
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<String> {
     let task = register_task(&task_id, state.inner())?;
-    let asset = project_clone(&asset_id, &state)?.asset;
+    let asset = media_sources.get(&asset_id)?.clone().asset;
     let preferences = preferences_clone(&state)?;
     validate_timecode(&options.timecode)?;
     if !options.frame_rate.is_finite()

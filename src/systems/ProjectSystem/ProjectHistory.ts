@@ -1,7 +1,7 @@
 import type {
   MediaBinFolder,
   MediaBinItem,
-  Project,
+  MediaDocument,
   StoryboardState,
   SubtitleState,
 } from "../../types";
@@ -33,7 +33,7 @@ export type ProjectHistoryCategory =
   | "default";
 
 export interface ProjectFileState {
-  projects: Record<string, Project>;
+  projects: Record<string, MediaDocument>;
   mediaFolders: MediaBinFolder[];
   mediaItems: MediaBinItem[];
   activeVideoId: string;
@@ -47,7 +47,7 @@ export interface ProjectFileState {
 interface ProjectSetOperation {
   type: "project.set";
   projectId: string;
-  value: Project | null;
+  value: MediaDocument | null;
 }
 
 interface MediaItemSetOperation {

@@ -409,7 +409,7 @@ fn run_embedding_batch(
 
 fn resolve_shots(
     shots: Vec<SemanticShot>,
-    state: &tauri::State<'_, AppState>,
+    media_sources: &MediaSources,
 ) -> AppResult<Vec<ShotSource>> {
     // Resolve project metadata once per asset, not once per storyboard.
     let mut assets = HashMap::new();
@@ -425,7 +425,7 @@ fn resolve_shots(
             let asset = match assets.entry(shot.asset_id.clone()) {
                 std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
                 std::collections::hash_map::Entry::Vacant(entry) => {
-                    let project = project_clone(&shot.asset_id, state)?;
+                    let project = media_sources.get(&shot.asset_id)?.clone();
                     let stream = project.asset.video_stream_index.ok_or_else(|| {
                         app_error(
                             ErrorCode::VideoStreamMissing,
@@ -838,6 +838,7 @@ fn encode_missing(
 
 #[tauri::command]
 pub(crate) async fn select_storyboard_frames(
+    media_sources: crate::MediaSources,
     shots: Vec<SemanticShot>,
     task_id: String,
     on_progress: Channel<SelectionProgress>,
@@ -869,7 +870,7 @@ pub(crate) async fn select_storyboard_frames(
         }
     };
     report(0.0, 0);
-    let sources = resolve_shots(shots, &state)?;
+    let sources = resolve_shots(shots, &media_sources)?;
     let preferences = preferences_clone(&state)?;
     let program = ffmpeg_program(&preferences);
     let root = cache::root(&preferences);
@@ -1182,6 +1183,7 @@ pub(crate) async fn initialize_storyboard_semantic_search(
 
 #[tauri::command]
 pub(crate) async fn search_storyboards_semantic(
+    media_sources: crate::MediaSources,
     query: String,
     shots: Vec<SemanticShot>,
     app: tauri::AppHandle,
@@ -1190,20 +1192,21 @@ pub(crate) async fn search_storyboards_semantic(
     if query.trim().is_empty() {
         return Ok(Vec::new());
     }
-    search_storyboards_semantic_batch(vec![query], shots, app, state)
+    search_storyboards_semantic_batch(media_sources, vec![query], shots, app, state)
         .await
         .map(|mut results| results.pop().unwrap_or_default())
 }
 
 #[tauri::command]
 pub(crate) async fn search_storyboards_semantic_batch(
+    media_sources: crate::MediaSources,
     queries: Vec<String>,
     shots: Vec<SemanticShot>,
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<Vec<Vec<StoryboardSemanticMatch>>> {
     super::semantic_prompts::validate_queries(&queries)?;
-    let sources = resolve_shots(shots, &state)?;
+    let sources = resolve_shots(shots, &media_sources)?;
     let preferences = preferences_clone(&state)?;
     let selection_root = cache::root(&preferences);
     let semantic_root = index::root(&preferences);

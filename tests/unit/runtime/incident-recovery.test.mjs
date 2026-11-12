@@ -18,6 +18,7 @@ function loadRuntime() {
     "../../../src/errors/runtime.ts",
     {
       "@tauri-apps/api/core": { invoke: async () => undefined },
+      "../runtime/mediaSources": loadModule("../../../src/runtime/mediaSources.ts"),
       "./model": model,
       "./recovery": loadRecovery(),
     },

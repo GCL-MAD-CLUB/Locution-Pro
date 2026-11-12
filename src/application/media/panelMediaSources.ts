@@ -40,7 +40,7 @@ import {
   visibleSubtitleTracks,
   useProjectPort,
 } from "../../systems/ProjectSystem";
-import type { MediaBinItem, Project } from "../../types";
+import type { MediaBinItem, MediaDocument } from "../../types";
 import {
   replayedPanelSourceSelection,
   type PanelSourceSelection,
@@ -48,7 +48,7 @@ import {
 
 export interface PanelMediaSource {
   item: MediaBinItem;
-  project: Project;
+  project: MediaDocument;
   tracks: ReturnType<typeof visibleSubtitleTracks>;
 }
 
@@ -641,7 +641,7 @@ export function usePanelMediaWorkspaceMenu(
  * further with their own eligibility predicate.
  */
 export function panelMediaSources(
-  projects: Record<string, Project>,
+  projects: Record<string, MediaDocument>,
   mediaItems: MediaBinItem[],
 ): PanelMediaSource[] {
   return mediaItems.flatMap((item) => {
@@ -658,7 +658,7 @@ export function panelMediaSources(
 export function subtitleTrackLabel(
   mediaItems: MediaBinItem[],
   videoId: string,
-  track: Project["tracks"][number],
+  track: MediaDocument["tracks"][number],
 ) {
   const item = mediaItems.find(
     (candidate) =>

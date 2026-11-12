@@ -64,8 +64,8 @@ test("failed validation preserves the last good package", async (t) => {
   const root = await fixture(t);
   const output = await buildSite({ root, siteUrl: "https://example.com" });
   const lastGoodHtml = await readFile(path.join(output, "index.html"), "utf8");
-  await rm(path.join(root, "site", "assets", "official-shot-city.webp"));
-  await assert.rejects(buildSite({ root }), /official-shot-city\.webp/u);
+  await rm(path.join(root, "site", "assets", "locution-app-workspace-light.webp"));
+  await assert.rejects(buildSite({ root }), /locution-app-workspace-light\.webp/u);
   assert.equal(await readFile(path.join(output, "index.html"), "utf8"), lastGoodHtml);
 });
 

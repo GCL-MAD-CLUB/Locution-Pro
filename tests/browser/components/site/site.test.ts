@@ -2,498 +2,293 @@ import { test, expect } from "../../support/fixtures";
 
 for (const viewport of [
   { width: 1440, height: 900 },
+  { width: 1024, height: 768 },
+  { width: 768, height: 1024 },
   { width: 390, height: 844 },
+  { width: 320, height: 568 },
 ]) {
-  test(`workspace preview opens in a modal and restores focus at ${viewport.width} × ${viewport.height}`, async ({
+  test(`software demonstrations preserve the native layout at ${viewport.width}`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport);
     await page.goto("/site/#workspace");
-    const originalUrl = page.url();
-    const active = page.locator('.workspace-slide[data-position="center"]');
-    const dialog = page.getByRole("dialog", { name: "编辑工作区", exact: true });
-    const close = page.getByRole("button", { name: "关闭工作区预览" });
-    await active.click();
-    await expect(dialog).toBeVisible();
-    await expect(close).toBeFocused();
-    await expect(dialog.locator("img")).toHaveAttribute(
-      "src",
-      /locution-app-workspace-light\.webp$/u,
-    );
-    await expect(page.locator("html")).toHaveCSS("overflow", "hidden");
-    await page.keyboard.press("Tab");
-    await expect(close).toBeFocused();
-    const fits = await dialog.locator("img").evaluate((image) => {
-      const rect = image.getBoundingClientRect();
-      return (
-        rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight
+    await page.evaluate(() => document.fonts.ready);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+    const frames = [];
+    for (const id of ["import-demo", "product-demo", "export-demo"]) {
+      const demo = page.locator(`#${id}`);
+      const layout = await demo.locator(".demo-screen").evaluate((el) => ({
+        width: el.getBoundingClientRect().width,
+        height: el.getBoundingClientRect().height,
+        overflow: el.scrollWidth - el.clientWidth,
+      }));
+      expect(layout.overflow).toBeLessThanOrEqual(1);
+      expect(layout.width / layout.height).toBeCloseTo(3120 / 1940, 1);
+      frames.push(
+        await demo.locator("..").evaluate((el) => {
+          const { width, height } = el.getBoundingClientRect();
+          return { width, height };
+        }),
       );
-    });
-    expect(fits).toBe(true);
-    await page.keyboard.press("Escape");
-    await expect(dialog).toBeHidden();
-    await expect(active).toBeFocused();
-    await expect(page.locator("html")).not.toHaveClass(/workspace-dialog-open/u);
-    await active.press("Enter");
-    await expect(dialog).toBeVisible();
-    await close.click();
-    await expect(dialog).toBeHidden();
-    await active.click();
-    await page.mouse.click(4, 4);
-    await expect(dialog).toBeHidden();
-    expect(page.url()).toBe(originalUrl);
-    expect(page.context().pages()).toHaveLength(1);
-  });
-}
-
-test("workspace preview shows the selected import or export screenshot", async ({ page }) => {
-  await page.goto("/site/#workspace");
-  const carousel = page.locator(".workspace-carousel");
-  for (const [key, label] of [
-    ["import", "导入"],
-    ["export", "导出"],
-  ]) {
-    await carousel.getByRole("button", { name: label, exact: true }).click();
-    await carousel.locator('.workspace-slide[data-position="center"]').click();
-    const dialog = page.getByRole("dialog", { name: `${label}工作区`, exact: true });
-    await expect(dialog).toBeVisible();
-    await expect(dialog.locator("img")).toHaveAttribute(
-      "src",
-      new RegExp(`locution-app-${key}-light\\.webp$`, "u"),
-    );
-    await page.keyboard.press("Escape");
-  }
-});
-
-test("workspace carousel cycles through screenshots and resets to editing in portrait", async ({
-  page,
-}) => {
-  await page.goto("/site/#workspace");
-  const carousel = page.locator(".workspace-carousel");
-  const active = carousel.locator('.workspace-slide[data-position="center"]');
-  await expect(active).toHaveAttribute("data-workspace", "edit");
-  await expect(carousel.locator(".workspace-slide:visible")).toHaveCount(3);
-
-  await carousel.getByRole("button", { name: "下一个工作区" }).click();
-  await expect(active).toHaveAttribute("data-workspace", "export");
-  await expect(carousel.getByRole("button", { name: "导出", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await carousel.getByRole("button", { name: "下一个工作区" }).click();
-  await expect(active).toHaveAttribute("data-workspace", "import");
-  await carousel.getByRole("button", { name: "导入", exact: true }).press("ArrowLeft");
-  await expect(active).toHaveAttribute("data-workspace", "export");
-
-  const side = carousel.locator('[data-workspace="edit"]');
-  // Click the exposed edge; the central screenshot covers the rest of this slide.
-  const bounds = await side.boundingBox();
-  await side.click({ position: { x: 8, y: bounds!.height / 2 } });
-  await expect(active).toHaveAttribute("data-workspace", "edit");
-  await expect(active).toBeFocused();
-  await active.press("ArrowLeft");
-  await expect(active).toHaveAttribute("data-workspace", "import");
-  await expect(active).toHaveAttribute("href", /locution-app-import-light\.webp$/u);
-
-  await page.setViewportSize({ width: 768, height: 1024 });
-  await expect(active).toHaveAttribute("data-workspace", "edit");
-  await expect(carousel.locator(".workspace-slide:visible")).toHaveCount(1);
-  await expect(carousel.locator(".workspace-controls")).toBeHidden();
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await expect(active).toHaveAttribute("data-workspace", "edit");
-  await expect(carousel.getByRole("button", { name: "编辑", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-});
-
-test("workspace carousel animates changes and respects reduced motion", async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.goto("/site/#workspace");
-  const carousel = page.locator(".workspace-carousel");
-  const edit = carousel.locator('[data-workspace="edit"]');
-  await expect(edit).toHaveCSS("transition-duration", /0\.52s/u);
-  await carousel.getByRole("button", { name: "导出", exact: true }).click();
-  await expect(carousel.locator('[data-workspace="export"]')).toHaveCSS("transform", "none");
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await expect(edit).toHaveCSS("transition-duration", "0s");
-});
-
-test("landscape touch swipes switch workspaces without opening the image", async ({ page }) => {
-  await page.setViewportSize({ width: 844, height: 390 });
-  await page.goto("/site/#workspace");
-  const viewport = page.locator(".workspace-viewport");
-  await viewport.dispatchEvent("touchstart", {
-    touches: [{ identifier: 1, clientX: 500, clientY: 180 }],
-  });
-  await viewport.dispatchEvent("touchend", {
-    changedTouches: [{ identifier: 1, clientX: 360, clientY: 184 }],
-  });
-  await expect(page.locator('.workspace-slide[data-position="center"]')).toHaveAttribute(
-    "data-workspace",
-    "export",
-  );
-  await viewport.dispatchEvent("touchstart", {
-    touches: [{ identifier: 1, clientX: 500, clientY: 180 }],
-  });
-  await viewport.dispatchEvent("touchend", {
-    changedTouches: [{ identifier: 1, clientX: 490, clientY: 280 }],
-  });
-  await expect(page.locator('.workspace-slide[data-position="center"]')).toHaveAttribute(
-    "data-workspace",
-    "export",
-  );
-});
-
-for (const viewport of [
-  { width: 1440, height: 700 },
-  { width: 1440, height: 900 },
-  { width: 1920, height: 1080 },
-  { width: 1024, height: 768 },
-]) {
-  test(`website sections fit the available desktop viewport at ${viewport.width} × ${viewport.height}`, async ({
-    page,
-  }) => {
-    await page.setViewportSize(viewport);
-    await page.goto("/site/");
-    await page.evaluate(() => document.fonts.ready);
-    await expect(page.locator('.chapter-nav a[href="#intro"]')).toHaveAttribute(
-      "aria-current",
-      "location",
-    );
-    const layout = await page.evaluate(() => {
-      const available =
-        innerHeight - document.querySelector(".site-header")!.getBoundingClientRect().height;
-      return {
-        available,
-        viewportWidth: innerWidth,
-        documentWidth: document.documentElement.scrollWidth,
-        sections: [...document.querySelectorAll("main > section")].map((section) => ({
-          id: section.id,
-          height: section.getBoundingClientRect().height,
-          overflow: section.scrollHeight - section.clientHeight,
-        })),
-      };
-    });
-    expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
-    for (const section of layout.sections) {
-      expect(section.height, section.id).toBeGreaterThanOrEqual(layout.available - 1);
-      expect(section.height, section.id).toBeLessThanOrEqual(layout.available + 2);
-      expect(section.overflow, section.id).toBeLessThanOrEqual(2);
+      await expect(demo.locator(".demo-screen")).toHaveAttribute("inert", "");
+      await expect(
+        demo.locator(".demo-screen button, .demo-screen input, .demo-screen a"),
+      ).toHaveCount(0);
+      await expect(demo.locator(".demo-canvas")).toHaveAttribute("viewBox", "0 0 3120 1940");
+      const track = await demo.getAttribute("data-demo-track");
+      await expect(demo.locator(`[data-demo-scene="${track}"]`)).not.toHaveAttribute("hidden");
     }
-    const image = page.locator('.workspace-slide[data-position="center"] img');
-    const ratio = await image.evaluate((element) => {
-      const img = element as HTMLImageElement;
-      return { rendered: img.width / img.height, natural: img.naturalWidth / img.naturalHeight };
-    });
-    expect(ratio.rendered).toBeCloseTo(ratio.natural, 2);
+    for (const frame of frames) {
+      expect(Math.abs(frame.width - frames[0].width)).toBeLessThan(1);
+      expect(Math.abs(frame.height - frames[0].height)).toBeLessThan(1);
+    }
   });
 }
 
-for (const viewport of [
-  { width: 320, height: 568 },
-  { width: 390, height: 667 },
-  { width: 768, height: 1024 },
-]) {
-  test(`mobile reading stays complete at ${viewport.width} × ${viewport.height}`, async ({
-    page,
-  }) => {
-    await page.setViewportSize(viewport);
-    await page.goto("/site/");
-    await page.evaluate(() => document.fonts.ready);
-    const layout = await page.evaluate(() => ({
-      width: document.documentElement.scrollWidth,
-      sections: [...document.querySelectorAll("main > section")].map((section) => ({
-        id: section.id,
-        overflow: section.scrollHeight - section.clientHeight,
-      })),
-    }));
-    expect(layout.width).toBe(viewport.width);
-    for (const section of layout.sections)
-      expect(section.overflow, section.id).toBeLessThanOrEqual(2);
-  });
-}
-
-test("mobile directory supports navigation, Escape and outside clicks", async ({ page }) => {
-  await page.setViewportSize({ width: 375, height: 812 });
-  await page.goto("/site/");
-  const menu = page.locator(".mobile-menu");
-  const toggle = menu.locator("summary");
-  await toggle.click();
-  await expect(menu).toHaveAttribute("open", "");
-  await menu.locator('a[href="#search"]').click();
-  await expect(menu).not.toHaveAttribute("open", "");
-  await expect(page).toHaveURL(/#search$/u);
-  await expect(page.locator("#search-title")).toBeInViewport();
-  await toggle.click();
-  await page.keyboard.press("Escape");
-  await expect(toggle).toBeFocused();
-  await expect(menu).not.toHaveAttribute("open", "");
-  await toggle.click();
-  await page.locator("#search-title").click();
-  await expect(menu).not.toHaveAttribute("open", "");
-});
-
-test("rapid demo changes show the latest choice and clear the busy state", async ({ page }) => {
+test("the first screen draws its title and reveals its content on arrival", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.goto("/site/");
-  await page.locator('[data-query="city"]').click();
-  await page.locator('[data-query="mountain"]').click();
-  await expect(page.locator('[data-query="mountain"]')).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#search-results")).toHaveAttribute("aria-busy", "false");
-  await expect(page.locator("#search-results img").first()).toHaveAttribute(
-    "src",
-    /official-shot-mountain\.webp$/u,
-  );
-  await expect(page.locator("#search-status")).toContainText("旷野远山");
+  await page.goto("/site/", { waitUntil: "domcontentloaded" });
+  const hero = page.locator(".hero");
+  await expect(hero).toHaveClass(/hero-entering/u);
+  await hero.evaluate((el) => {
+    for (const animation of el.getAnimations({ subtree: true })) {
+      animation.pause();
+      animation.currentTime = 0;
+    }
+  });
+  await expect(page.getByRole("heading", { level: 1 })).toHaveAccessibleName("Locution Pro");
+  await expect(hero.locator(".hero-letter").first()).toHaveCSS("fill-opacity", "0");
+  await expect(hero.locator(".hero-preview")).toHaveCSS("opacity", "0");
+  await expect(hero.locator(".hero-actions")).toHaveCSS("opacity", "0");
+  await hero.evaluate((el) => {
+    for (const animation of el.getAnimations({ subtree: true })) animation.currentTime = 1800;
+  });
+  await expect(hero.locator(".hero-letter").last()).toHaveCSS("fill-opacity", "1");
+  await expect(hero.locator(".hero-preview")).toHaveCSS("opacity", "1");
+  await expect(hero.locator(".hero-actions")).toHaveCSS("opacity", "1");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(hero).not.toHaveClass(/hero-entering/u);
+  await expect(hero.locator(".hero-preview")).toHaveCSS("animation-name", "none");
+  await expect(hero.locator(".hero-preview")).toHaveCSS("opacity", "1");
 });
 
-test("wheel input starts the chapter transition immediately and inertia advances only one screen", async ({
-  page,
-}) => {
+test("the editing demo plays, pauses and resumes without visitor input", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/site/");
-  await page.evaluate(() => document.fonts.ready);
   await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
-  const boundary = await page
-    .locator("#workspace")
-    .evaluate((section) =>
-      Math.round(
-        section.getBoundingClientRect().top +
-          scrollY -
-          document.querySelector("header")!.getBoundingClientRect().height,
-      ),
+  const demo = page.locator("#product-demo");
+  const showDemo = () =>
+    demo.evaluate((el) =>
+      scrollTo({ top: el.getBoundingClientRect().top + scrollY - 90, behavior: "instant" }),
     );
-  await page.mouse.move(800, 450);
-  await page.mouse.wheel(0, 90);
-  await page.clock.runFor(96);
-  const started = await page.evaluate(() => scrollY);
-  expect(started).toBeGreaterThan(1);
-  expect(started).toBeLessThan(boundary);
-  // Keep inertia inside one gesture even when the test runner is busy. The
-  // 80 ms cadence also carries the gesture beyond the chapter animation.
-  for (let i = 0; i < 8; i++) {
-    await page.mouse.wheel(0, 15);
-    await page.clock.runFor(80);
-  }
-  expect(await page.evaluate(() => scrollY)).toBe(boundary);
-  await page.clock.runFor(250);
-  expect(await page.evaluate(() => scrollY)).toBe(boundary);
-
-  const nextBoundary = await page
-    .locator("#features")
-    .evaluate((section) =>
-      Math.round(
-        section.getBoundingClientRect().top +
-          scrollY -
-          document.querySelector("header")!.getBoundingClientRect().height,
-      ),
-    );
-  await page.mouse.wheel(0, 90);
-  await page.clock.runFor(700);
-  expect(await page.evaluate(() => scrollY)).toBe(nextBoundary);
+  await showDemo();
+  await page.clock.runFor(100);
+  await expect(demo).toHaveAttribute("data-playing", "true");
+  await page.clock.runFor(3300);
+  await expect(demo.locator("[data-demo-query]")).toHaveText("分镜 156");
+  await expect(demo.locator('[data-demo-layer="result"]')).not.toHaveAttribute("hidden");
+  await page.clock.runFor(2400);
+  await expect(demo.locator('[data-demo-layer="keyword"]')).not.toHaveAttribute("hidden");
+  await demo.getByRole("button", { name: "暂停自动演示", exact: true }).click();
+  const pausedFrame = await demo.locator(".demo-canvas").getAttribute("viewBox");
+  await page.clock.runFor(5000);
+  await expect(demo.locator(".demo-canvas")).toHaveAttribute("viewBox", pausedFrame!);
+  await expect(demo).toHaveAttribute("data-playing", "false");
+  await demo.getByRole("button", { name: "继续自动演示", exact: true }).click();
+  await page.clock.runFor(3000);
+  await expect(demo).toHaveAttribute("data-scene", "edit");
+  await expect(demo.locator('[data-demo-layer="keyword"]')).toHaveAttribute("hidden", "");
+  await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
+  await page.clock.runFor(100);
+  await expect(demo).toHaveAttribute("data-playing", "false");
+  const offscreenFrame = await demo.locator(".demo-canvas").getAttribute("viewBox");
+  await page.clock.runFor(10000);
+  await expect(demo.locator(".demo-canvas")).toHaveAttribute("viewBox", offscreenFrame!);
+  await showDemo();
+  await page.clock.runFor(100);
+  await expect(demo).toHaveAttribute("data-playing", "true");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.clock.runFor(100);
+  await expect(demo).toHaveAttribute("data-playing", "false");
+  await expect(demo).toHaveAttribute("data-scene", "edit");
+  await expect(demo.locator(".demo-playback")).toBeHidden();
+  await expect(demo.locator("[data-demo-pointer]")).toHaveAttribute("hidden", "");
+  await expect(demo.locator(".demo-canvas")).toHaveAttribute("viewBox", "0 0 3120 1940");
 });
 
-test("chapters land completely below the header in both directions and after resizing", async ({
+for (const track of ["import", "export"]) {
+  test(`${track} demonstration plays its own software sequence`, async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.goto("/site/");
+    await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
+    const demo = page.locator(`#${track}-demo`);
+    await demo.evaluate((el) =>
+      scrollTo({ top: el.getBoundingClientRect().top + scrollY - 90, behavior: "instant" }),
+    );
+    await page.clock.runFor(100);
+    await expect(demo).toHaveAttribute("data-playing", "true");
+    await page.clock.runFor(3300);
+    await expect(demo).toHaveAttribute("data-scene", track);
+    await expect(
+      demo.locator(`[data-demo-layer="${track === "import" ? "second-file" : "format-value"}"]`),
+    ).not.toHaveAttribute("hidden");
+    await page.clock.runFor(8500);
+    await expect(demo).toHaveAttribute("data-scene", track);
+  });
+}
+
+test("scrolling reveals equal-sized software spreads without stretching the first section", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/site/");
-  await page.evaluate(() => document.fonts.ready);
-  await page.mouse.move(800, 450);
-  for (const id of ["workspace", "features", "search", "workflow", "local", "faq", "download"]) {
-    await page.mouse.wheel(0, 90);
+  await expect(page.locator("html")).toHaveClass(/motion-ready/u);
+  const directions = await page
+    .locator(".product-story")
+    .evaluateAll((els) => els.map((el) => new DOMMatrix(getComputedStyle(el).transform).m41));
+  expect(directions[0]).toBeLessThan(0);
+  expect(directions[1]).toBeGreaterThan(0);
+  expect(directions[2]).toBeLessThan(0);
+  const sizes = [];
+  for (const id of ["features", "workspace", "workflow"]) {
+    const section = page.locator(`#${id}`);
+    await section.evaluate((el) =>
+      scrollTo({ top: el.getBoundingClientRect().top + scrollY - 100, behavior: "instant" }),
+    );
+    await expect(section).toHaveCSS("opacity", "1");
     await expect
-      .poll(() =>
-        page.locator(`#${id}`).evaluate((section) => {
-          const rect = section.getBoundingClientRect();
-          const header = document.querySelector("header")!.getBoundingClientRect().height;
-          return Math.max(Math.abs(rect.top - header), Math.max(0, rect.bottom - innerHeight));
-        }),
-      )
-      .toBeLessThanOrEqual(1);
+      .poll(() => section.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m41))
+      .toBe(0);
+    sizes.push(
+      await section.evaluate((el) => {
+        const { width, height } = el.getBoundingClientRect();
+        const visual = el.querySelector(".story-visual")!.getBoundingClientRect();
+        return { width, height, visualWidth: visual.width, visualHeight: visual.height };
+      }),
+    );
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1440);
   }
-  await page.mouse.wheel(0, -90);
+  for (const size of sizes) {
+    expect(size.height).toBeLessThan(900);
+    expect(Math.abs(size.height - sizes[0].height)).toBeLessThan(1);
+    expect(Math.abs(size.visualWidth - sizes[0].visualWidth)).toBeLessThan(1);
+    expect(Math.abs(size.visualHeight - sizes[0].visualHeight)).toBeLessThan(1);
+  }
+  await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
+  await expect(page.locator("#features")).toHaveCSS("opacity", "1");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(page.locator("html")).not.toHaveClass(/motion-ready/u);
+  await expect(page.locator("#features")).toHaveCSS("transform", "none");
+});
+
+test("mobile transitions stay in normal flow without horizontal overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/site/");
+  await expect(page.locator("#features")).toHaveCSS("position", "static");
+  for (const id of ["features", "workspace", "workflow", "download", "support"]) {
+    await page
+      .locator(`#${id}`)
+      .evaluate((el) =>
+        scrollTo({ top: el.getBoundingClientRect().top + scrollY - 100, behavior: "instant" }),
+      );
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+    if (id === "workspace" || id === "workflow")
+      await expect(page.locator(`#${id}`)).toHaveCSS("opacity", "1");
+  }
+});
+
+test("without JavaScript each native software scene and download remain available", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto("/site/");
+    await expect(
+      page.locator(".hero-actions").getByRole("link", { name: "GitHub", exact: true }),
+    ).toHaveAttribute("href", "https://github.com/GCL-MAD-CLUB/Locution-Pro");
+    for (const [id, track] of [
+      ["import-demo", "import"],
+      ["product-demo", "edit"],
+      ["export-demo", "export"],
+    ]) {
+      const demo = page.locator(`#${id}`);
+      await expect(demo.locator(".demo-screen")).toBeVisible();
+      await expect(demo.locator(`[data-demo-scene="${track}"]`)).not.toHaveAttribute("hidden");
+      await expect(demo.locator(".demo-playback")).toBeHidden();
+      await expect(demo.locator("[data-demo-pointer]")).toHaveAttribute("hidden", "");
+    }
+    await expect(page.getByRole("link", { name: "下载 Windows 版", exact: true })).toHaveAttribute(
+      "href",
+      "/api/download",
+    );
+  } finally {
+    await context.close();
+  }
+});
+
+test("support keeps compact content in its own viewport and the footer spans the page", async ({
+  page,
+}) => {
+  await page.goto("/site/#support");
+  const support = await page.locator("#support").boundingBox();
+  expect(support!.height).toBeGreaterThanOrEqual(836);
+  const content = await page.locator(".support-content").boundingBox();
+  expect(content!.width).toBeLessThanOrEqual(800);
+  expect(content!.height / support!.height).toBeLessThan(0.4);
+  await expect(page.locator("#support .support-card")).toHaveCount(3);
+  await expect(page.getByText("鸣谢", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("article", { name: "给视频创作者的一封信" })).toBeVisible();
+  await expect(page.locator("#download-title")).toHaveAttribute("lang", "en");
+  const footer = await page.locator("footer").boundingBox();
+  expect(footer!.x).toBe(0);
+  expect(footer!.width).toBe(1440);
+});
+
+test("the footer is uncovered by scrolling and its navigation can receive keyboard focus", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/site/");
+  await page.locator("main").evaluate((el) =>
+    scrollTo({
+      top: el.getBoundingClientRect().bottom + scrollY - innerHeight / 2,
+      behavior: "instant",
+    }),
+  );
   await expect
     .poll(() =>
       page
-        .locator("#faq")
-        .evaluate((section) =>
-          Math.abs(
-            section.getBoundingClientRect().top -
-              document.querySelector("header")!.getBoundingClientRect().height,
-          ),
-        ),
+        .locator("footer")
+        .evaluate((el) => Number((el as HTMLElement).style.getPropertyValue("--footer-reveal"))),
     )
-    .toBeLessThanOrEqual(1);
-  await page.setViewportSize({ width: 1440, height: 700 });
+    .toBeCloseTo(0.5, 1);
+  await page.evaluate(() =>
+    scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }),
+  );
   await expect
     .poll(() =>
       page
-        .locator("#faq")
-        .evaluate((section) =>
-          Math.abs(
-            section.getBoundingClientRect().top -
-              document.querySelector("header")!.getBoundingClientRect().height,
-          ),
-        ),
+        .locator("footer")
+        .evaluate((el) => Number((el as HTMLElement).style.getPropertyValue("--footer-reveal"))),
     )
-    .toBeLessThanOrEqual(1);
+    .toBe(1);
+  const brand = page.locator("footer .brand");
+  await brand.focus();
+  await expect(brand).toBeFocused();
+  await expect(brand).toBeInViewport();
 });
 
-test("footer scrolling stays at the user's position instead of returning to the last chapter", async ({
-  page,
-}) => {
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.goto("/site/#download");
-  await page.evaluate(() => document.fonts.ready);
-  const start = await page
-    .locator("#download")
-    .evaluate((section) =>
-      Math.round(
-        section.getBoundingClientRect().top +
-          scrollY -
-          document.querySelector("header")!.getBoundingClientRect().height,
-      ),
-    );
-  await page.evaluate((top) => scrollTo({ top, behavior: "instant" }), start);
-  const footerPosition = await page.evaluate(
-    (top) => Math.min(top + 200, document.documentElement.scrollHeight - innerHeight),
-    start,
-  );
-  await page.mouse.move(800, 450);
-  await page.mouse.wheel(0, 200);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(footerPosition);
-  await page.waitForTimeout(800);
-  expect(await page.evaluate(() => scrollY)).toBe(footerPosition);
-  await page.mouse.wheel(0, -30);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(footerPosition - 30);
-  await page.waitForTimeout(300);
-  expect(await page.evaluate(() => scrollY)).toBe(footerPosition - 30);
-});
-
-test("reverse wheel input interrupts an unfinished chapter animation", async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: "no-preference" });
+test("FAQ and page scrolling remain native alongside the demonstration", async ({ page }) => {
   await page.goto("/site/");
-  await page.mouse.move(800, 450);
-  await page.mouse.wheel(0, 90);
-  await page.waitForFunction(() => scrollY > 100 && scrollY < 500, undefined, { polling: "raf" });
-  await page.mouse.wheel(0, -90);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
-});
-
-test("long expanded chapters and nested scroll containers retain native scrolling", async ({
-  page,
-}) => {
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.goto("/site/");
-  await page.evaluate(() => document.fonts.ready);
-  const start = await page.locator("#faq").evaluate((section) => {
-    section.querySelectorAll("details").forEach((item) => (item.open = true));
-    (section as HTMLElement).style.minHeight = "1800px";
-    return (
-      Math.round(
-        section.getBoundingClientRect().top +
-          scrollY -
-          document.querySelector("header")!.getBoundingClientRect().height,
-      ) + 200
-    );
-  });
-  await page.evaluate((top) => scrollTo({ top, behavior: "instant" }), start);
-  await page.mouse.move(800, 450);
-  await page.mouse.wheel(0, 90);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(start + 90);
-  await page.waitForTimeout(300);
-  expect(await page.evaluate(() => scrollY)).toBe(start + 90);
-  await page.evaluate(() => {
-    const element = document.createElement("div");
-    element.id = "nested-scroll";
-    element.style.cssText =
-      "position:fixed;top:200px;left:200px;width:200px;height:120px;overflow:auto;z-index:100;background:white";
-    const content = document.createElement("div");
-    content.style.height = "900px";
-    element.append(content);
-    document.body.append(element);
-  });
-  await page.mouse.move(250, 250);
-  await page.mouse.wheel(0, 150);
-  await expect
-    .poll(() => page.locator("#nested-scroll").evaluate((element) => element.scrollTop))
-    .toBe(150);
-  expect(await page.evaluate(() => scrollY)).toBe(start + 90);
-});
-
-test("page keys use the same measured chapter destinations", async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.goto("/site/");
-  await page.keyboard.press("PageDown");
-  await expect
-    .poll(() =>
-      page
-        .locator("#workspace")
-        .evaluate((section) =>
-          Math.abs(
-            section.getBoundingClientRect().top -
-              document.querySelector("header")!.getBoundingClientRect().height,
-          ),
-        ),
-    )
-    .toBeLessThanOrEqual(1);
-  await page.keyboard.press("PageUp");
-  await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
-});
-
-test("touch gestures stay free on a desktop viewport with a fine primary pointer", async ({
-  page,
-}) => {
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.goto("/site/");
-  await page.evaluate(() => document.fonts.ready);
-  const boundary = await page
-    .locator("#features")
-    .evaluate(
-      (section) =>
-        section.getBoundingClientRect().top +
-        scrollY -
-        document.querySelector("header")!.getBoundingClientRect().height,
-    );
-  await page.dispatchEvent("body", "touchstart");
-  await page.evaluate(
-    (target) => window.scrollTo({ top: target - 30, behavior: "instant" }),
-    boundary,
-  );
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(boundary - 30, 0);
-  await page.dispatchEvent("body", "touchend");
-  await page.waitForTimeout(800);
-  expect(await page.evaluate(() => scrollY)).toBeCloseTo(boundary - 30, 0);
-});
-
-test("reduced motion keeps the user's scroll position and FAQ expansion remains readable", async ({
-  page,
-}) => {
-  await page.goto("/site/");
-  const boundary = await page
-    .locator("#features")
-    .evaluate(
-      (section) =>
-        section.getBoundingClientRect().top +
-        scrollY -
-        document.querySelector("header")!.getBoundingClientRect().height,
-    );
-  await page.evaluate(
-    (target) => window.scrollTo({ top: target - 120, behavior: "instant" }),
-    boundary,
-  );
-  await page.mouse.move(800, 450);
-  await page.mouse.wheel(0, 90);
-  await page.waitForTimeout(800);
-  expect(await page.evaluate(() => scrollY)).toBeCloseTo(boundary - 30, 0);
-  await page.setViewportSize({ width: 375, height: 667 });
-  for (const summary of await page.locator(".faq-list summary").all()) await summary.click();
-  await expect(page.locator(".faq-list details[open]")).toHaveCount(4);
-  expect(
-    await page.locator("#faq").evaluate((section) => section.scrollHeight - section.clientHeight),
-  ).toBeLessThanOrEqual(2);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375);
+  await expect(page.locator("html")).toHaveCSS("scroll-behavior", "auto");
+  await page.evaluate(() => scrollTo({ top: 200, behavior: "instant" }));
+  await page.mouse.move(100, 200);
+  await page.mouse.wheel(0, 100);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(300);
+  await page.getByText("需要什么运行环境？", { exact: true }).click();
+  await expect(page.getByText(/64 位 Windows 10 或 Windows 11/u)).toBeVisible();
 });

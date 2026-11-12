@@ -5,19 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta
       name="description"
-      content="Locution Pro — 面向视频创作者的媒体管理、画面检索、镜头整理与片段导出工作软件。素材本地处理，无需上传。"
+      content="Locution Pro，面向视频创作者的本地媒体管理与镜头检索软件。浏览素材、整理镜头、导出片段，免费开源。"
     />
-    <meta name="theme-color" content="#f6f5f0" />
+    <meta name="theme-color" content="#faf9f6" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="zh_CN" />
     <meta property="og:site_name" content="Locution Pro" />
     <meta property="og:title" content="Locution Pro — 从素材里，找到那一帧" />
     <meta
       property="og:description"
-      content="媒体管理、画面检索、镜头整理与片段导出，汇集在一个本地工作空间。免费开源，素材无需上传。"
+      content="媒体管理、画面检索、镜头整理与片段导出。素材留在本机，免费开源。"
     />
     <meta property="og:image" content="./assets/locution-app-workspace-light.webp" />
-    <meta property="og:image:alt" content="Locution Pro 实际编辑工作区" />
+    <meta property="og:image:alt" content="Locution Pro 真实编辑工作区" />
     <meta name="twitter:card" content="summary_large_image" />
     <title>Locution Pro — 从素材里，找到那一帧</title>
     <link rel="icon" type="image/png" href="./assets/locution-icon.png" />
@@ -33,491 +33,821 @@
   </head>
   <body id="top">
     <a class="skip-link" href="#main">跳至主要内容</a>
-
     <header class="site-header">
-      <div class="header-inner">
+      <div class="page-shell header-inner">
         <a class="brand" href="#top" aria-label="Locution Pro 首页">
-          <img src="./assets/locution-icon.png" alt="" width="36" height="36" />
-          <span>Locution <strong>Pro</strong></span>
+          <img src="./assets/locution-icon.png" alt="" width="30" height="30" />
+          <span>Locution Pro</span>
         </a>
-        <nav class="main-nav" aria-label="主导航">
-          <a href="#features">功能</a>
-          <a href="#workflow">工作流</a>
-          <a href="#local">本地处理</a>
-        </nav>
-        <div class="header-actions">
-          <details class="mobile-menu">
-            <summary aria-label="页面目录">目录 <span aria-hidden="true">+</span></summary>
-            <nav aria-label="移动端页面目录">
-              <a href="#workspace"><span>01</span> 实际工作区</a>
-              <a href="#features"><span>02</span> 核心能力</a>
-              <a href="#search"><span>03</span> 画面检索</a>
-              <a href="#workflow"><span>04</span> 创作工作流</a>
-              <a href="#local"><span>05</span> 本地处理</a>
-              <a href="#faq"><span>06</span> 常见问题</a>
-              <a href="#download"><span>07</span> 下载开始</a>
-            </nav>
-          </details>
+        <nav class="header-actions" aria-label="主导航">
+          <a
+            class="guide-link"
+            href="https://helpx.locution.dpdns.org/"
+            target="_blank"
+            rel="noreferrer"
+            >用户指南</a
+          >
           <a
             class="github-link"
             href="https://github.com/GCL-MAD-CLUB/Locution-Pro"
             target="_blank"
             rel="noreferrer"
-            >GitHub <span aria-hidden="true">↗</span></a
+            aria-label="GitHub 仓库"
           >
-          <a class="header-download" href="/api/download">下载 <span aria-hidden="true">↓</span></a>
-        </div>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+              <path
+                d="M12 .75a11.25 11.25 0 0 0-3.56 21.92c.56.1.77-.24.77-.54v-2.1c-3.13.68-3.79-1.33-3.79-1.33-.51-1.3-1.25-1.65-1.25-1.65-1.02-.7.08-.68.08-.68 1.13.08 1.73 1.16 1.73 1.16 1 1.72 2.64 1.22 3.28.93.1-.73.39-1.22.71-1.5-2.5-.28-5.13-1.25-5.13-5.56 0-1.23.44-2.23 1.16-3.02-.12-.29-.5-1.43.11-2.98 0 0 .95-.3 3.1 1.15a10.8 10.8 0 0 1 5.64 0c2.15-1.46 3.1-1.15 3.1-1.15.61 1.55.23 2.69.11 2.98.72.79 1.16 1.79 1.16 3.02 0 4.32-2.64 5.28-5.15 5.56.4.35.76 1.03.76 2.08v3.09c0 .3.2.65.78.54A11.25 11.25 0 0 0 12 .75Z"
+              />
+            </svg>
+          </a>
+          <a class="button button-small button-primary" href="/api/download">下载</a>
+        </nav>
       </div>
-      <div class="reading-progress" aria-hidden="true"></div>
     </header>
-
-    <nav class="chapter-nav" aria-label="页面章节">
-      <a href="#intro" aria-label="00 首页"
-        ><span class="chapter-index">00</span><span class="chapter-label">首页</span></a
-      >
-      <a href="#workspace" aria-label="01 工作区"
-        ><span class="chapter-index">01</span><span class="chapter-label">工作区</span></a
-      >
-      <a href="#features" aria-label="02 核心能力"
-        ><span class="chapter-index">02</span><span class="chapter-label">核心能力</span></a
-      >
-      <a href="#search" aria-label="03 画面检索"
-        ><span class="chapter-index">03</span><span class="chapter-label">画面检索</span></a
-      >
-      <a href="#workflow" aria-label="04 工作流"
-        ><span class="chapter-index">04</span><span class="chapter-label">工作流</span></a
-      >
-      <a href="#local" aria-label="05 本地处理"
-        ><span class="chapter-index">05</span><span class="chapter-label">本地处理</span></a
-      >
-      <a href="#faq" aria-label="06 常见问题"
-        ><span class="chapter-index">06</span><span class="chapter-label">常见问题</span></a
-      >
-      <a href="#download" aria-label="07 下载"
-        ><span class="chapter-index">07</span><span class="chapter-label">下载</span></a
-      >
-    </nav>
-
     <main id="main">
-      <section class="hero page-shell" id="intro" aria-labelledby="hero-title">
-        <div class="hero-topline mono">
-          <span>LOCUTION PRO / CREATIVE WORKSPACE</span><span>本地素材 · 无限灵感</span>
-        </div>
-        <div class="hero-layout">
-          <div class="hero-title-block">
-            <p class="hero-kicker">面向视频创作者的镜头工作软件</p>
+      <section class="hero page-shell" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <div class="hero-art" aria-hidden="true">
+            <svg
+              class="art-film"
+              viewBox="0 0 120 1600"
+              preserveAspectRatio="xMidYMin slice"
+              fill="none"
+            >
+              <rect class="art-film-base" width="120" height="1600" />
+              <path
+                class="art-film-holes"
+                d="M8 10h12v18H8zM100 10h12v18h-12zM8 50h12v18H8zM100 50h12v18h-12zM8 90h12v18H8zM100 90h12v18h-12zM8 130h12v18H8zM100 130h12v18h-12zM8 170h12v18H8zM100 170h12v18h-12zM8 210h12v18H8zM100 210h12v18h-12zM8 250h12v18H8zM100 250h12v18h-12zM8 290h12v18H8zM100 290h12v18h-12zM8 330h12v18H8zM100 330h12v18h-12zM8 370h12v18H8zM100 370h12v18h-12zM8 410h12v18H8zM100 410h12v18h-12zM8 450h12v18H8zM100 450h12v18h-12zM8 490h12v18H8zM100 490h12v18h-12zM8 530h12v18H8zM100 530h12v18h-12zM8 570h12v18H8zM100 570h12v18h-12zM8 610h12v18H8zM100 610h12v18h-12zM8 650h12v18H8zM100 650h12v18h-12zM8 690h12v18H8zM100 690h12v18h-12zM8 730h12v18H8zM100 730h12v18h-12zM8 770h12v18H8zM100 770h12v18h-12zM8 810h12v18H8zM100 810h12v18h-12zM8 850h12v18H8zM100 850h12v18h-12zM8 890h12v18H8zM100 890h12v18h-12zM8 930h12v18H8zM100 930h12v18h-12zM8 970h12v18H8zM100 970h12v18h-12zM8 1010h12v18H8zM100 1010h12v18h-12zM8 1050h12v18H8zM100 1050h12v18h-12zM8 1090h12v18H8zM100 1090h12v18h-12zM8 1130h12v18H8zM100 1130h12v18h-12zM8 1170h12v18H8zM100 1170h12v18h-12zM8 1210h12v18H8zM100 1210h12v18h-12zM8 1250h12v18H8zM100 1250h12v18h-12zM8 1290h12v18H8zM100 1290h12v18h-12zM8 1330h12v18H8zM100 1330h12v18h-12zM8 1370h12v18H8zM100 1370h12v18h-12zM8 1410h12v18H8zM100 1410h12v18h-12zM8 1450h12v18H8zM100 1450h12v18h-12zM8 1490h12v18H8zM100 1490h12v18h-12zM8 1530h12v18H8zM100 1530h12v18h-12zM8 1570h12v18H8zM100 1570h12v18h-12z"
+              />
+              <path
+                class="art-film-cells"
+                d="M30 16h60v104H30zM30 140h60v104H30zM30 264h60v104H30zM30 512h60v104H30zM30 636h60v104H30zM30 760h60v104H30zM30 884h60v104H30zM30 1008h60v104H30zM30 1132h60v104H30zM30 1256h60v104H30zM30 1380h60v104H30z"
+              />
+              <rect class="art-film-mark" x="30" y="388" width="60" height="104" />
+            </svg>
+            <svg
+              class="art-planes"
+              viewBox="0 0 1600 900"
+              preserveAspectRatio="xMidYMid slice"
+              fill="none"
+            >
+              <defs>
+                <mask
+                  id="art-ring-weave"
+                  maskUnits="userSpaceOnUse"
+                  x="-200"
+                  y="-200"
+                  width="2000"
+                  height="1300"
+                >
+                  <rect x="-200" y="-200" width="2000" height="1300" fill="#fff" />
+                  <path d="M-112.3 991L1297.7 639.5L1282.3 577.4L-127.7 929Z" fill="#000" />
+                </mask>
+                <mask
+                  id="art-frame-weave"
+                  maskUnits="userSpaceOnUse"
+                  x="-200"
+                  y="-200"
+                  width="2000"
+                  height="1300"
+                >
+                  <rect x="-200" y="-200" width="2000" height="1300" fill="#fff" />
+                  <path d="M166.5 51.7L384.9 24.9L415.1 271.1L196.8 297.9Z" fill="#000" />
+                </mask>
+              </defs>
+              <path
+                class="art-shapes"
+                fill-rule="evenodd"
+                d="M1035 400a255 255 0 1 0 510 0a255 255 0 1 0 -510 0ZM166.5 51.7L603.2 -1.9L633.5 244.3L196.8 297.9ZM-112.3 991L1731.3 531.4L1715.8 469.3L-127.7 929ZM883.1 -41.9L798.1 938.1L841.9 941.9L926.9 -38.1Z"
+              />
+              <circle
+                class="art-ring"
+                cx="1290"
+                cy="400"
+                r="345"
+                pathLength="1"
+                mask="url(#art-ring-weave)"
+              />
+              <circle class="art-focus-ring" cx="1290" cy="400" r="300" />
+              <path class="art-crosshair" d="M1290 360v80M1250 400h80" />
+              <g class="art-focus-scale">
+                <path
+                  d="M974.8 259.7L960.2 253.2M1010.9 197.2L997.9 187.8M1059.1 143.6L1048.4 131.7M1117.5 101.2L1109.5 87.4M1183.4 71.9L1178.4 56.7M1253.9 56.9L1252.3 41"
+                />
+                <path
+                  class="art-focus-minor"
+                  d="M961.9 293.4L954.3 290.9M967.9 276.4L960.4 273.5M982.6 243.4L975.5 239.7M991.2 227.5L984.3 223.5M1000.7 212.1L993.9 207.7M1021.9 182.9L1015.7 177.8M1033.6 169.1L1027.7 163.8M1046 156L1040.4 150.4M1072.9 131.9L1067.8 125.7M1087.2 120.9L1082.5 114.4M1102.1 110.7L1097.7 103.9M1133.4 92.6L1129.7 85.5M1149.7 84.8L1146.4 77.5M1166.4 77.9L1163.5 70.4M1200.7 66.8L1198.6 59M1218.3 62.5L1216.6 54.7M1236 59.2L1234.8 51.3M1271.9 55.5L1271.5 47.5"
+                />
+                <text x="941.9" y="245">0.5</text>
+                <text x="981.8" y="176.1">1</text>
+                <text x="1035.1" y="116.9">2</text>
+                <text x="1099.5" y="70">3</text>
+                <text x="1172.3" y="37.6">10</text>
+                <text x="1250.2" y="21.1">∞</text>
+              </g>
+              <path
+                class="art-frame-outline"
+                d="M222.4 -12L690.6 29L667.6 292L199.4 251Z"
+                pathLength="1"
+                mask="url(#art-frame-weave)"
+              />
+            </svg>
+            <svg class="art-wave" viewBox="0 0 600 64" preserveAspectRatio="none" fill="none">
+              <path
+                d="M3.5 25v14M13.5 18.5v27M23.5 23v18M33.5 14v36M43.5 6.5v51M53.5 22v20M63.5 26v12M73.5 29.5v5M83.5 29.5v5M93.5 17.5v29M103.5 20.5v23M113.5 22.5v19M123.5 15v34M133.5 20v24M143.5 11.5v41M153.5 2v60M163.5 15.5v33M173.5 30v4M183.5 30v4M193.5 30v4M203.5 15v34M213.5 13.5v37M223.5 30v4M233.5 24v16M243.5 29v6M253.5 21v22M263.5 9v46M273.5 20v24M283.5 25.5v13M293.5 24v16M303.5 23.5v17M313.5 8v48M323.5 2.5v59M333.5 19v26M343.5 29.5v5M353.5 25.5v13M363.5 30v4M373.5 15v34M383.5 21v22M393.5 26v12M403.5 24.5v15M413.5 26v12M423.5 10.5v43M433.5 2.5v59M443.5 18v28M453.5 30v4M463.5 27.5v9M473.5 28v8M483.5 9.5v45M493.5 11v42M503.5 26.5v11M513.5 28v8M523.5 26v12M533.5 23v18M543.5 11.5v41M553.5 24v16M563.5 28v8M573.5 30v4M583.5 24.5v15M593.5 5v54"
+                vector-effect="non-scaling-stroke"
+              />
+            </svg>
+            <svg
+              class="art-viewfinder"
+              viewBox="0 0 1000 600"
+              preserveAspectRatio="none"
+              fill="none"
+            >
+              <path
+                d="M0 30V0h30M970 0h30v30M1000 570v30h-30M30 600H0v-30"
+                vector-effect="non-scaling-stroke"
+              />
+            </svg>
+            <svg class="art-timeline" viewBox="0 0 1200 24" preserveAspectRatio="none" fill="none">
+              <path
+                d="M0 23.5H1200M0 24v-14M120 24v-14M240 24v-14M360 24v-14M480 24v-14M600 24v-14M720 24v-14M840 24v-14M960 24v-14M1080 24v-14M1200 24v-14"
+                vector-effect="non-scaling-stroke"
+              />
+              <path
+                class="art-minor-ticks"
+                d="M24 24v-6M48 24v-6M72 24v-6M96 24v-6M144 24v-6M168 24v-6M192 24v-6M216 24v-6M264 24v-6M288 24v-6M312 24v-6M336 24v-6M384 24v-6M408 24v-6M432 24v-6M456 24v-6M504 24v-6M528 24v-6M552 24v-6M576 24v-6M624 24v-6M648 24v-6M672 24v-6M696 24v-6M744 24v-6M768 24v-6M792 24v-6M816 24v-6M864 24v-6M888 24v-6M912 24v-6M936 24v-6M984 24v-6M1008 24v-6M1032 24v-6M1056 24v-6M1104 24v-6M1128 24v-6M1152 24v-6M1176 24v-6"
+                vector-effect="non-scaling-stroke"
+              />
+            </svg>
+            <svg class="art-track" viewBox="0 0 1000 22" preserveAspectRatio="none" fill="none">
+              <path
+                d="M0 0h58v22H0zM64 0h92v22H64zM162 0h40v22H162zM208 0h126v22H208zM340 0h74v22H340zM420 0h30v22H420zM456 0h110v22H456zM642 0h88v22H642zM736 0h46v22H736zM788 0h140v22H788zM934 0h52v22H934zM992 0h8v22H992z"
+                vector-effect="non-scaling-stroke"
+              />
+              <path
+                class="art-track-current"
+                d="M572 0h64v22H572z"
+                vector-effect="non-scaling-stroke"
+              />
+            </svg>
+            <span class="art-label art-label-clip">A001_C003</span>
+            <span class="art-label art-label-rate">23.976 FPS · 3840 × 2160</span>
+            <span class="art-playhead"><span class="art-timecode">00:08:31:05</span></span>
+          </div>
+          <div class="hero-heading">
             <h1 id="hero-title">
-              从素材里，<br /><span class="hero-title-accent"
-                >找到<span class="hero-shot">那一帧</span>。</span
+              <span class="visually-hidden">Locution Pro</span
+              ><svg
+                class="hero-wordmark"
+                aria-hidden="true"
+                viewBox="0 -820 5455 1050"
+                style="width: 5.455em; height: 1.05em"
+                xmlns="http://www.w3.org/2000/svg"
               >
+                <path
+                  class="hero-letter"
+                  pathLength="1"
+                  style="--glyph-index: 0"
+                  d="M106.16 0V-729.04H165.88V-51.72H497.88V0Z"
+                />
+                <path
+                  class="hero-letter"
+                  pathLength="1"
+                  style="--glyph-index: 1"
+                  d="M789.16 13.16Q724.72 13.16 669.54 -19.82Q614.36 -52.8 581.16 -115.18Q547.96 -177.56 547.96 -265.68Q547.96 -355.48 581.16 -418.2Q614.36 -480.92 669.54 -513.9Q724.72 -546.88 789.16 -546.88Q837.28 -546.88 880.98 -528.14Q924.68 -509.4 958.22 -473.42Q991.76 -437.44 1010.98 -384.96Q1030.2 -332.48 1030.2 -265.68Q1030.2 -177.56 996.58 -115.18Q962.96 -52.8 908.28 -19.82Q853.6 13.16 789.16 13.16ZM789.16 -37.6Q841.48 -37.6 882.3 -66.26Q923.12 -94.92 946.56 -146.3Q970 -197.68 970 -265.68Q970 -334.52 946.56 -386.24Q923.12 -437.96 882.3 -467.04Q841.48 -496.12 789.16 -496.12Q736.84 -496.12 696.02 -467.04Q655.2 -437.96 632.1 -386.24Q609 -334.52 609 -265.68Q609 -197.68 632.1 -146.3Q655.2 -94.92 696.02 -66.26Q736.84 -37.6 789.16 -37.6Z"
+                />
+                <path
+                  class="hero-letter"
+                  pathLength="1"
+                  style="--glyph-index: 2"
+                  d="M1356.96 13.16Q1287.56 13.16 1231.8 -19.82Q1176.04 -52.8 1144 -115.18Q1111.96 -177.56 1111.96 -265.68Q1111.96 -355.48 1146.32 -418.2Q1180.68 -480.92 1237 -513.9Q1293.32 -546.88 1358.88 -546.88Q1412.56 -546.88 1450.36 -528.28Q1488.16 -509.68 1514.8 -481.68L1483.88 -445.76Q1460.48 -468.68 1430.04 -482.4Q1399.6 -496.12 1360.64 -496.12Q1308.36 -496.12 1265.5 -467.04Q1222.64 -437.96 1197.82 -386.24Q1173 -334.52 1173 -265.68Q1173 -197.68 1196.56 -146.3Q1220.12 -94.92 1261.98 -66.26Q1303.84 -37.6 1359.84 -37.6Q1400.96 -37.6 1436.8 -53.32Q1472.64 -69.04 1498 -93.6L1526.68 -58.36Q1493.36 -25.52 1450.74 -6.18Q1408.12 13.16 1356.96 13.16Z"
+                />
+                <path
+                  class="hero-letter"
+                  pathLength="1"
+                  style="--glyph-index: 3"
+                  d="M1778.24 13.16Q1695.16 13.16 1655.68 -38Q1616.2 -89.16 1616.2 -192.64V-533.72H1674.92V-199.52Q1674.92 -117.16 1702.26 -78.02Q1729.6 -38.88 1791.32 -38.88Q1837.28 -38.88 1874.74 -64.14Q1912.2 -89.4 1956.88 -143.08V-533.72H2015.6V0H1966.36L1960.92 -88.08H1958.6Q1919.4 -42.72 1876.56 -14.78Q1833.72 13.16 1778.24 13.16Z"
+                />
+                <path
+                  class="hero-letter"
+                  pathLength="1"
+                  style="--glyph-index: 4"
+                  d="M2333.8 9.64Q2281.28 9.64 2251.48 -11.3Q2221.68 -32.24 2209.58 -69.3Q2197.48 -106.36 2197.48 -154.88V-483.76H2114.6V-528.4L2199.24 -533.72L2205.8 -709.24H2255.36V-533.72H2407.84V-483.76H2255.36V-151.84Q2255.36 -100.48 2272.92 -70.4Q2290.48 -40.32 2344.16 -40.32Q2359 -40.32 2375.1 -44Q2391.2 -47.68 2408.76 -56.72L2425 -14.2Q2403.84 -3.52 2379.66 3.06Q2355.48 9.64 2333.8 9.64Z"
+                />
+                <path
+                  class="hero-letter"
+                  pathLength="1"
+                  style="--glyph-index: 5"
+                  d="M2505.72 0V-533.72H2564.44V0ZM2534.24 -658.08Q2513.6 -658.08 2500.8 -671.32Q2488 -684.56 2488 -707.24Q2488 -728.08 2500.8 -740.9Q2513.6 -753.72 2534.24 -753.72Q2553.88 -753.72 2567.1 -740.9Q2580.32 -728.08 2580.32 -707.24Q2580.32 -684.56 2567.1 -671.32Q2553.88 -658.08 2534.24 -658.08Z"
+                />
+                <path
+                  class="hero-letter"
+                  pathLength="1"
+                  style="--glyph-index: 6"
+                  d="M2930.16 13.16Q2865.72 13.16 2810.54 -19.82Q2755.36 -52.8 2722.16 -115.18Q2688.96 -177.56 2688.96 -265.68Q2688.96 -355.48 2722.16 -418.2Q2755.36 -480.92 2810.54 -513.9Q2865.72 -546.88 2930.16 -546.88Q2978.28 -546.88 3021.98 -528.14Q3065.68 -509.4 3099.22 -473.42Q3132.76 -437.44 3151.98 -384.96Q3171.2 -332.48 3171.2 -265.68Q3171.2 -177.56 3137.58 -115.18Q3103.96 -52.8 3049.28 -19.82Q2994.6 13.16 2930.16 13.16ZM2930.16 -37.6Q2982.48 -37.6 3023.3 -66.26Q3064.12 -94.92 3087.56 -146.3Q3111 -197.68 3111 -265.68Q3111 -334.52 3087.56 -386.24Q3064.12 -437.96 3023.3 -467.04Q2982.48 -496.12 2930.16 -496.12Q2877.84 -496.12 2837.02 -467.04Q2796.2 -437.96 2773.1 -386.24Q2750 -334.52 2750 -265.68Q2750 -197.68 2773.1 -146.3Q2796.2 -94.92 2837.02 -66.26Q2877.84 -37.6 2930.16 -37.6Z"
+                />
+                <path
+                  class="hero-letter"
+                  pathLength="1"
+                  style="--glyph-index: 7"
+                  d="M3296.72 0V-533.72H3345.12L3352.24 -451.8H3354.4Q3394.44 -491.84 3437.68 -519.36Q3480.92 -546.88 3536.4 -546.88Q3619.32 -546.88 3658.8 -495.38Q3698.28 -443.88 3698.28 -341.08V0H3639.56V-333.36Q3639.56 -415.88 3612.22 -455.36Q3584.88 -494.84 3522.32 -494.84Q3476.36 -494.84 3438.98 -470.92Q3401.6 -447 3355.44 -399.32V0Z"
+                />
+                <path
+                  class="hero-letter"
+                  pathLength="1"
+                  style="--glyph-index: 8"
+                  d="M4056.16 0V-729.04H4245.08Q4327.92 -729.04 4387.44 -709.06Q4446.96 -689.08 4479.06 -644.48Q4511.16 -599.88 4511.16 -523.84Q4511.16 -450.96 4479.48 -403.28Q4447.8 -355.6 4389.2 -331.96Q4330.6 -308.32 4249.08 -308.32H4115.88V0ZM4115.88 -358.6H4236.72Q4344.56 -358.6 4397.14 -397.34Q4449.72 -436.08 4449.72 -523.84Q4449.72 -612.6 4395.9 -645.6Q4342.08 -678.6 4232.56 -678.6H4115.88Z"
+                />
+                <path
+                  class="hero-letter"
+                  pathLength="1"
+                  style="--glyph-index: 9"
+                  d="M4631.72 0V-533.72H4680.12L4687.24 -434.72H4689.4Q4715.52 -484.16 4753.98 -515.52Q4792.44 -546.88 4840.48 -546.88Q4856.4 -546.88 4868.96 -544.64Q4881.52 -542.4 4894.36 -535.72L4879.68 -485.52Q4868.88 -489.52 4858.98 -491.02Q4849.08 -492.52 4832.6 -492.52Q4798.24 -492.52 4759.12 -462.38Q4720 -432.24 4690.44 -357.76V0Z"
+                />
+                <path
+                  class="hero-letter"
+                  pathLength="1"
+                  style="--glyph-index: 10"
+                  d="M5158.16 13.16Q5093.72 13.16 5038.54 -19.82Q4983.36 -52.8 4950.16 -115.18Q4916.96 -177.56 4916.96 -265.68Q4916.96 -355.48 4950.16 -418.2Q4983.36 -480.92 5038.54 -513.9Q5093.72 -546.88 5158.16 -546.88Q5206.28 -546.88 5249.98 -528.14Q5293.68 -509.4 5327.22 -473.42Q5360.76 -437.44 5379.98 -384.96Q5399.2 -332.48 5399.2 -265.68Q5399.2 -177.56 5365.58 -115.18Q5331.96 -52.8 5277.28 -19.82Q5222.6 13.16 5158.16 13.16ZM5158.16 -37.6Q5210.48 -37.6 5251.3 -66.26Q5292.12 -94.92 5315.56 -146.3Q5339 -197.68 5339 -265.68Q5339 -334.52 5315.56 -386.24Q5292.12 -437.96 5251.3 -467.04Q5210.48 -496.12 5158.16 -496.12Q5105.84 -496.12 5065.02 -467.04Q5024.2 -437.96 5001.1 -386.24Q4978 -334.52 4978 -265.68Q4978 -197.68 5001.1 -146.3Q5024.2 -94.92 5065.02 -66.26Q5105.84 -37.6 5158.16 -37.6Z"
+                />
+              </svg>
             </h1>
+            <p class="hero-tagline">从素材里，找到那一帧。</p>
           </div>
           <div class="hero-intro">
-            <img
-              class="hero-icon"
-              src="./assets/locution-icon.png"
-              alt="Locution Pro 应用图标"
-              width="64"
-              height="64"
-            />
             <p class="hero-description">
-              媒体管理、画面检索、镜头整理与片段导出，汇集在一个工作空间。无需字幕，也能从画面本身开始。
+              面向视频创作者的本地工作空间。<br />管理素材，检索画面，整理镜头，导出片段。
             </p>
             <div class="hero-actions">
               <a class="button button-primary" href="/api/download"
-                ><span>下载 Locution Pro</span><span aria-hidden="true">↓</span></a
+                ><svg
+                  viewBox="0 0 20 20"
+                  width="18"
+                  height="18"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M1 3.5 8.5 2.4v7H1zm8.5-1.3L19 1v8.4H9.5zM1 10.5h7.5v7L1 16.5zm8.5 0H19V19l-9.5-1.3z"
+                  /></svg
+                >Windows 版</a
               >
               <a
-                class="text-link"
+                class="button button-secondary"
                 href="https://github.com/GCL-MAD-CLUB/Locution-Pro"
                 target="_blank"
                 rel="noreferrer"
-                >查看 GitHub <span aria-hidden="true">↗</span></a
+                >GitHub</a
               >
             </div>
-            <ul class="hero-facts" aria-label="产品特点">
-              <li>本地处理</li>
-              <li>无需上传</li>
-              <li>免费开源</li>
-            </ul>
+            <p class="hero-note">免费开源 · Windows 10 / 11</p>
           </div>
         </div>
-        <div class="hero-bottom">
-          <span class="mono">FROM MEDIA TO THE SHOT</span>
-          <a class="hero-scroll" href="#workspace"
-            ><span>查看真实工作区</span><span aria-hidden="true">↓</span></a
+        <a class="hero-preview" href="#workspace" aria-label="查看 Locution Pro 工作区演示">
+          <img
+            src="./assets/locution-app-workspace-light.webp"
+            alt="Locution Pro 编辑工作区，包含素材、源监视器与分镜面板"
+            width="3120"
+            height="1940"
+            fetchpriority="high"
+          />
+        </a>
+      </section>
+
+      <section class="product-story page-shell" id="features" aria-labelledby="import-title">
+        <div class="story-copy">
+          <h2 id="import-title">散落的素材，<br />汇集在一处。</h2>
+          <p>浏览本地文件夹，把视频、音频与图像收进项目。素材在哪里，工作就从哪里开始。</p>
+        </div>
+        <div class="story-visual">
+          <figure
+            class="product-demo"
+            id="import-demo"
+            data-demo-track="import"
+            aria-labelledby="import-title import-demo-description"
+          >
+            <p class="visually-hidden" id="import-demo-description">
+              自动演示 Locution Pro 的素材选择与导入。界面按真实软件原样展示，无需操作。
+            </p>
+            <div class="demo-screen" aria-hidden="true" inert>
+              <svg class="demo-canvas" viewBox="0 0 3120 1940" xmlns="http://www.w3.org/2000/svg">
+                <g data-demo-scene="import">
+                  <image
+                    href="./assets/locution-app-import-light.webp"
+                    width="3120"
+                    height="1940"
+                  />
+                  <g data-demo-layer="import-selection" hidden>
+                    <rect
+                      class="demo-file-selection"
+                      x="1163"
+                      y="308"
+                      width="295"
+                      height="297"
+                      rx="5"
+                    />
+                    <rect
+                      class="demo-file-selection"
+                      x="1843"
+                      y="308"
+                      width="297"
+                      height="297"
+                      rx="5"
+                      data-demo-layer="second-file"
+                      hidden
+                    />
+                    <rect x="1220" y="1762" width="326" height="102" fill="#d5d5d5" />
+                    <text class="demo-software-text" x="1235" y="1825" data-demo-selection>
+                      已选择 1 项
+                    </text>
+                    <rect x="2938" y="1783" width="143" height="62" rx="31" fill="#1268bd" />
+                    <text class="demo-software-text demo-white-text" x="2978" y="1826">导入</text>
+                  </g>
+                </g>
+                <g data-demo-scene="edit" hidden>
+                  <image
+                    href="./assets/locution-app-workspace-light.webp"
+                    width="3120"
+                    height="1940"
+                  />
+                  <g data-demo-layer="search" hidden>
+                    <rect
+                      x="1209"
+                      y="284"
+                      width="444"
+                      height="42"
+                      fill="#fff"
+                      stroke="#2d8cff"
+                      stroke-width="2"
+                    />
+                    <text class="demo-software-text" x="1270" y="315" data-demo-query></text>
+                  </g>
+                  <g data-demo-layer="result" hidden>
+                    <rect x="1209" y="460" width="1223" height="1323" fill="#f7f7f7" />
+                    <svg x="1209" y="460" width="1223" height="166" viewBox="1209 880 1223 166">
+                      <image
+                        href="./assets/locution-app-workspace-light.webp"
+                        width="3120"
+                        height="1940"
+                      />
+                    </svg>
+                    <rect x="2830" y="281" width="276" height="47" fill="#f7f7f7" />
+                    <text class="demo-software-text" x="2834" y="314">1 条已选择，共 1 条</text>
+                  </g>
+                  <g data-demo-layer="keyword" hidden>
+                    <rect x="2496" y="848" width="574" height="166" fill="#f7f7f7" />
+                    <text class="demo-software-text" x="2512" y="884">人物</text>
+                    <rect
+                      x="2494"
+                      y="1353"
+                      width="182"
+                      height="42"
+                      fill="#2d8cff"
+                      fill-opacity=".16"
+                    />
+                  </g>
+                </g>
+                <g data-demo-scene="export" hidden>
+                  <image
+                    href="./assets/locution-app-export-light.webp"
+                    width="3120"
+                    height="1940"
+                  />
+                  <g data-demo-layer="format-menu" hidden>
+                    <rect
+                      x="1144"
+                      y="578"
+                      width="588"
+                      height="152"
+                      rx="4"
+                      fill="#fff"
+                      stroke="#aaa"
+                      stroke-width="2"
+                    />
+                    <rect x="1146" y="627" width="584" height="49" fill="#e5effb" />
+                    <text class="demo-software-text" x="1164" y="612">H.264</text>
+                    <text class="demo-software-text" x="1164" y="661">HEVC</text>
+                    <text class="demo-software-text" x="1164" y="710">ProRes</text>
+                  </g>
+                  <g data-demo-layer="format-value" hidden>
+                    <rect x="1158" y="534" width="220" height="34" fill="#fff" />
+                    <text class="demo-software-text" x="1164" y="562">HEVC</text>
+                  </g>
+                </g>
+                <g class="demo-pointer" data-demo-pointer hidden>
+                  <circle
+                    class="demo-click-ring"
+                    r="32"
+                    cx="3"
+                    cy="4"
+                    fill="none"
+                    stroke="#2d8cff"
+                    stroke-width="5"
+                  />
+                  <path
+                    d="M0 0v43l11-12 10 22 9-5-10-21h18Z"
+                    fill="#202124"
+                    stroke="#fff"
+                    stroke-width="3"
+                    stroke-linejoin="round"
+                  />
+                </g>
+              </svg>
+            </div>
+            <figcaption class="demo-caption">
+              <span data-demo-caption>把素材汇集到项目。</span
+              ><button type="button" class="demo-playback" aria-label="暂停自动演示" hidden>
+                暂停
+              </button>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+      <section
+        class="product-story story-reverse page-shell"
+        id="workspace"
+        aria-labelledby="demo-title"
+      >
+        <div class="story-copy">
+          <h2 id="demo-title">从一段素材，<br />到想要的镜头。</h2>
+          <p>
+            长视频拆成分镜，画面与切点一起审看。为值得留下的镜头添加关键字，让下一次查找更轻松。
+          </p>
+          <p class="story-note">安装可选语义检索组件后，还能按画面描述查找。</p>
+        </div>
+        <div class="story-visual">
+          <figure
+            class="product-demo"
+            id="product-demo"
+            data-demo-track="edit"
+            aria-labelledby="demo-title product-demo-description"
+          >
+            <p class="visually-hidden" id="product-demo-description">
+              自动演示 Locution Pro 的分镜查找与关键字标注。界面按真实软件原样展示，无需操作。
+            </p>
+            <div class="demo-screen" aria-hidden="true" inert>
+              <svg class="demo-canvas" viewBox="0 0 3120 1940" xmlns="http://www.w3.org/2000/svg">
+                <g data-demo-scene="import" hidden>
+                  <image
+                    href="./assets/locution-app-import-light.webp"
+                    width="3120"
+                    height="1940"
+                  />
+                  <g data-demo-layer="import-selection" hidden>
+                    <rect
+                      class="demo-file-selection"
+                      x="1163"
+                      y="308"
+                      width="295"
+                      height="297"
+                      rx="5"
+                    />
+                    <rect
+                      class="demo-file-selection"
+                      x="1843"
+                      y="308"
+                      width="297"
+                      height="297"
+                      rx="5"
+                      data-demo-layer="second-file"
+                      hidden
+                    />
+                    <rect x="1220" y="1762" width="326" height="102" fill="#d5d5d5" />
+                    <text class="demo-software-text" x="1235" y="1825" data-demo-selection>
+                      已选择 1 项
+                    </text>
+                    <rect x="2938" y="1783" width="143" height="62" rx="31" fill="#1268bd" />
+                    <text class="demo-software-text demo-white-text" x="2978" y="1826">导入</text>
+                  </g>
+                </g>
+                <g data-demo-scene="edit">
+                  <image
+                    href="./assets/locution-app-workspace-light.webp"
+                    width="3120"
+                    height="1940"
+                  />
+                  <g data-demo-layer="search" hidden>
+                    <rect
+                      x="1209"
+                      y="284"
+                      width="444"
+                      height="42"
+                      fill="#fff"
+                      stroke="#2d8cff"
+                      stroke-width="2"
+                    />
+                    <text class="demo-software-text" x="1270" y="315" data-demo-query></text>
+                  </g>
+                  <g data-demo-layer="result" hidden>
+                    <rect x="1209" y="460" width="1223" height="1323" fill="#f7f7f7" />
+                    <svg x="1209" y="460" width="1223" height="166" viewBox="1209 880 1223 166">
+                      <image
+                        href="./assets/locution-app-workspace-light.webp"
+                        width="3120"
+                        height="1940"
+                      />
+                    </svg>
+                    <rect x="2830" y="281" width="276" height="47" fill="#f7f7f7" />
+                    <text class="demo-software-text" x="2834" y="314">1 条已选择，共 1 条</text>
+                  </g>
+                  <g data-demo-layer="keyword" hidden>
+                    <rect x="2496" y="848" width="574" height="166" fill="#f7f7f7" />
+                    <text class="demo-software-text" x="2512" y="884">人物</text>
+                    <rect
+                      x="2494"
+                      y="1353"
+                      width="182"
+                      height="42"
+                      fill="#2d8cff"
+                      fill-opacity=".16"
+                    />
+                  </g>
+                </g>
+                <g data-demo-scene="export" hidden>
+                  <image
+                    href="./assets/locution-app-export-light.webp"
+                    width="3120"
+                    height="1940"
+                  />
+                  <g data-demo-layer="format-menu" hidden>
+                    <rect
+                      x="1144"
+                      y="578"
+                      width="588"
+                      height="152"
+                      rx="4"
+                      fill="#fff"
+                      stroke="#aaa"
+                      stroke-width="2"
+                    />
+                    <rect x="1146" y="627" width="584" height="49" fill="#e5effb" />
+                    <text class="demo-software-text" x="1164" y="612">H.264</text>
+                    <text class="demo-software-text" x="1164" y="661">HEVC</text>
+                    <text class="demo-software-text" x="1164" y="710">ProRes</text>
+                  </g>
+                  <g data-demo-layer="format-value" hidden>
+                    <rect x="1158" y="534" width="220" height="34" fill="#fff" />
+                    <text class="demo-software-text" x="1164" y="562">HEVC</text>
+                  </g>
+                </g>
+                <g class="demo-pointer" data-demo-pointer hidden>
+                  <circle
+                    class="demo-click-ring"
+                    r="32"
+                    cx="3"
+                    cy="4"
+                    fill="none"
+                    stroke="#2d8cff"
+                    stroke-width="5"
+                  />
+                  <path
+                    d="M0 0v43l11-12 10 22 9-5-10-21h18Z"
+                    fill="#202124"
+                    stroke="#fff"
+                    stroke-width="3"
+                    stroke-linejoin="round"
+                  />
+                </g>
+              </svg>
+            </div>
+            <figcaption class="demo-caption">
+              <span data-demo-caption>在分镜里，找到想保留的画面。</span
+              ><button type="button" class="demo-playback" aria-label="暂停自动演示" hidden>
+                暂停
+              </button>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+      <section class="product-story page-shell" id="workflow" aria-labelledby="export-title">
+        <div class="story-copy">
+          <h2 id="export-title">选好片段，<br />接着创作。</h2>
+          <p>核对入点与出点，设置输出格式。独立导出或合并成片，把整理好的镜头交给下一步。</p>
+        </div>
+        <div class="story-visual">
+          <figure
+            class="product-demo"
+            id="export-demo"
+            data-demo-track="export"
+            aria-labelledby="export-title export-demo-description"
+          >
+            <p class="visually-hidden" id="export-demo-description">
+              自动演示 Locution Pro 的片段输出设置。界面按真实软件原样展示，无需操作。
+            </p>
+            <div class="demo-screen" aria-hidden="true" inert>
+              <svg class="demo-canvas" viewBox="0 0 3120 1940" xmlns="http://www.w3.org/2000/svg">
+                <g data-demo-scene="import" hidden>
+                  <image
+                    href="./assets/locution-app-import-light.webp"
+                    width="3120"
+                    height="1940"
+                  />
+                  <g data-demo-layer="import-selection" hidden>
+                    <rect
+                      class="demo-file-selection"
+                      x="1163"
+                      y="308"
+                      width="295"
+                      height="297"
+                      rx="5"
+                    />
+                    <rect
+                      class="demo-file-selection"
+                      x="1843"
+                      y="308"
+                      width="297"
+                      height="297"
+                      rx="5"
+                      data-demo-layer="second-file"
+                      hidden
+                    />
+                    <rect x="1220" y="1762" width="326" height="102" fill="#d5d5d5" />
+                    <text class="demo-software-text" x="1235" y="1825" data-demo-selection>
+                      已选择 1 项
+                    </text>
+                    <rect x="2938" y="1783" width="143" height="62" rx="31" fill="#1268bd" />
+                    <text class="demo-software-text demo-white-text" x="2978" y="1826">导入</text>
+                  </g>
+                </g>
+                <g data-demo-scene="edit" hidden>
+                  <image
+                    href="./assets/locution-app-workspace-light.webp"
+                    width="3120"
+                    height="1940"
+                  />
+                  <g data-demo-layer="search" hidden>
+                    <rect
+                      x="1209"
+                      y="284"
+                      width="444"
+                      height="42"
+                      fill="#fff"
+                      stroke="#2d8cff"
+                      stroke-width="2"
+                    />
+                    <text class="demo-software-text" x="1270" y="315" data-demo-query></text>
+                  </g>
+                  <g data-demo-layer="result" hidden>
+                    <rect x="1209" y="460" width="1223" height="1323" fill="#f7f7f7" />
+                    <svg x="1209" y="460" width="1223" height="166" viewBox="1209 880 1223 166">
+                      <image
+                        href="./assets/locution-app-workspace-light.webp"
+                        width="3120"
+                        height="1940"
+                      />
+                    </svg>
+                    <rect x="2830" y="281" width="276" height="47" fill="#f7f7f7" />
+                    <text class="demo-software-text" x="2834" y="314">1 条已选择，共 1 条</text>
+                  </g>
+                  <g data-demo-layer="keyword" hidden>
+                    <rect x="2496" y="848" width="574" height="166" fill="#f7f7f7" />
+                    <text class="demo-software-text" x="2512" y="884">人物</text>
+                    <rect
+                      x="2494"
+                      y="1353"
+                      width="182"
+                      height="42"
+                      fill="#2d8cff"
+                      fill-opacity=".16"
+                    />
+                  </g>
+                </g>
+                <g data-demo-scene="export">
+                  <image
+                    href="./assets/locution-app-export-light.webp"
+                    width="3120"
+                    height="1940"
+                  />
+                  <g data-demo-layer="format-menu" hidden>
+                    <rect
+                      x="1144"
+                      y="578"
+                      width="588"
+                      height="152"
+                      rx="4"
+                      fill="#fff"
+                      stroke="#aaa"
+                      stroke-width="2"
+                    />
+                    <rect x="1146" y="627" width="584" height="49" fill="#e5effb" />
+                    <text class="demo-software-text" x="1164" y="612">H.264</text>
+                    <text class="demo-software-text" x="1164" y="661">HEVC</text>
+                    <text class="demo-software-text" x="1164" y="710">ProRes</text>
+                  </g>
+                  <g data-demo-layer="format-value" hidden>
+                    <rect x="1158" y="534" width="220" height="34" fill="#fff" />
+                    <text class="demo-software-text" x="1164" y="562">HEVC</text>
+                  </g>
+                </g>
+                <g class="demo-pointer" data-demo-pointer hidden>
+                  <circle
+                    class="demo-click-ring"
+                    r="32"
+                    cx="3"
+                    cy="4"
+                    fill="none"
+                    stroke="#2d8cff"
+                    stroke-width="5"
+                  />
+                  <path
+                    d="M0 0v43l11-12 10 22 9-5-10-21h18Z"
+                    fill="#202124"
+                    stroke="#fff"
+                    stroke-width="3"
+                    stroke-linejoin="round"
+                  />
+                </g>
+              </svg>
+            </div>
+            <figcaption class="demo-caption">
+              <span data-demo-caption>核对片段范围与输出规格，准备交付。</span
+              ><button type="button" class="demo-playback" aria-label="暂停自动演示" hidden>
+                暂停
+              </button>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+      <p class="feature-more page-shell">
+        整理流程，不止这些<a
+          class="inline-link"
+          href="https://helpx.locution.dpdns.org/"
+          target="_blank"
+          rel="noreferrer"
+          >查看用户指南 →</a
+        >
+      </p>
+
+      <section class="local-section page-shell" id="local" aria-labelledby="local-title">
+        <div class="local-copy">
+          <h2 id="local-title">你的素材，<br />留在你的电脑。</h2>
+          <p>
+            媒体分析、镜头检测、语义检索与导出均在本机完成。<br />用 .lcp
+            项目保存整理结果，下次打开，接着创作。
+          </p>
+          <a
+            class="inline-link"
+            href="https://helpx.locution.dpdns.org/"
+            target="_blank"
+            rel="noreferrer"
+            >了解使用方式</a
           >
         </div>
-      </section>
-
-      <section
-        class="product-stage page-shell section-space"
-        id="workspace"
-        aria-label="Locution Pro 实际工作区"
-      >
-        <figure class="workspace-figure workspace-carousel" data-reveal>
-          <div class="workspace-topline mono">
-            <span>THE ACTUAL WORKSPACE</span>
-            <span>导入&nbsp;&nbsp;—&nbsp;&nbsp;编辑&nbsp;&nbsp;—&nbsp;&nbsp;导出</span>
+        <div class="project-composition" aria-hidden="true">
+          <svg class="project-connections" viewBox="0 0 480 360" fill="none">
+            <path d="M83 84Q174 84 235 178M404 150Q328 150 260 187M168 301Q205 270 245 215" />
+          </svg>
+          <div class="media-file media-video">
+            <svg viewBox="0 0 48 48" fill="none">
+              <rect x="6" y="10" width="36" height="28" rx="2" />
+              <path d="m20 18 11 6-11 6Z" />
+            </svg>
+            <span>MOV</span>
           </div>
-          <div class="workspace-viewport" role="group" aria-label="工作区截图轮播">
-            <a
-              class="workspace-image workspace-slide"
-              data-workspace="import"
-              data-position="left"
-              data-label="导入"
-              href="./assets/locution-app-import-light.webp"
-              aria-label="切换到导入工作区"
-              tabindex="-1"
-            >
-              <img
-                src="./assets/locution-app-import-light.webp"
-                alt="Locution Pro 导入工作区，展示本地素材浏览、媒体选择和导入设置"
-                width="3120"
-                height="1940"
-                loading="lazy"
-                decoding="async"
-              />
-              <span class="workspace-expand mono" aria-hidden="true">查看完整工作区 ⤢</span>
-            </a>
-            <a
-              class="workspace-image workspace-slide"
-              data-workspace="edit"
-              data-position="center"
-              data-label="编辑"
-              href="./assets/locution-app-workspace-light.webp"
-              aria-label="查看编辑工作区完整截图"
-            >
-              <img
-                src="./assets/locution-app-workspace-light.webp"
-                alt="Locution Pro 浅色工作区，展示源监视器、项目媒体、分镜列表、直方图与关键字面板"
-                width="3120"
-                height="1940"
-              />
-              <span class="workspace-expand mono" aria-hidden="true">查看完整工作区 ⤢</span>
-            </a>
-            <a
-              class="workspace-image workspace-slide"
-              data-workspace="export"
-              data-position="right"
-              data-label="导出"
-              href="./assets/locution-app-export-light.webp"
-              aria-label="切换到导出工作区"
-              tabindex="-1"
-            >
-              <img
-                src="./assets/locution-app-export-light.webp"
-                alt="Locution Pro 导出工作区，展示分镜选择、导出设置和画面预览"
-                width="3120"
-                height="1940"
-                loading="lazy"
-                decoding="async"
-              />
-              <span class="workspace-expand mono" aria-hidden="true">查看完整工作区 ⤢</span>
-            </a>
+          <div class="media-file media-audio">
+            <svg viewBox="0 0 48 48" fill="none">
+              <path d="M8 20v8m8-16v24m8-30v36m8-28v20m8-14v8" />
+            </svg>
+            <span>WAV</span>
           </div>
-          <div class="workspace-controls" role="group" aria-label="切换工作区">
-            <button
-              type="button"
-              class="workspace-arrow"
-              data-workspace-step="-1"
-              aria-label="上一个工作区"
-            >
-              ←
-            </button>
-            <div class="workspace-choices">
-              <button type="button" data-workspace-choice="import" aria-pressed="false">
-                导入
-              </button>
-              <button type="button" data-workspace-choice="edit" aria-pressed="true">编辑</button>
-              <button type="button" data-workspace-choice="export" aria-pressed="false">
-                导出
-              </button>
-            </div>
-            <button
-              type="button"
-              class="workspace-arrow"
-              data-workspace-step="1"
-              aria-label="下一个工作区"
-            >
-              →
-            </button>
+          <div class="media-file media-image">
+            <svg viewBox="0 0 48 48" fill="none">
+              <rect x="6" y="8" width="36" height="32" rx="2" />
+              <circle cx="16" cy="18" r="3" />
+              <path d="m7 34 12-10 8 6 7-11 8 15" />
+            </svg>
+            <span>JPG</span>
           </div>
-          <p
-            class="visually-hidden"
-            id="workspace-status"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-          ></p>
-        </figure>
-
-        <div class="capability-rail" aria-label="产品能力" data-reveal="late">
-          <span><b>01</b> Media management</span>
-          <span><b>02</b> Visual search</span>
-          <span><b>03</b> Shot organization</span>
-          <span><b>04</b> Clip delivery</span>
+          <img
+            class="project-file"
+            src="./assets/lcp-thumbnail.webp"
+            alt=""
+            width="420"
+            height="512"
+            loading="lazy"
+          />
         </div>
       </section>
 
-      <section
-        class="features page-shell section-space"
-        id="features"
-        aria-labelledby="features-title"
-      >
-        <div class="section-intro" data-reveal>
-          <p class="section-number" aria-hidden="true">02</p>
-          <h2 id="features-title">一个工作空间，<br />四个关键动作。</h2>
-          <p>
-            从海量拍摄素材到精选镜头，让查找更直观，让整理更有序。每一项能力都服务于下一次创作决定。
-          </p>
-        </div>
-        <div class="feature-ledger" data-reveal="late">
-          <article>
-            <span class="feature-number mono">01 / DISCOVER</span>
-            <h3>以画面寻找素材</h3>
-            <p>
-              自动识别镜头切点，用分镜列表或缩略图网格浏览长视频。安装语义检索组件后，输入画面描述，即可跨视频寻找相关镜头。
-            </p>
-            <span class="feature-meta mono">SCENE / SHOT</span>
-          </article>
-          <article>
-            <span class="feature-number mono">02 / ORGANIZE</span>
-            <h3>为灵感建立秩序</h3>
-            <p>
-              用媒体箱组织素材，以星级、旗标、色标和层级关键字筛选镜头。将相关镜头组成堆叠，让素材库保持清晰。
-            </p>
-            <span class="feature-meta mono">MARK / GROUP</span>
-          </article>
-          <article>
-            <span class="feature-number mono">03 / REVIEW</span>
-            <h3>逐帧审看，精确选择</h3>
-            <p>
-              检查画面与镜头衔接，调整切点，导出原始分辨率静帧。配合代理预览与可调整的面板布局，专注每一次选择。
-            </p>
-            <span class="feature-meta mono">FRAME / SELECT</span>
-          </article>
-          <article>
-            <span class="feature-number mono">04 / DELIVER</span>
-            <h3>让精选片段走向交付</h3>
-            <p>
-              预览并微调入点与出点，逐项输出或合并为一个文件。按需要设置画面、音频、文件命名与输出位置。
-            </p>
-            <span class="feature-meta mono">RANGE / EXPORT</span>
-          </article>
-        </div>
-      </section>
-
-      <section class="search-section section-space" id="search" aria-labelledby="search-title">
-        <div class="page-shell">
-          <div class="search-heading" data-reveal>
-            <p class="search-label mono">03 / VISUAL SEARCH · 交互示意</p>
-            <h2 id="search-title">你记得画面，<br />不必记住文件名。</h2>
-            <p>
-              安装语义检索组件后，用一句自然语言描述人物、动作或环境，即可在本机素材中查找相关画面。无需先准备字幕。
-            </p>
-          </div>
-          <div class="search-demo" data-reveal="late">
-            <div class="query-panel">
-              <p class="query-label mono">DESCRIBE THE SHOT</p>
-              <p class="query-text" id="query-text">“黄昏时的海岸线”</p>
-              <div class="query-options" role="group" aria-label="切换检索示例">
-                <button
-                  class="query-option is-active"
-                  type="button"
-                  data-query="coast"
-                  aria-pressed="true"
-                >
-                  <span>山间海岸</span><span aria-hidden="true">→</span>
-                </button>
-                <button class="query-option" type="button" data-query="city" aria-pressed="false">
-                  <span>城市夜景</span><span aria-hidden="true">→</span>
-                </button>
-                <button
-                  class="query-option"
-                  type="button"
-                  data-query="mountain"
-                  aria-pressed="false"
-                >
-                  <span>旷野远山</span><span aria-hidden="true">→</span>
-                </button>
-              </div>
-              <p class="query-note">
-                示例画面来自项目官方视觉稿，仅用于展示检索交互，并非真实检索结果。
-              </p>
-            </div>
-            <div class="results-panel">
-              <div class="results-heading mono">
-                <span id="result-count">03 个视觉参考</span><span>VISUAL REFERENCES</span>
-              </div>
-              <div class="search-results" id="search-results">
-                <article class="search-result">
-                  <img
-                    src="./assets/official-shot-coast.webp"
-                    alt="海岸与远山的官方视觉示意"
-                    width="384"
-                    height="248"
-                  />
-                  <div class="result-meta">
-                    <h3>海岸 / 远景</h3>
-                    <span class="result-index mono">01</span>
-                  </div>
-                </article>
-                <article class="search-result">
-                  <img
-                    src="./assets/official-shot-mountain.webp"
-                    alt="山峦与海面的官方视觉示意"
-                    width="512"
-                    height="332"
-                  />
-                  <div class="result-meta">
-                    <h3>山脊 / 黄昏</h3>
-                    <span class="result-index mono">02</span>
-                  </div>
-                </article>
-                <article class="search-result">
-                  <img
-                    src="./assets/official-shot-city.webp"
-                    alt="月夜城市的官方视觉示意"
-                    width="384"
-                    height="248"
-                  />
-                  <div class="result-meta">
-                    <h3>城市 / 入夜</h3>
-                    <span class="result-index mono">03</span>
-                  </div>
-                </article>
-              </div>
-              <p class="visually-hidden" id="search-status" aria-live="polite"></p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="workflow section-space" id="workflow" aria-labelledby="workflow-title">
-        <div class="page-shell">
-          <div class="workflow-heading" data-reveal>
-            <p class="section-number" aria-hidden="true">04</p>
-            <h2 id="workflow-title">从导入到交付，<br />不打断创作思路。</h2>
-            <p>素材从进入项目开始，始终处于清晰、可接续的工作流中。</p>
-          </div>
-          <ol class="workflow-list" data-reveal="late">
-            <li>
-              <span class="workflow-number">01</span>
-              <h3>汇集素材</h3>
-              <p>视频、音频、图像与可选字幕集中管理。</p>
-            </li>
-            <li>
-              <span class="workflow-number">02</span>
-              <h3>查找画面</h3>
-              <p>浏览自动分镜，或描述所需场景。</p>
-            </li>
-            <li>
-              <span class="workflow-number">03</span>
-              <h3>整理镜头</h3>
-              <p>添加标记、关键字与星级，编成有序集合。</p>
-            </li>
-            <li>
-              <span class="workflow-number">04</span>
-              <h3>导出交付</h3>
-              <p>核对范围，独立输出或合并成片。</p>
-            </li>
-          </ol>
-        </div>
-      </section>
-
-      <section
-        class="local-section page-shell section-space"
-        id="local"
-        aria-labelledby="local-title"
-      >
-        <div class="local-grid">
-          <div class="local-copy" data-reveal>
-            <p class="section-number" aria-hidden="true">05</p>
-            <h2 id="local-title">素材留在本机。<br />创作不必等待。</h2>
-            <p>
-              媒体分析、镜头检测、语义检索、预览和导出均在本机完成。日常素材处理无需上传文件，也不必等待远端队列。
-            </p>
-            <a
-              class="text-link"
-              href="https://helpx.locution.dpdns.org/"
-              target="_blank"
-              rel="noreferrer"
-              >阅读用户指南 <span aria-hidden="true">↗</span></a
-            >
-          </div>
-          <div class="local-visual" data-reveal="late">
-            <p class="mono">PROJECT FILE / AUTO SAVE</p>
-            <img
-              src="./assets/lcp-thumbnail.webp"
-              alt="Locution Pro 的 LCP 项目文件图标"
-              width="512"
-              height="512"
-            />
-            <div>
-              <strong>.lcp</strong><span>保存素材组织与镜头标注<br />配合自动保存与项目副本</span>
-            </div>
-          </div>
-        </div>
-        <dl class="spec-grid" data-reveal="late">
-          <div>
-            <dt class="mono">PROJECT</dt>
-            <dd>.lcp 项目与自动保存</dd>
-          </div>
-          <div>
-            <dt class="mono">VIDEO OUTPUT</dt>
-            <dd>H.264 / HEVC / ProRes / VP9</dd>
-          </div>
-          <div>
-            <dt class="mono">AUDIO OUTPUT</dt>
-            <dd>MP3 / AAC</dd>
-          </div>
-          <div>
-            <dt class="mono">SYSTEM</dt>
-            <dd>Windows 10 / 11 · 64 位</dd>
-          </div>
-        </dl>
-      </section>
-
-      <section class="faq-section page-shell section-space" id="faq" aria-labelledby="faq-title">
-        <div class="faq-heading" data-reveal>
-          <p class="section-number" aria-hidden="true">06</p>
-          <h2 id="faq-title">开始之前。</h2>
-          <p>关于素材、项目与运行环境，你可能想了解这些。</p>
-        </div>
-        <div class="faq-list" data-reveal="late">
+      <section class="faq-section page-shell" aria-labelledby="faq-title">
+        <h2 id="faq-title">开始之前</h2>
+        <div class="faq-list">
           <details>
-            <summary>
-              <span>没有字幕，也能检索视频吗？</span
-              ><span class="faq-plus" aria-hidden="true">+</span>
-            </summary>
+            <summary>没有字幕，也能找到视频里的画面吗？</summary>
             <p>
-              可以。分镜浏览不依赖字幕；安装语义检索组件后，可直接按画面描述查找镜头。已有字幕时，还可按对白文字或含义检索。
+              可以。分镜浏览不依赖字幕；安装可选语义检索组件后，可按画面描述查找镜头。已有字幕时，也可以按对白查找。
             </p>
           </details>
           <details>
-            <summary>
-              <span>素材会被上传到云端吗？</span><span class="faq-plus" aria-hidden="true">+</span>
-            </summary>
+            <summary>需要什么运行环境？</summary>
             <p>
-              不会。媒体分析、镜头检测、语义检索、预览和导出均在本机完成，日常素材处理无需上传文件。
+              64 位 Windows 10 或 Windows 11。可用窗口至少为 1080 × 700，建议使用 1920 × 1080
+              或更高分辨率显示器，并为素材、缓存和导出预留磁盘空间。
             </p>
           </details>
           <details>
-            <summary>
-              <span>运行 Locution Pro 需要什么环境？</span
-              ><span class="faq-plus" aria-hidden="true">+</span>
-            </summary>
-            <p>
-              需要 64 位 Windows 10 或 Windows 11。可用窗口至少为 1080 × 700，建议使用 1920 × 1080
-              或更高分辨率显示器，并为素材、缓存和导出文件预留磁盘空间。
-            </p>
-          </details>
-          <details>
-            <summary>
-              <span>如何继续之前的整理工作？</span
-              ><span class="faq-plus" aria-hidden="true">+</span>
-            </summary>
+            <summary>怎样继续之前的整理工作？</summary>
             <p>
               使用 .lcp
               项目保存素材组织与镜头标注，配合自动保存和项目副本继续创作。移交项目时，请同时提供原始素材。
@@ -526,63 +856,176 @@
         </div>
       </section>
 
-      <section class="download-section" id="download" aria-labelledby="download-title">
-        <div class="page-shell">
-          <div class="download-topline mono">
-            <span>07 / READY WHEN YOU ARE</span><span data-release-version>V0.4.1 / WINDOWS</span>
+      <section class="download-section page-shell" id="download" aria-labelledby="download-title">
+        <div class="download-copy">
+          <h2 id="download-title" lang="en">
+            Your next story<br />is already<br />in your footage.
+          </h2>
+          <div class="download-actions">
+            <a class="button button-primary" href="/api/download">下载 Windows 版</a>
+            <a
+              class="button button-secondary"
+              href="https://github.com/GCL-MAD-CLUB/Locution-Pro"
+              target="_blank"
+              rel="noreferrer"
+              >GitHub</a
+            >
           </div>
-          <div class="download-content" data-reveal>
-            <div>
-              <p class="download-kicker">你的下一个镜头，正在素材里等你。</p>
-              <h2 id="download-title">下一帧，<br />从这里开始。</h2>
-            </div>
-            <div class="download-action">
-              <img src="./assets/locution-icon.png" alt="" width="96" height="96" />
-              <p>免费下载 Locution Pro，让每一个值得保留的镜头触手可及。</p>
-              <a class="button button-primary" href="/api/download"
-                ><span>下载 Locution Pro</span><span aria-hidden="true">↓</span></a
-              >
-            </div>
+          <p class="download-version" data-release-version>V0.4.1 / WINDOWS</p>
+        </div>
+        <article class="creator-letter" aria-label="给视频创作者的一封信">
+          <div class="letter-seal">
+            <img src="./assets/locution-icon.png" alt="" width="32" height="32" loading="lazy" />
           </div>
-          <div class="download-wordmark" aria-hidden="true">Locution Pro</div>
+          <div class="letter-paper">
+            <p class="letter-salutation">给每一位视频创作者：</p>
+            <p>你是否也花过很多时间，在一段段长视频里反复寻找想要的镜头？</p>
+            <p>
+              我们做 Locution
+              Pro，是想把整理素材的时间留给创作。导入素材，浏览分镜，找到画面，再带着选好的片段继续剪辑。
+            </p>
+            <p>素材留在本机，工作随时接续。愿你更快找到想要的那一帧。</p>
+            <p class="letter-author">Locution Pro 团队</p>
+            <p class="letter-handwriting" lang="en">Find the frame. Tell your story.</p>
+            <span class="letter-signature" lang="en">Locution</span>
+          </div>
+        </article>
+      </section>
+
+      <section class="support-section page-shell" id="support" aria-labelledby="support-title">
+        <h2 id="support-title">参与支持</h2>
+        <div class="support-content">
+          <div class="support-grid">
+            <a
+              class="support-card"
+              href="https://github.com/GCL-MAD-CLUB/Locution-Pro/discussions"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <svg class="support-icon" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                <path d="M10 7h28a4 4 0 0 1 4 4v23a4 4 0 0 1-4 4H17L6 45V11a4 4 0 0 1 4-4Z" />
+                <path d="M15 17h18M15 24h18M15 31h10" />
+              </svg>
+              <span class="support-arrow" aria-hidden="true">↗</span>
+              <h3>使用反馈</h3>
+              <p>聊聊你的使用体验</p>
+            </a>
+            <a
+              class="support-card"
+              href="https://github.com/GCL-MAD-CLUB/Locution-Pro/issues"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <svg class="support-icon" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                <circle cx="24" cy="24" r="18" />
+                <circle cx="24" cy="24" r="6" fill="currentColor" stroke="none" />
+              </svg>
+              <span class="support-arrow" aria-hidden="true">↗</span>
+              <h3>GitHub Issue</h3>
+              <p>报 bug、提需求</p>
+            </a>
+            <a
+              class="support-card"
+              href="https://github.com/GCL-MAD-CLUB/Locution-Pro/pulls"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <svg class="support-icon" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                <circle cx="12" cy="10" r="5" />
+                <circle cx="36" cy="38" r="5" />
+                <path d="M12 15v27M27 8h2a7 7 0 0 1 7 7v18" stroke-dasharray="5 6" />
+              </svg>
+              <span class="support-arrow" aria-hidden="true">↗</span>
+              <h3>GitHub PR</h3>
+              <p>欢迎贡献代码</p>
+            </a>
+          </div>
+          <a
+            class="support-star"
+            href="https://github.com/GCL-MAD-CLUB/Locution-Pro"
+            target="_blank"
+            rel="noreferrer"
+            ><svg viewBox="0 0 24 24" fill="none" width="22" height="22" aria-hidden="true">
+              <path
+                d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9Z"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linejoin="round"
+              /></svg
+            >在 GitHub 上为我们点亮 Star</a
+          >
         </div>
       </section>
     </main>
 
-    <dialog class="workspace-dialog" id="workspace-dialog" aria-labelledby="workspace-dialog-title">
-      <span class="visually-hidden" id="workspace-dialog-title">编辑工作区</span>
-      <button type="button" class="workspace-dialog-close" aria-label="关闭工作区预览" autofocus>
-        ×
-      </button>
+    <footer class="site-footer">
+      <div class="footer-signature page-shell" aria-hidden="true"><span>Locution</span></div>
       <img
-        class="workspace-dialog-image"
-        src="./assets/locution-app-workspace-light.webp"
-        alt="Locution Pro 编辑工作区完整截图"
-        width="3120"
-        height="1940"
+        class="footer-mark"
+        src="./assets/locution-icon.png"
+        alt=""
+        width="256"
+        height="256"
         loading="lazy"
       />
-    </dialog>
-
-    <footer class="site-footer">
-      <div class="page-shell footer-grid">
-        <p>Made by GCL MAD CLUB<br /><span>Apache-2.0 Open Source</span></p>
-        <nav aria-label="页脚导航">
-          <a href="https://github.com/GCL-MAD-CLUB/Locution-Pro" target="_blank" rel="noreferrer"
-            >GitHub ↗</a
-          >
-          <a
-            href="https://github.com/GCL-MAD-CLUB/Locution-Pro/blob/main/CHANGELOG.md"
-            target="_blank"
-            rel="noreferrer"
-            >更新日志 ↗</a
-          >
-          <a href="https://helpx.locution.dpdns.org/" target="_blank" rel="noreferrer"
-            >用户指南 ↗</a
-          >
-          <a href="#top">回到顶部 ↑</a>
-        </nav>
-        <p class="footer-note mono">FIND THE SHOT.<br />KEEP THE FLOW.</p>
+      <div class="footer-content">
+        <div class="page-shell footer-inner">
+          <div class="footer-brand">
+            <a class="brand" href="#top"
+              ><img src="./assets/locution-icon.png" alt="" width="30" height="30" />Locution Pro</a
+            >
+            <p>面向视频创作者的本地工作空间。<br />从素材里，找到那一帧。</p>
+          </div>
+          <nav aria-label="产品链接">
+            <h3>产品</h3>
+            <a href="/api/download">Windows 版</a><a href="#workspace">功能演示</a
+            ><a
+              href="https://github.com/GCL-MAD-CLUB/Locution-Pro/blob/main/CHANGELOG.md"
+              target="_blank"
+              rel="noreferrer"
+              >更新日志</a
+            >
+          </nav>
+          <nav aria-label="资源链接">
+            <h3>资源</h3>
+            <a href="https://helpx.locution.dpdns.org/" target="_blank" rel="noreferrer">用户指南</a
+            ><a href="https://github.com/GCL-MAD-CLUB/Locution-Pro" target="_blank" rel="noreferrer"
+              >GitHub 仓库</a
+            ><a
+              href="https://github.com/GCL-MAD-CLUB/Locution-Pro/issues"
+              target="_blank"
+              rel="noreferrer"
+              >问题反馈</a
+            >
+          </nav>
+          <nav aria-label="参与链接">
+            <h3>一起完善</h3>
+            <a href="#support">参与支持</a>
+            <a
+              href="https://github.com/GCL-MAD-CLUB/Locution-Pro/discussions"
+              target="_blank"
+              rel="noreferrer"
+              >使用交流</a
+            >
+            <a
+              href="https://github.com/GCL-MAD-CLUB/Locution-Pro/blob/main/CONTRIBUTING.md"
+              target="_blank"
+              rel="noreferrer"
+              >贡献指南</a
+            >
+          </nav>
+        </div>
+        <div class="page-shell">
+          <div class="footer-legal">
+            <span>© Kotodama · Locution Pro</span
+            ><a
+              href="https://github.com/GCL-MAD-CLUB/Locution-Pro/blob/main/LICENSE"
+              target="_blank"
+              rel="noreferrer"
+              >Apache-2.0 开源许可</a
+            >
+          </div>
+        </div>
       </div>
     </footer>
   </body>

@@ -31,11 +31,14 @@ npm run site:preview
 - `index.html`：官网首页。
 - `404.html`：未知路径的错误页，阻止 Pages 将未知路径回退到首页。
 - `src/`：样式和交互；字体通过独立 WOFF2 文件加载。
+- `src/scroll-motion.js`: 原生滚动驱动页面位移、缩放和显现，尊重减少动态效果设置。
+- `src/demo.js`：以真实应用截图为界面底稿，按脚本自动演示素材选择、分镜查找、关键字标注和输出设置。访客无需操作；视口外与后台暂停，减少动态效果时显示静态界面。不运行视频分析、模型或编码。
 - `assets/`：本地图标、应用截图、视觉示意和字体许可证。
 - `_headers`：安全头；使用 Pages 默认的 ETag 与重新验证缓存策略，避免未带哈希的资源更新后仍显示旧版本。
 - `_redirects`：原文档内页目录以 301 跳转到用户指南新子域名，保留后续路径。
 - `_worker.js` 和 `_routes.json`：仅让 `/api/release` 与 `/api/download` 进入 Worker，其他页面继续使用静态托管和现有安全头。
 - `robots.txt`：抓取规则。构建会加入正式站点地图地址。
+- `DESIGN.md`: 视觉规范，不发布。
 - `brand-spec.md`：维护中的品牌约束，不发布。
 
 默认正式域名为 `https://locution.dpdns.org`。如需变更，在构建时设置 `SITE_URL` 为 HTTPS 源站地址，不带路径、查询参数或片段。构建生成首页 canonical、Open Graph 绝对地址和 `sitemap.xml`。预览部署由 Pages 默认添加禁止索引响应头。

@@ -720,59 +720,42 @@ test("selection and hover remain independent while zooming", async ({ page }) =>
   expect(await activated(page)).toBe("4");
 });
 
-test("visible previews keep their DOM position and never restart entry when layers or distance order change", async ({
+test("hovering selected shots and previews preserves selection and playback; deselection removes only its preview", async ({
   page,
 }) => {
-  await page.emulateMedia({ reducedMotion: "no-preference" });
   await mount(page);
-  await page.clock.install();
   await page.evaluate(() => (window as any).graphSetSelection(new Set(["0", "4", "8"])));
+  await expect.poll(() => selected(page)).toEqual(["0", "4", "8"]);
+  const beforeActivations = await activations(page);
+  const beforeActivated = await activated(page);
+  const preview = (id: string) => page.locator(`[data-preview-shot-id="${id}"]`);
+  async function expectSelectedPreviews(ids: string[]) {
+    await expect(page.locator(".storyboard-graph-preview")).toHaveCount(ids.length);
+    for (const id of ids) {
+      await expect(preview(id)).toBeVisible();
+      await expect(preview(id)).toHaveClass(/is-selected/);
+      await expect(preview(id)).not.toHaveAttribute("aria-hidden", "true");
+    }
+    await expect.poll(() => selected(page)).toEqual(ids);
+    expect(await activations(page)).toEqual(beforeActivations);
+    expect(await activated(page)).toBe(beforeActivated);
+  }
   await shot(page, 4).hover();
-  await expect(page.locator(".storyboard-graph-preview")).toHaveCount(3);
-  await page.clock.runFor(200);
-  await page.evaluate(() => {
-    const removed: string[] = [];
-    const entries: string[] = [];
-    const root = document.querySelector(".storyboard-graph-previews")!;
-    new MutationObserver((records) => {
-      for (const record of records)
-        for (const node of record.removedNodes)
-          if (node instanceof HTMLElement && node.matches(".storyboard-graph-preview"))
-            removed.push(node.dataset.previewShotId!);
-    }).observe(root, { childList: true });
-    root.addEventListener("transitionrun", (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement) || !target.matches(".storyboard-graph-preview")) return;
-      for (const animation of target.getAnimations()) {
-        if (!(animation instanceof CSSTransition) || animation.transitionProperty !== "opacity")
-          continue;
-        const frames = (animation.effect as KeyframeEffect).getKeyframes();
-        if (Number(frames[0].opacity) === 0) entries.push(target.dataset.previewShotId!);
-      }
-    });
-    (window as any).graphPreviewLifecycle = { removed, entries };
-  });
-  // The selected previews stay visible while their distance-based z-indices change.
+  await expect(page.getByRole("tooltip")).toHaveAttribute("data-preview-shot-id", "4");
+  await expectSelectedPreviews(["0", "4", "8"]);
   await shot(page, 0).hover();
-  await page.clock.runFor(200);
-  await page.locator('[data-preview-shot-id="8"]').hover();
-  await page.clock.runFor(200);
+  await expect(page.getByRole("tooltip")).toHaveAttribute("data-preview-shot-id", "0");
+  await expectSelectedPreviews(["0", "4", "8"]);
+  await preview("8").hover();
+  await expectSelectedPreviews(["0", "4", "8"]);
   await shot(page, 8).hover();
-  await page.clock.runFor(200);
-  expect(await page.evaluate(() => (window as any).graphPreviewLifecycle)).toEqual({
-    removed: [],
-    entries: [],
-  });
-  await expect(page.locator(".storyboard-graph-preview.is-exiting")).toHaveCount(0);
-  // Actual removal cleans up only the departing preview; the other two persist.
+  await expect(page.getByRole("tooltip")).toHaveAttribute("data-preview-shot-id", "8");
+  await expectSelectedPreviews(["0", "4", "8"]);
+
   await page.mouse.move(1100, 700);
   await page.evaluate(() => (window as any).graphSetSelection(new Set(["0", "4"])));
-  await page.clock.runFor(200);
-  await expect(page.locator('[data-preview-shot-id="8"]')).toHaveCount(0);
-  expect(await page.evaluate(() => (window as any).graphPreviewLifecycle)).toEqual({
-    removed: ["8"],
-    entries: [],
-  });
+  await expect(preview("8")).toHaveCount(0);
+  await expectSelectedPreviews(["0", "4"]);
 });
 
 test("wheel zoom anchors to the pointer; canvas and overview drags stay synchronized and bounded", async ({

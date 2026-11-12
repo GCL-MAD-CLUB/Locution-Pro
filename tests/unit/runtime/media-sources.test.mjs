@@ -33,13 +33,29 @@ test("batch operations include exactly their requested media and override suppli
   const batch = commandMediaSources("find_media_needing_analysis", { assetIds: ["a", "missing"] });
   assert.deepEqual(Object.keys(batch.mediaSources), ["a"]);
   const search = commandMediaSources("search_storyboards_semantic_batch", {
-    shots: [{ asset_id: "b" }, { asset_id: "b" }],
+    shots: [{ assetId: "b" }, { assetId: "b" }],
     mediaSources: { a },
   });
   assert.deepEqual(Object.keys(search.mediaSources), ["b"]);
   assert.equal(search.mediaSources.b.asset, b.asset);
   const args = { clips: [] };
   assert.equal(commandMediaSources("export_clips", args), args);
+});
+
+test("storyboard indexing, retrieval and graph requests include shot media", () => {
+  const { registerMediaSources, commandMediaSources } = loadModule(modulePath);
+  const media = { asset: { id: "a", path: "source.mp4" } };
+  registerMediaSources(() => ({ a: media, unrelated: { asset: { id: "unrelated" } } }));
+  for (const command of [
+    "select_storyboard_frames",
+    "search_storyboards_semantic",
+    "search_storyboards_semantic_batch",
+    "read_storyboard_graph_vectors",
+  ]) {
+    const request = commandMediaSources(command, { shots: [{ assetId: "a" }] });
+    assert.deepEqual(Object.keys(request.mediaSources), ["a"], command);
+    assert.equal(request.mediaSources.a.asset.path, "source.mp4", command);
+  }
 });
 
 test("every native media input command receives document sources at the IPC boundary", () => {
@@ -55,11 +71,69 @@ test("every native media input command receives document sources at the IPC boun
       /#\[tauri::command\]\s+pub\(crate\) (?:async )?fn (\w+)\(([^)]*)\)/g,
     )) {
       if (!match[2].includes("media_sources:")) continue;
-      assert.ok(commandMediaSources(match[1], { assetId: "a" }).mediaSources?.a, match[1]);
+      const signature = match[2];
+      const args = /\bshots:/.test(signature)
+        ? { shots: [{ assetId: "a" }] }
+        : /\basset_ids:/.test(signature)
+          ? { assetIds: ["a"] }
+          : /\basset_id:/.test(signature)
+            ? { assetId: "a" }
+            : null;
+      assert.ok(args, `Unrecognized media selector for ${match[1]}`);
+      assert.ok(commandMediaSources(match[1], args).mediaSources?.a, match[1]);
       count++;
     }
   }
   assert.equal(count, 19);
+});
+
+test("the real storyboard index dispatch includes current document media", async () => {
+  const { registerMediaSources, commandMediaSources } = loadModule(modulePath);
+  const media = { asset: { id: "a", path: "relinked.mp4" } };
+  registerMediaSources(() => ({ a: media }));
+  const requests = [];
+  const failures = [];
+  const { ensureStoryboardSemanticIndex } = loadModule(
+    "../../../src/application/media/storyboardSemanticSearch.ts",
+    {
+      "../../core/editor/semanticPrompts": {},
+      "../../core/editor/textSearch": {},
+      "@tauri-apps/api/core": { Channel: class {} },
+      react: {},
+      "../../errors": {
+        invokeCommand: async (command, args) => {
+          const request = commandMediaSources(command, args);
+          requests.push({ command, request });
+          for (const shot of request.shots) {
+            assert.equal(request.mediaSources[shot.assetId]?.asset.path, "relinked.mp4");
+          }
+        },
+      },
+      "../../errors/runtime": {},
+      "../../systems/TaskSystem": {
+        createTaskProgress: async () => ({
+          cancelled: false,
+          fail: (error) => failures.push(error),
+          remove() {},
+        }),
+      },
+      "../../platform/tauri/runtime": {},
+    },
+    { crypto: globalThis.crypto },
+  );
+  const shot = {
+    id: "shot",
+    assetId: "a",
+    fingerprint: "hash",
+    startFrame: 0,
+    endFrame: 24,
+    source: "detected",
+  };
+  assert.equal(await ensureStoryboardSemanticIndex([shot], "scope"), "ready");
+  assert.equal(failures.length, 0);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].command, "select_storyboard_frames");
+  assert.equal(requests[0].request.shots[0], shot);
 });
 
 test("metadata operations omit cue payloads while analysis preserves them", () => {

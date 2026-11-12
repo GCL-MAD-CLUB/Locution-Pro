@@ -33,7 +33,7 @@ export function commandMediaSources(command: string, args?: Record<string, unkno
   const ids = new Set<string>();
   if (typeof args?.assetId === "string") ids.add(args.assetId);
   if (Array.isArray(args?.assetIds)) for (const id of args.assetIds) ids.add(id);
-  if (Array.isArray(args?.shots)) for (const shot of args.shots) ids.add(shot.asset_id);
+  if (Array.isArray(args?.shots)) for (const shot of args.shots) ids.add(shot.assetId);
   const sources = readSources();
   const mediaSources: Record<string, MediaDocument> = {};
   // Thumbnail and detection requests need metadata only. Avoid serializing every

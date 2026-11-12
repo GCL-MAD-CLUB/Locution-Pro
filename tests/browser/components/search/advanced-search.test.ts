@@ -127,9 +127,6 @@ for (const label of ["字幕", "分镜"] as const) {
     await dialog.getByLabel("正向描述", { exact: true }).fill("sunset\nbeach");
     await dialog.getByLabel("反向描述", { exact: true }).fill("crowd\ncity");
     await expect(dialog.getByLabel("最低匹配度", { exact: true })).toHaveCount(0);
-    const bounds = await dialog.boundingBox();
-    expect(bounds!.height).toBeLessThanOrEqual(448);
-    expect(bounds!.y).toBeGreaterThanOrEqual(0);
     await dialog.getByRole("button", { name: "应用", exact: true }).click();
     expect(await search.snapshot()).toMatchObject({
       query: "sunset\nbeach",

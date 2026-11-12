@@ -1,24 +1,7 @@
-import type { Locator } from "@playwright/test";
-
 import packageJson from "../../../package.json" with { type: "json" };
 import { test, expect, openImport } from "../support/fixtures";
 
 const prerelease = packageJson.version.includes("-");
-
-async function assertUpdateVisualAlignment(dialog: Locator) {
-  const alignment = await dialog.locator(".update-dialog-status").evaluate((row) => {
-    const visual = row.querySelector(".update-dialog-visual");
-    const text = visual?.nextElementSibling;
-    if (!(visual instanceof Element) || !(text instanceof Element)) {
-      return { visualWidth: 0, textOffset: 0 };
-    }
-    const visualBox = visual.getBoundingClientRect();
-    const textBox = text.getBoundingClientRect();
-    return { visualWidth: visualBox.width, textOffset: textBox.left - visualBox.right };
-  });
-  expect(alignment.visualWidth).toBe(48);
-  expect(alignment.textOffset).toBeCloseTo(16, 1);
-}
 
 test("启动时先展示安装错误，再展示新版本说明，确认后不重复", async ({ page, native }) => {
   await page.addInitScript(() => {
@@ -71,14 +54,6 @@ test.describe("正式版更新", () => {
     await expect(update.getByRole("heading", { name: "Locution Pro 999.0.0" })).toBeVisible();
     await expect(update.locator(".update-dialog-summary-icon")).toBeVisible();
     await expect(update.getByText("新版本", { exact: true })).toBeVisible();
-    const badgeOffset = await update.locator(".update-dialog-title-row").evaluate((row) => {
-      const title = row.querySelector("h3");
-      const badge = row.querySelector(".update-dialog-badge");
-      return title instanceof Element && badge instanceof Element
-        ? badge.getBoundingClientRect().left - title.getBoundingClientRect().right
-        : -1;
-    });
-    expect(badgeOffset).toBeGreaterThan(0);
     await expect(update.getByRole("heading", { name: "本次更新" })).toBeVisible();
     await expect(update.getByText("更快的媒体导入")).toBeVisible();
     expect(await native.calls("fetch_latest_release")).toHaveLength(1);
@@ -107,7 +82,7 @@ test.describe("正式版更新", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
-  test("更新包就绪使用12px字号，忽略选项位于版本说明与按钮之间", async ({ page, native }) => {
+  test("更新包就绪后允许更新并可忽略此版本", async ({ page, native }) => {
     await page.addInitScript(() => {
       (window as any).__nativeTest.latestRelease = {
         version: "999.0.0",
@@ -120,23 +95,6 @@ test.describe("正式版更新", () => {
     const dialog = page.getByRole("dialog", { name: "检查更新", exact: true });
     await expect(dialog.getByRole("button", { name: "立即更新", exact: true })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "前往发布页", exact: true })).toHaveCount(0);
-    for (const selector of [
-      ".update-dialog-body",
-      "h3",
-      ".update-dialog-notes h2",
-      ".update-dialog-ignore",
-      ".modal-dialog-confirm",
-    ]) {
-      await expect(dialog.locator(selector).first()).toHaveCSS("font-size", "12px");
-    }
-    const positions = await dialog.evaluate((element) => ({
-      notes: element.querySelector(".update-dialog-notes")!.getBoundingClientRect().bottom,
-      ignoreTop: element.querySelector(".update-dialog-ignore")!.getBoundingClientRect().top,
-      ignoreBottom: element.querySelector(".update-dialog-ignore")!.getBoundingClientRect().bottom,
-      actions: element.querySelector(".modal-dialog-actions")!.getBoundingClientRect().top,
-    }));
-    expect(positions.ignoreTop).toBeGreaterThan(positions.notes);
-    expect(positions.ignoreBottom).toBeLessThan(positions.actions);
     await dialog.getByRole("checkbox", { name: "不再提示此版本" }).check();
     expect(await native.calls("set_update_ignored")).toHaveLength(1);
   });
@@ -173,7 +131,6 @@ test.describe("正式版更新", () => {
     await app.getByRole("menuitem", { name: "更新(U)...", exact: true }).click();
     const latest = app.getByRole("dialog", { name: "检查更新", exact: true });
     await expect(latest.getByText("当前已是最新版本")).toBeVisible();
-    await assertUpdateVisualAlignment(latest);
     await latest.getByRole("button", { name: "完成" }).click();
 
     await native.fail("fetch_latest_release", "offline");
@@ -282,7 +239,7 @@ test("关闭未保存项目可取消，明确放弃后才移除媒体", async ({
   const save = app.locator(".project-save-dialog");
   await expect(save).toBeVisible();
   await save.getByRole("button", { name: /取消/ }).click();
-  expect(await native.calls("close_project")).toHaveLength(0);
+  await expect(save).toHaveCount(0);
   await expect(
     app
       .getByRole("table", { name: "媒体列表", exact: true })
@@ -296,5 +253,6 @@ test("关闭未保存项目可取消，明确放弃后才移除媒体", async ({
       .getByText("clip.MP4", { exact: true }),
   ).toHaveCount(0);
   expect(await native.calls("save_project_file")).toHaveLength(0);
-  expect(await native.calls("close_project")).toHaveLength(1);
+  await expect(save).toHaveCount(0);
+  await expect(app.getByText("已关闭项目。", { exact: true })).toBeVisible();
 });

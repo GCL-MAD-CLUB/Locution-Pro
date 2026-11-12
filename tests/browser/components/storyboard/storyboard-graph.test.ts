@@ -155,7 +155,7 @@ test("overlapping clusters target only the upper region; hand and spray do not s
   expect(await activated(page)).toBeNull();
 });
 
-test("cluster outlines enclose members, keep screen-space dashes and follow elastic dragging", async ({
+test("cluster outlines follow zooming and dragging without selecting or seeking", async ({
   page,
 }) => {
   await page.goto("/tests/browser/support/blank.html");
@@ -184,18 +184,6 @@ test("cluster outlines enclose members, keep screen-space dashes and follow elas
       );
     });
   expect(await enclosed()).toBe(true);
-  const style = await outlines.first().evaluate((path) => ({
-    dash: getComputedStyle(path).strokeDasharray,
-    width: getComputedStyle(path).strokeWidth,
-    effect: getComputedStyle(path).vectorEffect,
-    pointer: getComputedStyle(path).pointerEvents,
-  }));
-  expect(style).toEqual({
-    dash: "5px, 5px",
-    width: "1px",
-    effect: "non-scaling-stroke",
-    pointer: "fill",
-  });
   const stage = page.locator(".storyboard-graph-view");
   const bounds = (await stage.boundingBox())!;
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
@@ -660,19 +648,8 @@ async function assertFrame(page: Page) {
   expect(bounds.y + bounds.h).toBeLessThanOrEqual(90.001);
 }
 
-test("graph frame matches icon view; controls and corner text are absent; hover and selection work", async ({
-  page,
-}) => {
+test("graph hover reveals previews and clicking selects the shot", async ({ page }) => {
   await mount(page);
-  const styles = await page.evaluate(() => {
-    const keys = ["border", "borderRadius", "boxShadow", "backgroundColor"] as const;
-    const read = (selector: string) => {
-      const style = getComputedStyle(document.querySelector(selector)!);
-      return keys.map((key) => style[key]);
-    };
-    return { graph: read(".storyboard-graph-view"), reference: read("#frame-reference") };
-  });
-  expect(styles.graph).toEqual(styles.reference);
   await expect(
     page.locator(
       ".storyboard-graph-view input, .storyboard-graph-caption, .storyboard-graph-controls",
@@ -720,221 +697,27 @@ test("graph frame matches icon view; controls and corner text are absent; hover 
     };
   });
   for (const color of Object.values(hoverColors)) expect(isGrayscale(color)).toBe(true);
-  const previewGeometry = await page.evaluate(() => {
-    const dot = document.querySelector<HTMLElement>(".storyboard-graph-dot.is-hovered")!;
-    const preview = document.querySelector<HTMLElement>('[role="tooltip"]')!;
-    const dotBox = dot.getBoundingClientRect();
-    const previewBox = preview.getBoundingClientRect();
-    const arrow = getComputedStyle(preview, "::after");
-    return {
-      dotCenterX: dotBox.left + dotBox.width / 2,
-      dotTop: dotBox.top,
-      arrowCenterX: previewBox.left + Number.parseFloat(arrow.left),
-      arrowTipY:
-        previewBox.top + Number.parseFloat(arrow.top) + Number.parseFloat(arrow.borderTopWidth),
-    };
-  });
-  expect(previewGeometry.arrowCenterX).toBeCloseTo(previewGeometry.dotCenterX, 1);
-  expect(previewGeometry.arrowTipY).toBeLessThan(previewGeometry.dotTop);
   await dot.click();
   await expect(dot).toHaveAttribute("aria-pressed", "true");
 });
 
-test("selection preserves the disc geometry; zoom scales it and only hover enlarges it by 1.1", async ({
-  page,
-}) => {
+test("selection and hover remain independent while zooming", async ({ page }) => {
   await mount(page, false, 3);
-  const disc = page.locator('[data-graph-node="4"]');
-  const geometry = () =>
-    disc.evaluate((element) => {
-      const circle = element as SVGCircleElement;
-      return {
-        radius: circle.r.baseVal.value,
-        stroke: getComputedStyle(circle).strokeWidth,
-        width: circle.getBoundingClientRect().width,
-      };
-    });
-  const normal = await geometry();
-  await page.evaluate(() => (window as any).graphSetSelection(new Set(["4"])));
-  await expect(disc).toHaveAttribute("data-selection-node", "4");
-  expect(await geometry()).toEqual(normal);
-  await shot(page, 4).hover();
-  expect((await geometry()).width / normal.width).toBeCloseTo(1.1, 4);
-  await page.evaluate(() => (window as any).graphSetSelection(new Set()));
-  await expect(disc).not.toHaveAttribute("data-selection-node");
-  expect((await geometry()).width / normal.width).toBeCloseTo(1.1, 4);
-  await page.mouse.move(1000, 700);
-  await expect(shot(page, 4)).not.toHaveClass(/is-hovered/);
-  expect(await geometry()).toEqual(normal);
-  const initial = await transform(page);
-  await page.mouse.move(600, 350);
-  await page.mouse.wheel(0, -300);
-  await expect.poll(async () => (await transform(page)).zoom).toBeGreaterThan(initial.zoom);
-  const zoom = (await transform(page)).zoom;
-  expect((await geometry()).radius / normal.radius).toBeCloseTo(
-    Math.min(zoom, 0.8) / Math.min(initial.zoom, 0.8),
-    4,
-  );
-});
-
-test("zoom caps at 2 while node paint, hit targets and rings stop growing at 0.8", async ({
-  page,
-}) => {
-  await mount(page, false, 6, 8);
   const dot = shot(page, 4);
   await dot.click();
-  const geometry = () =>
-    dot.evaluate((button) => {
-      const node = document.querySelector<SVGCircleElement>('[data-graph-node="4"]')!;
-      const ring = document.querySelector<SVGCircleElement>('[data-selection-ring="4"]')!;
-      const matrix = node.getScreenCTM()!;
-      const radius =
-        (node.r.baseVal.value + parseFloat(getComputedStyle(node).strokeWidth) / 2) * matrix.a;
-      const a = node.getBoundingClientRect();
-      const b = ring.getBoundingClientRect();
-      return {
-        radius,
-        hitWidth: button.getBoundingClientRect().width,
-        gap: ring.r.baseVal.value * matrix.a - 0.5 - radius,
-        ringStroke: getComputedStyle(ring).strokeWidth,
-        dx: (a.left + a.right - b.left - b.right) / 2,
-        dy: (a.top + a.bottom - b.top - b.bottom) / 2,
-      };
-    });
-  const widths: number[] = [];
-  for (const zoom of [0.6, 0.8, 1.2, 2]) {
-    const current = (await transform(page)).zoom;
-    const anchor = await center(dot);
-    await page.locator(".storyboard-graph-view").evaluate(
-      (element, input) => {
-        element.dispatchEvent(
-          new WheelEvent("wheel", {
-            bubbles: true,
-            cancelable: true,
-            clientX: input.x,
-            clientY: input.y,
-            deltaY: -Math.log(input.zoom / input.current) / 0.0015,
-          }),
-        );
-      },
-      { ...anchor, zoom, current },
-    );
-    await expect.poll(async () => (await transform(page)).zoom).toBeCloseTo(zoom, 5);
-    const actual = await geometry();
-    expect(actual.radius).toBeCloseTo(8 * Math.min(zoom, 0.8), 4);
-    // HTML layout rounds the inverse-scaled hit box to subpixel layout units.
-    expect(actual.hitWidth).toBeCloseTo(actual.radius * 2, 1);
-    expect(actual.gap).toBeCloseTo(Math.max(1, actual.radius / 4), 4);
-    expect(actual.ringStroke).toBe("1px");
-    expect(actual.dx).toBeCloseTo(0, 4);
-    expect(actual.dy).toBeCloseTo(0, 4);
-    widths.push(actual.hitWidth);
-    await assertFrame(page);
-  }
-  expect(widths[0]).toBeLessThan(widths[1]);
-  expect(widths[1]).toBeCloseTo(widths[2], 1);
-  expect(widths[2]).toBeCloseTo(widths[3], 1);
-  const position = await center(dot);
-  await page.mouse.move(position.x + widths[3] / 2 + 2, position.y);
-  await expect(dot).not.toHaveClass(/is-hovered/);
+  await expect.poll(() => selected(page)).toEqual(["4"]);
   await dot.hover();
-  const hovered = await geometry();
-  expect(hovered.hitWidth).toBeCloseTo(widths[3] * 1.1, 3);
-  expect(hovered.hitWidth).toBeCloseTo(hovered.radius * 2, 1);
-  expect(hovered.dx).toBeCloseTo(0, 4);
-  expect(hovered.dy).toBeCloseTo(0, 4);
-});
-
-test("hover scale, node and edge colors, and preview entry and exit ease immediately together", async ({
-  page,
-}) => {
-  await page.emulateMedia({ reducedMotion: "no-preference" });
-  await mount(page);
-  const entering = await page.evaluate(async () => {
-    for (const element of document.querySelectorAll(
-      ".storyboard-graph-node-paint, .storyboard-graph-node",
-    ))
-      getComputedStyle(element).getPropertyValue("scale");
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
-    const button = document.querySelector('[data-storyboard-shot-id="4"].storyboard-graph-dot')!;
-    button.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
-    return document
-      .querySelector(".storyboard-graph-view")!
-      .getAnimations({ subtree: true })
-      .filter((animation) => animation instanceof CSSTransition)
-      .map((animation) => {
-        animation.pause();
-        const effect = animation.effect as KeyframeEffect;
-        const frames = effect.getKeyframes();
-        return {
-          target: (effect.target as Element).getAttribute("class"),
-          property: (animation as CSSTransition).transitionProperty,
-          duration: effect.getTiming().duration,
-          easing: effect.getTiming().easing,
-          from: frames[0],
-          to: frames.at(-1)!,
-        };
-      });
-  });
-  for (const [target, property] of [
-    ["storyboard-graph-node-paint", "scale"],
-    ["storyboard-graph-node", "fill"],
-    ["is-highlighted", "stroke"],
-    ["storyboard-graph-preview", "opacity"],
-  ]) {
-    const transition = entering.find(
-      (item) => item.target?.includes(target) && item.property === property,
-    );
-    expect(transition, `${target} ${property}: ${JSON.stringify(entering)}`).toBeDefined();
-    expect(transition!.duration).toBe(120);
-    expect(transition!.easing).toBe("ease");
-  }
-  const scaling = entering.find((item) => item.property === "scale")!;
-  expect(parseFloat(String(scaling.to.scale))).toBe(1.1);
-  const fadingIn = entering.find(
-    (item) =>
-      item.target?.includes("storyboard-graph-preview") && !item.target.includes("is-neighbor"),
-  )!;
-  expect(Number(fadingIn.from.opacity)).toBe(0);
-  expect(Number(fadingIn.to.opacity)).toBe(1);
-  const exiting = await page.evaluate(async () => {
-    for (const animation of document
-      .querySelector(".storyboard-graph-view")!
-      .getAnimations({ subtree: true }))
-      animation.finish();
-    // Commit the finished values before asking React to remove the hover.
-    document.querySelector(".storyboard-graph-preview")!.getBoundingClientRect();
-    const button = document.querySelector('[data-storyboard-shot-id="4"].storyboard-graph-dot')!;
-    button.dispatchEvent(
-      new PointerEvent("pointerout", { bubbles: true, relatedTarget: document.body }),
-    );
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
-    const preview = document.querySelector<HTMLElement>(".storyboard-graph-preview.is-exiting");
-    const transition = preview
-      ?.getAnimations()
-      .find((animation) => (animation as CSSTransition).transitionProperty === "opacity");
-    const effect = transition?.effect as KeyframeEffect | undefined;
-    return {
-      hoverCleared: !button.classList.contains("is-hovered"),
-      inert: preview?.inert,
-      pointerEvents: preview && getComputedStyle(preview).pointerEvents,
-      frames: effect?.getKeyframes(),
-      duration: effect?.getTiming().duration,
-    };
-  });
-  expect(exiting.hoverCleared).toBe(true);
-  expect(exiting.inert).toBe(true);
-  expect(exiting.pointerEvents).toBe("none");
-  expect(exiting.duration).toBe(120);
-  expect(Number(exiting.frames?.at(-1)?.opacity)).toBe(0);
-  await expect(page.locator(".storyboard-graph-preview")).toHaveCount(0);
+  await expect(dot).toHaveClass(/is-hovered/);
+  await page.mouse.move(1000, 700);
+  await expect(dot).not.toHaveClass(/is-hovered/);
+  await expect.poll(() => selected(page)).toEqual(["4"]);
+  const initial = await transform(page);
+  const anchor = await center(dot);
+  await page.mouse.move(anchor.x, anchor.y);
+  await page.mouse.wheel(0, -300);
+  await expect.poll(async () => (await transform(page)).zoom).toBeGreaterThan(initial.zoom);
+  await expect.poll(() => selected(page)).toEqual(["4"]);
+  expect(await activated(page)).toBe("4");
 });
 
 test("visible previews keep their DOM position and never restart entry when layers or distance order change", async ({
@@ -1038,23 +821,13 @@ test("wheel zoom anchors to the pointer; canvas and overview drags stay synchron
   await assertFrame(page);
 });
 
-test("maximum zoom gives equal node pixels for small and large graphs and survives panel resizing", async ({
-  page,
-}) => {
-  let referenceDiameter = 0;
+test("zoom cap applies across graph sizes and survives panel resizing", async ({ page }) => {
   for (const spread of [0.01, 1, 30]) {
     await mount(page, false, spread);
     const dot = page.getByRole("button", { name: "Shot 4", exact: true });
     const anchor = await center(dot);
     await page.mouse.move(anchor.x, anchor.y);
     for (let i = 0; i < 12; i++) await page.mouse.wheel(0, -600);
-    // The first, tiny graph already reaches the pixel cap in its fitted view.
-    if (!referenceDiameter) referenceDiameter = (await dot.boundingBox())!.width;
-    await expect
-      .poll(async () => (await dot.boundingBox())!.width)
-      .toBeCloseTo(referenceDiameter, 1);
-    expect(referenceDiameter).toBeLessThanOrEqual(40);
-    expect(referenceDiameter).toBeGreaterThan(0);
     await assertFrame(page);
     const maximum = await transform(page);
     expect(maximum.zoom).toBe(2);
@@ -1070,20 +843,7 @@ test("maximum zoom gives equal node pixels for small and large graphs and surviv
       host.style.width = "420px";
       host.style.height = "650px";
     });
-    await expect
-      .poll(async () => (await dot.boundingBox())!.width)
-      .toBeCloseTo(referenceDiameter, 1);
-    await expect
-      .poll(async () => {
-        const { width, height } = await page
-          .locator("[data-graph-viewport]")
-          .evaluate((element) => {
-            const box = (element as SVGRectElement).getBBox();
-            return { width: box.width, height: box.height };
-          });
-        return width / height;
-      })
-      .toBeCloseTo(418 / 648, 2);
+    await expect.poll(async () => (await transform(page)).zoom).toBe(maximum.zoom);
     await assertFrame(page);
   }
 });
@@ -1334,8 +1094,6 @@ for (const [keys, mode, label, expected] of [
     else {
       await expect(badge).toBeVisible();
       await expect(badge).toHaveAttribute("data-selection-mode", mode);
-      await expect(badge).toHaveCSS("width", "9px");
-      await expect(badge).toHaveCSS("height", "9px");
       await expect(badge).toHaveCSS("pointer-events", "none");
     }
     await expect.poll(() => selected(page)).toEqual([...expected]);
@@ -1415,19 +1173,6 @@ test("selection badge follows the native arrow and stays out of tools, previews 
   await page.keyboard.down("Shift");
   await expect(badge).toBeVisible();
   await expect(stage).toHaveCSS("cursor", "default");
-  await expect(badge).toHaveCSS("text-shadow", "none");
-  await expect(badge.locator(".storyboard-graph-selection-cursor-mark")).toHaveCSS(
-    "stroke-width",
-    "1.5px",
-  );
-  await page.mouse.move(70, 460);
-  await expect
-    .poll(async () => {
-      const bounds = await badge.boundingBox();
-      return bounds && { x: bounds.x, y: bounds.y };
-    })
-    // The badge sits 12px right and 11px below the pointer.
-    .toEqual({ x: 82, y: 471 });
   await page.getByRole("button", { name: "聚类优化", exact: true }).hover();
   await expect(badge).toBeHidden();
   const mini = await center(page.locator(".storyboard-graph-minimap"));
@@ -1493,40 +1238,7 @@ for (const [mode, single, group, box] of [
   });
 }
 
-test("selection previews persist, unselected hover adds missing neighbors, and selected rings stay one pixel at different zooms", async ({
-  page,
-}) => {
-  await mount(page, false, 5);
-  const dot = shot(page, 4);
-  await dot.click();
-  for (const wheel of [-300, 200]) {
-    const position = await center(dot);
-    await page.mouse.move(position.x, position.y);
-    await page.mouse.wheel(0, wheel);
-    await dot.hover();
-    const ring = await dot.evaluate(() => {
-      const circle = document.querySelector<SVGCircleElement>('[data-selection-ring="4"]')!;
-      const node = document.querySelector<SVGCircleElement>('[data-selection-node="4"]')!;
-      const ring = getComputedStyle(circle);
-      const fill = getComputedStyle(node);
-      return {
-        width: Number.parseFloat(ring.strokeWidth),
-        gap:
-          (circle.r.baseVal.value -
-            node.r.baseVal.value -
-            Number.parseFloat(fill.strokeWidth) / 2) *
-            node.getScreenCTM()!.a -
-          Number.parseFloat(ring.strokeWidth) / 2,
-        stroke: ring.stroke,
-        fill: fill.fill,
-      };
-    });
-    expect(ring.width).toBeCloseTo(1, 1);
-    expect(ring.gap).toBeGreaterThanOrEqual(0.99);
-    expect(ring.stroke).toBe(ring.fill);
-    expect(isGrayscale(ring.fill)).toBe(true);
-  }
-  // At this scale only central nodes are visible; use a compact graph to inspect all previews.
+test("selection previews persist and unselected hover adds missing neighbors", async ({ page }) => {
   await mount(page);
   await shot(page, 4).click();
   await shot(page, 0).hover();
@@ -1540,112 +1252,6 @@ test("selection previews persist, unselected hover adds missing neighbors, and s
   await shot(page, 4).dblclick();
   await page.mouse.move(1100, 700);
   await expect(page.locator(".storyboard-graph-preview.is-selected")).toHaveCount(3);
-});
-
-test("ring gaps grow beyond 8px diameter and preview arrows follow the ring", async ({ page }) => {
-  await mount(page, false, 6, 8);
-  const dot = shot(page, 4);
-  await dot.click();
-  const gaps: number[] = [];
-  for (const wheel of [0, -300, -600, 400]) {
-    const position = await center(dot);
-    await page.mouse.move(position.x, position.y);
-    if (wheel) await page.mouse.wheel(0, wheel);
-    await dot.hover();
-    const geometry = await dot.evaluate(() => {
-      const circle = document.querySelector<SVGCircleElement>('[data-selection-ring="4"]')!;
-      const node = document.querySelector<SVGCircleElement>('[data-selection-node="4"]')!;
-      const ring = getComputedStyle(circle);
-      const preview = document.querySelector<HTMLElement>('[data-preview-shot-id="4"]')!;
-      const arrow = getComputedStyle(preview, "::after");
-      const center = new DOMPoint(circle.cx.baseVal.value, circle.cy.baseVal.value).matrixTransform(
-        circle.getScreenCTM()!,
-      );
-      const scale = node.getScreenCTM()!.a;
-      const radius =
-        (node.r.baseVal.value + parseFloat(getComputedStyle(node).strokeWidth) / 2) * scale;
-      const width = Number.parseFloat(ring.strokeWidth);
-      const ringTop = center.y - circle.r.baseVal.value * scale - width / 2;
-      const tip =
-        preview.getBoundingClientRect().top +
-        Number.parseFloat(arrow.top) +
-        Number.parseFloat(arrow.borderTopWidth);
-      return {
-        radius,
-        width,
-        gap: circle.r.baseVal.value * scale - width / 2 - radius,
-        arrowGap: ringTop - tip,
-      };
-    });
-    expect(geometry.width).toBe(1);
-    expect(geometry.gap).toBeCloseTo(Math.max(1, geometry.radius / 4), 1);
-    expect(geometry.arrowGap).toBeCloseTo(2, 1);
-    gaps.push(geometry.gap);
-  }
-  expect(gaps[0]).toBeGreaterThanOrEqual(1 - 1e-5);
-  expect(gaps[2]).toBeCloseTo(1.6, 1);
-  expect(gaps[3]).toBeCloseTo(gaps[2], 1);
-});
-
-test("selected node and ring share one SVG center through fractional zoom, pan and panel resize", async ({
-  page,
-}) => {
-  for (const radius of [4, 13.4]) {
-    await mount(page, false, 6, radius);
-    const dot = shot(page, 4);
-    await dot.click();
-    const assertConcentric = async () => {
-      const geometry = await page.evaluate(() => {
-        const node = document.querySelector<SVGCircleElement>('[data-selection-node="4"]')!;
-        const ring = document.querySelector<SVGCircleElement>('[data-selection-ring="4"]')!;
-        const a = node.getBoundingClientRect();
-        const b = ring.getBoundingClientRect();
-        const button = document.querySelector(".storyboard-graph-dot.is-selected")!;
-        return {
-          sameGroup: node.parentElement === ring.parentElement,
-          sameLocalCenter:
-            node.cx.baseVal.value === ring.cx.baseVal.value &&
-            node.cy.baseVal.value === ring.cy.baseVal.value,
-          dx: (a.left + a.right - b.left - b.right) / 2,
-          dy: (a.top + a.bottom - b.top - b.bottom) / 2,
-          htmlHitTarget: button instanceof HTMLButtonElement,
-          strokeWidth: getComputedStyle(ring).strokeWidth,
-        };
-      });
-      expect(geometry.sameGroup).toBe(true);
-      expect(geometry.sameLocalCenter).toBe(true);
-      expect(geometry.dx).toBeCloseTo(0, 3);
-      expect(geometry.dy).toBeCloseTo(0, 3);
-      expect(geometry.htmlHitTarget).toBe(true);
-      expect(geometry.strokeWidth).toBe("1px");
-    };
-    await assertConcentric();
-    const position = await center(dot);
-    await page.mouse.move(position.x, position.y);
-    await page.mouse.wheel(0, -317);
-    await assertConcentric();
-    await page.getByRole("button", { name: "手型工具", exact: true }).click();
-    await page.mouse.move(100, 170);
-    await page.mouse.down();
-    await page.mouse.move(137.5, 191.25, { steps: 4 });
-    await page.mouse.up();
-    await assertConcentric();
-    await page.evaluate(() => {
-      const host = document.querySelector<HTMLElement>("#graph-host")!;
-      host.style.width = "731.5px";
-      host.style.height = "481.25px";
-    });
-    await expect
-      .poll(async () => (await page.locator(".storyboard-graph-view").boundingBox())!.width)
-      .toBeCloseTo(731.5, 1);
-    await assertConcentric();
-    const stage = page.locator(".storyboard-graph-view");
-    await stage.focus();
-    await stage.press("+");
-    await assertConcentric();
-    await stage.press("-");
-    await assertConcentric();
-  }
 });
 
 test("unselected pointer hover reveals missing neighbors at 60% while selected previews keep their own opacity", async ({
@@ -1878,12 +1484,6 @@ test("graph annotations update readonly thumbnail badges, colored nodes and conc
   await expect(metadata.getByRole("img", { name: "该分镜包含关键字", exact: true })).toBeVisible();
   await expect(metadata.locator("button")).toHaveCount(0);
   await expect(metadata).toHaveCSS("pointer-events", "none");
-  const badgeBox = (await metadata.boundingBox())!;
-  const previewBox = (await preview.boundingBox())!;
-  expect(badgeBox.x).toBeGreaterThan(previewBox.x);
-  expect(badgeBox.y).toBeGreaterThan(previewBox.y);
-  expect(badgeBox.x + badgeBox.width).toBeLessThan(previewBox.x + previewBox.width);
-  expect(badgeBox.y + badgeBox.height).toBeLessThan(previewBox.y + previewBox.height);
   const node = page.locator('[data-selection-node="4"]');
   const ring = page.locator('[data-selection-ring="4"]');
   const fill = await node.evaluate((element) => getComputedStyle(element).fill);

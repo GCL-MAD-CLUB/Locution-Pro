@@ -47,6 +47,7 @@ import {
   storyboardGraphMarqueeHitIds,
   storyboardGraphSelectionRect,
   storyboardGraphSelectionRing,
+  storyboardGraphSelectionMode,
   type StoryboardGraphSelectionMode,
   type StoryboardGraphTool,
 } from "../../../../core/editor/storyboardGraph/selection";
@@ -57,6 +58,7 @@ import type { StoryboardShot, StoryboardShotAnnotation } from "../../../../types
 import { StoryboardGraphThumbnail } from "./StoryboardGraphThumbnail";
 import { StoryboardGraphTools } from "./StoryboardGraphTools";
 import { useStoryboardGraphMotion } from "./useStoryboardGraphMotion";
+import { StoryboardGraphSelectionCursor } from "./StoryboardGraphSelectionCursor";
 import "./StoryboardGraphView.css";
 
 export interface StoryboardGraphCanvasProps {
@@ -438,6 +440,14 @@ export function StoryboardGraphCanvas({
   const spraySequenceRef = useRef(0);
   const lastSprayClickRef = useRef<{ id: string; historyGroupId: string } | null>(null);
   const [selectionMode, setSelectionMode] = useState<StoryboardGraphSelectionMode>("replace");
+  const [selectionModifiers, setSelectionModifiers] = useState({ shiftKey: false, altKey: false });
+  const effectiveSelectionMode = storyboardGraphSelectionMode(selectionModifiers, selectionMode);
+  const syncSelectionModifiers = useCallback((event: { shiftKey: boolean; altKey: boolean }) => {
+    const { shiftKey, altKey } = event;
+    setSelectionModifiers((current) =>
+      current.shiftKey === shiftKey && current.altKey === altKey ? current : { shiftKey, altKey },
+    );
+  }, []);
   const [marquee, setMarquee] = useState<StoryboardGraphRect | null>(null);
   const marqueeRef = useRef<MarqueeGesture | null>(null);
   const suppressClickRef = useRef(false);
@@ -1032,7 +1042,46 @@ export function StoryboardGraphCanvas({
       );
   }
 
+  useEffect(() => {
+    const key = (event: globalThis.KeyboardEvent) => {
+      if (!panelActive) return;
+      if (
+        event.type === "keydown" &&
+        event.target instanceof HTMLElement &&
+        (event.target.isContentEditable ||
+          event.target.closest("input, textarea, select, [role='textbox']"))
+      )
+        return;
+      syncSelectionModifiers(event);
+    };
+    const reset = () => syncSelectionModifiers({ shiftKey: false, altKey: false });
+    const visibility = () => {
+      if (document.hidden) reset();
+    };
+    if (!panelActive) reset();
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("keyup", key, true);
+    window.addEventListener("blur", reset);
+    document.addEventListener("visibilitychange", visibility);
+    return () => {
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("keyup", key, true);
+      window.removeEventListener("blur", reset);
+      document.removeEventListener("visibilitychange", visibility);
+    };
+  }, [panelActive, syncSelectionModifiers]);
+
+  useLayoutEffect(() => {
+    const gesture = marqueeRef.current;
+    if (!gesture || gesture.spray || gesture.mode === effectiveSelectionMode) return;
+    gesture.mode = effectiveSelectionMode;
+    // Always recalculate from pointerdown's selection, including when a key
+    // changes while the pointer is stationary inside an active rectangle.
+    if (gesture.active) updateMarquee(gesture, gesture.point);
+  }, [effectiveSelectionMode]);
+
   function startCanvasGesture(event: PointerEvent<HTMLDivElement>) {
+    syncSelectionModifiers(event);
     if (!graph || !event.isPrimary || (event.button !== 0 && event.button !== 1)) return;
     if (
       event.target instanceof Element &&
@@ -1077,7 +1126,7 @@ export function StoryboardGraphCanvas({
         start: canvasPoint(event),
         point: canvasPoint(event),
         base: new Set(selectionRef.current),
-        mode: selectionMode,
+        mode: storyboardGraphSelectionMode(event, selectionMode),
         camera: cameraRef.current,
         capture,
         active: false,
@@ -1102,6 +1151,7 @@ export function StoryboardGraphCanvas({
   }
 
   function moveCanvasGesture(event: PointerEvent<HTMLDivElement>) {
+    syncSelectionModifiers(event);
     const node = nodeDragRef.current;
     if (node?.id === event.pointerId) {
       event.preventDefault();
@@ -1131,6 +1181,7 @@ export function StoryboardGraphCanvas({
     const selection = marqueeRef.current;
     if (selection?.id === event.pointerId) {
       event.preventDefault();
+      if (!selection.spray) selection.mode = storyboardGraphSelectionMode(event, selectionMode);
       const point = canvasPoint(event);
       selection.point = point;
       if (
@@ -1165,6 +1216,7 @@ export function StoryboardGraphCanvas({
         return;
       }
       if (selection.active) {
+        if (!selection.spray) selection.mode = storyboardGraphSelectionMode(event, selectionMode);
         const point = canvasPoint(event);
         updateMarquee(selection, point);
         if (selection.spray) {
@@ -1279,12 +1331,13 @@ export function StoryboardGraphCanvas({
         return;
       }
       const previous = lastClickRef.current;
+      const mode = storyboardGraphSelectionMode(event, selectionMode);
       const base =
-        group && previous?.id === shot.id && previous.mode === selectionMode
+        group && previous?.id === shot.id && previous.mode === mode
           ? previous.base
           : new Set(selectionRef.current);
-      if (!group) lastClickRef.current = { id: shot.id, base, mode: selectionMode };
-      commitSelection(applyStoryboardGraphSelection(base, hits, selectionMode));
+      if (!group) lastClickRef.current = { id: shot.id, base, mode };
+      commitSelection(applyStoryboardGraphSelection(base, hits, mode));
       callbacksRef.current.onActivateShot(shot);
     },
     [
@@ -1384,6 +1437,11 @@ export function StoryboardGraphCanvas({
       }
       role="region"
       data-graph-phase={phase}
+      data-selection-mode={
+        !preparing && tool === "pointer" && !sprayActive && dragging !== "node"
+          ? effectiveSelectionMode
+          : undefined
+      }
       data-graph-canvas={JSON.stringify(canvas)}
       aria-label="分镜语义图谱"
       tabIndex={0}
@@ -1430,13 +1488,22 @@ export function StoryboardGraphCanvas({
           return;
         if (!preparing && tool === "pointer" && !sprayActive)
           commitSelection(
-            applyStoryboardGraphSelection(selectionRef.current, new Set(), selectionMode),
+            applyStoryboardGraphSelection(
+              selectionRef.current,
+              new Set(),
+              storyboardGraphSelectionMode(event, selectionMode),
+            ),
           );
       }}
       onPointerLeave={resetHover}
       onKeyDownCapture={toolShortcut}
       onKeyDown={navigateKeyboard}
     >
+      <StoryboardGraphSelectionCursor
+        stageRef={stageRef}
+        mode={effectiveSelectionMode}
+        enabled={!preparing && tool === "pointer" && !sprayActive && !dragging}
+      />
       <svg
         className="storyboard-graph-hover-bridges"
         width={size.width}
@@ -1482,7 +1549,11 @@ export function StoryboardGraphCanvas({
                   visibleNodes.filter((node) => node.cluster === cluster).map((node) => node.id),
                 );
                 commitSelection(
-                  applyStoryboardGraphSelection(selectionRef.current, hits, selectionMode),
+                  applyStoryboardGraphSelection(
+                    selectionRef.current,
+                    hits,
+                    storyboardGraphSelectionMode(event, selectionMode),
+                  ),
                 );
               }}
             />
@@ -1620,7 +1691,7 @@ export function StoryboardGraphCanvas({
       {children}
       <StoryboardGraphTools
         tool={tool}
-        mode={selectionMode}
+        mode={effectiveSelectionMode}
         sprayActive={sprayActive}
         showThumbnails={showThumbnails}
         clusterEnabled={clusterEnabled}
@@ -1644,6 +1715,7 @@ export function StoryboardGraphCanvas({
           lastClickRef.current = null;
           setSelectionMode(next);
         }}
+        onPointerActivate={() => stageRef.current?.focus({ preventScroll: true })}
       />
       <div className="storyboard-graph-navigator">
         <svg

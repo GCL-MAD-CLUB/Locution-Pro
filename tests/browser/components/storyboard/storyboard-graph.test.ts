@@ -324,6 +324,35 @@ test("V/H switch graph tools without intercepting text entry, modified keys or t
   expect(await sprays(page)).toEqual([]);
 });
 
+test("pointer activation of toolbar controls returns focus for Space panning", async ({ page }) => {
+  await mount(page, false, 5);
+  const stage = page.locator(".storyboard-graph-view");
+  const toggle = page.getByRole("button", { name: "显示缩略图", exact: true });
+  const before = await transform(page);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(stage).toBeFocused();
+  await page.keyboard.down("Space");
+  await expect(stage).toHaveClass(/is-hand/);
+  const start = await center(shot(page, 4));
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 30, start.y + 18, { steps: 4 });
+  await expect.poll(async () => (await transform(page)).x).toBeCloseTo(before.x + 30, 0);
+  await page.mouse.up();
+  await page.keyboard.up("Space");
+  await expect(stage).not.toHaveClass(/is-hand/);
+  expect(await selected(page)).toEqual([]);
+  expect(await activations(page)).toEqual([]);
+
+  // Keyboard activation keeps the toolbar's native Space behavior.
+  await toggle.focus();
+  await page.keyboard.press("Space");
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(toggle).toBeFocused();
+  await expect(stage).not.toHaveClass(/is-hand/);
+});
+
 test("view-degree radius changes preserve an already dragged layout and its camera", async ({
   page,
 }) => {
@@ -1282,6 +1311,141 @@ test("hand pans from nodes without selecting or seeking; pointer zooms and selec
   await page.mouse.move(425, 274);
   await page.mouse.wheel(0, -200);
   await expect.poll(async () => (await transform(page)).zoom).toBeGreaterThan(beforePointer.zoom);
+});
+
+for (const [keys, mode, label, expected] of [
+  [[], "replace", "替换选择", ["0", "1", "2"]],
+  [["Shift"], "add", "添加到选择", ["0", "1", "2", "8"]],
+  [["Alt"], "subtract", "从选择中减去", ["8"]],
+  [["Shift", "Alt"], "intersect", "与选择交集", ["1"]],
+] as const) {
+  test(`selection modifiers ${mode} drive marquee and cursor without seeking`, async ({ page }) => {
+    await mount(page);
+    await page.evaluate(() => (window as any).graphSetSelection(new Set(["1", "8"])));
+    const stage = page.locator(".storyboard-graph-view");
+    const before = await transform(page);
+    for (const key of keys) await page.keyboard.down(key);
+    await topRowMarquee(page);
+    await expect(stage).toHaveAttribute("data-selection-mode", mode);
+    await expect(page.getByRole("radio", { name: label, exact: true })).toBeChecked();
+    await expect(stage).toHaveCSS("cursor", "default");
+    const badge = page.locator(".storyboard-graph-selection-cursor");
+    if (mode === "replace") await expect(badge).toBeHidden();
+    else {
+      await expect(badge).toBeVisible();
+      await expect(badge).toHaveAttribute("data-selection-mode", mode);
+      await expect(badge).toHaveCSS("width", "9px");
+      await expect(badge).toHaveCSS("height", "9px");
+      await expect(badge).toHaveCSS("pointer-events", "none");
+    }
+    await expect.poll(() => selected(page)).toEqual([...expected]);
+    await page.mouse.up();
+    for (const key of [...keys].reverse()) await page.keyboard.up(key);
+    await expect(stage).toHaveAttribute("data-selection-mode", "replace");
+    await expect(badge).toBeHidden();
+    expect(await selected(page)).toEqual([...expected]);
+    expect(await activations(page)).toEqual([]);
+    expect(await transform(page)).toEqual(before);
+  });
+}
+
+test("stationary marquee recomputes modifiers from the original selection and blur resets the cursor", async ({
+  page,
+}) => {
+  await mount(page);
+  await page.evaluate(() => (window as any).graphSetSelection(new Set(["1", "8"])));
+  await topRowMarquee(page);
+  await expect.poll(() => selected(page)).toEqual(["0", "1", "2"]);
+  await page.keyboard.down("Shift");
+  await expect(page.locator(".storyboard-graph-selection-cursor")).toHaveAttribute(
+    "data-selection-mode",
+    "add",
+  );
+  await expect(page.locator(".storyboard-graph-selection-cursor")).toBeVisible();
+  await expect.poll(() => selected(page)).toEqual(["0", "1", "2", "8"]);
+  await page.keyboard.down("Alt");
+  await expect(page.locator(".storyboard-graph-selection-cursor")).toHaveAttribute(
+    "data-selection-mode",
+    "intersect",
+  );
+  await expect.poll(() => selected(page)).toEqual(["1"]);
+  await page.keyboard.up("Shift");
+  await expect(page.locator(".storyboard-graph-selection-cursor")).toHaveAttribute(
+    "data-selection-mode",
+    "subtract",
+  );
+  await expect.poll(() => selected(page)).toEqual(["8"]);
+  await page.keyboard.up("Alt");
+  await expect(page.locator(".storyboard-graph-selection-cursor")).toBeHidden();
+  await expect.poll(() => selected(page)).toEqual(["0", "1", "2"]);
+  await page.keyboard.down("Alt");
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect.poll(() => selected(page)).toEqual(["1", "8"]);
+  await expect(page.locator(".storyboard-graph-marquee")).toHaveCount(0);
+  await expect(page.locator(".storyboard-graph-view")).toHaveAttribute(
+    "data-selection-mode",
+    "replace",
+  );
+  await page.mouse.up();
+  await page.keyboard.up("Alt");
+  expect(await activations(page)).toEqual([]);
+});
+
+test("modifier clicks and double-clicks override the toolbar temporarily", async ({ page }) => {
+  await mount(page);
+  await shot(page, 8).click();
+  await shot(page, 4).click({ modifiers: ["Shift"] });
+  await expect.poll(() => selected(page)).toEqual(["4", "8"]);
+  await shot(page, 4).dblclick({ modifiers: ["Alt"] });
+  await expect.poll(() => selected(page)).toEqual(["8"]);
+  await page.getByRole("radio", { name: "添加到选择", exact: true }).click();
+  await shot(page, 8).click({ modifiers: ["Alt"] });
+  await expect.poll(() => selected(page)).toEqual([]);
+  await expect(page.getByRole("radio", { name: "添加到选择", exact: true })).toBeChecked();
+  expect(await activated(page)).toBe("8");
+});
+
+test("selection badge follows the native arrow and stays out of tools, previews and navigation", async ({
+  page,
+}) => {
+  await mount(page);
+  const stage = page.locator(".storyboard-graph-view");
+  const badge = page.locator(".storyboard-graph-selection-cursor");
+  await page.mouse.move(60, 450);
+  await page.keyboard.down("Shift");
+  await expect(badge).toBeVisible();
+  await expect(stage).toHaveCSS("cursor", "default");
+  await expect(badge).toHaveCSS("text-shadow", "none");
+  await expect(badge.locator(".storyboard-graph-selection-cursor-mark")).toHaveCSS(
+    "stroke-width",
+    "1.5px",
+  );
+  await page.mouse.move(70, 460);
+  await expect
+    .poll(async () => {
+      const bounds = await badge.boundingBox();
+      return bounds && { x: bounds.x, y: bounds.y };
+    })
+    // The badge sits 12px right and 11px below the pointer.
+    .toEqual({ x: 82, y: 471 });
+  await page.getByRole("button", { name: "聚类优化", exact: true }).hover();
+  await expect(badge).toBeHidden();
+  const mini = await center(page.locator(".storyboard-graph-minimap"));
+  await page.mouse.move(mini.x, mini.y);
+  await expect(badge).toBeHidden();
+  await shot(page, 4).hover();
+  await expect(badge).toBeVisible();
+  await expect(shot(page, 4)).toHaveCSS("cursor", "default");
+  await page.locator('[data-preview-shot-id="4"]').hover();
+  await expect(badge).toBeHidden();
+  await page.getByRole("button", { name: "手型工具", exact: true }).click();
+  await page.mouse.move(70, 460);
+  await expect(stage).toHaveCSS("cursor", "grab");
+  await expect(badge).toBeHidden();
+  await enableSpray(page);
+  await page.mouse.move(70, 460);
+  await expect(badge).toBeHidden();
+  await page.keyboard.up("Shift");
 });
 
 for (const [mode, single, group, box] of [

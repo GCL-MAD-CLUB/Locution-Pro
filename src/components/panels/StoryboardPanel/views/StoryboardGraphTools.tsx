@@ -1,14 +1,14 @@
-import { Eye, EyeOff, Hand, MousePointer2, Network } from "lucide-react";
+import { Eye, EyeOff, Group, Hand, MousePointer2 } from "lucide-react";
 import type {
   StoryboardGraphSelectionMode,
   StoryboardGraphTool,
 } from "../../../../core/editor/storyboardGraph/selection";
 
 const modes = [
-  ["replace", "替换选择"],
-  ["add", "添加到选择"],
-  ["subtract", "从选择中减去"],
-  ["intersect", "与选择交集"],
+  ["replace", "替换选择", ""],
+  ["add", "添加到选择", "Shift"],
+  ["subtract", "从选择中减去", "Alt / Option"],
+  ["intersect", "与选择交集", "Shift + Alt / Option"],
 ] as const;
 
 function SelectionIcon({ mode }: { mode: StoryboardGraphSelectionMode }) {
@@ -44,6 +44,7 @@ export function StoryboardGraphTools({
   onToggleClustering,
   onToolChange,
   onModeChange,
+  onPointerActivate,
 }: {
   tool: StoryboardGraphTool;
   mode: StoryboardGraphSelectionMode;
@@ -54,6 +55,7 @@ export function StoryboardGraphTools({
   onToggleClustering?: () => void;
   onToolChange: (tool: StoryboardGraphTool) => void;
   onModeChange: (mode: StoryboardGraphSelectionMode) => void;
+  onPointerActivate?: () => void;
 }) {
   return (
     <div
@@ -61,7 +63,11 @@ export function StoryboardGraphTools({
       role="toolbar"
       aria-label="图谱工具"
       onPointerDown={(event) => event.stopPropagation()}
-      onClick={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        // Keyboard clicks report detail 0 and keep their native Space activation.
+        if (event.detail > 0) onPointerActivate?.();
+      }}
       onDoubleClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}
     >
@@ -91,13 +97,13 @@ export function StoryboardGraphTools({
           role="radiogroup"
           aria-label="图谱选择模式"
         >
-          {modes.map(([value, label], index) => (
+          {modes.map(([value, label, shortcut], index) => (
             <button
               type="button"
               key={value}
               role="radio"
               aria-label={label}
-              title={label}
+              title={shortcut ? `${label}（${shortcut}）` : label}
               aria-checked={mode === value}
               tabIndex={mode === value ? 0 : -1}
               onClick={() => onModeChange(value)}
@@ -139,7 +145,7 @@ export function StoryboardGraphTools({
           disabled={!onToggleClustering}
           onClick={onToggleClustering}
         >
-          <Network aria-hidden="true" />
+          <Group aria-hidden="true" />
         </button>
       </div>
     </div>

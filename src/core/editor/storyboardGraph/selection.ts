@@ -4,6 +4,14 @@ import type { StoryboardGraphRect } from "./camera";
 export type StoryboardGraphTool = "pointer" | "hand";
 export type StoryboardGraphSelectionMode = "replace" | "add" | "subtract" | "intersect";
 
+export function storyboardGraphSelectionMode(
+  { shiftKey, altKey }: { shiftKey: boolean; altKey: boolean },
+  fallback: StoryboardGraphSelectionMode = "replace",
+): StoryboardGraphSelectionMode {
+  if (shiftKey) return altKey ? "intersect" : "add";
+  return altKey ? "subtract" : fallback;
+}
+
 // The caller projects the node's radius using camera zoom. Hover then scales
 // that screen radius and gap; the ring remains one screen pixel wide.
 export function storyboardGraphSelectionRing(screenRadius: number, hoverScale = 1) {

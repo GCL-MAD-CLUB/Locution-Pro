@@ -34,9 +34,9 @@ import {
   List,
   ListFilter,
   Loader2,
-  Network,
   Scissors,
   Star,
+  Share2,
 } from "lucide-react";
 import {
   Fragment,
@@ -4053,7 +4053,7 @@ export function StoryboardPanel() {
                 aria-label="图谱视图"
                 aria-pressed={viewMode === "graph"}
               >
-                <Network aria-hidden="true" />
+                <Share2 aria-hidden="true" />
               </button>
               <span className="storyboard-filter-separator storyboard-footer-separator" />
             </div>

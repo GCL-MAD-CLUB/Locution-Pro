@@ -8,7 +8,6 @@ mod macos;
 const REPOSITORY: &str = "GCL-MAD-CLUB/Locution-Pro";
 const CDN: &str = "https://openlist.frameneo.com/sd/YRrdPxj2";
 const MAX_MANIFEST: usize = 64 * 1024;
-const MAX_RELEASE: usize = 1024 * 1024;
 const MAX_INSTALLER: u64 = 256 * 1024 * 1024;
 
 /// The latest.json platform entry this build installs from and its immutable
@@ -52,8 +51,6 @@ pub(crate) struct LatestRelease {
 #[derive(Clone, Serialize, Deserialize)]
 struct Installer {
     signature: String,
-    url: String,
-    #[serde(default)]
     cdn_url: String,
 }
 
@@ -179,6 +176,16 @@ fn stable_version(value: &str) -> AppResult<semver::Version> {
     Ok(version)
 }
 
+fn newer_version(candidate: &str, current: &str) -> AppResult<bool> {
+    let candidate =
+        semver::Version::parse(candidate).map_err(|error| invalid_update(error.to_string()))?;
+    let current =
+        semver::Version::parse(current).map_err(|error| invalid_update(error.to_string()))?;
+    // Preview builds receive the same stable releases. Build metadata and
+    // publication dates do not affect SemVer precedence.
+    Ok(candidate.cmp_precedence(&current).is_gt())
+}
+
 fn cached_installer_path(
     app: &tauri::AppHandle,
     version: &str,
@@ -217,15 +224,6 @@ fn launch_failure(arguments: impl IntoIterator<Item = String>) -> Option<UpdateF
 
 #[tauri::command]
 pub(crate) async fn update_startup(app: tauri::AppHandle) -> CommandResult<UpdateStartup> {
-    if stable_version(env!("CARGO_PKG_VERSION")).is_err() {
-        return Ok(UpdateStartup {
-            pending: None,
-            notes: None,
-            failure: None,
-            ignored: false,
-            ignored_versions: Vec::new(),
-        });
-    }
     let mut startup = tauri::async_runtime::spawn_blocking(move || startup_state(app))
         .await
         .map_err(|error| update_error(error.to_string()))??;
@@ -257,7 +255,7 @@ fn startup_state(app: tauri::AppHandle) -> CommandResult<UpdateStartup> {
         stable_version(&cached.release.version).is_ok()
             && validate_installer(&cached.installer, &cached.release.version, "update").is_ok()
     }) {
-        if stable_version(&cached.release.version)? > stable_version(current)? {
+        if newer_version(&cached.release.version, current)? {
             let path = cached_installer_path(&app, &cached.release.version, &cached.installer)?;
             if verify_download(&path, &cached.installer.signature).is_ok() {
                 updates()
@@ -277,7 +275,7 @@ fn startup_state(app: tauri::AppHandle) -> CommandResult<UpdateStartup> {
             notes = Some(cached.release);
         }
     }
-    if seen.iter().any(|version| version == current) {
+    if stable_version(current).is_err() || seen.iter().any(|version| version == current) {
         notes = None;
     } else {
         let release = notes.unwrap_or_else(|| LatestRelease {
@@ -396,9 +394,7 @@ fn validate_installer(installer: &Installer, version: &str, variant: &str) -> Ap
             .signature
             .bytes()
             .all(|value| value.is_ascii_hexdigit())
-        || installer.url
-            != format!("https://github.com/{REPOSITORY}/releases/download/v{version}/{name}")
-        || (!installer.cdn_url.is_empty() && installer.cdn_url != format!("{CDN}/{name}"))
+        || installer.cdn_url != format!("{CDN}/{name}")
     {
         return Err(invalid_update("Invalid immutable installer URL or SHA-256"));
     }
@@ -488,237 +484,45 @@ async fn read_manifest(
     decode_manifest(&bytes)
 }
 
-fn decode_github_release(bytes: &[u8]) -> AppResult<LatestRelease> {
-    #[derive(Deserialize)]
-    struct GitHubRelease {
-        tag_name: String,
-        name: Option<String>,
-        body: Option<String>,
-        html_url: String,
-        #[serde(default)]
-        draft: bool,
-        #[serde(default)]
-        prerelease: bool,
-    }
-    let release: GitHubRelease =
-        serde_json::from_slice(bytes).map_err(|error| invalid_update(error.to_string()))?;
-    let version = release
-        .tag_name
-        .strip_prefix('v')
-        .unwrap_or(&release.tag_name);
-    if release.draft
-        || release.prerelease
-        || semver::Version::parse(version).is_ok_and(|version| !version.pre.is_empty())
-    {
-        return Err(update_error("Ignored prerelease"));
-    }
-    stable_version(version)?;
-    if release.draft
-        || release.prerelease
-        || release.html_url
-            != format!(
-                "https://github.com/{REPOSITORY}/releases/tag/{}",
-                release.tag_name
-            )
-    {
-        return Err(invalid_update(
-            "Expected a public stable release in the application repository",
-        ));
-    }
-    Ok(LatestRelease {
-        version: version.into(),
-        title: release.name.unwrap_or_default(),
-        body: release.body.unwrap_or_default(),
-        url: release.html_url,
-    })
-}
-
-async fn read_github_release(client: &reqwest::Client, url: &str) -> AppResult<LatestRelease> {
-    let mut response = client
-        .get(url)
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .and_then(reqwest::Response::error_for_status)
-        .map_err(|error| update_error(error.to_string()))?;
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|error| update_error(error.to_string()))?
-    {
-        if bytes.len() + chunk.len() > MAX_RELEASE {
-            return Err(invalid_update("GitHub release response is too large"));
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    decode_github_release(&bytes)
-}
-
-// The manifest enables automatic installation; it is not required to discover
-// a release. Keep usable release metadata even if every automatic path fails.
-async fn discover_release(
-    client: &reqwest::Client,
-    manifests: [&str; 2],
-    github: &str,
-) -> AppResult<(LatestRelease, Option<Installer>)> {
-    let mut failures = Vec::new();
-    let mut ignored = false;
-    let mut best: Option<(LatestRelease, Option<Installer>)> = None;
-    // CDN metadata is a discovery hint only. Only GitHub may authorize bytes.
-    for (index, url) in manifests.into_iter().enumerate() {
-        match read_manifest(client, url).await {
-            Ok((release, installer)) => {
-                let installer = if index == 1 { installer } else { None };
-                select_release(&mut best, release, installer)?;
-            }
-            Err(error) => {
-                ignored |= error.detail() == "Ignored prerelease";
-                failures.push(error.detail().to_string());
-            }
-        }
-    }
-    match read_github_release(client, github).await {
-        Ok(release) => select_release(&mut best, release, None)?,
-        Err(error) => {
-            ignored |= error.detail() == "Ignored prerelease";
-            failures.push(error.detail().to_string());
-        }
-    }
-    if best.is_none() && ignored {
-        return Ok((
-            LatestRelease {
-                version: env!("CARGO_PKG_VERSION").into(),
-                title: String::new(),
-                body: String::new(),
-                url: String::new(),
-            },
-            None,
-        ));
-    }
-    best.ok_or_else(|| {
-        update_error(format!(
-            "All release sources unavailable: {}",
-            failures.join("; ")
-        ))
-    })
-}
-
-fn select_release(
-    best: &mut Option<(LatestRelease, Option<Installer>)>,
-    release: LatestRelease,
-    installer: Option<Installer>,
-) -> AppResult<()> {
-    let version = stable_version(&release.version)?;
-    if let Some((known, updater)) = best {
-        let previous = stable_version(&known.version)?;
-        if version < previous {
-            return Ok(());
-        }
-        if version == previous {
-            if installer.is_some() {
-                *updater = installer;
-            }
-            if !release.body.trim().is_empty() {
-                known.body = release.body;
-            }
-            if !release.title.trim().is_empty() {
-                known.title = release.title;
-            }
-            return Ok(());
-        }
-    }
-    *best = Some((release, installer));
-    Ok(())
-}
-
 #[cfg(any(windows, all(target_os = "macos", target_arch = "aarch64")))]
 async fn authoritative_installer(client: &reqwest::Client, version: &str) -> AppResult<Installer> {
     stable_version(version)?;
-    let published = read_github_release(
-        client,
-        &format!("https://api.github.com/repos/{REPOSITORY}/releases/tags/v{version}"),
-    )
-    .await?;
-    if published.version != version {
-        return Err(invalid_update("GitHub release version mismatch"));
-    }
-    let (release, installer) = read_manifest(
-        client,
-        &format!("https://github.com/{REPOSITORY}/releases/download/v{version}/latest.json"),
-    )
-    .await?;
+    let (release, installer) = read_manifest(client, &format!("{CDN}/latest.json")).await?;
     if release.version != version {
-        return Err(invalid_update("GitHub manifest version mismatch"));
+        return Err(invalid_update(
+            "CDN release changed; check for updates again",
+        ));
     }
-    installer.ok_or_else(|| invalid_update("GitHub release has no update-only installer"))
+    installer.ok_or_else(|| invalid_update("CDN release has no update-only installer"))
 }
 
 async fn fill_release_notes(client: &reqwest::Client, release: &mut LatestRelease) {
     if !release.body.is_empty() {
         return;
     }
-    let request = client
-        .get(format!(
-            "https://api.github.com/repos/{REPOSITORY}/releases/tags/v{}",
-            release.version
-        ))
-        .timeout(Duration::from_secs(3));
-    let Ok(mut response) = request
-        .send()
-        .await
-        .and_then(reqwest::Response::error_for_status)
-    else {
-        return;
-    };
-    let mut bytes = Vec::new();
-    loop {
-        match response.chunk().await {
-            Ok(Some(chunk)) if bytes.len() + chunk.len() <= MAX_MANIFEST => {
-                bytes.extend_from_slice(&chunk)
-            }
-            Ok(None) => break,
-            _ => return,
+    if let Ok((published, _)) = read_manifest(client, &format!("{CDN}/latest.json")).await {
+        if published.version == release.version {
+            release.body = published.body;
         }
-    }
-    #[derive(Deserialize)]
-    struct Notes {
-        name: Option<String>,
-        body: Option<String>,
-    }
-    if let Ok(notes) = serde_json::from_slice::<Notes>(&bytes) {
-        if let Some(name) = notes.name.filter(|name| !name.trim().is_empty()) {
-            release.title = name;
-        }
-        release.body = notes.body.unwrap_or_default();
     }
 }
 
 #[tauri::command]
 pub(crate) async fn fetch_latest_release() -> CommandResult<LatestRelease> {
-    let current = match stable_version(env!("CARGO_PKG_VERSION")) {
-        Ok(current) => current,
-        Err(_) => {
+    let client = release_client(Duration::from_secs(8))?;
+    let (release, installer) = match read_manifest(&client, &format!("{CDN}/latest.json")).await {
+        Ok(release) => release,
+        Err(error) if error.detail() == "Ignored prerelease" => {
             return Ok(LatestRelease {
                 version: env!("CARGO_PKG_VERSION").into(),
                 title: String::new(),
                 body: String::new(),
                 url: String::new(),
-            })
+            });
         }
+        Err(error) => return Err(error),
     };
-    let client = release_client(Duration::from_secs(8))?;
-    let (mut release, installer) = discover_release(
-        &client,
-        [
-            &format!("{CDN}/latest.json"),
-            &format!("https://github.com/{REPOSITORY}/releases/latest/download/latest.json"),
-        ],
-        &format!("https://api.github.com/repos/{REPOSITORY}/releases/latest"),
-    )
-    .await?;
-    fill_release_notes(&client, &mut release).await;
-    let newer = stable_version(&release.version)? > current;
+    let newer = newer_version(&release.version, env!("CARGO_PKG_VERSION"))?;
     if let Some(installer) = installer.filter(|_| newer) {
         // An unavailable auto-update cache must not hide a discovered release.
         if let Ok(mut state) = updates().lock() {
@@ -831,30 +635,18 @@ async fn download_installer(
     installer: &Installer,
     path: &Path,
 ) -> AppResult<()> {
-    let mut failures = Vec::new();
-    for url in [&installer.cdn_url, &installer.url] {
-        if url.is_empty() {
-            continue;
-        }
-        match download_from(client, url, path, &installer.signature).await {
-            Ok(()) => return Ok(()),
-            Err(error) => {
-                failures.push(error.detail().to_string());
-                let _ = fs::remove_file(path);
-            }
-        }
+    let result = download_from(client, &installer.cdn_url, path, &installer.signature).await;
+    if result.is_err() {
+        let _ = fs::remove_file(path);
     }
-    Err(update_error(format!(
-        "Update download failed: {}",
-        failures.join("; ")
-    )))
+    result
 }
 
 #[tauri::command]
 pub(crate) async fn download_update(app: tauri::AppHandle, version: String) -> CommandResult<()> {
     let prepared = prepared_update(&version)?;
     // A path in memory has already been hashed during this session. The final
-    // installation boundary always checks bytes again against GitHub authority.
+    // installation boundary always checks bytes again against the CDN manifest.
     if prepared.path.is_some() {
         return Ok(());
     }
@@ -939,7 +731,7 @@ pub(crate) async fn install_update(
         let authority = authoritative_installer(&client, &version).await?;
         if authority.signature != prepared.installer.signature {
             return Err(invalid_update(
-                "Cached update does not match the GitHub release SHA-256",
+                "Cached update does not match the CDN release SHA-256",
             ));
         }
         authority.signature
@@ -1025,13 +817,6 @@ pub(crate) async fn install_update(
 mod tests {
     use super::*;
 
-    fn github_release() -> serde_json::Value {
-        serde_json::json!({
-            "tag_name": "v1.2.3", "name": "Release without latest.json", "body": "Legacy notes",
-            "html_url": format!("https://github.com/{REPOSITORY}/releases/tag/v1.2.3")
-        })
-    }
-
     #[test]
     fn cache_pruning_retains_pending_updates_and_unrecognized_directories() {
         let root = env::temp_dir().join(format!("locution-cache-prune-{}", Uuid::new_v4()));
@@ -1050,174 +835,6 @@ mod tests {
         assert!(pending.exists());
         assert!(unrelated.exists());
         fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn stale_cdn_never_hides_a_newer_github_release() {
-        let newer_manifest = manifest().to_string().replace("1.2.3", "1.3.0");
-        let newer_release = github_release().to_string().replace("1.2.3", "1.3.0");
-        let (release, installer) = discover_fixture(vec![
-            (200, manifest().to_string()),
-            (200, newer_manifest),
-            (200, newer_release),
-        ])
-        .unwrap();
-        assert_eq!(release.version, "1.3.0");
-        assert!(installer.is_some());
-    }
-
-    #[test]
-    fn cdn_cannot_authorize_update_bytes_without_independent_github_metadata() {
-        let mut cdn = manifest();
-        cdn["platforms"][release_platform::KEY]["updater"]["signature"] = "b".repeat(64).into();
-        let (_, installer) = discover_fixture(vec![
-            (200, cdn.to_string()),
-            (200, manifest().to_string()),
-            (200, github_release().to_string()),
-        ])
-        .unwrap();
-        assert_eq!(installer.unwrap().signature, "a".repeat(64));
-        let (_, installer) = discover_fixture(vec![
-            (200, cdn.to_string()),
-            (404, String::new()),
-            (503, String::new()),
-        ])
-        .unwrap();
-        assert!(installer.is_none());
-    }
-
-    #[test]
-    fn prereleases_are_ignored_even_if_they_are_the_only_reachable_entries() {
-        let preview = manifest().to_string().replace("1.2.3", "999.0.0-preview");
-        let preview_api = github_release()
-            .to_string()
-            .replace("1.2.3", "999.0.0-preview");
-        let (release, installer) = discover_fixture(vec![
-            (200, preview.clone()),
-            (200, preview),
-            (200, preview_api),
-        ])
-        .unwrap();
-        assert_eq!(release.version, env!("CARGO_PKG_VERSION"));
-        assert!(installer.is_none());
-        assert!(stable_version("0.4.1-preview").is_err());
-    }
-
-    fn discover_fixture(
-        responses: Vec<(u16, String)>,
-    ) -> AppResult<(LatestRelease, Option<Installer>)> {
-        use std::net::TcpListener;
-        use std::thread;
-        use std::time::Instant;
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        listener.set_nonblocking(true).unwrap();
-        let address = listener.local_addr().unwrap();
-        let server = thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_secs(10);
-            for (index, (status, body)) in responses.into_iter().enumerate() {
-                let mut stream = loop {
-                    match listener.accept() {
-                        Ok((stream, _)) => break stream,
-                        Err(error)
-                            if error.kind() == std::io::ErrorKind::WouldBlock
-                                && Instant::now() < deadline =>
-                        {
-                            thread::sleep(Duration::from_millis(5));
-                        }
-                        Err(error) => panic!("Release fixture connection failed: {error}"),
-                    }
-                };
-                stream.set_nonblocking(false).unwrap();
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(3)))
-                    .unwrap();
-                let mut request = [0; 4096];
-                let count = stream.read(&mut request).unwrap();
-                assert!(String::from_utf8_lossy(&request[..count])
-                    .starts_with(&format!("GET /{index} ")));
-                write!(stream, "HTTP/1.1 {status} Test\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
-            }
-        });
-        let result = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(async {
-                discover_release(
-                    &release_client(Duration::from_secs(3)).unwrap(),
-                    [
-                        &format!("http://{address}/0"),
-                        &format!("http://{address}/1"),
-                    ],
-                    &format!("http://{address}/2"),
-                )
-                .await
-            });
-        server.join().unwrap();
-        result
-    }
-
-    #[test]
-    fn missing_or_invalid_manifests_fall_back_to_original_github_release_discovery() {
-        for first in [
-            (404, String::new()),
-            (200, "<html>not a manifest</html>".into()),
-        ] {
-            let (release, installer) = discover_fixture(vec![
-                first,
-                (404, String::new()),
-                (200, github_release().to_string()),
-            ])
-            .unwrap();
-            assert_eq!(release.version, "1.2.3");
-            assert_eq!(release.body, "Legacy notes");
-            assert!(installer.is_none());
-        }
-    }
-
-    #[test]
-    fn missing_updater_preserves_known_release_even_when_the_api_is_unavailable() {
-        let mut manifest = manifest();
-        manifest["platforms"][release_platform::KEY]
-            .as_object_mut()
-            .unwrap()
-            .remove("updater");
-        let (release, installer) = discover_fixture(vec![
-            (200, manifest.to_string()),
-            (404, String::new()),
-            (403, String::new()),
-        ])
-        .unwrap();
-        assert_eq!(release.version, "1.2.3");
-        assert!(installer.is_none());
-    }
-
-    #[test]
-    fn github_manifest_recovers_auto_updates_after_cdn_failure() {
-        let (_, installer) =
-            discover_fixture(vec![(503, String::new()), (200, manifest().to_string())]).unwrap();
-        assert!(installer.is_some());
-    }
-
-    #[test]
-    fn check_fails_only_when_all_release_sources_are_unusable() {
-        assert!(discover_fixture(vec![
-            (404, String::new()),
-            (200, "{}".into()),
-            (503, String::new())
-        ])
-        .is_err());
-        let mut value = github_release();
-        for field in ["draft", "prerelease"] {
-            value[field] = true.into();
-            assert!(decode_github_release(&serde_json::to_vec(&value).unwrap()).is_err());
-            value[field] = false.into();
-        }
-        value["html_url"] = "https://example.com/untrusted".into();
-        assert!(decode_github_release(&serde_json::to_vec(&value).unwrap()).is_err());
-        value = github_release();
-        value["tag_name"] = "latest".into();
-        assert!(decode_github_release(&serde_json::to_vec(&value).unwrap()).is_err());
     }
 
     #[test]
@@ -1303,13 +920,13 @@ mod tests {
         assert_eq!(release.version, "1.2.3");
         assert!(updater
             .unwrap()
-            .url
+            .cdn_url
             .ends_with(&release_platform::asset("1.2.3", "update")));
         for invalid in [
             "https://example.com/update.exe",
             "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/latest/download/update.exe",
         ] {
-            data["platforms"][release_platform::KEY]["updater"]["url"] = invalid.into();
+            data["platforms"][release_platform::KEY]["updater"]["cdn_url"] = invalid.into();
             assert!(decode_manifest(&serde_json::to_vec(&data).unwrap()).is_err());
         }
     }
@@ -1340,92 +957,5 @@ mod tests {
         fs::write(&path, b"<html>error</html>").unwrap();
         assert!(verify_download(&path, &signature).is_err());
         fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn a_corrupt_cdn_download_falls_back_to_github_without_mixing_bytes() {
-        use std::net::TcpListener;
-        use std::thread;
-        use std::time::Instant;
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        listener.set_nonblocking(true).unwrap();
-        let address = listener.local_addr().unwrap();
-        let server = thread::spawn(move || {
-            let mut requests = Vec::new();
-            let deadline = Instant::now() + Duration::from_secs(10);
-            for body in [
-                [release_platform::UPDATE_HEADER, b" corrupt CDN bytes"].concat(),
-                [
-                    release_platform::UPDATE_HEADER,
-                    b" verified GitHub installer",
-                ]
-                .concat(),
-            ] {
-                let mut stream = loop {
-                    match listener.accept() {
-                        Ok((stream, _)) => break stream,
-                        Err(error)
-                            if error.kind() == std::io::ErrorKind::WouldBlock
-                                && Instant::now() < deadline =>
-                        {
-                            thread::sleep(Duration::from_millis(5))
-                        }
-                        Err(error) => panic!("Update fixture connection failed: {error}"),
-                    }
-                };
-                stream.set_nonblocking(false).unwrap();
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(3)))
-                    .unwrap();
-                let mut request = [0; 4096];
-                let count = stream.read(&mut request).unwrap();
-                requests.push(
-                    String::from_utf8_lossy(&request[..count])
-                        .lines()
-                        .next()
-                        .unwrap()
-                        .to_string(),
-                );
-                write!(
-                    stream,
-                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    body.len()
-                )
-                .unwrap();
-                stream.write_all(&body).unwrap();
-            }
-            requests
-        });
-        let path =
-            env::temp_dir().join(format!("locution-update-fallback-{}.part", Uuid::new_v4()));
-        let expected = [
-            release_platform::UPDATE_HEADER,
-            b" verified GitHub installer",
-        ]
-        .concat();
-        let installer = Installer {
-            signature: format!("{:x}", Sha256::digest(&expected)),
-            cdn_url: format!("http://{address}/cdn"),
-            url: format!("http://{address}/github"),
-        };
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(async {
-                download_installer(
-                    &release_client(Duration::from_secs(3)).unwrap(),
-                    &installer,
-                    &path,
-                )
-                .await
-                .unwrap();
-            });
-        assert_eq!(fs::read(&path).unwrap(), expected);
-        fs::remove_file(path).unwrap();
-        assert_eq!(
-            server.join().unwrap(),
-            ["GET /cdn HTTP/1.1", "GET /github HTTP/1.1"]
-        );
     }
 }

@@ -35,7 +35,6 @@ test("启动时先展示安装错误，再展示新版本说明，确认后不�
 });
 
 test.describe("正式版更新", () => {
-  test.skip(prerelease, "预发布版本不检查正式版更新");
   test("自动更新不可用时展示发布说明和原有发布页入口", async ({ page, native }) => {
     await page.addInitScript(() => {
       (window as any).__nativeTest.failures.download_update = "No updater in legacy release";
@@ -158,15 +157,15 @@ test.describe("正式版更新", () => {
   });
 });
 
-test("预发布版本启动和手动检查均不请求正式版更新", async ({ app, native }) => {
+test("预发布版本启动和手动检查均请求正式版更新", async ({ app, native }) => {
   test.skip(!prerelease, "仅适用于预发布版本");
   await expect.poll(async () => (await native.calls("update_startup")).length).toBe(1);
-  expect(await native.calls("fetch_latest_release")).toHaveLength(0);
+  await expect.poll(async () => (await native.calls("fetch_latest_release")).length).toBe(1);
   await app.getByRole("button", { name: "帮助(H)", exact: true }).click();
   await app.getByRole("menuitem", { name: "更新(U)...", exact: true }).click();
   const latest = app.getByRole("dialog", { name: "检查更新", exact: true });
   await expect(latest.getByText("当前已是最新版本")).toBeVisible();
-  expect(await native.calls("fetch_latest_release")).toHaveLength(0);
+  expect(await native.calls("fetch_latest_release")).toHaveLength(2);
   expect(await native.calls("download_update")).toHaveLength(0);
 });
 

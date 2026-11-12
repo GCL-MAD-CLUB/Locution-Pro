@@ -124,7 +124,6 @@ export function isStableUpdateVersion(version: string) {
 }
 
 export function checkForUpdate(): Promise<UpdateCheckResult> {
-  if (!isStableUpdateVersion(currentVersion)) return Promise.resolve({ status: "latest" });
   if (activeCheck) return activeCheck;
   const request = invokeCommand<ReleaseInfo>("fetch_latest_release")
     .then(async (release): Promise<UpdateCheckResult> => {
@@ -142,8 +141,8 @@ export function checkForUpdate(): Promise<UpdateCheckResult> {
         return { status: "available", release };
       } catch (error) {
         captureOperationError("help.checkUpdates", error);
-        // Release discovery succeeded. Missing metadata, failed downloads and
-        // hash failures all retain the original manual update path.
+        // CDN release discovery succeeded. Download or verification failures
+        // retain the user-initiated manual download option.
         return { status: "manual", release };
       }
     })

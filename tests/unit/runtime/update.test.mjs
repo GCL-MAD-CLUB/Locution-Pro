@@ -36,18 +36,7 @@ test("update versions follow semantic version precedence", () => {
   assert.equal(update.compareVersions("1.0.0+build.2", "v1.0.0+build.1"), 0);
 });
 
-test("prerelease builds and release candidates never check, download or notify", async () => {
-  const calls = [];
-  const preview = loadModule("../../../src/application/update.ts", {
-    "../../package.json": { version: "0.4.1-preview" },
-    "../errors": {
-      invokeCommand: async (command) => {
-        calls.push(command);
-      },
-    },
-  });
-  assert.equal((await preview.checkForUpdate()).status, "latest");
-  assert.deepEqual(calls, []);
+test("prerelease update targets are still ignored", async () => {
   const { update, invocations } = loadUpdate({ version: "999.0.0-rc.1" });
   assert.equal((await update.checkForUpdate()).status, "latest");
   assert.deepEqual(invocations, ["fetch_latest_release"]);

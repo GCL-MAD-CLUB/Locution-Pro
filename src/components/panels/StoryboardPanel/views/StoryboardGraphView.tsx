@@ -1,4 +1,4 @@
-import { Network } from "lucide-react";
+import { Waypoints } from "lucide-react";
 import { useMemo, useState } from "react";
 import { defaultStoryboardGraphOptions } from "../../../../core/editor/storyboardGraph/options";
 import { useStoryboardGraph } from "../../../../application/media/storyboardGraph";
@@ -64,7 +64,7 @@ export function StoryboardGraphView({
     >
       {!available ? (
         <div className="storyboard-graph-message" role="status">
-          <Network aria-hidden="true" />
+          <Waypoints aria-hidden="true" />
           <span>图谱视图需要安装分镜语义检索组件。</span>
         </div>
       ) : (

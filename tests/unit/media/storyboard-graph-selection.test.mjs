@@ -5,8 +5,23 @@ import {
   storyboardGraphMarqueeHitIds,
   storyboardGraphSelectionRect,
   storyboardGraphSelectionRing,
+  storyboardGraphSelectionMode,
 } from "../../../src/core/editor/storyboardGraph/selection.ts";
 import { storyboardGraphWorldPoint } from "../../../src/core/editor/storyboardGraph/camera.ts";
+
+test("selection modifiers temporarily override all toolbar modes", () => {
+  for (const fallback of ["replace", "add", "subtract", "intersect"]) {
+    for (const [shiftKey, altKey, expected] of [
+      [false, false, fallback],
+      [true, false, "add"],
+      [false, true, "subtract"],
+      [true, true, "intersect"],
+    ]) {
+      assert.equal(storyboardGraphSelectionMode({ shiftKey, altKey }, fallback), expected);
+    }
+  }
+  assert.equal(storyboardGraphSelectionMode({ shiftKey: false, altKey: false }), "replace");
+});
 
 test("selection ring gap stays one pixel through 8px diameter, then grows continuously with displayed size", () => {
   for (const [radius, zoom, expectedGap] of [

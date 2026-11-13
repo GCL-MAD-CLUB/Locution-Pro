@@ -59,7 +59,9 @@ const TRANSNET_STRIDE_FRAMES: usize = 50;
 const STORYBOARD_PROGRESS_PREDICT_END: f64 = 0.98;
 const STORYBOARD_PROGRESS_MIN_DELTA: f64 = 0.0025;
 const STORYBOARD_PROGRESS_FRAME_REPORT_INTERVAL: usize = 25;
-const DEFAULT_STORYBOARD_FRAME_RATE: f64 = 25.0;
+/// Used when a video stream has no positive average or real frame rate.
+/// Matches the frontend timeline default (`DEFAULT_FRAME_RATE`).
+pub(crate) const DEFAULT_MEDIA_FRAME_RATE: f64 = 24.0;
 const STORYBOARD_MAX_CONCURRENT_EXTRACTIONS: usize = 3;
 const STORYBOARD_MAX_EXTRACTION_THREADS: usize = 16;
 
@@ -1062,7 +1064,7 @@ fn storyboard_frame_rate(project: &MediaDocument) -> f64 {
             parse_frame_rate(stream.avg_frame_rate.as_deref())
                 .or_else(|| parse_frame_rate(stream.r_frame_rate.as_deref()))
         })
-        .unwrap_or(DEFAULT_STORYBOARD_FRAME_RATE)
+        .unwrap_or(DEFAULT_MEDIA_FRAME_RATE)
 }
 
 pub(crate) fn parse_frame_rate(value: Option<&str>) -> Option<f64> {
@@ -1645,5 +1647,70 @@ frame:2    pts:1536    pts_time:0.064
             2,
         )
         .is_none());
+    }
+
+    fn media_with_video_rate(avg: Option<&str>, real: Option<&str>) -> MediaDocument {
+        serde_json::from_value(serde_json::json!({
+            "asset": {
+                "id": "asset",
+                "path": "clip.mp4",
+                "file_name": "clip.mp4",
+                "file_size": 1,
+                "modified_at": 0,
+                "fingerprint": "hash",
+                "duration_us": 1_000_000,
+                "start_time_us": 0,
+                "video_stream_index": 0,
+                "audio_stream_index": null
+            },
+            "streams": [{
+                "index": 0,
+                "codec_type": "video",
+                "codec_name": "h264",
+                "avg_frame_rate": avg,
+                "r_frame_rate": real,
+                "language": null,
+                "title": null,
+                "width": 1920,
+                "height": 1080,
+                "channels": null,
+                "disposition": {}
+            }],
+            "tracks": [],
+            "cues": {},
+            "cache_dir": "cache",
+            "proxy_path": null
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn missing_frame_rate_falls_back_to_24() {
+        assert_eq!(
+            storyboard_frame_rate(&media_with_video_rate(None, None)),
+            DEFAULT_MEDIA_FRAME_RATE
+        );
+        assert_eq!(
+            storyboard_frame_rate(&media_with_video_rate(Some("0/0"), Some("0/0"))),
+            24.0
+        );
+        assert_eq!(
+            storyboard_frame_rate(&media_with_video_rate(Some(""), Some("not-a-rate"))),
+            24.0
+        );
+        let mut missing_stream = media_with_video_rate(None, None);
+        missing_stream.streams.clear();
+        missing_stream.asset.video_stream_index = None;
+        assert_eq!(storyboard_frame_rate(&missing_stream), 24.0);
+        assert!(
+            (storyboard_frame_rate(&media_with_video_rate(Some("30000/1001"), None))
+                - (30_000.0 / 1001.0))
+                .abs()
+                < 1e-9
+        );
+        assert_eq!(
+            storyboard_frame_rate(&media_with_video_rate(Some("25/1"), None)),
+            25.0
+        );
     }
 }

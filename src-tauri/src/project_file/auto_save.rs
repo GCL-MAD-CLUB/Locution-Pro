@@ -182,6 +182,15 @@ mod tests {
     use std::fs;
     use uuid::Uuid;
 
+    fn stamp_modified(path: &std::path::Path, secs: u64) {
+        let file = fs::OpenOptions::new().write(true).open(path).unwrap();
+        file.set_times(
+            fs::FileTimes::new()
+                .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs)),
+        )
+        .unwrap();
+    }
+
     fn workspace(marker: &str) -> ProjectWorkspace {
         ProjectWorkspace {
             projects: Vec::new(),
@@ -216,6 +225,10 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(first.is_file());
+        // Rotation keeps the newest files by mtime. Stamp earlier snapshots so a
+        // filesystem that reports one timestamp for the whole burst still drops
+        // the oldest content, not whichever path sorts last.
+        stamp_modified(&first, 10);
         assert_eq!(
             write_snapshot(&cache_root, "Demo.lcp", &workspace("one"), "p-1", 2).unwrap(),
             None
@@ -223,6 +236,7 @@ mod tests {
         let second = write_snapshot(&cache_root, "Demo.lcp", &workspace("two"), "p-1", 2)
             .unwrap()
             .unwrap();
+        stamp_modified(&second, 20);
         let third = write_snapshot(&cache_root, "Renamed.lcp", &workspace("three"), "p-1", 2)
             .unwrap()
             .unwrap();

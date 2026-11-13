@@ -9,6 +9,7 @@ import { initReleaseDownload as initReleaseDownloadJs } from "../../../site/src/
 import {
   CDN_BASE,
   GITHUB_BASE,
+  MACOS_PLATFORM,
   MANIFEST_URLS,
   RELEASE_PLATFORM,
   fallbackRelease,
@@ -60,7 +61,7 @@ type WorkerFetch = (
 const readLatestRelease = readLatestReleaseJs as (fetcher?: Fetcher) => Promise<ReleaseManifest>;
 const downloadRelease = downloadReleaseJs as (
   request: Request,
-  release: ReleaseDocument,
+  release: ReleaseDocument | ReturnType<typeof fallbackRelease>,
   fetcher?: Fetcher,
 ) => Promise<Response>;
 const handleRequest = handleRequestJs as (
@@ -89,12 +90,30 @@ function release(): ReleaseDocument {
   };
 }
 
+function macosRelease(): ReleaseDocument {
+  const document = release();
+  document.platforms[MACOS_PLATFORM] = {
+    signature: "b".repeat(64),
+    url: `${GITHUB_BASE}/download/v2.1.1/Locution.Pro_2.1.1_aarch64.dmg`,
+    cdn_url: `${CDN_BASE}/Locution.Pro_2.1.1_aarch64.dmg`,
+  };
+  return document;
+}
+
 function request(headers?: HeadersInit): Request {
   return new Request("https://locution.dpdns.org/api/download", { headers });
 }
 
+function macosRequest(): Request {
+  return new Request("https://locution.dpdns.org/api/download?platform=macos");
+}
+
+function diskImage(): Response {
+  return binary(new Uint8Array([0x78, 0xda, 0x63, 0x60]));
+}
+
 function binary(
-  body: string | ReadableStream<Uint8Array> = "MZ installer",
+  body: string | Uint8Array<ArrayBuffer> | ReadableStream<Uint8Array> = "MZ installer",
   init: ResponseInit = {},
 ): Response {
   const headers = new Headers(init.headers);
@@ -378,6 +397,66 @@ test("unavailable manifests download 0.4.1 from GitHub without the retired CDN f
   assert.equal(response.body, null);
 });
 
+test("macOS downloads probe the disk image and redirect to the CDN", async () => {
+  const calls: FetchTarget[] = [];
+  const response = await downloadRelease(macosRequest(), macosRelease(), async (url, init) => {
+    calls.push(url);
+    assert.equal(sentHeaders(init).get("Range"), "bytes=0-1");
+    return diskImage();
+  });
+  const platform = macosRelease().platforms[MACOS_PLATFORM];
+  assert.deepEqual(calls, [platform.cdn_url]);
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), platform.cdn_url);
+  assert.equal(response.body, null);
+});
+
+test("macOS downloads reject other installers and fall back to GitHub", async () => {
+  const calls: FetchTarget[] = [];
+  const platform = macosRelease().platforms[MACOS_PLATFORM];
+  const response = await downloadRelease(macosRequest(), macosRelease(), async (url) => {
+    calls.push(url);
+    return calls.length > 1 ? diskImage() : binary("MZ installer");
+  });
+  assert.deepEqual(calls, [platform.cdn_url, platform.url]);
+  assert.equal(response.headers.get("Location"), platform.url);
+  const failed = await downloadRelease(macosRequest(), macosRelease(), async () =>
+    binary("<html>error</html>"),
+  );
+  assert.equal(failed.status, 502);
+});
+
+test("Windows downloads reject a macOS disk image", async () => {
+  const response = await downloadRelease(request(), macosRelease(), async () => diskImage());
+  assert.equal(response.status, 502);
+});
+
+test("macOS downloads without a macOS installer open the latest GitHub release", async () => {
+  for (const document of [release(), fallbackRelease()]) {
+    const response = await downloadRelease(macosRequest(), document, () => assert.fail());
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("Location"), `${GITHUB_BASE}/latest`);
+    assert.equal(response.headers.get("Cache-Control"), "no-store");
+  }
+});
+
+test("explicit Windows downloads match the default and unknown platforms are rejected", async () => {
+  const windows = await downloadRelease(
+    new Request("https://locution.dpdns.org/api/download?platform=windows"),
+    macosRelease(),
+    async () => binary(),
+  );
+  assert.equal(windows.headers.get("Location"), release().platforms[RELEASE_PLATFORM].cdn_url);
+  for (const platform of ["linux", "", "__proto__", "darwin-aarch64"]) {
+    const response = await downloadRelease(
+      new Request(`https://locution.dpdns.org/api/download?platform=${platform}`),
+      macosRelease(),
+      () => assert.fail(),
+    );
+    assert.equal(response.status, 400);
+  }
+});
+
 test("website version label follows the manifest and preserves 0.4.1 when offline", async () => {
   const label = { textContent: "V0.4.1 / WINDOWS" };
   const document = { querySelectorAll: () => [label] };
@@ -387,4 +466,6 @@ test("website version label follows the manifest and preserves 0.4.1 when offlin
   assert.equal(label.textContent, "V0.4.1 / WINDOWS");
   await initReleaseDownload(document, async () => Response.json(release()));
   assert.equal(label.textContent, "V2.1.1 / WINDOWS");
+  await initReleaseDownload(document, async () => Response.json(macosRelease()));
+  assert.equal(label.textContent, "V2.1.1 / WINDOWS · MACOS");
 });

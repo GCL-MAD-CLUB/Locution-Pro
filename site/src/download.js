@@ -1,4 +1,4 @@
-import { isReleaseVersion } from "./release-contract.js";
+import { MACOS_PLATFORM, isReleaseVersion } from "./release-contract.js";
 
 export async function initReleaseDownload(document, fetcher = fetch) {
   try {
@@ -9,8 +9,9 @@ export async function initReleaseDownload(document, fetcher = fetch) {
     if (!response.ok) return;
     const release = await response.json();
     if (!isReleaseVersion(release.version, { stable: true })) return;
+    const platforms = release.platforms?.[MACOS_PLATFORM] ? "WINDOWS · MACOS" : "WINDOWS";
     document.querySelectorAll("[data-release-version]").forEach((label) => {
-      label.textContent = `V${release.version} / WINDOWS`;
+      label.textContent = `V${release.version} / ${platforms}`;
     });
   } catch {
     // The server download route independently resolves the release on click.

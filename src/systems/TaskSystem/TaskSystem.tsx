@@ -54,8 +54,17 @@ export interface TaskProgressStatus {
   isRunning: boolean;
 }
 
+interface TaskControl {
+  cancelled: boolean;
+  start: () => void;
+  done: Promise<void>;
+  finish: () => void;
+  /** Shared by every caller while a running cancellation is in flight. */
+  cancelRequest?: Promise<void>;
+}
+
 interface TaskProgressRecord {
-  control: { cancelled: boolean; start: () => void; done: Promise<void>; finish: () => void };
+  control: TaskControl;
   id: string;
   resourceKey?: string;
   operation: OperationKey;
@@ -196,19 +205,33 @@ async function stopTaskListener(task: TaskProgressRecord) {
   }
 }
 
-async function runTaskCancel(task: TaskProgressRecord) {
+/** Queued work never reached the backend, so it is dropped here.
+ * A running cancel is one backend request. Every later caller awaits that
+ * same promise and resolves only after the backend confirms stop and cleanup.
+ * The backend owns the cancel flag, process termination and cleanup paths;
+ * this scheduler does not repeat them.
+ */
+async function runTaskCancel(task: TaskProgressRecord): Promise<void> {
   const live = snapshot.tasks.find((current) => current.id === task.id);
   if (!live) return;
   task = live;
-  if (task.control.cancelled || task.is_cancelling) {
-    return;
-  }
+  if (task.control.cancelRequest) return task.control.cancelRequest;
   if (task.state === "queued") {
     task.control.cancelled = true;
     removeTask(task.id);
     task.control.start();
     return;
   }
+  const label = task.label;
+  let resolveRequest!: () => void;
+  let rejectRequest!: (error: unknown) => void;
+  const request = new Promise<void>((resolve, reject) => {
+    resolveRequest = resolve;
+    rejectRequest = reject;
+  });
+  // Publish the promise before any await so a second caller cannot start
+  // another backend request or return before this one settles.
+  task.control.cancelRequest = request;
   setSnapshot({
     ...snapshot,
     tasks: snapshot.tasks.map((currentTask) =>
@@ -218,26 +241,32 @@ async function runTaskCancel(task: TaskProgressRecord) {
     ),
   });
   task.control.cancelled = true;
-  try {
-    await task.on_cancel?.();
-    task.control.cancelled = true;
-    // The owner releases its slot only after backend work has settled.
-  } catch (error) {
-    if ((error as { code?: string } | null)?.code === "TASK_NOT_RUNNING") {
+  void (async () => {
+    try {
+      await task.on_cancel?.();
       task.control.cancelled = true;
-      return;
+      resolveRequest();
+    } catch (error) {
+      if ((error as { code?: string } | null)?.code === "TASK_NOT_RUNNING") {
+        task.control.cancelled = true;
+        resolveRequest();
+        return;
+      }
+      task.control.cancelled = false;
+      task.control.cancelRequest = undefined;
+      setSnapshot({
+        ...snapshot,
+        tasks: snapshot.tasks.map((currentTask) =>
+          currentTask.id === task.id
+            ? { ...currentTask, is_cancelling: false, label }
+            : currentTask,
+        ),
+      });
+      captureOperationError("task.cancel", error);
+      rejectRequest(error);
     }
-    task.control.cancelled = false;
-    setSnapshot({
-      ...snapshot,
-      tasks: snapshot.tasks.map((currentTask) =>
-        currentTask.id === task.id
-          ? { ...currentTask, is_cancelling: false, label: task.label }
-          : currentTask,
-      ),
-    });
-    captureOperationError("task.cancel", error);
-  }
+  })();
+  return request;
 }
 
 /** Registers immediately and resolves when the task owns an execution slot.
@@ -393,7 +422,12 @@ export function TaskProgress({ children }: TaskProgressProps) {
             {task.on_cancel && (
               <button
                 className="topbar-progress-cancel"
-                onClick={() => void runTaskCancel(task)}
+                onClick={() => {
+                  // The failure is already reported. Swallowing it here keeps
+                  // the click from becoming an unhandled rejection; quit still
+                  // observes the same rejected promise and stays open.
+                  void runTaskCancel(task).catch(() => undefined);
+                }}
                 title="取消任务"
                 aria-label="取消任务"
                 disabled={task.is_cancelling}

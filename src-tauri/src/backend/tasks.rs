@@ -162,23 +162,44 @@ pub(crate) fn clear_running_ffmpeg(state: &AppState, id: &str) {
     }
 }
 
-pub(crate) fn take_task_for_cancellation(
-    task_id: &str,
+/// Work taken out of shared task state. A second claim cannot see it, so
+/// closing the window and a frontend cancel cannot kill or delete twice.
+pub(crate) struct ClaimedCancellation {
+    pub(crate) found: bool,
+    processes: Vec<RunningFfmpeg>,
+    cleanup_paths: Vec<PathBuf>,
+}
+
+impl ClaimedCancellation {
+    pub(crate) fn has_cleanup(&self) -> bool {
+        !self.processes.is_empty() || !self.cleanup_paths.is_empty()
+    }
+}
+
+/// `task_id` of `None` claims every registered task.
+/// Cleanup paths are removed from the logical task so `TaskGuard`'s drop only
+/// deletes paths registered after this claim.
+pub(crate) fn claim_cancellation(
+    task_id: Option<&str>,
     state: &AppState,
-) -> AppResult<(bool, Vec<RunningFfmpeg>, Vec<PathBuf>)> {
-    let logical_task = state
-        .running_tasks
-        .lock()
-        .map_err(|_| {
+) -> AppResult<ClaimedCancellation> {
+    let mut found = false;
+    let mut cleanup_paths = Vec::new();
+    {
+        let mut tasks = state.running_tasks.lock().map_err(|_| {
             app_error(
                 ErrorCode::TaskStateUnavailable,
                 "Task state lock is poisoned",
             )
-        })?
-        .get(task_id)
-        .cloned();
-    if let Some(task) = &logical_task {
-        task.cancel.store(true, Ordering::SeqCst);
+        })?;
+        for (id, task) in tasks.iter_mut() {
+            if task_id.is_some_and(|wanted| wanted != id.as_str()) {
+                continue;
+            }
+            found = true;
+            task.cancel.store(true, Ordering::SeqCst);
+            cleanup_paths.append(&mut task.cleanup_paths);
+        }
     }
 
     let processes = {
@@ -190,7 +211,7 @@ pub(crate) fn take_task_for_cancellation(
         })?;
         let matching_ids = running
             .iter()
-            .filter(|(_, task)| task.task_id == task_id)
+            .filter(|(_, task)| task_id.is_none_or(|id| task.task_id == id))
             .map(|(id, _)| id.clone())
             .collect::<Vec<_>>();
         matching_ids
@@ -198,64 +219,40 @@ pub(crate) fn take_task_for_cancellation(
             .filter_map(|id| running.remove(&id))
             .collect::<Vec<_>>()
     };
-
-    let logical_task_found = logical_task.is_some();
-    let cleanup_paths = logical_task
-        .map(|task| task.cleanup_paths)
-        .unwrap_or_default();
-    Ok((
-        logical_task_found || !processes.is_empty(),
+    if !processes.is_empty() {
+        found = true;
+    }
+    for process in &processes {
+        for path in &process.cleanup_paths {
+            if !cleanup_paths.contains(path) {
+                cleanup_paths.push(path.clone());
+            }
+        }
+    }
+    Ok(ClaimedCancellation {
+        found,
         processes,
         cleanup_paths,
-    ))
+    })
 }
 
-pub(crate) fn cancel_all_tasks(state: &AppState) -> AppResult<bool> {
-    let logical_tasks = state
-        .running_tasks
-        .lock()
-        .map_err(|_| {
-            app_error(
-                ErrorCode::TaskStateUnavailable,
-                "Task state lock is poisoned",
-            )
-        })?
-        .values()
-        .cloned()
-        .collect::<Vec<_>>();
-    for task in &logical_tasks {
-        task.cancel.store(true, Ordering::SeqCst);
-    }
-
-    let processes = {
-        let mut running = state.running_ffmpeg.lock().map_err(|_| {
-            app_error(
-                ErrorCode::TaskStateUnavailable,
-                "FFmpeg task state lock is poisoned",
-            )
-        })?;
-        running.drain().map(|(_, task)| task).collect::<Vec<_>>()
-    };
-
-    if logical_tasks.is_empty() && processes.is_empty() {
-        return Ok(false);
-    }
-
-    stop_running_ffmpeg(processes);
-    for task in logical_tasks {
-        remove_cleanup_paths(&task.cleanup_paths);
-    }
-    Ok(true)
-}
-
-pub(crate) fn stop_running_ffmpeg(tasks: Vec<RunningFfmpeg>) {
-    for task in tasks {
+pub(crate) fn apply_cancellation(claimed: ClaimedCancellation) {
+    for task in claimed.processes {
         task.cancel.store(true, Ordering::SeqCst);
         if let Some(pid) = task.pid {
             kill_process_tree(pid);
         }
-        remove_cleanup_paths(&task.cleanup_paths);
     }
+    remove_cleanup_paths(&claimed.cleanup_paths);
+}
+
+pub(crate) fn cancel_all_tasks(state: &AppState) -> AppResult<bool> {
+    let claimed = claim_cancellation(None, state)?;
+    let found = claimed.found;
+    if claimed.has_cleanup() {
+        apply_cancellation(claimed);
+    }
+    Ok(found)
 }
 
 pub(crate) fn remove_cleanup_paths(paths: &[PathBuf]) {
@@ -316,4 +313,92 @@ pub(crate) fn unregister_task_cleanup_paths(
             .retain(|path| !completed_paths.contains(path));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
+
+    struct TemporaryDirectory(PathBuf);
+
+    impl TemporaryDirectory {
+        fn new() -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "locution-pro-cancel-{}-{}",
+                std::process::id(),
+                NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::create_dir_all(&path).expect("temporary cancellation directory");
+            fs::write(path.join("partial.mp4"), b"partial").expect("partial output");
+            Self(path)
+        }
+    }
+
+    impl Drop for TemporaryDirectory {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn register_running<'a>(state: &'a AppState, task_id: &str, directory: &Path) -> TaskGuard<'a> {
+        let guard = register_task(task_id, state).expect("task");
+        register_running_ffmpeg(
+            state,
+            format!("process-{task_id}"),
+            task_id.to_string(),
+            guard.cancel_token(),
+            None,
+            vec![directory.to_path_buf()],
+        )
+        .expect("ffmpeg registration");
+        guard
+    }
+
+    #[test]
+    fn one_claim_deletes_cleanup_output_and_a_second_claim_finds_nothing_to_repeat() {
+        let state = AppState::for_tests();
+        let directory = TemporaryDirectory::new();
+        let _guard = register_running(&state, "export:1", &directory.0);
+
+        let first = claim_cancellation(Some("export:1"), &state).expect("first claim");
+        assert!(first.found);
+        assert!(first.has_cleanup());
+        apply_cancellation(first);
+        assert!(!directory.0.exists());
+        assert!(state
+            .running_tasks
+            .lock()
+            .expect("tasks")
+            .get("export:1")
+            .expect("logical task")
+            .cleanup_paths
+            .is_empty());
+        assert!(state.running_ffmpeg.lock().expect("ffmpeg").is_empty());
+
+        let second = claim_cancellation(None, &state).expect("second claim");
+        assert!(second.found);
+        assert!(!second.has_cleanup());
+    }
+
+    #[test]
+    fn cancelling_one_task_leaves_another_tasks_process_and_output() {
+        let state = AppState::for_tests();
+        let export_dir = TemporaryDirectory::new();
+        let proxy_dir = TemporaryDirectory::new();
+        let _export = register_running(&state, "export:1", &export_dir.0);
+        let _proxy = register_running(&state, "proxy:1", &proxy_dir.0);
+
+        let claimed = claim_cancellation(Some("export:1"), &state).expect("claim");
+        apply_cancellation(claimed);
+
+        assert!(!export_dir.0.exists());
+        assert!(proxy_dir.0.join("partial.mp4").is_file());
+        let running = state.running_ffmpeg.lock().expect("ffmpeg");
+        assert!(running.contains_key("process-proxy:1"));
+        assert!(!running.contains_key("process-export:1"));
+    }
 }

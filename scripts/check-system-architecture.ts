@@ -124,6 +124,9 @@ for (const path of sourceFiles(sourceRoot)) {
     if (specifier.includes("ProjectSystem/ProjectState")) {
       fail(path, "ProjectSystem state is private; use the typed project port");
     }
+    if (specifier.includes("PreferencesSystem/PreferencesState")) {
+      fail(path, "PreferencesSystem state is private; use the typed preferences port");
+    }
 
     const imported = importedComponentOwner(path, specifier);
     if (owner && imported && owner !== imported.owner && /(?:State|System)$/u.test(imported.leaf)) {
@@ -153,6 +156,12 @@ for (const path of [eventContractPath, join(sourceRoot, "runtime", "events", "Ev
     ts.forEachChild(node, visit);
   }
   visit(parsed);
+}
+
+const projectStatePath = join(sourceRoot, "systems", "ProjectSystem", "ProjectState.ts");
+const projectStateSource = readFileSync(projectStatePath, "utf8");
+if (/\bpreferencesLoaded\b|^\s*preferences\s*:/mu.test(projectStateSource)) {
+  fail(projectStatePath, "preferences belong to PreferencesSystem, not ProjectSystem");
 }
 
 if (failures.length > 0) {

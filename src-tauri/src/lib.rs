@@ -155,9 +155,17 @@ pub fn run() {
             record_frontend_incident
         ])
         .on_window_event(|window, event| {
-            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
-                let state = window.state::<AppState>();
-                let _ = cancel_all_tasks(state.inner());
+            // CloseRequested is handled by the webview: it preventDefault()s,
+            // asks cancel_task to stop each running task, and destroy()s only
+            // after that cleanup returns. Doing the same work here would kill
+            // processes and delete export files twice. Destroyed is the
+            // fallback when that request never finishes (a crashed webview, or
+            // the quit timeout). claim_cancellation drops work already taken,
+            // so the fallback does not repeat it.
+            if let tauri::WindowEvent::Destroyed = event {
+                if let Some(state) = window.try_state::<AppState>() {
+                    let _ = cancel_all_tasks(state.inner());
+                }
             }
         })
         .build(tauri::generate_context!())

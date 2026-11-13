@@ -61,6 +61,9 @@ jobs:
       - name: Check system architecture
         run: npm run check:architecture
 
+      - name: Check media source injection
+        run: npm run check:media-sources
+
       - name: Type-check and build frontend
         run: npx tsc && npx vite build
 

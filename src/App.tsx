@@ -89,14 +89,9 @@ import {
   pruneProjectStates,
   useProjectPort,
 } from "./systems/ProjectSystem";
+import { usePreferencesPort } from "./systems/PreferencesSystem";
 import { isMacOSRuntime, isTauriRuntime } from "./platform/tauri/runtime";
-import type {
-  MediaBinFolder,
-  MediaBinItem,
-  OpenProjectResult,
-  Preferences,
-  RecentProjectEntry,
-} from "./types";
+import type { MediaBinFolder, MediaBinItem, OpenProjectResult, RecentProjectEntry } from "./types";
 
 const projectFilters = [
   {
@@ -368,14 +363,12 @@ function AppContent() {
     mediaProjectsAdded,
     mediaItemsAdded,
     mediaItemsMovedToFolder,
-    preferencesLoaded,
     messagePublished,
     warningsReplaced,
     warningsAppended,
     projectHistoryJumped,
     projectHistoryFutureDiscarded,
     projectRestored,
-    preferences,
     mediaBinReadOnly,
   } = useProjectPort(
     [
@@ -387,7 +380,6 @@ function AppContent() {
       "projectId",
       "exportState",
       "projectDirty",
-      "preferences",
       "message",
       "warnings",
       "mediaBinReadOnly",
@@ -401,7 +393,6 @@ function AppContent() {
       "mediaProjectsAdded",
       "mediaItemsAdded",
       "mediaItemsMovedToFolder",
-      "preferencesLoaded",
       "messagePublished",
       "warningsReplaced",
       "warningsAppended",
@@ -410,6 +401,12 @@ function AppContent() {
       "projectRestored",
     ],
   );
+  const {
+    preferences,
+    loaded: preferencesLoaded,
+    loadPreferences,
+  } = usePreferencesPort(["preferences", "loaded"], ["loadPreferences"]);
+  const startupPreferenceApplied = useRef(false);
   const autoSaveIntervalMinutes = preferences.auto_save_interval_minutes;
   useLayoutEffect(() => {
     applyAppearance(preferences.appearance ?? "darkest");
@@ -492,19 +489,16 @@ function AppContent() {
     if (!isTauriRuntime()) {
       return;
     }
+    void loadPreferences();
+  }, [loadPreferences]);
 
-    void runOperation("preferences.load", () => invokeCommand("take_preferences_startup_error"));
-    void runOperation("preferences.load", () => invokeCommand<Preferences>("get_preferences")).then(
-      (outcome) => {
-        if (outcome.status === "success") {
-          preferencesLoaded(outcome.value);
-          if (!outcome.value.show_home_on_startup) {
-            setProjectHomeMode((current) => (current === "startup" ? null : current));
-          }
-        }
-      },
-    );
-  }, []);
+  useEffect(() => {
+    if (!preferencesLoaded || startupPreferenceApplied.current) return;
+    startupPreferenceApplied.current = true;
+    if (!preferences.show_home_on_startup) {
+      setProjectHomeMode((current) => (current === "startup" ? null : current));
+    }
+  }, [preferencesLoaded, preferences.show_home_on_startup]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return;

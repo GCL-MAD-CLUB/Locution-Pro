@@ -241,3 +241,116 @@ test("other operations retain exclusive FIFO execution between storyboard batche
   assert.deepEqual(started, [0, 1, 2, 3]);
   next.remove();
 });
+
+test("a second cancel and cancel-all wait for the same in-flight backend request", async () => {
+  const system = taskSystem();
+  const gate = deferred<void>();
+  let requests = 0;
+  let handle!: TaskProgressHandle;
+  const created = system.createTaskProgress(
+    options(
+      "export",
+      () => undefined,
+      async () => {
+        requests += 1;
+        await gate.promise;
+        handle.remove();
+      },
+    ),
+  );
+  handle = await created;
+  const view = () => system.useTaskProgressStatus().tasks[0];
+  let firstSettled = false;
+  let secondSettled = false;
+  let allSettled = false;
+  const first = view()
+    .cancel()
+    .then(() => {
+      firstSettled = true;
+    });
+  const second = view()
+    .cancel()
+    .then(() => {
+      secondSettled = true;
+    });
+  const all = system.cancelAllTaskProgress().then(() => {
+    allSettled = true;
+  });
+  await flush();
+  assert.equal(requests, 1);
+  assert.equal(firstSettled, false);
+  assert.equal(secondSettled, false);
+  assert.equal(allSettled, false);
+  gate.resolve();
+  await first;
+  await second;
+  await all;
+  assert.equal(firstSettled, true);
+  assert.equal(secondSettled, true);
+  assert.equal(allSettled, true);
+  assert.equal(requests, 1);
+});
+
+test("a failed running cancel rejects every waiter and a real retry can run", async () => {
+  const system = taskSystem();
+  const gate = deferred<void>();
+  let requests = 0;
+  let fail = true;
+  const handle = await system.createTaskProgress(
+    options(
+      "export",
+      () => undefined,
+      async () => {
+        requests += 1;
+        await gate.promise;
+        if (fail) throw Object.assign(new Error("cleanup failed"), { code: "EXPORT_FAILED" });
+      },
+    ),
+  );
+  const view = () => system.useTaskProgressStatus().tasks[0];
+  const first = view().cancel();
+  let secondState = "pending";
+  const second = view()
+    .cancel()
+    .then(
+      () => {
+        secondState = "resolved";
+      },
+      () => {
+        secondState = "rejected";
+      },
+    );
+  await flush();
+  assert.equal(secondState, "pending");
+  gate.resolve();
+  await assert.rejects(first, /cleanup failed/);
+  await second;
+  assert.equal(secondState, "rejected");
+  assert.equal(requests, 1);
+  assert.equal(system.errors.length, 1);
+  assert.equal(handle.cancelled, false);
+  assert.equal(view().isCancelling, false);
+  fail = false;
+  await view().cancel();
+  assert.equal(requests, 2);
+  assert.equal(handle.cancelled, true);
+  handle.remove();
+});
+
+test("a cancel that finds the task already finished resolves every waiter", async () => {
+  const system = taskSystem();
+  const handle = await system.createTaskProgress(
+    options(
+      "export",
+      () => undefined,
+      async () => {
+        throw Object.assign(new Error("already finished"), { code: "TASK_NOT_RUNNING" });
+      },
+    ),
+  );
+  const view = () => system.useTaskProgressStatus().tasks[0];
+  await Promise.all([view().cancel(), view().cancel()]);
+  assert.equal(handle.cancelled, true);
+  assert.equal(system.errors.length, 0);
+  handle.remove();
+});

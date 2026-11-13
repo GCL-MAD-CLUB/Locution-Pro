@@ -196,6 +196,11 @@ async function stopTaskListener(task: TaskProgressRecord) {
   }
 }
 
+/** Queued work never reached the backend, so it is dropped here.
+ * A running cancel is one request to the backend and resolves only after that
+ * request does. The backend owns the cancel flag, process termination and
+ * cleanup paths; this scheduler does not repeat them.
+ */
 async function runTaskCancel(task: TaskProgressRecord) {
   const live = snapshot.tasks.find((current) => current.id === task.id);
   if (!live) return;

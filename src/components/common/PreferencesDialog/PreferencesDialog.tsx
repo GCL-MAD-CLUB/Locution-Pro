@@ -2,10 +2,10 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Loader2 } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { applyAppearance, knownAppearances } from "../../../runtime/theme";
-import { invokeCommand, runOperation } from "../../../errors";
-import { createFfmpegTaskId } from "../../../platform/tauri/ffmpegProgress";
+import { runOperation } from "../../../errors";
 import { isTauriRuntime } from "../../../platform/tauri/runtime";
-import { defaultPreferences, useProjectPort } from "../../../systems/ProjectSystem";
+import { useProjectPort } from "../../../systems/ProjectSystem";
+import { defaultPreferences, usePreferencesPort } from "../../../systems/PreferencesSystem";
 import type { Appearance, Preferences } from "../../../types";
 import { ModalDialog } from "../ModalDialog";
 import {
@@ -57,9 +57,10 @@ function PreferencesEditor({
   initialCategory: PreferencesCategory;
   onClose: () => void;
 }) {
-  const { preferences, preferencesLoaded, messagePublished } = useProjectPort(
+  const { messagePublished } = useProjectPort([], ["messagePublished"]);
+  const { preferences, updatePreferences } = usePreferencesPort(
     ["preferences"],
-    ["preferencesLoaded", "messagePublished"],
+    ["updatePreferences"],
   );
   const [draft, setDraft] = useState(() => createDraft(preferences));
   const savedAppearance = useRef(preferences.appearance ?? "darkest");
@@ -168,19 +169,13 @@ function PreferencesEditor({
     }
     setIsSaving(true);
     try {
-      const outcome = await runOperation("preferences.update", () =>
-        invokeCommand<Preferences>("update_preferences", {
-          preferences: {
-            ...draft,
-            auto_save_interval_minutes: Number(draft.auto_save_interval_minutes),
-            auto_save_max_snapshots: Number(draft.auto_save_max_snapshots),
-          },
-          taskId: createFfmpegTaskId("preferences"),
-        }),
-      );
-      if (outcome.status === "success") {
-        savedAppearance.current = outcome.value.appearance ?? "darkest";
-        preferencesLoaded(outcome.value);
+      const saved = await updatePreferences({
+        ...draft,
+        auto_save_interval_minutes: Number(draft.auto_save_interval_minutes),
+        auto_save_max_snapshots: Number(draft.auto_save_max_snapshots),
+      });
+      if (saved) {
+        savedAppearance.current = saved.appearance ?? "darkest";
         messagePublished("已保存首选项。");
         onClose();
       }

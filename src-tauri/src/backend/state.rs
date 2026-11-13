@@ -45,6 +45,11 @@ impl AppState {
             workspace_config_lock: Mutex::new(()),
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn for_tests() -> Self {
+        Self::from_preferences_result(Ok(Preferences::default()))
+    }
 }
 
 /// A project opened from Finder before setup created [`AppState`]: on a cold

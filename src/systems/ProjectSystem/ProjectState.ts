@@ -30,7 +30,6 @@ import type {
   MediaBinFolder,
   MediaBinItem,
   MediaStream,
-  Preferences,
   MediaDocument,
   ProjectExportState,
   ProjectWorkspace,
@@ -125,7 +124,6 @@ interface ProjectCommands {
   sourcePreviewSelected: () => void;
   proxyPreviewSelected: () => void;
   proxyGenerated: (path: string) => void;
-  preferencesLoaded: (preferences: Preferences) => void;
   messagePublished: (message: string) => void;
   warningsReplaced: (warnings: UserNotice[]) => void;
   warningsAppended: (warnings: UserNotice[]) => void;
@@ -163,7 +161,6 @@ interface ProjectSystemState {
   proxyPath: string | null;
   useProxy: boolean;
   proxyDialogOpen: boolean;
-  preferences: Preferences;
   message: string;
   warnings: UserNotice[];
   mediaBinReadOnly: boolean;
@@ -751,21 +748,6 @@ function openedProjectState(workspace: ProjectWorkspace, projectId: string) {
   };
 }
 
-export function defaultPreferences(): Preferences {
-  return {
-    appearance: "darkest",
-    show_home_on_startup: true,
-    auto_save_enabled: true,
-    auto_save_current_project: true,
-    auto_save_dir: "",
-    cache_dir: "",
-    ffmpeg_path: "ffmpeg",
-    ffprobe_path: "ffprobe",
-    auto_save_interval_minutes: 5,
-    auto_save_max_snapshots: 20,
-  };
-}
-
 function projectFileStateFromStore(state: ProjectSystemState): ProjectFileState {
   return {
     projects: state.projects,
@@ -1055,7 +1037,6 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
   projectDirty: false,
   useProxy: false,
   proxyDialogOpen: false,
-  preferences: defaultPreferences(),
   message: "就绪",
   warnings: [],
   mediaBinReadOnly: false,
@@ -2118,7 +2099,6 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
           proxyDialogOpen: false,
         };
       }),
-    preferencesLoaded: (preferences) => set({ preferences }),
     messagePublished: (message) => set({ message }),
     warningsReplaced: (warnings) => set({ warnings }),
     warningsAppended: (warnings) =>

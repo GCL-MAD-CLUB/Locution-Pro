@@ -7,6 +7,7 @@ import {
   listenToFfmpegTaskProgress,
 } from "../../../platform/tauri/ffmpegProgress";
 import { mediaDisplayName, useProjectPort } from "../../../systems/ProjectSystem";
+import { usePreferencesPort } from "../../../systems/PreferencesSystem";
 import { isTauriRuntime } from "../../../platform/tauri/runtime";
 import type { ProxyResult } from "../../../types";
 import { ModalDialog } from "../ModalDialog";
@@ -56,8 +57,8 @@ function labelForLocation(location: ProxyLocation, customLocation: string, cache
 }
 
 export function ProxyCreationDialog() {
+  const { preferences } = usePreferencesPort(["preferences"], []);
   const {
-    preferences,
     activeVideoId,
     mediaItems,
     project,
@@ -66,7 +67,7 @@ export function ProxyCreationDialog() {
     proxyGenerated,
     messagePublished: setMessage,
   } = useProjectPort(
-    ["activeVideoId", "mediaItems", "preferences", "project", "proxyDialogOpen"],
+    ["activeVideoId", "mediaItems", "project", "proxyDialogOpen"],
     ["proxyDialogClosed", "proxyGenerated", "messagePublished"],
   );
   const cacheDir = preferences.cache_dir;

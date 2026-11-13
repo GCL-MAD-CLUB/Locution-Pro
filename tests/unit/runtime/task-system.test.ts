@@ -241,3 +241,31 @@ test("other operations retain exclusive FIFO execution between storyboard batche
   assert.deepEqual(started, [0, 1, 2, 3]);
   next.remove();
 });
+
+test("a running cancel resolves after one backend request and does not send another", async () => {
+  const system = taskSystem();
+  const gate = deferred<void>();
+  let requests = 0;
+  const handle = await system.createTaskProgress(
+    options(
+      "export",
+      () => undefined,
+      async () => {
+        requests += 1;
+        await gate.promise;
+      },
+    ),
+  );
+  const view = () => system.useTaskProgressStatus().tasks[0];
+  const first = view().cancel();
+  const second = view().cancel();
+  await flush();
+  assert.equal(requests, 1);
+  assert.equal(view().isCancelling, true);
+  gate.resolve();
+  await first;
+  await second;
+  assert.equal(requests, 1);
+  assert.equal(handle.cancelled, true);
+  handle.remove();
+});

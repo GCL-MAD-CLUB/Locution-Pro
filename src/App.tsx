@@ -10,6 +10,7 @@ import {
   withoutUnavailableAppPanels,
   withAppPanelDefaults,
 } from "./application/appPanelRegistry";
+import { finishWindowClose, windowCloseAction } from "./application/windowClose";
 import { publishEvent, useBroadcastEvent } from "./runtime/events/react";
 import { readAppStorage } from "./runtime/storage";
 import { useProjections } from "./runtime/state/StateHub";
@@ -77,6 +78,7 @@ import {
   runOperation,
   type OperationKey,
 } from "./errors";
+import { normalizeError } from "./errors/runtime";
 import {
   captureProjectAutoSave,
   getProjectWorkspaceSnapshot,
@@ -715,17 +717,33 @@ function AppContent() {
     const currentWindow = getCurrentWindow();
     runBackgroundOperation("window.closeListener", async () => {
       const unlisten = await currentWindow.onCloseRequested((event) => {
-        if (updateInstallingRef.current) {
-          event.preventDefault();
-          return;
-        }
-        if (!projectDirty || closingWindowRef.current) {
-          void runOperation("project.close", () => cancelAllTaskProgress());
-          return;
-        }
-
+        const action = windowCloseAction({
+          updateInstalling: updateInstallingRef.current,
+          closing: closingWindowRef.current,
+          projectDirty,
+        });
+        // Hold the platform close until export cancellation and cleanup finish.
+        // destroy() is what exits. A repeated close while that wait runs is ignored.
         event.preventDefault();
-        setPendingCloseTarget("window");
+        if (action === "block-install" || action === "ignore-reentry") {
+          return;
+        }
+        if (action === "confirm-dirty") {
+          setPendingCloseTarget("window");
+          return;
+        }
+        closingWindowRef.current = true;
+        void runOperation("project.close", async () => {
+          try {
+            await finishWindowClose(
+              () => cancelAllTaskProgress(),
+              () => getCurrentWindow().destroy(),
+            );
+          } catch (error) {
+            closingWindowRef.current = false;
+            throw normalizeError(error);
+          }
+        });
       });
       if (disposed) {
         unlisten();
@@ -1164,10 +1182,12 @@ function AppContent() {
     }
 
     closingWindowRef.current = true;
-    const outcome = await runOperation("project.close", async () => {
-      await cancelAllTaskProgress();
-      await getCurrentWindow().destroy();
-    });
+    const outcome = await runOperation("project.close", () =>
+      finishWindowClose(
+        () => cancelAllTaskProgress(),
+        () => getCurrentWindow().destroy(),
+      ),
+    );
     if (outcome.status !== "success") {
       closingWindowRef.current = false;
       setPendingCloseTarget("window");

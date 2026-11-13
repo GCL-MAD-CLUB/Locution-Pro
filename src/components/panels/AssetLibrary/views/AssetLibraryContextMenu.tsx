@@ -2,6 +2,8 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import {
   assetLibraryColorLabels,
+  assetLibraryViewPresetForSize,
+  assetLibraryViewPresets,
   type AssetLibraryFlag,
   type AssetLibrarySort,
   type AssetLibrarySortKey,
@@ -32,8 +34,10 @@ export interface AssetLibraryContextMenuModel {
   canDuplicate: boolean;
   canRename: boolean;
   canDelete: boolean;
+  canSelectAll: boolean;
   hasEntries: boolean;
   sort: AssetLibrarySort;
+  size: number;
   navigationVisible: boolean;
   detailsVisible: boolean;
 }
@@ -47,15 +51,18 @@ export interface AssetLibraryContextMenuActions {
   duplicate: () => void;
   rename: () => void;
   remove: () => void;
+  selectAll: () => void;
+  showProperties: () => void;
   setFlag: (flag: AssetLibraryFlag) => void;
   setRating: (rating: number) => void;
   setColorLabel: (colorLabel: AssetLibraryColorLabel | null) => void;
   setSort: (sort: AssetLibrarySort) => void;
+  setSize: (size: number) => void;
   setNavigationVisible: (visible: boolean) => void;
   setDetailsVisible: (visible: boolean) => void;
 }
 
-type Submenu = "flag" | "rating" | "color" | "sort" | null;
+type Submenu = "flag" | "rating" | "color" | "sort" | "view" | null;
 
 const sortLabels: Record<AssetLibrarySortKey, string> = {
   name: "名称",
@@ -64,6 +71,71 @@ const sortLabels: Record<AssetLibrarySortKey, string> = {
   duration: "时长",
   rating: "星级",
 };
+
+/** Sort keys and direction, shared by the right-click menu and the command bar. */
+export function AssetLibrarySortItems({
+  sort,
+  onSelect,
+}: {
+  sort: AssetLibrarySort;
+  onSelect: (sort: AssetLibrarySort) => void;
+}) {
+  return (
+    <>
+      {(Object.keys(sortLabels) as AssetLibrarySortKey[]).map((key) => (
+        <PopupMenuItem
+          key={key}
+          checked={sort.key === key}
+          indicator="dot"
+          onSelect={() => onSelect({ ...sort, key })}
+        >
+          {sortLabels[key]}
+        </PopupMenuItem>
+      ))}
+      <PopupMenuSeparator />
+      <PopupMenuItem
+        checked={sort.direction === "ascending"}
+        indicator="dot"
+        onSelect={() => onSelect({ ...sort, direction: "ascending" })}
+      >
+        递增
+      </PopupMenuItem>
+      <PopupMenuItem
+        checked={sort.direction === "descending"}
+        indicator="dot"
+        onSelect={() => onSelect({ ...sort, direction: "descending" })}
+      >
+        递减
+      </PopupMenuItem>
+    </>
+  );
+}
+
+/** View presets; each sets the size slider, which then picks list or icons. */
+export function AssetLibraryViewPresetItems({
+  size,
+  onSelect,
+}: {
+  size: number;
+  onSelect: (size: number) => void;
+}) {
+  const current = assetLibraryViewPresetForSize(size);
+  return (
+    <>
+      {assetLibraryViewPresets.map((preset) => (
+        <PopupMenuItem
+          key={preset.id}
+          checked={current?.id === preset.id}
+          indicator="dot"
+          shortcut={preset.shortcut}
+          onSelect={() => onSelect(preset.size)}
+        >
+          {preset.label}
+        </PopupMenuItem>
+      ))}
+    </>
+  );
+}
 
 export function AssetLibraryContextMenu({
   menu,
@@ -127,6 +199,15 @@ export function AssetLibraryContextMenu({
       <PopupMenuItem shortcut="Delete" disabled={!model.canDelete} onSelect={run(actions.remove)}>
         删除
       </PopupMenuItem>
+      {menu.scope === "content" && (
+        <PopupMenuItem
+          shortcut="Ctrl+A"
+          disabled={!model.canSelectAll}
+          onSelect={run(actions.selectAll)}
+        >
+          全选
+        </PopupMenuItem>
+      )}
       {model.hasEntries && (
         <>
           <PopupMenuSeparator />
@@ -180,36 +261,21 @@ export function AssetLibraryContextMenu({
       {menu.scope === "content" && (
         <>
           <PopupMenuSeparator />
+          <PopupMenuSubmenu label="查看" open={submenu === "view"} onOpenChange={toggle("view")}>
+            <AssetLibraryViewPresetItems
+              size={model.size}
+              onSelect={(size) => run(() => actions.setSize(size))()}
+            />
+          </PopupMenuSubmenu>
           <PopupMenuSubmenu
             label="排序方式"
             open={submenu === "sort"}
             onOpenChange={toggle("sort")}
           >
-            {(Object.keys(sortLabels) as AssetLibrarySortKey[]).map((key) => (
-              <PopupMenuItem
-                key={key}
-                checked={model.sort.key === key}
-                indicator="dot"
-                onSelect={run(() => actions.setSort({ ...model.sort, key }))}
-              >
-                {sortLabels[key]}
-              </PopupMenuItem>
-            ))}
-            <PopupMenuSeparator />
-            <PopupMenuItem
-              checked={model.sort.direction === "ascending"}
-              indicator="dot"
-              onSelect={run(() => actions.setSort({ ...model.sort, direction: "ascending" }))}
-            >
-              递增
-            </PopupMenuItem>
-            <PopupMenuItem
-              checked={model.sort.direction === "descending"}
-              indicator="dot"
-              onSelect={run(() => actions.setSort({ ...model.sort, direction: "descending" }))}
-            >
-              递减
-            </PopupMenuItem>
+            <AssetLibrarySortItems
+              sort={model.sort}
+              onSelect={(sort) => run(() => actions.setSort(sort))()}
+            />
           </PopupMenuSubmenu>
           <PopupMenuItem
             checked={model.navigationVisible}
@@ -225,6 +291,10 @@ export function AssetLibraryContextMenu({
           </PopupMenuItem>
         </>
       )}
+      <PopupMenuSeparator />
+      <PopupMenuItem shortcut="Alt+Enter" onSelect={run(actions.showProperties)}>
+        属性
+      </PopupMenuItem>
     </PopupMenu>,
     document.body,
   );

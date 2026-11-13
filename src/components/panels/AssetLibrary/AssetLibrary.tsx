@@ -1,37 +1,23 @@
-import {
-  Captions,
-  ChevronLeft,
-  ChevronRight,
-  CornerLeftUp,
-  Film,
-  FolderPlus,
-  PanelLeft,
-  PanelRight,
-  Search,
-  Trash2,
-} from "lucide-react";
+import { Search } from "lucide-react";
 import {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
   assetLibraryChildren,
-  assetLibraryClipboard,
   assetLibraryDescendants,
   assetLibraryEntryMatches,
-  assetLibraryFolderDescendantIds,
   assetLibraryFolderPath,
   assetLibraryLocationExists,
   assetLibraryRootLabels,
   assetLibraryViewLayout,
-  renamedAssetLibraryEntry,
+  sameAssetLibraryLocation,
   sortedAssetLibraryNodes,
   withAssetLibraryColorLabel,
   withAssetLibraryFlag,
@@ -52,26 +38,31 @@ import { isPopupMenuEventTarget, useCloseOnOutsidePointer } from "../../common/P
 import { annotationShortcutAction } from "../../common/utils/annotationShortcuts";
 import "./AssetLibrary.css";
 import { assetLibraryCommands } from "./assetLibraryCommands";
+import { assetLibraryDragDrop } from "./assetLibraryDragDrop";
+import { assetLibraryFileOperations } from "./assetLibraryFileOperations";
+import {
+  assetLibraryButtonKeys,
+  assetLibraryKeyCommand,
+  isAssetLibraryEditableTarget,
+  type AssetLibraryKeyCommand,
+} from "./assetLibraryKeyboard";
 import { resolveAssetMedia } from "./assetLibraryMedia";
 import {
-  activeAssetLibraryDrag,
   assetEntryKey,
   assetFolderKey,
-  assetLibraryDragType,
   assetLibrarySelectionFromKeys,
+  assetLibrarySelectionSize,
   assetLocationKey,
-  beginAssetLibraryDrag,
-  endAssetLibraryDrag,
+  assetNodeParent,
   type AssetLibraryNode,
 } from "./assetLibraryNodes";
+import { useAssetLibraryClipboard, useAssetLibraryState } from "./assetLibraryState";
+import { AssetLibraryAddressBar } from "./views/AssetLibraryAddressBar";
 import {
-  assetLibraryPaneWidths,
-  readAssetLibraryClipboard,
-  setAssetLibraryClipboard,
-  useAssetLibraryClipboard,
-  useAssetLibraryState,
-  type AssetLibraryPane,
-} from "./assetLibraryState";
+  AssetLibraryCommandBar,
+  type AssetLibraryCommandBarActions,
+  type AssetLibraryCommandBarModel,
+} from "./views/AssetLibraryCommandBar";
 import {
   AssetLibraryContextMenu,
   type AssetLibraryContextMenuActions,
@@ -79,40 +70,17 @@ import {
   type AssetLibraryContextMenuState,
 } from "./views/AssetLibraryContextMenu";
 import { AssetLibraryDetails } from "./views/AssetLibraryDetails";
+import { AssetLibraryFooter } from "./views/AssetLibraryFooter";
 import { AssetLibraryItems } from "./views/AssetLibraryItems";
 import { AssetLibraryNavigation } from "./views/AssetLibraryNavigation";
+import { AssetLibraryResizeHandle } from "./views/AssetLibraryResizeHandle";
 
 const sizeStep = 5;
 const contentDropKey = "content";
 const minimumItemsWidth = 160;
-
 interface ContextMenuState extends AssetLibraryContextMenuState {
   /** For tree menus, the location that was right-clicked. */
   treeLocation?: AssetLibraryLocation;
-}
-
-function isEditableTarget(target: EventTarget | null) {
-  const element = target as HTMLElement | null;
-  return (
-    element?.tagName === "INPUT" ||
-    element?.tagName === "TEXTAREA" ||
-    element?.tagName === "SELECT" ||
-    Boolean(element?.isContentEditable)
-  );
-}
-
-function sameLocation(left: AssetLibraryLocation, right: AssetLibraryLocation) {
-  return left.root === right.root && left.folderId === right.folderId;
-}
-
-function selectionSize(selection: AssetLibrarySelection) {
-  return selection.folderIds.length + selection.entryIds.length;
-}
-
-function nodeParent(node: AssetLibraryNode): AssetLibraryLocation {
-  return node.kind === "folder"
-    ? { root: node.folder.root, folderId: node.folder.parent_id }
-    : { root: node.entry.root, folderId: node.entry.folder_id };
 }
 
 function folderMatches(name: string, query: string) {
@@ -146,9 +114,10 @@ export function AssetLibrary() {
   const commands = useMemo(() => assetLibraryCommands(assetLibraryUpdated), [assetLibraryUpdated]);
   const [columns, setColumns] = useState(1);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
-  const [resizingPane, setResizingPane] = useState<AssetLibraryPane | null>(null);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
+  const [addressEditing, setAddressEditing] = useState(false);
   const sectionRef = useRef<HTMLElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
   const locationValid = assetLibraryLocationExists(library, view.location);
   const location: AssetLibraryLocation = locationValid
@@ -165,6 +134,15 @@ export function AssetLibrary() {
     () => assetLibraryFolderPath(library, location.folderId),
     [library, location.folderId],
   );
+
+  // As in a file manager's navigation pane, the tree always reveals the current folder.
+  const { expandKeys } = view;
+  useEffect(() => {
+    expandKeys([
+      assetLocationKey({ root: location.root, folderId: null }),
+      ...path.slice(0, -1).map((folder) => assetFolderKey(folder.id)),
+    ]);
+  }, [expandKeys, location.root, path]);
 
   const mediaByEntryId = useMemo(
     () =>
@@ -250,6 +228,30 @@ export function AssetLibrary() {
     view.select(additive ? [...view.selectedKeys, ...range] : range, toKey, fromKey);
   }
 
+  function toggleNodeSelected(node: AssetLibraryNode) {
+    const keys = new Set(view.selectedKeys);
+    if (keys.has(node.key)) keys.delete(node.key);
+    else keys.add(node.key);
+    view.select(keys, node.key, node.key);
+  }
+
+  function selectAll() {
+    view.select(nodes.map((node) => node.key));
+  }
+
+  function toggleAllSelected() {
+    if (nodes.length > 0 && selectedNodes.length === nodes.length) view.select([], null, null);
+    else selectAll();
+  }
+
+  function invertSelection() {
+    view.select(nodes.filter((node) => !view.selectedKeys.has(node.key)).map((node) => node.key));
+  }
+
+  function showProperties() {
+    view.setDetailsVisible(true);
+  }
+
   function updateSelectedEntries(
     label: string,
     recipe: (entry: AssetLibraryEntry) => AssetLibraryEntry,
@@ -295,114 +297,19 @@ export function AssetLibrary() {
     view.select([assetFolderKey(location.folderId)], assetFolderKey(location.folderId));
   }
 
-  function createFolder(target: AssetLibraryLocation = location) {
-    const folder = commands.createFolder(target);
-    if (!folder) return;
-    if (!sameLocation(target, location)) view.navigate(target);
-    if (query) view.setQuery("");
-    const key = assetFolderKey(folder.id);
-    view.select([key], key, key);
-    view.setRenamingKey(key);
-  }
-
-  function copyNodes(nodeSelection: AssetLibrarySelection, asCut: boolean) {
-    const nextClipboard = assetLibraryClipboard(library, nodeSelection);
-    if (!nextClipboard) return;
-    setAssetLibraryClipboard(nextClipboard, asCut);
-    const count = nextClipboard.topFolderIds.length + nextClipboard.topEntryIds.length;
-    messagePublished(asCut ? `已剪切 ${count} 项。` : `已复制 ${count} 项。`);
-  }
-
-  function selectCreated(target: AssetLibraryLocation, folderIds: string[], entryIds: string[]) {
-    if (!sameLocation(target, location) || query) return;
-    const keys = [...folderIds.map(assetFolderKey), ...entryIds.map(assetEntryKey)];
-    view.select(keys, keys.at(-1) ?? null, keys[0] ?? null);
-  }
-
-  function pasteInto(target: AssetLibraryLocation) {
-    const { clipboard: current, cut: isCut } = readAssetLibraryClipboard();
-    if (!current) return;
-    if (current.root !== target.root) {
-      messagePublished(`${rootLabel(current.root)}素材不能粘贴到“${rootLabel(target.root)}”。`);
-      return;
-    }
-    const cutSelection = { folderIds: current.topFolderIds, entryIds: current.topEntryIds };
-    const originalsExist =
-      library.folders.some((folder) => cutSelection.folderIds.includes(folder.id)) ||
-      library.entries.some((entry) => cutSelection.entryIds.includes(entry.id));
-    if (isCut && originalsExist) {
-      const movedCount = commands.move(cutSelection, target);
-      setAssetLibraryClipboard(null);
-      selectCreated(target, cutSelection.folderIds, cutSelection.entryIds);
-      messagePublished(movedCount > 0 ? `已移动 ${movedCount} 项。` : "所选项目已在此位置。");
-      return;
-    }
-    const pasted = commands.paste(current, target);
-    if (isCut) setAssetLibraryClipboard(null);
-    selectCreated(target, pasted.folderIds, pasted.entryIds);
-    messagePublished(`已粘贴 ${pasted.folderIds.length + pasted.entryIds.length} 项。`);
-  }
-
-  function duplicateNodes(nodeSelection: AssetLibrarySelection) {
-    const groups = new Map<
-      string,
-      { target: AssetLibraryLocation; selection: AssetLibrarySelection }
-    >();
-    const add = (target: AssetLibraryLocation, kind: "folderIds" | "entryIds", id: string) => {
-      const key = assetLocationKey(target);
-      const group = groups.get(key) ?? { target, selection: { folderIds: [], entryIds: [] } };
-      groups.set(key, {
-        target,
-        selection: { ...group.selection, [kind]: [...group.selection[kind], id] },
-      });
-    };
-    library.folders
-      .filter((folder) => nodeSelection.folderIds.includes(folder.id))
-      .forEach((folder) =>
-        add({ root: folder.root, folderId: folder.parent_id }, "folderIds", folder.id),
-      );
-    library.entries
-      .filter((entry) => nodeSelection.entryIds.includes(entry.id))
-      .forEach((entry) =>
-        add({ root: entry.root, folderId: entry.folder_id }, "entryIds", entry.id),
-      );
-    const copies = [...groups.values()].flatMap(({ target, selection: groupSelection }) => {
-      const groupClipboard = assetLibraryClipboard(library, groupSelection);
-      return groupClipboard ? [{ clipboard: groupClipboard, target }] : [];
+  const { createFolder, copyNodes, pasteInto, duplicateNodes, removeNodes, renameNode } =
+    assetLibraryFileOperations({
+      library,
+      location,
+      path,
+      query,
+      commands,
+      view,
+      messagePublished,
     });
-    const created = commands.duplicate(copies);
-    const keys = [...created.folderIds.map(assetFolderKey), ...created.entryIds.map(assetEntryKey)];
-    view.select(keys, keys.at(-1) ?? null, keys[0] ?? null);
-    messagePublished(`已创建 ${keys.length} 个副本。`);
-  }
-
-  function removeNodes(nodeSelection: AssetLibrarySelection) {
-    if (selectionSize(nodeSelection) === 0) return;
-    const removedFolders = assetLibraryFolderDescendantIds(
-      library.folders,
-      nodeSelection.folderIds,
-    );
-    const survivor = [...path].reverse().find((folder) => !removedFolders.has(folder.id));
-    const removed = commands.remove(nodeSelection);
-    if (location.folderId && removedFolders.has(location.folderId)) {
-      view.replaceLocation({ root: location.root, folderId: survivor?.id ?? null });
-    }
-    view.select([], null, null);
-    if (removed > 0) messagePublished(`已从素材库删除 ${removed} 项，可通过撤销恢复。`);
-  }
 
   function startRename(key: string | null) {
     if (key && nodeIndex.has(key)) view.setRenamingKey(key);
-  }
-
-  function renameNode(node: AssetLibraryNode, name: string) {
-    view.setRenamingKey(null);
-    if (node.kind === "folder") commands.renameFolder(node.folder.id, name);
-    else {
-      commands.updateEntries("重命名素材", [node.entry.id], (entry) =>
-        renamedAssetLibraryEntry(entry, name),
-      );
-    }
   }
 
   useEditCapability({
@@ -416,7 +323,7 @@ export function AssetLibrary() {
       paste: () => pasteInto(location),
       clear: () => removeNodes(selection),
       duplicate: () => duplicateNodes(selection),
-      selectAll: () => view.select(nodes.map((node) => node.key)),
+      selectAll,
       clearSelection: () => view.select([], null, null),
     },
   });
@@ -449,131 +356,112 @@ export function AssetLibrary() {
 
   // --- Drag and drop -----------------------------------------------------------------
 
-  function dropAllowed(target: AssetLibraryLocation) {
-    const drag = activeAssetLibraryDrag();
-    if (!drag || drag.root !== target.root) return false;
-    if (!target.folderId) return true;
-    const dragged = assetLibrarySelectionFromKeys(drag.keys);
-    return !assetLibraryFolderDescendantIds(library.folders, dragged.folderIds).has(
-      target.folderId,
-    );
-  }
-
-  function handleDragStart(event: DragEvent<HTMLElement>, node: AssetLibraryNode) {
-    const keys = view.selectedKeys.has(node.key)
-      ? selectedNodes.map((selected) => selected.key)
-      : [node.key];
-    if (!view.selectedKeys.has(node.key)) selectOnly(node.key);
-    beginAssetLibraryDrag(keys, location.root);
-    event.dataTransfer.effectAllowed = "copyMove";
-    event.dataTransfer.setData(assetLibraryDragType, keys.join("\n"));
-  }
-
-  function handleDragEnd() {
-    endAssetLibraryDrag();
-    setDropTargetKey(null);
-  }
-
-  function handleDragOver(
-    event: DragEvent<HTMLElement>,
-    target: AssetLibraryLocation,
-    key: string,
-  ) {
-    if (!dropAllowed(target)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = event.ctrlKey || event.metaKey ? "copy" : "move";
-    setDropTargetKey(key);
-  }
-
-  function handleDrop(event: DragEvent<HTMLElement>, target: AssetLibraryLocation) {
-    const drag = activeAssetLibraryDrag();
-    if (!drag || !dropAllowed(target)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    handleDragEnd();
-    const dragged = assetLibrarySelectionFromKeys(drag.keys);
-    if (event.ctrlKey || event.metaKey) {
-      const dragClipboard = assetLibraryClipboard(library, dragged);
-      if (!dragClipboard) return;
-      const pasted = commands.paste(dragClipboard, target, "复制素材");
-      messagePublished(`已复制 ${pasted.folderIds.length + pasted.entryIds.length} 项。`);
-      return;
-    }
-    const movedCount = commands.move(dragged, target);
-    if (movedCount > 0) messagePublished(`已移动 ${movedCount} 项。`);
-  }
+  const { handleDragStart, handleDragEnd, handleDragOver, handleDrop } = assetLibraryDragDrop({
+    library,
+    location,
+    selectedKeys: view.selectedKeys,
+    selectedNodes,
+    selectOnly,
+    setDropTargetKey,
+    commands,
+    messagePublished,
+  });
 
   const contentTarget = (folderId: string | null): AssetLibraryLocation =>
     folderId ? { root: location.root, folderId } : location;
 
   // --- Keyboard ------------------------------------------------------------------------
 
-  function moveFocus(event: ReactKeyboardEvent<HTMLElement>, nextIndex: number) {
-    const target = nodes[Math.min(nodes.length - 1, Math.max(0, nextIndex))];
-    if (!target) return;
-    event.preventDefault();
-    if (event.shiftKey) selectRange(view.anchorKey ?? target.key, target.key, event.ctrlKey);
-    else if (event.ctrlKey || event.metaKey) view.select(view.selectedKeys, target.key, target.key);
-    else selectOnly(target.key);
+  function openKeyboardMenu() {
+    const section = sectionRef.current;
+    const focused = view.focusKey
+      ? section?.querySelector<HTMLElement>(`[data-asset-key="${CSS.escape(view.focusKey)}"]`)
+      : null;
+    const anchor = focused ?? section?.querySelector<HTMLElement>(".asset-library-items");
+    if (!anchor) return;
+    const bounds = anchor.getBoundingClientRect();
+    if (!focused) view.select([], null, null);
+    setMenu({
+      x: bounds.left + 16,
+      y: focused ? bounds.bottom : bounds.top + 16,
+      scope: "content",
+    });
+  }
+
+  function focusSearch() {
+    searchRef.current?.focus();
+    searchRef.current?.select();
+  }
+
+  function runKeyCommand(command: AssetLibraryKeyCommand, focusIndex: number) {
+    switch (command.kind) {
+      case "back":
+        return view.goBack();
+      case "forward":
+        return view.goForward();
+      case "up":
+        return navigateUp();
+      case "properties":
+        return showProperties();
+      case "address":
+        return setAddressEditing(true);
+      case "search":
+        return focusSearch();
+      case "contextMenu":
+        return openKeyboardMenu();
+      case "viewPreset":
+        return view.setSize(command.size);
+      case "newFolder":
+        return createFolder();
+      case "cut":
+        return copyNodes(selection, true);
+      case "toggleFocused":
+        return toggleNodeSelected(nodes[focusIndex]!);
+      case "move": {
+        const target = nodes[command.index]!;
+        if (command.extend) {
+          selectRange(view.anchorKey ?? target.key, target.key, command.keepSelection);
+        } else if (command.keepSelection) {
+          view.select(view.selectedKeys, target.key, target.key);
+        } else {
+          selectOnly(target.key);
+        }
+        return;
+      }
+      case "open": {
+        const node = nodes[focusIndex] ?? selectedNodes[0];
+        return node && openNode(node);
+      }
+      case "rename":
+        return startRename(selectedNodes.length === 1 ? selectedNodes[0]!.key : view.focusKey);
+      case "clearSelection":
+        return view.select([], null, null);
+    }
   }
 
   function handleKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
-    if (isEditableTarget(event.target) || isPopupMenuEventTarget(event.target)) return;
-    // Focused buttons and the properties pane keep Enter, digits and arrows for themselves.
-    if ((event.target as HTMLElement).closest?.("button, .asset-library-details")) return;
-    const ctrl = event.ctrlKey || event.metaKey;
-    const key = event.key;
-    if (event.altKey && !ctrl) {
-      if (key === "ArrowLeft") view.goBack();
-      else if (key === "ArrowRight") view.goForward();
-      else if (key === "ArrowUp") navigateUp();
-      else return;
-      event.preventDefault();
+    if (isAssetLibraryEditableTarget(event.target) || isPopupMenuEventTarget(event.target)) return;
+    const target = event.target as HTMLElement;
+    // The properties pane keeps its keys; focused buttons keep activation and arrow keys.
+    if (target.closest?.(".asset-library-details")) return;
+    if (target.closest?.("button") && !event.altKey && assetLibraryButtonKeys.has(event.key))
       return;
-    }
-    if (ctrl && event.shiftKey && key.toLocaleLowerCase() === "n") {
-      event.preventDefault();
-      createFolder();
-      return;
-    }
-    if (ctrl && !event.shiftKey && key.toLocaleLowerCase() === "x") {
-      event.preventDefault();
-      copyNodes(selection, true);
-      return;
-    }
     const focusIndex = view.focusKey ? (nodeIndex.get(view.focusKey) ?? -1) : -1;
-    const rowStep = layout.mode === "icons" ? columns : 1;
-    const steps: Record<string, number> = {
-      ArrowUp: -rowStep,
-      ArrowDown: rowStep,
-      ...(layout.mode === "icons" ? { ArrowLeft: -1, ArrowRight: 1 } : {}),
-    };
-    if (key in steps && !event.altKey) {
-      moveFocus(event, focusIndex < 0 ? 0 : focusIndex + steps[key]!);
+    const command = assetLibraryKeyCommand(event, {
+      itemCount: nodes.length,
+      focusIndex,
+      iconColumns: layout.mode === "icons" ? columns : null,
+      hasSelection: view.selectedKeys.size > 0,
+    });
+    if (command) {
+      const opensNothing =
+        (command.kind === "open" && !nodes[focusIndex] && !selectedNodes[0]) ||
+        (command.kind === "rename" && selectedNodes.length !== 1 && !view.focusKey);
+      if (!opensNothing) event.preventDefault();
+      runKeyCommand(command, focusIndex);
       return;
     }
-    if (key === "Home") return moveFocus(event, 0);
-    if (key === "End") return moveFocus(event, nodes.length - 1);
-    if (ctrl) return;
-    if (key === "Enter") {
-      const node = nodes[focusIndex] ?? selectedNodes[0];
-      if (node) {
-        event.preventDefault();
-        openNode(node);
-      }
-      return;
-    }
-    if (key === "F2") {
-      event.preventDefault();
-      startRename(selectedNodes.length === 1 ? selectedNodes[0]!.key : view.focusKey);
-      return;
-    }
-    if (key === "Escape" && view.selectedKeys.size > 0) {
-      event.preventDefault();
-      view.select([], null, null);
-      return;
-    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     const action =
       isEditAuthority && !event.repeat ? annotationShortcutAction(event.nativeEvent) : null;
     if (!action || selectedEntryIds.length === 0) return;
@@ -618,14 +506,16 @@ export function AssetLibrary() {
     canOpen: Boolean(singleMenuNode) || Boolean(menuTreeLocation),
     openLabel: singleMenuNode?.kind === "entry" ? "在源监视器中预览" : "打开",
     canCreateFolder: true,
-    canCut: selectionSize(menuSelection) > 0,
-    canCopy: selectionSize(menuSelection) > 0,
+    canCut: assetLibrarySelectionSize(menuSelection) > 0,
+    canCopy: assetLibrarySelectionSize(menuSelection) > 0,
     canPaste: Boolean(clipboard) && clipboard?.root === menuTarget.root,
-    canDuplicate: selectionSize(menuSelection) > 0,
+    canDuplicate: assetLibrarySelectionSize(menuSelection) > 0,
     canRename: menuTreeLocation ? Boolean(menuTreeLocation.folderId) : Boolean(singleMenuNode),
-    canDelete: selectionSize(menuSelection) > 0,
+    canDelete: assetLibrarySelectionSize(menuSelection) > 0,
+    canSelectAll: nodes.length > 0,
     hasEntries: !menuTreeLocation && selectedEntryIds.length > 0,
     sort: view.sort,
+    size: view.size,
     navigationVisible: view.navigationVisible,
     detailsVisible: view.detailsVisible,
   };
@@ -654,72 +544,69 @@ export function AssetLibrary() {
       view.setRenamingKey(key);
     },
     remove: () => removeNodes(menuSelection),
+    selectAll,
+    showProperties: () => {
+      if (menuTreeLocation) view.navigate(menuTreeLocation);
+      showProperties();
+    },
     setFlag,
     setRating,
     setColorLabel,
     setSort: view.setSort,
+    setSize: view.setSize,
     setNavigationVisible: view.setNavigationVisible,
     setDetailsVisible: view.setDetailsVisible,
   };
 
-  // --- Pane resizing -------------------------------------------------------------------
+  // --- Command bar ---------------------------------------------------------------------
 
-  const { setSize, setPaneWidth } = view;
-  const resizeCleanupRef = useRef<(() => void) | null>(null);
-  useEffect(() => () => resizeCleanupRef.current?.(), []);
-
-  function startPaneResize(event: ReactPointerEvent<HTMLDivElement>, pane: AssetLibraryPane) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    resizeCleanupRef.current?.();
-    const startX = event.clientX;
-    const startWidth = view.paneWidths[pane];
-    // The folder pane grows to the right, the properties pane to the left.
-    const direction = pane === "navigation" ? 1 : -1;
-    document.body.classList.add("is-resizing-asset-library-pane");
-    setResizingPane(pane);
-    const onMove = (moveEvent: PointerEvent) => {
-      moveEvent.preventDefault();
-      setPaneWidth(pane, startWidth + direction * (moveEvent.clientX - startX));
-    };
-    const cleanup = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", cleanup);
-      window.removeEventListener("pointercancel", cleanup);
-      document.body.classList.remove("is-resizing-asset-library-pane");
-      setResizingPane(null);
-      if (resizeCleanupRef.current === cleanup) resizeCleanupRef.current = null;
-    };
-    resizeCleanupRef.current = cleanup;
-    window.addEventListener("pointermove", onMove, { passive: false });
-    window.addEventListener("pointerup", cleanup);
-    window.addEventListener("pointercancel", cleanup);
-  }
-
-  function resizeHandle(pane: AssetLibraryPane, label: string) {
-    return (
-      <div
-        className={`asset-library-resize-handle${resizingPane === pane ? " is-active" : ""}`}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label={label}
-        title="拖动调整宽度，双击恢复默认"
-        onPointerDown={(event) => startPaneResize(event, pane)}
-        onDoubleClick={() => setPaneWidth(pane, assetLibraryPaneWidths[pane].initial)}
-      />
-    );
-  }
+  // Commands hand focus back to the panel so keyboard shortcuts keep working afterwards.
+  const refocus = (action: () => void) => () => {
+    action();
+    sectionRef.current?.focus({ preventScroll: true });
+  };
+  const singleSelected = selectedNodes.length === 1 ? selectedNodes[0]! : null;
+  const commandModel: AssetLibraryCommandBarModel = {
+    canCut: selectedNodes.length > 0,
+    canCopy: selectedNodes.length > 0,
+    canPaste: Boolean(clipboard) && clipboard?.root === location.root,
+    canRename: Boolean(singleSelected),
+    canDelete: selectedNodes.length > 0,
+    hasItems: nodes.length > 0,
+    hasSelection: selectedNodes.length > 0,
+    sort: view.sort,
+    size: view.size,
+    navigationVisible: view.navigationVisible,
+    detailsVisible: view.detailsVisible,
+    itemCheckboxes: view.itemCheckboxes,
+  };
+  const commandActions: AssetLibraryCommandBarActions = {
+    createFolder: () => createFolder(),
+    cut: refocus(() => copyNodes(selection, true)),
+    copy: refocus(() => copyNodes(selection, false)),
+    paste: refocus(() => pasteInto(location)),
+    rename: refocus(() => startRename(singleSelected?.key ?? null)),
+    remove: refocus(() => removeNodes(selection)),
+    setSort: view.setSort,
+    setSize: view.setSize,
+    setNavigationVisible: view.setNavigationVisible,
+    setDetailsVisible: view.setDetailsVisible,
+    setItemCheckboxes: view.setItemCheckboxes,
+    selectAll: refocus(selectAll),
+    selectNone: refocus(() => view.select([], null, null)),
+    invertSelection: refocus(invertSelection),
+    showProperties,
+  };
 
   // --- Rendering -----------------------------------------------------------------------
 
-  const size = view.size;
+  const { setSize, setPaneWidth, size } = view;
   const zoom = useCallback((steps: number) => setSize(size + steps * sizeStep), [setSize, size]);
 
   const locationLabel = query
     ? (node: AssetLibraryNode) => {
-        const parent = nodeParent(node);
-        if (sameLocation(parent, location)) return null;
+        const parent = assetNodeParent(node);
+        if (sameAssetLibraryLocation(parent, location)) return null;
         const names = assetLibraryFolderPath(library, parent.folderId)
           .slice(path.length)
           .map((folder) => folder.name);
@@ -732,7 +619,6 @@ export function AssetLibrary() {
   const selectedEntryNodes = selectedNodes.flatMap((node) =>
     node.kind === "entry" ? [{ entry: node.entry, media: node.media }] : [],
   );
-  const RootIcon = location.root === "subtitles" ? Captions : Film;
   // Side panes shrink before the item frame drops below its minimum width.
   const gridTemplateColumns = [
     view.navigationVisible ? `minmax(0, ${view.paneWidths.navigation}px) 4px` : "",
@@ -750,65 +636,33 @@ export function AssetLibrary() {
       aria-label="素材库"
       onKeyDown={handleKeyDown}
     >
-      <div className="asset-library-location-row">
-        <RootIcon aria-hidden="true" />
-        <nav className="asset-library-breadcrumb" aria-label="当前位置">
-          <button
-            type="button"
-            className={path.length === 0 ? "is-current" : ""}
-            onClick={() => view.navigate({ root: location.root, folderId: null })}
-          >
-            {rootLabel(location.root)}
-          </button>
-          {path.map((folder, index) => (
-            <span key={folder.id} className="asset-library-breadcrumb-part">
-              <ChevronRight aria-hidden="true" />
-              <button
-                type="button"
-                className={index === path.length - 1 ? "is-current" : ""}
-                title={folder.name}
-                onClick={() => view.navigate({ root: folder.root, folderId: folder.id })}
-              >
-                {folder.name}
-              </button>
-            </span>
-          ))}
-        </nav>
-        <div className="asset-library-history" aria-label="位置历史">
-          <button
-            type="button"
-            title="后退 (Alt+←)"
-            aria-label="后退"
-            disabled={view.backStack.length === 0}
-            onClick={view.goBack}
-          >
-            <ChevronLeft aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            title="上一级 (Alt+↑)"
-            aria-label="上一级"
-            disabled={!location.folderId}
-            onClick={navigateUp}
-          >
-            <CornerLeftUp aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            title="前进 (Alt+→)"
-            aria-label="前进"
-            disabled={view.forwardStack.length === 0}
-            onClick={view.goForward}
-          >
-            <ChevronRight aria-hidden="true" />
-          </button>
-        </div>
-      </div>
+      <AssetLibraryAddressBar
+        library={library}
+        location={location}
+        path={path}
+        backStack={view.backStack}
+        forwardStack={view.forwardStack}
+        editing={addressEditing}
+        dropTargetKey={dropTargetKey}
+        onEditingChange={(editing) => {
+          setAddressEditing(editing);
+          if (!editing) sectionRef.current?.focus({ preventScroll: true });
+        }}
+        onNavigate={view.navigate}
+        onGoBack={view.goBack}
+        onGoForward={view.goForward}
+        onNavigateUp={navigateUp}
+        onInvalidPath={(text) => messagePublished(`素材库中找不到“${text}”。请检查拼写并重试。`)}
+        onDragOverTarget={handleDragOver}
+        onDragLeaveTarget={() => setDropTargetKey(null)}
+        onDropOnTarget={handleDrop}
+      />
 
       <div className="media-bin-search-row">
         <label className="media-bin-search">
           <Search aria-hidden="true" />
           <input
+            ref={searchRef}
             value={view.query}
             placeholder={`在“${path.at(-1)?.name ?? rootLabel(location.root)}”中搜索`}
             aria-label="搜索素材"
@@ -823,10 +677,13 @@ export function AssetLibrary() {
         </span>
       </div>
 
+      <AssetLibraryCommandBar model={commandModel} actions={commandActions} />
+
       <div className="asset-library-content" style={{ gridTemplateColumns }}>
         {view.navigationVisible && (
           <>
             <AssetLibraryNavigation
+              sort={view.sort}
               library={library}
               location={location}
               collapsedKeys={view.collapsedKeys}
@@ -841,10 +698,16 @@ export function AssetLibrary() {
               onDropOnTarget={handleDrop}
               onContextMenu={openTreeMenu}
             />
-            {resizeHandle("navigation", "调整文件夹窗格宽度")}
+            <AssetLibraryResizeHandle
+              pane="navigation"
+              label="调整文件夹窗格宽度"
+              width={view.paneWidths.navigation}
+              onWidthChange={setPaneWidth}
+            />
           </>
         )}
         <AssetLibraryItems
+          root={location.root}
           nodes={nodes}
           layout={layout}
           sort={view.sort}
@@ -860,7 +723,15 @@ export function AssetLibrary() {
               : `此文件夹为空。可在${rootLabel(location.root)}面板中右键选择“添加到素材库”。`
           }
           locationLabel={locationLabel}
+          visibleColumns={view.visibleColumns[location.root]}
+          columnWidths={view.columnWidths[location.root]}
+          itemCheckboxes={view.itemCheckboxes}
           onSort={view.setSort}
+          onToggleColumn={view.toggleColumn}
+          onColumnWidthChange={view.setColumnWidth}
+          onResetColumnWidths={view.resetColumnWidths}
+          onToggleNodeSelected={toggleNodeSelected}
+          onToggleAllSelected={toggleAllSelected}
           onNodePointerDown={handleNodePointerDown}
           onNodeClick={handleNodeClick}
           onOpenNode={openNode}
@@ -885,7 +756,12 @@ export function AssetLibrary() {
         />
         {view.detailsVisible && (
           <>
-            {resizeHandle("details", "调整属性窗格宽度")}
+            <AssetLibraryResizeHandle
+              pane="details"
+              label="调整属性窗格宽度"
+              width={view.paneWidths.details}
+              onWidthChange={setPaneWidth}
+            />
             <AssetLibraryDetails
               folder={selectedFolderNode?.kind === "folder" ? selectedFolderNode : null}
               entries={selectedEntryNodes}
@@ -900,58 +776,18 @@ export function AssetLibrary() {
         )}
       </div>
 
-      <footer className="media-bin-footer">
-        <div className="media-bin-view-tools">
-          <button
-            type="button"
-            className={view.navigationVisible ? "active" : ""}
-            title="文件夹窗格"
-            aria-label="文件夹窗格"
-            aria-pressed={view.navigationVisible}
-            onClick={() => view.setNavigationVisible(!view.navigationVisible)}
-          >
-            <PanelLeft aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={view.detailsVisible ? "active" : ""}
-            title="属性窗格"
-            aria-label="属性窗格"
-            aria-pressed={view.detailsVisible}
-            onClick={() => view.setDetailsVisible(!view.detailsVisible)}
-          >
-            <PanelRight aria-hidden="true" />
-          </button>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={view.size}
-            aria-label="显示大小"
-            title={layout.mode === "list" ? "显示大小：列表" : "显示大小：图标"}
-            onChange={(event) => view.setSize(Number(event.currentTarget.value))}
-          />
-        </div>
-        <div className="media-bin-action-tools">
-          <button
-            type="button"
-            title="新建文件夹 (Ctrl+Shift+N)"
-            aria-label="新建文件夹"
-            onClick={() => createFolder()}
-          >
-            <FolderPlus aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            title="删除 (Delete)"
-            aria-label="删除"
-            disabled={selectedNodes.length === 0}
-            onClick={() => removeNodes(selection)}
-          >
-            <Trash2 aria-hidden="true" />
-          </button>
-        </div>
-      </footer>
+      <AssetLibraryFooter
+        navigationVisible={view.navigationVisible}
+        detailsVisible={view.detailsVisible}
+        size={view.size}
+        listMode={layout.mode === "list"}
+        canDelete={selectedNodes.length > 0}
+        onNavigationVisibleChange={view.setNavigationVisible}
+        onDetailsVisibleChange={view.setDetailsVisible}
+        onSizeChange={view.setSize}
+        onCreateFolder={() => createFolder()}
+        onDelete={() => removeNodes(selection)}
+      />
 
       {menu && (
         <AssetLibraryContextMenu

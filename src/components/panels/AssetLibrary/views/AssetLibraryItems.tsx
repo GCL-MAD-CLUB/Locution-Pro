@@ -1,3 +1,4 @@
+import type { AssetLibraryRoot } from "../../../../types";
 import { Captions, Film } from "lucide-react";
 import {
   useEffect,
@@ -12,21 +13,30 @@ import {
 import { mediaGridLayout } from "../../../../application/media/mediaGridLayout";
 import {
   assetLibraryEntryDurationUs,
+  formatAssetLibraryDate,
   type AssetLibrarySort,
-  type AssetLibrarySortKey,
   type AssetLibraryViewLayout,
 } from "../../../../core/editor/assetLibrary";
-import { formatDuration } from "../../../../core/editor/time";
+import { formatMonitorTime } from "../../../../core/editor/time";
 import { annotationColors } from "../../../../runtime/theme";
 import "../../MediaBin/MediaBin.css";
 import { MediaBinFolderIcon, OfflineFileIcon } from "../../MediaBin/views/MediaBinFolderIcon";
+import {
+  assetLibraryColumnsForRoot,
+  type AssetLibraryColumn,
+  type AssetLibraryColumnId,
+  type AssetLibraryColumnWidths,
+} from "../assetLibraryColumns";
 import { type AssetLibraryNode } from "../assetLibraryNodes";
 import { AssetLibraryFlagMark, AssetLibraryMarks } from "./AssetLibraryBadges";
+import { AssetLibraryListHeader } from "./AssetLibraryListHeader";
 import { AssetLibraryThumbnail } from "./AssetLibraryThumbnail";
 
 /** Matches `.media-bin-grid`: 14px padding and a 12px gap. */
 const gridPadding = 14;
 const gridGap = 12;
+/** The fixed label column and the narrowest the flexible name column may get. */
+const labelColumnWidth = 13;
 
 interface MarqueeState {
   originX: number;
@@ -36,21 +46,8 @@ interface MarqueeState {
   baseKeys: ReadonlySet<string>;
 }
 
-interface ListColumn {
-  id: "label" | "title" | "location" | "marks" | "duration";
-  label: string;
-  sortKey: AssetLibrarySortKey | null;
-}
-
-const listColumns: readonly ListColumn[] = [
-  { id: "label", label: "", sortKey: null },
-  { id: "title", label: "名称", sortKey: "name" },
-  { id: "location", label: "位置", sortKey: null },
-  { id: "marks", label: "标注", sortKey: "rating" },
-  { id: "duration", label: "持续时间", sortKey: "duration" },
-];
-
 export interface AssetLibraryItemsProps {
+  root: AssetLibraryRoot;
   nodes: readonly AssetLibraryNode[];
   layout: AssetLibraryViewLayout;
   sort: AssetLibrarySort;
@@ -62,7 +59,16 @@ export interface AssetLibraryItemsProps {
   thumbnailsEnabled: boolean;
   emptyText: string;
   locationLabel?: (node: AssetLibraryNode) => string | null;
+  visibleColumns: ReadonlySet<AssetLibraryColumnId>;
+  columnWidths: AssetLibraryColumnWidths;
+  itemCheckboxes: boolean;
   onSort: (sort: AssetLibrarySort) => void;
+  onToggleColumn: (column: AssetLibraryColumnId) => void;
+  onColumnWidthChange: (column: AssetLibraryColumnId, width: number) => void;
+  onResetColumnWidths: () => void;
+  /** Checkbox clicks add or remove one item without touching the rest of the selection. */
+  onToggleNodeSelected: (node: AssetLibraryNode) => void;
+  onToggleAllSelected: () => void;
   onNodePointerDown: (event: ReactPointerEvent<HTMLElement>, node: AssetLibraryNode) => void;
   onNodeClick: (event: ReactMouseEvent<HTMLElement>, node: AssetLibraryNode) => void;
   onOpenNode: (node: AssetLibraryNode) => void;
@@ -86,25 +92,31 @@ function nodeName(node: AssetLibraryNode) {
 }
 
 function nodeDuration(node: AssetLibraryNode) {
-  return node.kind === "folder" ? "" : formatDuration(assetLibraryEntryDurationUs(node.entry));
+  return node.kind === "folder"
+    ? ""
+    : formatMonitorTime(assetLibraryEntryDurationUs(node.entry), node.entry.media.frame_rate);
 }
 
-function SortArrow({ direction }: { direction: AssetLibrarySort["direction"] }) {
-  return (
-    <svg className="media-bin-sort-arrow" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d={
-          direction === "ascending"
-            ? "M8 14 L8 2.5 M5 5.5 L8 2.5 L11 5.5"
-            : "M8 2 L8 13.5 M5 10.5 L8 13.5 L11 10.5"
-        }
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2.75"
-      />
-    </svg>
-  );
+function cellText(node: AssetLibraryNode, column: AssetLibraryColumnId) {
+  if (column === "created") {
+    return formatAssetLibraryDate(
+      node.kind === "folder" ? node.folder.created_at : node.entry.created_at,
+    );
+  }
+  if (node.kind === "folder") return "";
+  const { entry } = node;
+  switch (column) {
+    case "subtitle":
+      return entry.text.trim();
+    case "keywords":
+      return entry.annotation.keywords.join("、");
+    case "source":
+      return entry.media.file_name;
+    case "duration":
+      return nodeDuration(node);
+    default:
+      return "";
+  }
 }
 
 function RenameInput({
@@ -175,13 +187,9 @@ function KindIcon({ node }: { node: AssetLibraryNode }) {
   );
 }
 
-/** Folders use the media bin folder color; entries show their color label when set. */
+/** Only entries carry a color label. */
 function LabelColor({ node }: { node: AssetLibraryNode }) {
-  if (node.kind === "folder") {
-    return (
-      <span className="media-bin-label-color" style={{ background: "var(--color-media-folder)" }} />
-    );
-  }
+  if (node.kind === "folder") return null;
   const colorLabel = node.entry.annotation.color_label;
   return colorLabel ? (
     <span className="media-bin-label-color" style={{ background: annotationColors[colorLabel] }} />
@@ -192,6 +200,7 @@ function LabelColor({ node }: { node: AssetLibraryNode }) {
 
 export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   const {
+    root,
     nodes,
     layout,
     sort,
@@ -203,6 +212,9 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     thumbnailsEnabled,
     emptyText,
     locationLabel,
+    visibleColumns,
+    columnWidths,
+    itemCheckboxes,
     onColumnsChange,
     onZoom,
   } = props;
@@ -218,7 +230,12 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
           gridGap,
         )
       : { columns: 1, cardWidth: 0 };
-  const columns = listColumns.filter((column) => column.id !== "location" || locationLabel);
+  const columns = assetLibraryColumnsForRoot(root)
+    .filter((column) => column.id !== "name")
+    .filter((column) =>
+      column.id === "location" ? Boolean(locationLabel) : visibleColumns.has(column.id),
+    );
+  const selectedCount = nodes.filter((node) => selectedKeys.has(node.key)).length;
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
@@ -228,7 +245,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     const observer = new ResizeObserver(update);
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [nodes.length, layout.mode, layout.mode === "list" ? layout.rowHeight : layout.cardWidth]);
 
   useEffect(() => onColumnsChange(grid.columns), [grid.columns, onColumnsChange]);
 
@@ -353,65 +370,77 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
         onCancel={props.onCancelRename}
       />
     ) : (
-      <span className={className} title={nodeName(node)}>
+      <span
+        className={`${className}${/\r?\n/.test(nodeName(node)) ? " has-explicit-lines" : ""}`}
+        title={nodeName(node)}
+      >
         {nodeName(node)}
       </span>
     );
   }
 
-  function toggleSort(key: AssetLibrarySortKey) {
-    props.onSort({
-      key,
-      direction: sort.key === key && sort.direction === "ascending" ? "descending" : "ascending",
-    });
+  function renderCheckbox(node: AssetLibraryNode, className = "") {
+    if (!itemCheckboxes) return null;
+    const selected = selectedKeys.has(node.key);
+    return (
+      <input
+        type="checkbox"
+        className={`asset-library-check${className}`}
+        checked={selected}
+        tabIndex={-1}
+        aria-label={`选择“${nodeName(node)}”`}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        onDoubleClick={(event) => event.stopPropagation()}
+        onChange={() => props.onToggleNodeSelected(node)}
+      />
+    );
   }
 
-  function renderHeader() {
-    const hasItems = nodes.length > 0;
+  function renderCell(node: AssetLibraryNode, column: AssetLibraryColumn) {
+    if (column.id === "location") {
+      const location = locationLabel?.(node);
+      return (
+        <span key={column.id} className="asset-library-location-cell" title={location ?? undefined}>
+          {location}
+        </span>
+      );
+    }
+    if (column.id === "marks") {
+      return (
+        <span key={column.id}>
+          {node.kind === "entry" && <AssetLibraryMarks entry={node.entry} list />}
+        </span>
+      );
+    }
+    const text = cellText(node, column.id);
+    const long = column.id === "subtitle" || column.id === "keywords";
     return (
-      <div className="media-bin-table-header-viewport">
-        <div className="media-bin-table-header" role="row">
-          {columns.map((column) => {
-            const active = column.sortKey !== null && sort.key === column.sortKey;
-            const nextDirection = active && sort.direction === "ascending" ? "降序" : "升序";
-            const name = column.id === "label" ? "标签" : column.label;
-            return (
-              <span
-                key={column.id}
-                className="media-bin-column-header"
-                role="columnheader"
-                aria-label={column.id === "label" ? "标签" : undefined}
-                aria-sort={active ? sort.direction : undefined}
-              >
-                {column.sortKey ? (
-                  <button
-                    type="button"
-                    className={`media-bin-column-sort-button${active ? " active" : ""}`}
-                    title={`按${name}${nextDirection}排列`}
-                    aria-label={`按${name}${nextDirection}排列`}
-                    disabled={!hasItems}
-                    onClick={() => toggleSort(column.sortKey!)}
-                  >
-                    <span className="media-bin-column-label-text">{column.label}</span>
-                    {active && <SortArrow direction={sort.direction} />}
-                  </button>
-                ) : (
-                  <span className="media-bin-column-label-text">{column.label}</span>
-                )}
-              </span>
-            );
-          })}
-        </div>
-      </div>
+      <span
+        key={column.id}
+        className={
+          column.id === "subtitle" || column.id === "keywords" || column.id === "source"
+            ? `asset-library-text-cell${/\r?\n/.test(text) ? " has-explicit-lines" : ""}`
+            : undefined
+        }
+        title={
+          column.id === "source" && node.kind === "entry"
+            ? node.entry.media.path
+            : long && text
+              ? text
+              : undefined
+        }
+      >
+        {text}
+      </span>
     );
   }
 
   function renderRow(node: AssetLibraryNode) {
-    const location = locationLabel?.(node);
     return (
       <div
         key={node.key}
-        className={`media-bin-row asset-library-row ${stateClassName(node)}`}
+        className={`media-bin-row asset-library-row ${stateClassName(node)}${layout.mode === "list" && layout.rowHeight >= 36 ? " has-two-lines" : ""}`}
         role="option"
         aria-selected={selectedKeys.has(node.key)}
         {...nodeHandlers(node)}
@@ -424,16 +453,12 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
             node.kind === "folder" ? " media-bin-folder-title-cell" : ""
           }`}
         >
+          {renderCheckbox(node)}
           <KindIcon node={node} />
           {nameContent(node, "media-bin-name-copy")}
         </span>
-        {locationLabel && (
-          <span className="asset-library-location-cell" title={location ?? undefined}>
-            {location}
-          </span>
-        )}
-        <span>{node.kind === "entry" && <AssetLibraryMarks entry={node.entry} />}</span>
-        <span>{nodeDuration(node)}</span>
+        {columns.map((column) => renderCell(node, column))}
+        <span aria-hidden="true" />
       </div>
     );
   }
@@ -495,20 +520,30 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
         title={location || undefined}
         {...nodeHandlers(node)}
       >
-        <span className="media-bin-card-preview-shell">{renderCardPreview(node)}</span>
+        <span className="media-bin-card-preview-shell">
+          {renderCardPreview(node)}
+          {renderCheckbox(node, " asset-library-card-check")}
+        </span>
         <span className="media-bin-card-meta">
           {node.kind === "entry" && node.entry.annotation.color_label && <LabelColor node={node} />}
           {nameContent(node, "media-bin-card-name")}
-          <span className="media-bin-card-duration">
-            {node.kind === "folder" ? `${node.childCount} 项` : nodeDuration(node)}
-          </span>
         </span>
       </div>
     );
   }
 
   const listScale = layout.mode === "list" ? layout.iconScale : 1;
+  const detailWidths = columns.map((column) => columnWidths[column.id]);
   const style = {
+    "--asset-library-columns": [
+      `${labelColumnWidth}px`,
+      `${columnWidths.name}px`,
+      ...detailWidths.map((width) => `${width}px`),
+      "minmax(0, 1fr)",
+    ].join(" "),
+    "--asset-library-min-width": `${
+      labelColumnWidth + columnWidths.name + detailWidths.reduce((total, width) => total + width, 0)
+    }px`,
     "--media-list-row-height": layout.mode === "list" ? `${layout.rowHeight}px` : undefined,
     "--media-list-icon-size": `${16 * listScale}px`,
     "--media-list-title-icon-gap": `${6 * (1 + (listScale - 1) / 1.5)}px`,
@@ -527,11 +562,10 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   return (
     <div
       className={`asset-library-items-frame is-${layout.mode}${
-        locationLabel ? " has-location" : ""
+        itemCheckboxes ? " has-checkboxes" : ""
       }${dropTargetKey === "content" ? " is-drop-target" : ""}`}
       style={style}
     >
-      {layout.mode === "list" && renderHeader()}
       <div
         ref={scrollRef}
         className="media-bin-table-scroll asset-library-items"
@@ -548,6 +582,23 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
         onDragLeave={props.onDragLeaveTarget}
         onDrop={(event) => props.onDropOnTarget(event, null)}
       >
+        {layout.mode === "list" && (
+          <AssetLibraryListHeader
+            root={root}
+            columns={columns}
+            columnWidths={columnWidths}
+            visibleColumns={visibleColumns}
+            sort={sort}
+            itemCount={nodes.length}
+            selectedCount={selectedCount}
+            itemCheckboxes={itemCheckboxes}
+            onSort={props.onSort}
+            onToggleColumn={props.onToggleColumn}
+            onColumnWidthChange={props.onColumnWidthChange}
+            onResetColumnWidths={props.onResetColumnWidths}
+            onToggleAllSelected={props.onToggleAllSelected}
+          />
+        )}
         {nodes.length === 0 ? (
           <div className="asset-library-empty">{emptyText}</div>
         ) : layout.mode === "list" ? (

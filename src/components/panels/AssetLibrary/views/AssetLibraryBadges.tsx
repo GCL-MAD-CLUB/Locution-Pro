@@ -32,7 +32,7 @@ function annotationDescription(entry: AssetLibraryEntry) {
     rating > 0 ? `${rating} 星` : "",
     colorLabel ? `${assetLibraryColorLabelNames[colorLabel]}色标` : "",
     customLabel ? `标签：${customLabel}` : "",
-    keywords.length ? `关键字：${keywords.join("、")}` : "",
+    entry.root === "storyboards" && keywords.length ? `关键字：${keywords.join("、")}` : "",
   ]
     .filter(Boolean)
     .join("，");
@@ -64,18 +64,27 @@ export function AssetLibraryRatingMark({ rating }: { rating: number }) {
 export function AssetLibraryMarks({
   entry,
   showFlag = true,
+  list = false,
 }: {
   entry: AssetLibraryEntry;
   showFlag?: boolean;
+  list?: boolean;
 }) {
   const description = annotationDescription(entry);
   const { rating, keywords, custom_label: customLabel } = entry.annotation;
   return (
-    <span className="asset-library-marks" title={description || undefined}>
+    <span
+      className={`asset-library-marks${list ? " is-list" : ""}`}
+      title={description || undefined}
+    >
       {showFlag && <AssetLibraryFlagMark entry={entry} />}
       <AssetLibraryRatingMark rating={rating} />
-      {customLabel && <span className="asset-library-custom-label">{customLabel}</span>}
-      {keywords.length > 0 && (
+      {(customLabel || (list && entry.annotation.color_label)) && (
+        <span className="asset-library-custom-label">
+          {customLabel || assetLibraryColorLabelNames[entry.annotation.color_label!]}
+        </span>
+      )}
+      {!list && entry.root === "storyboards" && keywords.length > 0 && (
         <span
           className="asset-library-keyword-mark"
           role="img"

@@ -579,9 +579,11 @@ function EntryProperties({
       <Section id="annotation" title="标注" state={sections}>
         <AnnotationFields entries={[entry]} onUpdate={(label, recipe) => update(label, recipe)} />
       </Section>
-      <Section id="keywords" title="关键字标记" state={sections}>
-        <KeywordEditor entries={[entry]} onUpdate={(label, recipe) => update(label, recipe)} />
-      </Section>
+      {!subtitle && (
+        <Section id="keywords" title="关键字标记" state={sections}>
+          <KeywordEditor entries={[entry]} onUpdate={(label, recipe) => update(label, recipe)} />
+        </Section>
+      )}
       <Section id="text" title={subtitle ? "字幕文本" : "备注"} state={sections}>
         <PlainEditor
           value={entry.text}
@@ -692,9 +694,11 @@ export function AssetLibraryDetails(props: AssetLibraryDetailsProps) {
         <Section id="annotation" title="标注" state={sections}>
           <AnnotationFields entries={plain} onUpdate={update} />
         </Section>
-        <Section id="keywords" title="关键字标记" state={sections}>
-          <KeywordEditor entries={plain} onUpdate={update} />
-        </Section>
+        {plain.every((entry) => entry.root === "storyboards") && (
+          <Section id="keywords" title="关键字标记" state={sections}>
+            <KeywordEditor entries={plain} onUpdate={update} />
+          </Section>
+        )}
       </>
     );
   } else if (folder) {

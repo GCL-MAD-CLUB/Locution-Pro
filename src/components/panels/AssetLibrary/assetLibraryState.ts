@@ -1,11 +1,21 @@
+import type { AssetLibraryRoot } from "../../../types";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import { createPanelState } from "../../../runtime/systems/PanelState";
-import type {
-  AssetLibraryClipboard,
-  AssetLibraryLocation,
-  AssetLibrarySort,
+import {
+  sameAssetLibraryLocation,
+  steppedAssetLibraryHistory,
+  type AssetLibraryClipboard,
+  type AssetLibraryLocation,
+  type AssetLibrarySort,
 } from "../../../core/editor/assetLibrary";
+import {
+  clampAssetLibraryColumnWidth,
+  defaultAssetLibraryColumnWidths,
+  defaultAssetLibraryVisibleColumns,
+  type AssetLibraryColumnId,
+  type AssetLibraryColumnWidths,
+} from "./assetLibraryColumns";
 
 export const assetLibraryPaneWidths = {
   navigation: { initial: 200, minimum: 140, maximum: 420 },
@@ -24,10 +34,6 @@ export const defaultAssetLibraryLocation: AssetLibraryLocation = {
   folderId: null,
 };
 
-function sameLocation(left: AssetLibraryLocation, right: AssetLibraryLocation) {
-  return left.root === right.root && left.folderId === right.folderId;
-}
-
 interface AssetLibraryPanelState {
   location: AssetLibraryLocation;
   backStack: AssetLibraryLocation[];
@@ -44,10 +50,14 @@ interface AssetLibraryPanelState {
   collapsedKeys: ReadonlySet<string>;
   paneWidths: Record<AssetLibraryPane, number>;
   collapsedSections: ReadonlySet<string>;
+  itemCheckboxes: boolean;
+  visibleColumns: Record<AssetLibraryRoot, ReadonlySet<AssetLibraryColumnId>>;
+  columnWidths: Record<AssetLibraryRoot, AssetLibraryColumnWidths>;
   navigate: (location: AssetLibraryLocation) => void;
   replaceLocation: (location: AssetLibraryLocation) => void;
-  goBack: () => void;
-  goForward: () => void;
+  /** Steps through history; a larger count jumps straight to an entry from the history menu. */
+  goBack: (steps?: number) => void;
+  goForward: (steps?: number) => void;
   select: (keys: Iterable<string>, focusKey?: string | null, anchorKey?: string | null) => void;
   setRenamingKey: (key: string | null) => void;
   setQuery: (query: string) => void;
@@ -56,11 +66,16 @@ interface AssetLibraryPanelState {
   setNavigationVisible: (visible: boolean) => void;
   setDetailsVisible: (visible: boolean) => void;
   toggleCollapsed: (key: string) => void;
+  expandKeys: (keys: readonly string[]) => void;
   setPaneWidth: (pane: AssetLibraryPane, width: number) => void;
   toggleSection: (section: string) => void;
+  setItemCheckboxes: (visible: boolean) => void;
+  toggleColumn: (column: AssetLibraryColumnId) => void;
+  setColumnWidth: (column: AssetLibraryColumnId, width: number) => void;
+  resetColumnWidths: () => void;
 }
 
-function toggled(keys: ReadonlySet<string>, key: string) {
+function toggled<T>(keys: ReadonlySet<T>, key: T) {
   const next = new Set(keys);
   if (next.has(key)) next.delete(key);
   else next.add(key);
@@ -68,6 +83,19 @@ function toggled(keys: ReadonlySet<string>, key: string) {
 }
 
 const historyLimit = 50;
+
+const clearedNavigationState = {
+  selectedKeys: new Set<string>() as ReadonlySet<string>,
+  anchorKey: null,
+  focusKey: null,
+  renamingKey: null,
+  query: "",
+};
+
+function stepHistory(state: AssetLibraryPanelState, steps: number) {
+  const next = steppedAssetLibraryHistory(state, steps, historyLimit);
+  return next ? { ...next, ...clearedNavigationState } : state;
+}
 
 export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() => (set) => ({
   location: defaultAssetLibraryLocation,
@@ -88,53 +116,30 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
     details: assetLibraryPaneWidths.details.initial,
   },
   collapsedSections: new Set<string>(),
+  itemCheckboxes: false,
+  visibleColumns: {
+    subtitles: defaultAssetLibraryVisibleColumns,
+    storyboards: defaultAssetLibraryVisibleColumns,
+  },
+  columnWidths: {
+    subtitles: defaultAssetLibraryColumnWidths,
+    storyboards: defaultAssetLibraryColumnWidths,
+  },
   navigate: (location) =>
     set((state) =>
-      sameLocation(state.location, location)
+      sameAssetLibraryLocation(state.location, location)
         ? { query: "" }
         : {
             location,
             backStack: [...state.backStack, state.location].slice(-historyLimit),
             forwardStack: [],
-            selectedKeys: new Set<string>(),
-            anchorKey: null,
-            focusKey: null,
-            renamingKey: null,
-            query: "",
+            ...clearedNavigationState,
           },
     ),
   replaceLocation: (location) =>
-    set((state) => (sameLocation(state.location, location) ? state : { location })),
-  goBack: () =>
-    set((state) => {
-      const previous = state.backStack.at(-1);
-      if (!previous) return state;
-      return {
-        location: previous,
-        backStack: state.backStack.slice(0, -1),
-        forwardStack: [state.location, ...state.forwardStack].slice(0, historyLimit),
-        selectedKeys: new Set<string>(),
-        anchorKey: null,
-        focusKey: null,
-        renamingKey: null,
-        query: "",
-      };
-    }),
-  goForward: () =>
-    set((state) => {
-      const next = state.forwardStack[0];
-      if (!next) return state;
-      return {
-        location: next,
-        backStack: [...state.backStack, state.location].slice(-historyLimit),
-        forwardStack: state.forwardStack.slice(1),
-        selectedKeys: new Set<string>(),
-        anchorKey: null,
-        focusKey: null,
-        renamingKey: null,
-        query: "",
-      };
-    }),
+    set((state) => (sameAssetLibraryLocation(state.location, location) ? state : { location })),
+  goBack: (steps = 1) => set((state) => stepHistory(state, -steps)),
+  goForward: (steps = 1) => set((state) => stepHistory(state, steps)),
   select: (keys, focusKey, anchorKey) =>
     set((state) => {
       const selectedKeys = new Set(keys);
@@ -152,12 +157,44 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   setNavigationVisible: (navigationVisible) => set({ navigationVisible }),
   setDetailsVisible: (detailsVisible) => set({ detailsVisible }),
   toggleCollapsed: (key) => set((state) => ({ collapsedKeys: toggled(state.collapsedKeys, key) })),
+  expandKeys: (keys) =>
+    set((state) => {
+      if (!keys.some((key) => state.collapsedKeys.has(key))) return state;
+      const collapsedKeys = new Set(state.collapsedKeys);
+      keys.forEach((key) => collapsedKeys.delete(key));
+      return { collapsedKeys };
+    }),
   setPaneWidth: (pane, width) =>
     set((state) => ({
       paneWidths: { ...state.paneWidths, [pane]: clampAssetLibraryPaneWidth(pane, width) },
     })),
   toggleSection: (section) =>
     set((state) => ({ collapsedSections: toggled(state.collapsedSections, section) })),
+  setItemCheckboxes: (itemCheckboxes) => set({ itemCheckboxes }),
+  toggleColumn: (column) =>
+    set((state) => ({
+      visibleColumns: {
+        ...state.visibleColumns,
+        [state.location.root]: toggled(state.visibleColumns[state.location.root], column),
+      },
+    })),
+  setColumnWidth: (column, width) =>
+    set((state) => ({
+      columnWidths: {
+        ...state.columnWidths,
+        [state.location.root]: {
+          ...state.columnWidths[state.location.root],
+          [column]: clampAssetLibraryColumnWidth(column, width),
+        },
+      },
+    })),
+  resetColumnWidths: () =>
+    set((state) => ({
+      columnWidths: {
+        ...state.columnWidths,
+        [state.location.root]: defaultAssetLibraryColumnWidths,
+      },
+    })),
 }));
 
 interface AssetLibraryClipboardState {

@@ -27,6 +27,17 @@ export function assetLibrarySelectionFromKeys(keys: Iterable<string>): AssetLibr
   return { folderIds, entryIds };
 }
 
+export function assetLibrarySelectionSize(selection: AssetLibrarySelection) {
+  return selection.folderIds.length + selection.entryIds.length;
+}
+
+/** The folder that directly contains `node`. */
+export function assetNodeParent(node: AssetLibraryNode): AssetLibraryLocation {
+  return node.kind === "folder"
+    ? { root: node.folder.root, folderId: node.folder.parent_id }
+    : { root: node.entry.root, folderId: node.entry.folder_id };
+}
+
 export function assetLocationKey(location: AssetLibraryLocation) {
   return location.folderId ? assetFolderKey(location.folderId) : `root:${location.root}`;
 }

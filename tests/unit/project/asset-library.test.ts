@@ -10,7 +10,9 @@ import type {
 type AssetLibraryModule = typeof import("../../../src/core/editor/assetLibrary.ts");
 
 const load = createModuleLoader(import.meta.url);
-const timeline = load("../../../src/core/editor/timeline.ts");
+const timeline = load<typeof import("../../../src/core/editor/timeline.ts")>(
+  "../../../src/core/editor/timeline.ts",
+);
 const library = load<AssetLibraryModule>("../../../src/core/editor/assetLibrary.ts", {
   "./timeline": timeline,
 });
@@ -250,7 +252,7 @@ test("captures become decoupled entries with snapshot annotations", () => {
   assert.equal(created.annotation.rating, 4);
   keywords.push("changed later");
   deepEqual(created.annotation.keywords, ["人物"]);
-  assert.equal(library.subtitleAssetName("  hello\nworld ", "clip.mp4", 1), "hello world");
+  assert.equal(library.subtitleAssetName("  hello\nworld ", "clip.mp4", 1), "hello\nworld");
   assert.equal(library.subtitleAssetName("", "clip.mp4", 2), "clip 字幕 2");
 });
 
@@ -309,8 +311,8 @@ test("sorting keeps folders first and orders names naturally", () => {
     { key: "duration", direction: "descending" },
   );
   deepEqual(
-    sorted.folders.map((item) => item.name),
-    ["镜头 2", "镜头 10"],
+    sorted.folders.map((item) => item.id),
+    ["f10", "f2"],
   );
   deepEqual(
     sorted.entries.map((item) => item.id),
@@ -328,4 +330,135 @@ test("one size control switches between list rows and icons", () => {
     cardWidth: 120,
   });
   deepEqual(library.assetLibraryViewLayout(500), { mode: "icons", cardWidth: 320 });
+});
+
+test("view presets set the shared size and fall on both sides of the icon threshold", () => {
+  for (const preset of library.assetLibraryViewPresets) {
+    const mode = library.assetLibraryViewLayout(preset.size).mode;
+    assert.equal(mode, preset.id === "details" ? "list" : "icons", preset.id);
+  }
+  assert.equal(library.assetLibraryViewPresetForSize(100)?.id, "extraLarge");
+  assert.equal(library.assetLibraryViewPresetForSize(53), null);
+});
+
+test("address-bar paths resolve absolutely, relatively and with parent steps", () => {
+  const state: ProjectAssetLibraryState = {
+    folders: [
+      folder("a", null, "访谈"),
+      folder("b", "a", "First Take"),
+      folder("c", null, "访谈", "storyboards"),
+    ],
+    entries: [],
+  };
+  const root = { root: "subtitles" as const, folderId: null };
+  assert.equal(
+    library.assetLibraryPathText(state, { root: "subtitles", folderId: "b" }),
+    "字幕\\访谈\\First Take",
+  );
+  deepEqual(library.assetLibraryLocationFromPath(state, "字幕\\访谈\\first take", root), {
+    root: "subtitles",
+    folderId: "b",
+  });
+  deepEqual(library.assetLibraryLocationFromPath(state, " 分镜 / 访谈 ", root), {
+    root: "storyboards",
+    folderId: "c",
+  });
+  deepEqual(library.assetLibraryLocationFromPath(state, "访谈/First Take", root), {
+    root: "subtitles",
+    folderId: "b",
+  });
+  deepEqual(
+    library.assetLibraryLocationFromPath(state, "..", { root: "subtitles", folderId: "b" }),
+    { root: "subtitles", folderId: "a" },
+  );
+  assert.equal(library.assetLibraryLocationFromPath(state, "字幕\\missing", root), null);
+  assert.equal(library.assetLibraryLocationFromPath(state, "  ", root), null);
+});
+
+test("dates use the file-manager form in local time", () => {
+  const timestamp = new Date(2026, 8, 23, 18, 5).getTime();
+  assert.equal(library.formatAssetLibraryDate(timestamp), "2026/9/23 18:05");
+  assert.equal(library.formatAssetLibraryDate(Number.NaN), "");
+});
+
+test("history jumps keep skipped locations in visiting order", () => {
+  const at = (folderId: string) => ({ root: "subtitles" as const, folderId });
+  const start = { location: at("d"), backStack: [at("a"), at("b"), at("c")], forwardStack: [] };
+  const back = library.steppedAssetLibraryHistory(start, -2)!;
+  deepEqual(back, { location: at("b"), backStack: [at("a")], forwardStack: [at("c"), at("d")] });
+  deepEqual(library.steppedAssetLibraryHistory(back, 2), start);
+  assert.equal(library.steppedAssetLibraryHistory(start, 1), null);
+  assert.equal(library.steppedAssetLibraryHistory(start, -9)?.location.folderId, "a");
+});
+
+test("sameAssetLibraryLocation compares root and folder", () => {
+  const at = (root: string, folderId: string | null) =>
+    ({ root, folderId }) as Parameters<AssetLibraryModule["sameAssetLibraryLocation"]>[0];
+  assert.equal(library.sameAssetLibraryLocation(at("subtitles", "a"), at("subtitles", "a")), true);
+  assert.equal(
+    library.sameAssetLibraryLocation(at("subtitles", null), at("subtitles", null)),
+    true,
+  );
+  assert.equal(
+    library.sameAssetLibraryLocation(at("subtitles", "a"), at("storyboard", "a")),
+    false,
+  );
+  assert.equal(
+    library.sameAssetLibraryLocation(at("subtitles", "a"), at("subtitles", null)),
+    false,
+  );
+});
+
+test("folder sorting follows names, creation time and the selected direction", () => {
+  const folders = [
+    { ...folder("f2", null, "item 2"), created_at: 20 },
+    { ...folder("f10", null, "item 10"), created_at: 10 },
+  ];
+  for (const key of ["name", "created", "duration", "rating", "start"] as const) {
+    const ascending = library.sortedAssetLibraryNodes(folders, [], { key, direction: "ascending" });
+    const descending = library.sortedAssetLibraryNodes(folders, [], {
+      key,
+      direction: "descending",
+    });
+    deepEqual(
+      descending.folders.map((item) => item.id),
+      ascending.folders.map((item) => item.id).reverse(),
+    );
+  }
+  deepEqual(
+    folders.map((item) => item.id),
+    ["f2", "f10"],
+  );
+});
+
+test("duration uses subtitle time ranges and inclusive storyboard frames", () => {
+  const subtitle = entry("subtitle", null, { start_us: 80_000, end_us: 200_000 });
+  assert.equal(library.assetLibraryEntryDurationUs(subtitle), 120_000);
+  assert.equal(library.assetLibraryEntryDurationUs({ ...subtitle, root: "storyboards" }), 160_000);
+  assert.equal(
+    library.assetLibraryEntryDurationUs({
+      ...subtitle,
+      root: "storyboards",
+      end_us: subtitle.start_us,
+    }),
+    frameUs,
+  );
+  const frameRate = 30000 / 1001;
+  const shot = entry("shot", null, {
+    root: "storyboards",
+    media: { ...subtitle.media, frame_rate: frameRate },
+    start_us: timeline.frameToTimeUs(10, frameRate),
+    end_us: timeline.frameToTimeUs(39, frameRate),
+  });
+  assert.equal(library.assetLibraryEntryDurationUs(shot), timeline.frameToTimeUs(30, frameRate));
+});
+
+test("entry names preserve authored line breaks through capture, rename and reload", () => {
+  const base = entry("multiline", null, { name: "first\nsecond" });
+  const renamed = library.renamedAssetLibraryEntry(base, "new first\r\nnew second");
+  assert.equal(renamed.name, "new first\nnew second");
+  assert.equal(
+    library.normalizedAssetLibrary({ folders: [], entries: [renamed] }).entries[0]?.name,
+    renamed.name,
+  );
 });

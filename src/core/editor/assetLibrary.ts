@@ -62,7 +62,6 @@ export type AssetLibraryIdFactory = (kind: "asset" | "asset-folder") => string;
 
 const maximumRating = 5;
 const maximumNameLength = 120;
-const capturedNameLength = 60;
 const copySuffix = " - 副本";
 
 export function createAssetLibraryId(kind: "asset" | "asset-folder") {
@@ -104,6 +103,15 @@ function optionalText(value: unknown) {
 
 export function normalizedAssetLibraryName(name: string) {
   return name.replace(/\s+/g, " ").trim().slice(0, maximumNameLength);
+}
+
+/** Entry names retain authored line breaks for list and icon labels. */
+function normalizedAssetLibraryEntryName(name: string) {
+  return name
+    .replace(/\r\n?/g, "\n")
+    .replace(/[^\S\n]+/g, " ")
+    .trim()
+    .slice(0, maximumNameLength);
 }
 
 export function normalizedAssetLibraryKeywords(keywords: readonly unknown[]) {
@@ -198,7 +206,7 @@ export function normalizedAssetLibrary(
         root: entry.root,
         folder_id: folder && folder.root === entry.root ? folder.id : null,
         name:
-          normalizedAssetLibraryName(typeof entry.name === "string" ? entry.name : "") ||
+          normalizedAssetLibraryEntryName(typeof entry.name === "string" ? entry.name : "") ||
           media.file_name ||
           "未命名素材",
         created_at: finiteNumber(entry.created_at),
@@ -246,6 +254,10 @@ export function assetLibraryFolderPath(
     current = current.parent_id ? byId.get(current.parent_id) : undefined;
   }
   return path;
+}
+
+export function sameAssetLibraryLocation(left: AssetLibraryLocation, right: AssetLibraryLocation) {
+  return left.root === right.root && left.folderId === right.folderId;
 }
 
 export function assetLibraryLocationExists(
@@ -376,7 +388,7 @@ export function updatedAssetLibraryEntries(
 }
 
 export function renamedAssetLibraryEntry(entry: AssetLibraryEntry, name: string) {
-  const normalized = normalizedAssetLibraryName(name);
+  const normalized = normalizedAssetLibraryEntryName(name);
   return normalized && normalized !== entry.name ? { ...entry, name: normalized } : entry;
 }
 
@@ -577,7 +589,7 @@ export function assetLibraryEntryFromCapture(
     id,
     root,
     folder_id: folderId,
-    name: normalizedAssetLibraryName(capture.name) || capture.media.file_name || "未命名素材",
+    name: normalizedAssetLibraryEntryName(capture.name) || capture.media.file_name || "未命名素材",
     created_at: now,
     media: { ...capture.media },
     start_us: startUs,
@@ -611,11 +623,8 @@ function fileStem(fileName: string) {
 }
 
 export function subtitleAssetName(text: string, fileName: string, sequence: number) {
-  const singleLine = text.replace(/\s+/g, " ").trim();
-  if (!singleLine) return `${fileStem(fileName)} 字幕 ${sequence}`;
-  return singleLine.length > capturedNameLength
-    ? `${singleLine.slice(0, capturedNameLength - 1)}…`
-    : singleLine;
+  const name = normalizedAssetLibraryEntryName(text);
+  return name || `${fileStem(fileName)} 字幕 ${sequence}`;
 }
 
 export function storyboardAssetName(
@@ -703,6 +712,16 @@ export function trimmedAssetLibraryEntry(entry: AssetLibraryEntry, startUs: numb
 }
 
 export function assetLibraryEntryDurationUs(entry: AssetLibraryEntry) {
+  if (entry.root === "storyboards") {
+    const frameRate = entry.media.frame_rate;
+    return frameToTimeUs(
+      Math.max(
+        0,
+        timeUsToFrame(entry.end_us, frameRate) - timeUsToFrame(entry.start_us, frameRate) + 1,
+      ),
+      frameRate,
+    );
+  }
   return Math.max(0, entry.end_us - entry.start_us);
 }
 
@@ -750,7 +769,7 @@ export function sortedAssetLibraryNodes(
     sort.key === "created"
       ? (left.created_at - right.created_at) * direction ||
         nameCollator.compare(left.name, right.name)
-      : nameCollator.compare(left.name, right.name) * (sort.key === "name" ? direction : 1),
+      : nameCollator.compare(left.name, right.name) * direction,
   );
   const sortedEntries = [...entries].sort(
     (left, right) =>
@@ -781,4 +800,123 @@ export function assetLibraryViewLayout(size: number): AssetLibraryViewLayout {
   }
   const progress = (clamped - assetLibraryIconThreshold) / (100 - assetLibraryIconThreshold);
   return { mode: "icons", cardWidth: Math.round(120 + progress * 200) };
+}
+
+export type AssetLibraryViewPresetId = "extraLarge" | "large" | "medium" | "small" | "details";
+
+/** File-manager view presets. Each one only sets the shared size control. */
+export const assetLibraryViewPresets: readonly {
+  id: AssetLibraryViewPresetId;
+  label: string;
+  size: number;
+  shortcut: string;
+}[] = [
+  { id: "extraLarge", label: "超大图标", size: 100, shortcut: "Ctrl+Shift+1" },
+  { id: "large", label: "大图标", size: 72, shortcut: "Ctrl+Shift+2" },
+  { id: "medium", label: "中等图标", size: 48, shortcut: "Ctrl+Shift+3" },
+  { id: "small", label: "小图标", size: assetLibraryIconThreshold, shortcut: "Ctrl+Shift+4" },
+  { id: "details", label: "详细信息", size: 12, shortcut: "Ctrl+Shift+6" },
+];
+
+export function assetLibraryViewPresetForSize(size: number) {
+  return assetLibraryViewPresets.find((preset) => preset.size === size) ?? null;
+}
+
+const pathSeparator = "\\";
+
+/** Address-bar text such as `字幕\访谈\第一段`. */
+export function assetLibraryPathText(
+  library: ProjectAssetLibraryState,
+  location: AssetLibraryLocation,
+) {
+  return [
+    assetLibraryRootLabels[location.root],
+    ...assetLibraryFolderPath(library, location.folderId).map((folder) => folder.name),
+  ].join(pathSeparator);
+}
+
+/**
+ * Resolves typed address-bar text. A leading root name makes the path absolute; otherwise it
+ * is resolved from `current`. Names match case-insensitively, and `..` goes up one level.
+ */
+export function assetLibraryLocationFromPath(
+  library: ProjectAssetLibraryState,
+  text: string,
+  current: AssetLibraryLocation,
+): AssetLibraryLocation | null {
+  const segments = text
+    .split(/[\\/]+/)
+    .map((segment) => normalizedAssetLibraryName(segment))
+    .filter(Boolean);
+  if (segments.length === 0) return null;
+  const root = assetLibraryRoots.find(
+    (candidate) =>
+      assetLibraryRootLabels[candidate].toLocaleLowerCase() === segments[0]!.toLocaleLowerCase(),
+  );
+  let location: AssetLibraryLocation = root ? { root, folderId: null } : current;
+  const byId = new Map(library.folders.map((folder) => [folder.id, folder]));
+  for (const segment of root ? segments.slice(1) : segments) {
+    if (segment === ".") continue;
+    if (segment === "..") {
+      const parentId = location.folderId ? (byId.get(location.folderId)?.parent_id ?? null) : null;
+      location = { root: location.root, folderId: parentId };
+      continue;
+    }
+    const lowered = segment.toLocaleLowerCase();
+    const match = library.folders.find(
+      (folder) =>
+        folder.root === location.root &&
+        folder.parent_id === location.folderId &&
+        folder.name.toLocaleLowerCase() === lowered,
+    );
+    if (!match) return null;
+    location = { root: location.root, folderId: match.id };
+  }
+  return location;
+}
+
+/** Local date and time in the file-manager form `2026/9/23 18:51`. */
+export function formatAssetLibraryDate(timestamp: number) {
+  const date = new Date(timestamp);
+  if (!Number.isFinite(date.getTime())) return "";
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${minutes}`;
+}
+
+export interface AssetLibraryHistory {
+  location: AssetLibraryLocation;
+  backStack: AssetLibraryLocation[];
+  forwardStack: AssetLibraryLocation[];
+}
+
+/**
+ * Moves `steps` entries back (negative) or forward (positive). Skipped locations stay in
+ * history in visiting order, as in a browser's history menu.
+ */
+export function steppedAssetLibraryHistory(
+  history: AssetLibraryHistory,
+  steps: number,
+  limit = 50,
+): AssetLibraryHistory | null {
+  const { location, backStack, forwardStack } = history;
+  if (steps < 0) {
+    const count = Math.min(Math.floor(-steps), backStack.length);
+    if (count < 1) return null;
+    return {
+      location: backStack[backStack.length - count]!,
+      backStack: backStack.slice(0, -count),
+      forwardStack: [
+        ...backStack.slice(backStack.length - count + 1),
+        location,
+        ...forwardStack,
+      ].slice(0, limit),
+    };
+  }
+  const count = Math.min(Math.floor(steps), forwardStack.length);
+  if (count < 1) return null;
+  return {
+    location: forwardStack[count - 1]!,
+    backStack: [...backStack, location, ...forwardStack.slice(0, count - 1)].slice(-limit),
+    forwardStack: forwardStack.slice(count),
+  };
 }

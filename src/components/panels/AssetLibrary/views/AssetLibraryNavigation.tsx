@@ -1,10 +1,19 @@
-import { Captions, ChevronRight, Film, FolderPlus } from "lucide-react";
-import type { CSSProperties, DragEvent, MouseEvent as ReactMouseEvent, ReactElement } from "react";
+import { Captions, ChevronRight, Film } from "lucide-react";
+import {
+  useEffect,
+  useRef,
+  type CSSProperties,
+  type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type ReactElement,
+} from "react";
 import {
   assetLibraryRootLabels,
   assetLibraryRoots,
   sortedAssetLibraryNodes,
   type AssetLibraryLocation,
+  type AssetLibrarySort,
 } from "../../../../core/editor/assetLibrary";
 import type {
   AssetLibraryFolder,
@@ -17,6 +26,7 @@ import { assetLocationKey } from "../assetLibraryNodes";
 interface AssetLibraryNavigationProps {
   library: ProjectAssetLibraryState;
   location: AssetLibraryLocation;
+  sort: AssetLibrarySort;
   collapsedKeys: ReadonlySet<string>;
   dropTargetKey: string | null;
   onNavigate: (location: AssetLibraryLocation) => void;
@@ -32,6 +42,17 @@ const rootIcons: Record<AssetLibraryRoot, { className: string; Icon: typeof Capt
   subtitles: { className: "subtitle", Icon: Captions },
   storyboards: { className: "video", Icon: Film },
 };
+
+/** How long a drag must hover over a collapsed folder before it opens, as in a file manager. */
+const dragExpandDelayMs = 700;
+
+interface VisibleTreeRow {
+  key: string;
+  target: AssetLibraryLocation;
+  parent: AssetLibraryLocation | null;
+  expandable: boolean;
+  expanded: boolean;
+}
 
 function parentKey(root: AssetLibraryRoot, folderId: string | null) {
   return assetLocationKey({ root, folderId });
@@ -52,11 +73,77 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
     countByParent.set(key, (countByParent.get(key) ?? 0) + 1);
   }
   const sortedChildren = (key: string) =>
-    sortedAssetLibraryNodes(childrenByParent.get(key) ?? [], [], {
-      key: "name",
-      direction: "ascending",
-    }).folders;
+    sortedAssetLibraryNodes(childrenByParent.get(key) ?? [], [], props.sort).folders;
   const activeKey = assetLocationKey(location);
+  const dragExpandRef = useRef<{ key: string; timer: number } | null>(null);
+
+  function cancelDragExpand() {
+    if (dragExpandRef.current) window.clearTimeout(dragExpandRef.current.timer);
+    dragExpandRef.current = null;
+  }
+
+  useEffect(() => cancelDragExpand, []);
+
+  function scheduleDragExpand(key: string) {
+    if (dragExpandRef.current?.key === key) return;
+    cancelDragExpand();
+    const timer = window.setTimeout(() => {
+      dragExpandRef.current = null;
+      if (collapsedKeys.has(key)) props.onToggleCollapsed(key);
+    }, dragExpandDelayMs);
+    dragExpandRef.current = { key, timer };
+  }
+
+  // Rows in display order, for arrow-key movement through the expanded tree.
+  function visibleRows() {
+    const rows: VisibleTreeRow[] = [];
+    const walk = (target: AssetLibraryLocation, parent: AssetLibraryLocation | null) => {
+      const key = assetLocationKey(target);
+      const children = sortedChildren(key);
+      const expanded = children.length > 0 && !collapsedKeys.has(key);
+      rows.push({ key, target, parent, expandable: children.length > 0, expanded });
+      if (expanded) {
+        children.forEach((folder) => walk({ root: folder.root, folderId: folder.id }, target));
+      }
+    };
+    assetLibraryRoots.forEach((root) => walk({ root, folderId: null }, null));
+    return rows;
+  }
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const rows = visibleRows();
+    const index = rows.findIndex((row) => row.key === activeKey);
+    const current = rows[index];
+    let next: VisibleTreeRow | undefined;
+    switch (event.key) {
+      case "ArrowUp":
+        next = rows[Math.max(0, index - 1)];
+        break;
+      case "ArrowDown":
+        next = rows[Math.min(rows.length - 1, index + 1)];
+        break;
+      case "Home":
+        next = rows[0];
+        break;
+      case "End":
+        next = rows.at(-1);
+        break;
+      case "ArrowRight":
+        if (current?.expandable && !current.expanded) props.onToggleCollapsed(current.key);
+        else if (current?.expanded) next = rows[index + 1];
+        break;
+      case "ArrowLeft":
+        if (current?.expanded) props.onToggleCollapsed(current.key);
+        else if (current?.parent) next = { ...current, target: current.parent };
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (next) props.onNavigate(next.target);
+  }
 
   function renderItem(
     target: AssetLibraryLocation,
@@ -84,9 +171,18 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
           onClick={() => props.onNavigate(target)}
           onDoubleClick={() => expandable && props.onToggleCollapsed(key)}
           onContextMenu={(event) => props.onContextMenu(event, target)}
-          onDragOver={(event) => props.onDragOverTarget(event, target)}
-          onDragLeave={props.onDragLeaveTarget}
-          onDrop={(event) => props.onDropOnTarget(event, target)}
+          onDragOver={(event) => {
+            props.onDragOverTarget(event, target);
+            if (expandable && !expanded && event.defaultPrevented) scheduleDragExpand(key);
+          }}
+          onDragLeave={() => {
+            cancelDragExpand();
+            props.onDragLeaveTarget();
+          }}
+          onDrop={(event) => {
+            cancelDragExpand();
+            props.onDropOnTarget(event, target);
+          }}
         >
           <span className="media-bin-title-cell media-bin-folder-title-cell">
             {expandable ? (
@@ -135,24 +231,14 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
 
   return (
     <nav className="asset-library-navigation" aria-label="素材库文件夹">
-      <div className="media-bin-table-header-viewport">
-        <div className="media-bin-table-header asset-library-tree-header" role="presentation">
-          <span className="media-bin-column-header">
-            <span className="media-bin-column-label-text">文件夹</span>
-          </span>
-          <button
-            type="button"
-            className="asset-library-tree-action"
-            title="新建文件夹 (Ctrl+Shift+N)"
-            aria-label="新建文件夹"
-            onClick={props.onCreateFolder}
-          >
-            <FolderPlus aria-hidden="true" />
-          </button>
-        </div>
-      </div>
       <div className="media-bin-table-scroll">
-        <ul className="asset-library-tree" role="tree">
+        <ul
+          className="asset-library-tree"
+          role="tree"
+          tabIndex={0}
+          aria-label="文件夹"
+          onKeyDown={handleKeyDown}
+        >
           {assetLibraryRoots.map((root) => {
             const { className, Icon } = rootIcons[root];
             return renderItem(

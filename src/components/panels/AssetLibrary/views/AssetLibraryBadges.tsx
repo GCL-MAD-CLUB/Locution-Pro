@@ -1,5 +1,5 @@
-import { Star } from "lucide-react";
-import type { SVGProps } from "react";
+import { Star, Tags } from "lucide-react";
+import type { CSSProperties } from "react";
 import { assetLibraryEntryFlag } from "../../../../core/editor/assetLibrary";
 import { annotationColors } from "../../../../runtime/theme";
 import type { AssetLibraryColorLabel, AssetLibraryEntry } from "../../../../types";
@@ -18,27 +18,16 @@ export const assetLibraryFlagNames = {
   excluded: "排除旗标",
 } as const;
 
-export function AssetLibraryFolderIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 48 40" fill="none" aria-hidden="true" {...props}>
-      <path fill="var(--color-media-folder-icon)" d="M4 8a3 3 0 0 1 3-3h12l4 4H4z" />
-      <path
-        fill="var(--color-media-folder-icon)"
-        d="M4 11h37a3 3 0 0 1 3 3v19a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"
-      />
-    </svg>
-  );
+export function assetLibraryColorStyle(colorLabel: AssetLibraryColorLabel | null) {
+  return colorLabel
+    ? ({ "--asset-color-label": annotationColors[colorLabel] } as CSSProperties)
+    : undefined;
 }
 
-export function AssetLibraryFlag({ flag }: { flag: ReturnType<typeof assetLibraryEntryFlag> }) {
-  return <span className={`asset-library-flag is-${flag}`} aria-hidden="true" />;
-}
-
-/** Compact, read-only annotation summary shown on rows and cards. */
-export function AssetLibraryBadges({ entry }: { entry: AssetLibraryEntry }) {
+function annotationDescription(entry: AssetLibraryEntry) {
   const flag = assetLibraryEntryFlag(entry);
   const { rating, color_label: colorLabel, keywords, custom_label: customLabel } = entry.annotation;
-  const description = [
+  return [
     flag !== "none" ? assetLibraryFlagNames[flag] : "",
     rating > 0 ? `${rating} 星` : "",
     colorLabel ? `${assetLibraryColorLabelNames[colorLabel]}色标` : "",
@@ -47,25 +36,52 @@ export function AssetLibraryBadges({ entry }: { entry: AssetLibraryEntry }) {
   ]
     .filter(Boolean)
     .join("，");
+}
+
+/** The pole-and-banner flag drawn on storyboard thumbnails, read-only. */
+export function AssetLibraryFlagMark({ entry }: { entry: AssetLibraryEntry }) {
+  const flag = assetLibraryEntryFlag(entry);
+  return flag === "none" ? null : (
+    <span
+      className={`asset-library-flag-mark is-${flag}`}
+      role="img"
+      aria-label={assetLibraryFlagNames[flag]}
+    />
+  );
+}
+
+export function AssetLibraryRatingMark({ rating }: { rating: number }) {
+  return rating > 0 ? (
+    <span className="asset-library-rating-mark" role="img" aria-label={`${rating} 星`}>
+      {Array.from({ length: rating }, (_, index) => (
+        <Star key={index} aria-hidden="true" />
+      ))}
+    </span>
+  ) : null;
+}
+
+/** Compact, read-only annotation summary shown on list rows and icon tiles. */
+export function AssetLibraryMarks({
+  entry,
+  showFlag = true,
+}: {
+  entry: AssetLibraryEntry;
+  showFlag?: boolean;
+}) {
+  const description = annotationDescription(entry);
+  const { rating, keywords, custom_label: customLabel } = entry.annotation;
   return (
-    <span className="asset-library-badges" title={description || undefined}>
-      {colorLabel && (
-        <span
-          className="asset-library-color-dot"
-          style={{ background: annotationColors[colorLabel] }}
-          aria-label={`${assetLibraryColorLabelNames[colorLabel]}色标`}
-        />
-      )}
-      {flag !== "none" && <AssetLibraryFlag flag={flag} />}
-      {rating > 0 && (
-        <span className="asset-library-rating" aria-label={`${rating} 星`}>
-          <Star aria-hidden="true" />
-          {rating}
-        </span>
-      )}
+    <span className="asset-library-marks" title={description || undefined}>
+      {showFlag && <AssetLibraryFlagMark entry={entry} />}
+      <AssetLibraryRatingMark rating={rating} />
+      {customLabel && <span className="asset-library-custom-label">{customLabel}</span>}
       {keywords.length > 0 && (
-        <span className="asset-library-keyword-count" aria-label={`${keywords.length} 个关键字`}>
-          #{keywords.length}
+        <span
+          className="asset-library-keyword-mark"
+          role="img"
+          aria-label={`${keywords.length} 个关键字`}
+        >
+          <Tags aria-hidden="true" />
         </span>
       )}
     </span>

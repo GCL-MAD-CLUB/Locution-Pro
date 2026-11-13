@@ -766,8 +766,7 @@ export function sortedAssetLibraryNodes(
 export const assetLibraryIconThreshold = 30;
 
 export type AssetLibraryViewLayout =
-  | { mode: "list"; rowHeight: number; showThumbnail: boolean }
-  | { mode: "icons"; cardWidth: number };
+  { mode: "list"; rowHeight: number; iconScale: number } | { mode: "icons"; cardWidth: number };
 
 /**
  * One size control drives both presentations, like a file manager's zoom: small sizes
@@ -776,9 +775,10 @@ export type AssetLibraryViewLayout =
 export function assetLibraryViewLayout(size: number): AssetLibraryViewLayout {
   const clamped = Math.min(100, Math.max(0, finiteNumber(size)));
   if (clamped < assetLibraryIconThreshold) {
-    const rowHeight = Math.round(22 + (clamped / assetLibraryIconThreshold) * 22);
-    return { mode: "list", rowHeight, showThumbnail: rowHeight >= 32 };
+    // The list range maps onto the media bin row-height slider (0-100).
+    const listSize = (clamped / assetLibraryIconThreshold) * 100;
+    return { mode: "list", rowHeight: 24 + listSize * 0.36, iconScale: 1 + listSize * 0.015 };
   }
   const progress = (clamped - assetLibraryIconThreshold) / (100 - assetLibraryIconThreshold);
-  return { mode: "icons", cardWidth: Math.round(112 + progress * 248) };
+  return { mode: "icons", cardWidth: Math.round(120 + progress * 200) };
 }

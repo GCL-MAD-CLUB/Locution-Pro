@@ -7,6 +7,18 @@ import type {
   AssetLibrarySort,
 } from "../../../core/editor/assetLibrary";
 
+export const assetLibraryPaneWidths = {
+  navigation: { initial: 200, minimum: 140, maximum: 420 },
+  details: { initial: 280, minimum: 220, maximum: 520 },
+} as const;
+
+export type AssetLibraryPane = keyof typeof assetLibraryPaneWidths;
+
+export function clampAssetLibraryPaneWidth(pane: AssetLibraryPane, width: number) {
+  const { minimum, maximum } = assetLibraryPaneWidths[pane];
+  return Math.round(Math.min(maximum, Math.max(minimum, width)));
+}
+
 export const defaultAssetLibraryLocation: AssetLibraryLocation = {
   root: "subtitles",
   folderId: null,
@@ -30,6 +42,8 @@ interface AssetLibraryPanelState {
   navigationVisible: boolean;
   detailsVisible: boolean;
   collapsedKeys: ReadonlySet<string>;
+  paneWidths: Record<AssetLibraryPane, number>;
+  collapsedSections: ReadonlySet<string>;
   navigate: (location: AssetLibraryLocation) => void;
   replaceLocation: (location: AssetLibraryLocation) => void;
   goBack: () => void;
@@ -42,6 +56,15 @@ interface AssetLibraryPanelState {
   setNavigationVisible: (visible: boolean) => void;
   setDetailsVisible: (visible: boolean) => void;
   toggleCollapsed: (key: string) => void;
+  setPaneWidth: (pane: AssetLibraryPane, width: number) => void;
+  toggleSection: (section: string) => void;
+}
+
+function toggled(keys: ReadonlySet<string>, key: string) {
+  const next = new Set(keys);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  return next;
 }
 
 const historyLimit = 50;
@@ -60,6 +83,11 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   navigationVisible: true,
   detailsVisible: true,
   collapsedKeys: new Set<string>(),
+  paneWidths: {
+    navigation: assetLibraryPaneWidths.navigation.initial,
+    details: assetLibraryPaneWidths.details.initial,
+  },
+  collapsedSections: new Set<string>(),
   navigate: (location) =>
     set((state) =>
       sameLocation(state.location, location)
@@ -123,13 +151,13 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   setSort: (sort) => set({ sort }),
   setNavigationVisible: (navigationVisible) => set({ navigationVisible }),
   setDetailsVisible: (detailsVisible) => set({ detailsVisible }),
-  toggleCollapsed: (key) =>
-    set((state) => {
-      const collapsedKeys = new Set(state.collapsedKeys);
-      if (collapsedKeys.has(key)) collapsedKeys.delete(key);
-      else collapsedKeys.add(key);
-      return { collapsedKeys };
-    }),
+  toggleCollapsed: (key) => set((state) => ({ collapsedKeys: toggled(state.collapsedKeys, key) })),
+  setPaneWidth: (pane, width) =>
+    set((state) => ({
+      paneWidths: { ...state.paneWidths, [pane]: clampAssetLibraryPaneWidth(pane, width) },
+    })),
+  toggleSection: (section) =>
+    set((state) => ({ collapsedSections: toggled(state.collapsedSections, section) })),
 }));
 
 interface AssetLibraryClipboardState {

@@ -215,7 +215,7 @@ export function AssetLibraryContextMenu({
             checked={model.navigationVisible}
             onSelect={run(() => actions.setNavigationVisible(!model.navigationVisible))}
           >
-            导航窗格
+            文件夹窗格
           </PopupMenuItem>
           <PopupMenuItem
             checked={model.detailsVisible}

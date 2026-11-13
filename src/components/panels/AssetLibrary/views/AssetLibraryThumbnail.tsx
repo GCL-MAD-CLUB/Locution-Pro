@@ -1,10 +1,11 @@
-import { Captions, Film, Link2Off } from "lucide-react";
+import { Captions, Film } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   timelineThumbnailResolutionForDisplay,
   timelineThumbnails,
 } from "../../../../timelineThumbnail";
 import type { AssetLibraryEntry } from "../../../../types";
+import { OfflineFileIcon } from "../../MediaBin/views/MediaBinFolderIcon";
 import type { ResolvedAssetMedia } from "../assetLibraryMedia";
 
 interface AssetLibraryThumbnailProps {
@@ -103,14 +104,17 @@ export function AssetLibraryThumbnail({
     requestRef.current?.reprioritize(priority);
   }, [priority]);
 
-  const PlaceholderIcon = !media ? Link2Off : entry.root === "subtitles" ? Captions : Film;
+  const PlaceholderIcon = !media ? OfflineFileIcon : entry.root === "subtitles" ? Captions : Film;
   const shown = thumbnail?.identity === identity ? thumbnail : null;
   return (
     <div ref={setElement} className="asset-library-thumbnail" data-offline={!media || undefined}>
       {shown ? (
         <img src={shown.src} alt="" decoding="async" draggable={false} />
       ) : (
-        <PlaceholderIcon className="asset-library-thumbnail-placeholder" aria-hidden="true" />
+        <PlaceholderIcon
+          className={`asset-library-thumbnail-placeholder${media ? "" : " is-offline"}`}
+          aria-hidden="true"
+        />
       )}
     </div>
   );

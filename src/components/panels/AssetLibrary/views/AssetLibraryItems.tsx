@@ -1,4 +1,4 @@
-import { Link2Off } from "lucide-react";
+import { Captions, Film } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -9,30 +9,51 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { mediaGridLayout } from "../../../../application/media/mediaGridLayout";
 import {
   assetLibraryEntryDurationUs,
+  type AssetLibrarySort,
+  type AssetLibrarySortKey,
   type AssetLibraryViewLayout,
 } from "../../../../core/editor/assetLibrary";
 import { formatDuration } from "../../../../core/editor/time";
+import { annotationColors } from "../../../../runtime/theme";
+import "../../MediaBin/MediaBin.css";
+import { MediaBinFolderIcon, OfflineFileIcon } from "../../MediaBin/views/MediaBinFolderIcon";
 import { type AssetLibraryNode } from "../assetLibraryNodes";
-import { AssetLibraryBadges, AssetLibraryFolderIcon } from "./AssetLibraryBadges";
+import { AssetLibraryFlagMark, AssetLibraryMarks } from "./AssetLibraryBadges";
 import { AssetLibraryThumbnail } from "./AssetLibraryThumbnail";
 
-const cardGap = 10;
-const gridPadding = 10;
+/** Matches `.media-bin-grid`: 14px padding and a 12px gap. */
+const gridPadding = 14;
+const gridGap = 12;
 
 interface MarqueeState {
   originX: number;
   originY: number;
   x: number;
   y: number;
-  additive: boolean;
   baseKeys: ReadonlySet<string>;
 }
+
+interface ListColumn {
+  id: "label" | "title" | "location" | "marks" | "duration";
+  label: string;
+  sortKey: AssetLibrarySortKey | null;
+}
+
+const listColumns: readonly ListColumn[] = [
+  { id: "label", label: "", sortKey: null },
+  { id: "title", label: "名称", sortKey: "name" },
+  { id: "location", label: "位置", sortKey: null },
+  { id: "marks", label: "标注", sortKey: "rating" },
+  { id: "duration", label: "持续时间", sortKey: "duration" },
+];
 
 export interface AssetLibraryItemsProps {
   nodes: readonly AssetLibraryNode[];
   layout: AssetLibraryViewLayout;
+  sort: AssetLibrarySort;
   selectedKeys: ReadonlySet<string>;
   focusKey: string | null;
   renamingKey: string | null;
@@ -41,6 +62,7 @@ export interface AssetLibraryItemsProps {
   thumbnailsEnabled: boolean;
   emptyText: string;
   locationLabel?: (node: AssetLibraryNode) => string | null;
+  onSort: (sort: AssetLibrarySort) => void;
   onNodePointerDown: (event: ReactPointerEvent<HTMLElement>, node: AssetLibraryNode) => void;
   onNodeClick: (event: ReactMouseEvent<HTMLElement>, node: AssetLibraryNode) => void;
   onOpenNode: (node: AssetLibraryNode) => void;
@@ -63,6 +85,28 @@ function nodeName(node: AssetLibraryNode) {
   return node.kind === "folder" ? node.folder.name : node.entry.name;
 }
 
+function nodeDuration(node: AssetLibraryNode) {
+  return node.kind === "folder" ? "" : formatDuration(assetLibraryEntryDurationUs(node.entry));
+}
+
+function SortArrow({ direction }: { direction: AssetLibrarySort["direction"] }) {
+  return (
+    <svg className="media-bin-sort-arrow" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d={
+          direction === "ascending"
+            ? "M8 14 L8 2.5 M5 5.5 L8 2.5 L11 5.5"
+            : "M8 2 L8 13.5 M5 10.5 L8 13.5 L11 10.5"
+        }
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2.75"
+      />
+    </svg>
+  );
+}
+
 function RenameInput({
   initialValue,
   onCommit,
@@ -82,7 +126,7 @@ function RenameInput({
   };
   return (
     <input
-      className="asset-library-rename"
+      className="media-bin-title-editor"
       value={value}
       aria-label="重命名"
       autoFocus
@@ -101,10 +145,56 @@ function RenameInput({
   );
 }
 
+/** The media bin's kind glyphs, drawn in one fixed-size box so every row lines up. */
+function KindIcon({ node }: { node: AssetLibraryNode }) {
+  if (node.kind === "folder") {
+    return (
+      <span className="media-bin-kind-icon folder">
+        <MediaBinFolderIcon />
+      </span>
+    );
+  }
+  if (!node.media) {
+    return (
+      <span className="media-bin-kind-icon">
+        <OfflineFileIcon
+          className="media-bin-offline-icon"
+          role="img"
+          aria-hidden={false}
+          aria-label="媒体离线"
+        />
+      </span>
+    );
+  }
+  const subtitle = node.entry.root === "subtitles";
+  const Icon = subtitle ? Captions : Film;
+  return (
+    <span className={`media-bin-kind-icon ${subtitle ? "subtitle" : "video"}`}>
+      <Icon aria-hidden="true" />
+    </span>
+  );
+}
+
+/** Folders use the media bin folder color; entries show their color label when set. */
+function LabelColor({ node }: { node: AssetLibraryNode }) {
+  if (node.kind === "folder") {
+    return (
+      <span className="media-bin-label-color" style={{ background: "var(--color-media-folder)" }} />
+    );
+  }
+  const colorLabel = node.entry.annotation.color_label;
+  return colorLabel ? (
+    <span className="media-bin-label-color" style={{ background: annotationColors[colorLabel] }} />
+  ) : (
+    <span className="media-bin-label-color asset-library-label-empty" aria-hidden="true" />
+  );
+}
+
 export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   const {
     nodes,
     layout,
+    sort,
     selectedKeys,
     focusKey,
     renamingKey,
@@ -118,24 +208,29 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   } = props;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
-  const cardWidth = layout.mode === "icons" ? layout.cardWidth : 0;
+  const [contentWidth, setContentWidth] = useState(0);
+  const grid =
+    layout.mode === "icons"
+      ? mediaGridLayout(
+          Math.max(0, contentWidth - gridPadding * 2),
+          nodes.length,
+          layout.cardWidth,
+          gridGap,
+        )
+      : { columns: 1, cardWidth: 0 };
+  const columns = listColumns.filter((column) => column.id !== "location" || locationLabel);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
-    const update = () => {
-      const width = element.clientWidth - gridPadding * 2;
-      onColumnsChange(
-        layout.mode === "icons"
-          ? Math.max(1, Math.floor((width + cardGap) / (cardWidth + cardGap)))
-          : 1,
-      );
-    };
+    const update = () => setContentWidth(element.clientWidth);
     update();
     const observer = new ResizeObserver(update);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [cardWidth, layout.mode, onColumnsChange]);
+  }, []);
+
+  useEffect(() => onColumnsChange(grid.columns), [grid.columns, onColumnsChange]);
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -190,7 +285,6 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
       originY: point.y,
       x: point.x,
       y: point.y,
-      additive,
       baseKeys: additive ? new Set(selectedKeys) : new Set(),
     };
     let moved = false;
@@ -198,6 +292,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     const handleMove = (moveEvent: PointerEvent) => {
       const next = contentPoint(moveEvent);
       if (!moved && Math.hypot(next.x - initial.originX, next.y - initial.originY) < 4) return;
+      if (!moved) document.body.classList.add("is-marquee-selecting");
       moved = true;
       current = { ...current, x: next.x, y: next.y };
       setMarquee(current);
@@ -207,6 +302,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
       window.removeEventListener("pointercancel", handleUp);
+      document.body.classList.remove("is-marquee-selecting");
       setMarquee(null);
       if (!moved && !additive) props.onClearSelection();
     };
@@ -237,21 +333,19 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     };
   }
 
-  function nodeClassName(node: AssetLibraryNode, base: string) {
+  function stateClassName(node: AssetLibraryNode) {
     return [
-      base,
-      node.kind === "folder" ? "is-folder" : "is-entry",
+      node.kind === "folder" ? "media-bin-folder-row" : "",
       selectedKeys.has(node.key) ? "selected" : "",
-      focusKey === node.key ? "focused" : "",
+      focusKey === node.key ? "is-focused" : "",
       cutKeys.has(node.key) ? "is-cut" : "",
-      dropTargetKey === node.key ? "drop-target" : "",
-      node.kind === "entry" && !node.media ? "is-offline" : "",
+      dropTargetKey === node.key ? "folder-drop-target" : "",
     ]
       .filter(Boolean)
       .join(" ");
   }
 
-  function nameContent(node: AssetLibraryNode) {
+  function nameContent(node: AssetLibraryNode, className: string) {
     return renamingKey === node.key ? (
       <RenameInput
         initialValue={nodeName(node)}
@@ -259,9 +353,56 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
         onCancel={props.onCancelRename}
       />
     ) : (
-      <span className="asset-library-name" title={nodeName(node)}>
+      <span className={className} title={nodeName(node)}>
         {nodeName(node)}
       </span>
+    );
+  }
+
+  function toggleSort(key: AssetLibrarySortKey) {
+    props.onSort({
+      key,
+      direction: sort.key === key && sort.direction === "ascending" ? "descending" : "ascending",
+    });
+  }
+
+  function renderHeader() {
+    const hasItems = nodes.length > 0;
+    return (
+      <div className="media-bin-table-header-viewport">
+        <div className="media-bin-table-header" role="row">
+          {columns.map((column) => {
+            const active = column.sortKey !== null && sort.key === column.sortKey;
+            const nextDirection = active && sort.direction === "ascending" ? "降序" : "升序";
+            const name = column.id === "label" ? "标签" : column.label;
+            return (
+              <span
+                key={column.id}
+                className="media-bin-column-header"
+                role="columnheader"
+                aria-label={column.id === "label" ? "标签" : undefined}
+                aria-sort={active ? sort.direction : undefined}
+              >
+                {column.sortKey ? (
+                  <button
+                    type="button"
+                    className={`media-bin-column-sort-button${active ? " active" : ""}`}
+                    title={`按${name}${nextDirection}排列`}
+                    aria-label={`按${name}${nextDirection}排列`}
+                    disabled={!hasItems}
+                    onClick={() => toggleSort(column.sortKey!)}
+                  >
+                    <span className="media-bin-column-label-text">{column.label}</span>
+                    {active && <SortArrow direction={sort.direction} />}
+                  </button>
+                ) : (
+                  <span className="media-bin-column-label-text">{column.label}</span>
+                )}
+              </span>
+            );
+          })}
+        </div>
+      </div>
     );
   }
 
@@ -270,49 +411,74 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     return (
       <div
         key={node.key}
-        className={nodeClassName(node, "asset-library-row")}
+        className={`media-bin-row asset-library-row ${stateClassName(node)}`}
         role="option"
         aria-selected={selectedKeys.has(node.key)}
         {...nodeHandlers(node)}
       >
-        <span className="asset-library-row-icon">
-          {node.kind === "folder" ? (
-            <AssetLibraryFolderIcon />
-          ) : layout.mode === "list" && layout.showThumbnail ? (
+        <span className="media-bin-label-cell">
+          <LabelColor node={node} />
+        </span>
+        <span
+          className={`media-bin-title-cell${
+            node.kind === "folder" ? " media-bin-folder-title-cell" : ""
+          }`}
+        >
+          <KindIcon node={node} />
+          {nameContent(node, "media-bin-name-copy")}
+        </span>
+        {locationLabel && (
+          <span className="asset-library-location-cell" title={location ?? undefined}>
+            {location}
+          </span>
+        )}
+        <span>{node.kind === "entry" && <AssetLibraryMarks entry={node.entry} />}</span>
+        <span>{nodeDuration(node)}</span>
+      </div>
+    );
+  }
+
+  function renderCardPreview(node: AssetLibraryNode) {
+    if (node.kind === "folder") {
+      return (
+        <span className="media-bin-card-preview folder">
+          <MediaBinFolderIcon />
+        </span>
+      );
+    }
+    const subtitle = node.entry.root === "subtitles";
+    const BadgeIcon = subtitle ? Captions : Film;
+    return (
+      <span className={`media-bin-card-preview ${subtitle ? "subtitle" : "video"}`}>
+        {node.media ? (
+          <>
             <AssetLibraryThumbnail
               entry={node.entry}
               media={node.media}
-              displayWidth={(layout.rowHeight - 6) * (16 / 9)}
+              displayWidth={grid.cardWidth}
               enabled={thumbnailsEnabled}
             />
-          ) : node.media ? (
-            <span className={`asset-library-kind-dot is-${node.entry.root}`} aria-hidden="true" />
-          ) : (
-            <Link2Off className="asset-library-offline-icon" aria-label="媒体离线" />
-          )}
-        </span>
-        <span className="asset-library-row-name">
-          {nameContent(node)}
-          {location && <span className="asset-library-location">{location}</span>}
-        </span>
-        {node.kind === "entry" ? (
-          <>
-            <AssetLibraryBadges entry={node.entry} />
-            <span className="asset-library-row-meta">
-              {formatDuration(assetLibraryEntryDurationUs(node.entry))}
-            </span>
-            <span className="asset-library-row-source" title={node.entry.media.file_name}>
-              {node.entry.media.file_name}
+            <span className="media-bin-card-type-badges" aria-hidden="true">
+              <span className={`media-bin-card-type-badge ${subtitle ? "subtitle" : "video"}`}>
+                <BadgeIcon />
+              </span>
             </span>
           </>
         ) : (
-          <>
-            <span />
-            <span className="asset-library-row-meta">{node.childCount} 项</span>
-            <span className="asset-library-row-source">文件夹</span>
-          </>
+          <OfflineFileIcon
+            className="media-bin-offline-icon"
+            role="img"
+            aria-hidden={false}
+            aria-label="媒体离线"
+          />
         )}
-      </div>
+        <span className="asset-library-card-flag">
+          <AssetLibraryFlagMark entry={node.entry} />
+        </span>
+        <span className="asset-library-card-marks">
+          <AssetLibraryMarks entry={node.entry} showFlag={false} />
+        </span>
+      </span>
     );
   }
 
@@ -321,45 +487,33 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     return (
       <div
         key={node.key}
-        className={nodeClassName(node, "asset-library-card")}
+        className={`media-bin-card asset-library-card ${
+          node.kind === "folder" ? "media-bin-folder-card" : ""
+        } ${stateClassName(node)}`}
         role="option"
         aria-selected={selectedKeys.has(node.key)}
+        title={location || undefined}
         {...nodeHandlers(node)}
       >
-        <div className="asset-library-card-visual">
-          {node.kind === "folder" ? (
-            <AssetLibraryFolderIcon className="asset-library-card-folder" />
-          ) : (
-            <>
-              <AssetLibraryThumbnail
-                entry={node.entry}
-                media={node.media}
-                displayWidth={cardWidth}
-                enabled={thumbnailsEnabled}
-              />
-              <span className="asset-library-card-overlay">
-                <AssetLibraryBadges entry={node.entry} />
-                <span className="asset-library-card-duration">
-                  {formatDuration(assetLibraryEntryDurationUs(node.entry))}
-                </span>
-              </span>
-            </>
-          )}
-        </div>
-        <div className="asset-library-card-caption">
-          {nameContent(node)}
-          <span className="asset-library-location">
-            {location ??
-              (node.kind === "folder" ? `${node.childCount} 项` : node.entry.media.file_name)}
+        <span className="media-bin-card-preview-shell">{renderCardPreview(node)}</span>
+        <span className="media-bin-card-meta">
+          {node.kind === "entry" && node.entry.annotation.color_label && <LabelColor node={node} />}
+          {nameContent(node, "media-bin-card-name")}
+          <span className="media-bin-card-duration">
+            {node.kind === "folder" ? `${node.childCount} 项` : nodeDuration(node)}
           </span>
-        </div>
+        </span>
       </div>
     );
   }
 
+  const listScale = layout.mode === "list" ? layout.iconScale : 1;
   const style = {
-    "--asset-row-height": layout.mode === "list" ? `${layout.rowHeight}px` : undefined,
-    "--asset-card-width": layout.mode === "icons" ? `${layout.cardWidth}px` : undefined,
+    "--media-list-row-height": layout.mode === "list" ? `${layout.rowHeight}px` : undefined,
+    "--media-list-icon-size": `${16 * listScale}px`,
+    "--media-list-title-icon-gap": `${6 * (1 + (listScale - 1) / 1.5)}px`,
+    "--media-grid-column-count": grid.columns,
+    "--media-grid-card-render-width": `${grid.cardWidth}px`,
   } as CSSProperties;
   const marqueeStyle = marquee
     ? {
@@ -372,30 +526,37 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
 
   return (
     <div
-      ref={scrollRef}
-      className={`asset-library-items is-${layout.mode}${dropTargetKey === "content" ? " drop-target" : ""}`}
+      className={`asset-library-items-frame is-${layout.mode}${
+        locationLabel ? " has-location" : ""
+      }${dropTargetKey === "content" ? " is-drop-target" : ""}`}
       style={style}
-      role="listbox"
-      aria-multiselectable="true"
-      aria-label="素材"
-      onPointerDown={startMarquee}
-      onContextMenu={(event) => {
-        if (!(event.target as HTMLElement).closest("[data-asset-key]")) {
-          props.onContextMenu(event, null);
-        }
-      }}
-      onDragOver={(event) => props.onDragOverTarget(event, null)}
-      onDragLeave={props.onDragLeaveTarget}
-      onDrop={(event) => props.onDropOnTarget(event, null)}
     >
-      {nodes.length === 0 ? (
-        <div className="asset-library-empty">{emptyText}</div>
-      ) : layout.mode === "list" ? (
-        nodes.map(renderRow)
-      ) : (
-        <div className="asset-library-grid">{nodes.map(renderCard)}</div>
-      )}
-      {marqueeStyle && <div className="asset-library-marquee" style={marqueeStyle} />}
+      {layout.mode === "list" && renderHeader()}
+      <div
+        ref={scrollRef}
+        className="media-bin-table-scroll asset-library-items"
+        role="listbox"
+        aria-multiselectable="true"
+        aria-label="素材"
+        onPointerDown={startMarquee}
+        onContextMenu={(event) => {
+          if (!(event.target as HTMLElement).closest("[data-asset-key]")) {
+            props.onContextMenu(event, null);
+          }
+        }}
+        onDragOver={(event) => props.onDragOverTarget(event, null)}
+        onDragLeave={props.onDragLeaveTarget}
+        onDrop={(event) => props.onDropOnTarget(event, null)}
+      >
+        {nodes.length === 0 ? (
+          <div className="asset-library-empty">{emptyText}</div>
+        ) : layout.mode === "list" ? (
+          nodes.map(renderRow)
+        ) : (
+          <div className="media-bin-grid">{nodes.map(renderCard)}</div>
+        )}
+        {marqueeStyle && <div className="asset-library-marquee" style={marqueeStyle} />}
+      </div>
     </div>
   );
 }

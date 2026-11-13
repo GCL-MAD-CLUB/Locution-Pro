@@ -320,13 +320,12 @@ test("sorting keeps folders first and orders names naturally", () => {
 
 test("one size control switches between list rows and icons", () => {
   const smallest = library.assetLibraryViewLayout(0);
-  deepEqual(smallest, { mode: "list", rowHeight: 22, showThumbnail: false });
-  const largeList = library.assetLibraryViewLayout(library.assetLibraryIconThreshold - 1);
-  assert.equal(largeList.mode, "list");
-  assert.equal(largeList.mode === "list" && largeList.showThumbnail, true);
+  deepEqual(smallest, { mode: "list", rowHeight: 24, iconScale: 1 });
+  const largeList = library.assetLibraryViewLayout(library.assetLibraryIconThreshold / 2);
+  deepEqual(largeList, { mode: "list", rowHeight: 42, iconScale: 1.75 });
   deepEqual(library.assetLibraryViewLayout(library.assetLibraryIconThreshold), {
     mode: "icons",
-    cardWidth: 112,
+    cardWidth: 120,
   });
-  deepEqual(library.assetLibraryViewLayout(500), { mode: "icons", cardWidth: 360 });
+  deepEqual(library.assetLibraryViewLayout(500), { mode: "icons", cardWidth: 320 });
 });

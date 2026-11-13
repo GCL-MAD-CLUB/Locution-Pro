@@ -1,14 +1,14 @@
 import {
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
+  Captions,
+  ChevronLeft,
   ChevronRight,
+  CornerLeftUp,
+  Film,
   FolderPlus,
   PanelLeft,
   PanelRight,
   Search,
   Trash2,
-  X,
 } from "lucide-react";
 import {
   useCallback,
@@ -65,10 +65,12 @@ import {
   type AssetLibraryNode,
 } from "./assetLibraryNodes";
 import {
+  assetLibraryPaneWidths,
   readAssetLibraryClipboard,
   setAssetLibraryClipboard,
   useAssetLibraryClipboard,
   useAssetLibraryState,
+  type AssetLibraryPane,
 } from "./assetLibraryState";
 import {
   AssetLibraryContextMenu,
@@ -82,6 +84,7 @@ import { AssetLibraryNavigation } from "./views/AssetLibraryNavigation";
 
 const sizeStep = 5;
 const contentDropKey = "content";
+const minimumItemsWidth = 160;
 
 interface ContextMenuState extends AssetLibraryContextMenuState {
   /** For tree menus, the location that was right-clicked. */
@@ -143,6 +146,7 @@ export function AssetLibrary() {
   const commands = useMemo(() => assetLibraryCommands(assetLibraryUpdated), [assetLibraryUpdated]);
   const [columns, setColumns] = useState(1);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const [resizingPane, setResizingPane] = useState<AssetLibraryPane | null>(null);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
 
@@ -516,6 +520,8 @@ export function AssetLibrary() {
 
   function handleKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (isEditableTarget(event.target) || isPopupMenuEventTarget(event.target)) return;
+    // Focused buttons and the properties pane keep Enter, digits and arrows for themselves.
+    if ((event.target as HTMLElement).closest?.("button, .asset-library-details")) return;
     const ctrl = event.ctrlKey || event.metaKey;
     const key = event.key;
     if (event.altKey && !ctrl) {
@@ -656,9 +662,57 @@ export function AssetLibrary() {
     setDetailsVisible: view.setDetailsVisible,
   };
 
+  // --- Pane resizing -------------------------------------------------------------------
+
+  const { setSize, setPaneWidth } = view;
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => resizeCleanupRef.current?.(), []);
+
+  function startPaneResize(event: ReactPointerEvent<HTMLDivElement>, pane: AssetLibraryPane) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resizeCleanupRef.current?.();
+    const startX = event.clientX;
+    const startWidth = view.paneWidths[pane];
+    // The folder pane grows to the right, the properties pane to the left.
+    const direction = pane === "navigation" ? 1 : -1;
+    document.body.classList.add("is-resizing-asset-library-pane");
+    setResizingPane(pane);
+    const onMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
+      setPaneWidth(pane, startWidth + direction * (moveEvent.clientX - startX));
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", cleanup);
+      window.removeEventListener("pointercancel", cleanup);
+      document.body.classList.remove("is-resizing-asset-library-pane");
+      setResizingPane(null);
+      if (resizeCleanupRef.current === cleanup) resizeCleanupRef.current = null;
+    };
+    resizeCleanupRef.current = cleanup;
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", cleanup);
+    window.addEventListener("pointercancel", cleanup);
+  }
+
+  function resizeHandle(pane: AssetLibraryPane, label: string) {
+    return (
+      <div
+        className={`asset-library-resize-handle${resizingPane === pane ? " is-active" : ""}`}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={label}
+        title="拖动调整宽度，双击恢复默认"
+        onPointerDown={(event) => startPaneResize(event, pane)}
+        onDoubleClick={() => setPaneWidth(pane, assetLibraryPaneWidths[pane].initial)}
+      />
+    );
+  }
+
   // --- Rendering -----------------------------------------------------------------------
 
-  const { setSize } = view;
   const size = view.size;
   const zoom = useCallback((steps: number) => setSize(size + steps * sizeStep), [setSize, size]);
 
@@ -678,56 +732,40 @@ export function AssetLibrary() {
   const selectedEntryNodes = selectedNodes.flatMap((node) =>
     node.kind === "entry" ? [{ entry: node.entry, media: node.media }] : [],
   );
-  const entryCount = nodes.filter((node) => node.kind === "entry").length;
-  const folderCount = nodes.length - entryCount;
+  const RootIcon = location.root === "subtitles" ? Captions : Film;
+  // Side panes shrink before the item frame drops below its minimum width.
+  const gridTemplateColumns = [
+    view.navigationVisible ? `minmax(0, ${view.paneWidths.navigation}px) 4px` : "",
+    `minmax(${minimumItemsWidth}px, 1fr)`,
+    view.detailsVisible ? `4px minmax(0, ${view.paneWidths.details}px)` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <section
       ref={sectionRef}
-      className="asset-library"
+      className="media-bin-panel asset-library"
       tabIndex={-1}
       aria-label="素材库"
       onKeyDown={handleKeyDown}
     >
-      <header className="asset-library-header">
-        <div className="asset-library-nav-buttons">
-          <button
-            type="button"
-            title="后退 (Alt+←)"
-            disabled={view.backStack.length === 0}
-            onClick={view.goBack}
-          >
-            <ArrowLeft aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            title="前进 (Alt+→)"
-            disabled={view.forwardStack.length === 0}
-            onClick={view.goForward}
-          >
-            <ArrowRight aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            title="上一级 (Alt+↑)"
-            disabled={!location.folderId}
-            onClick={navigateUp}
-          >
-            <ArrowUp aria-hidden="true" />
-          </button>
-        </div>
+      <div className="asset-library-location-row">
+        <RootIcon aria-hidden="true" />
         <nav className="asset-library-breadcrumb" aria-label="当前位置">
           <button
             type="button"
+            className={path.length === 0 ? "is-current" : ""}
             onClick={() => view.navigate({ root: location.root, folderId: null })}
           >
             {rootLabel(location.root)}
           </button>
-          {path.map((folder) => (
+          {path.map((folder, index) => (
             <span key={folder.id} className="asset-library-breadcrumb-part">
               <ChevronRight aria-hidden="true" />
               <button
                 type="button"
+                className={index === path.length - 1 ? "is-current" : ""}
                 title={folder.name}
                 onClick={() => view.navigate({ root: folder.root, folderId: folder.id })}
               >
@@ -736,7 +774,39 @@ export function AssetLibrary() {
             </span>
           ))}
         </nav>
-        <label className="asset-library-search">
+        <div className="asset-library-history" aria-label="位置历史">
+          <button
+            type="button"
+            title="后退 (Alt+←)"
+            aria-label="后退"
+            disabled={view.backStack.length === 0}
+            onClick={view.goBack}
+          >
+            <ChevronLeft aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            title="上一级 (Alt+↑)"
+            aria-label="上一级"
+            disabled={!location.folderId}
+            onClick={navigateUp}
+          >
+            <CornerLeftUp aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            title="前进 (Alt+→)"
+            aria-label="前进"
+            disabled={view.forwardStack.length === 0}
+            onClick={view.goForward}
+          >
+            <ChevronRight aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      <div className="media-bin-search-row">
+        <label className="media-bin-search">
           <Search aria-hidden="true" />
           <input
             value={view.query}
@@ -747,58 +817,37 @@ export function AssetLibrary() {
               if (event.key === "Escape") view.setQuery("");
             }}
           />
-          {view.query && (
-            <button type="button" title="清除搜索" onClick={() => view.setQuery("")}>
-              <X aria-hidden="true" />
-            </button>
-          )}
         </label>
-        <div className="asset-library-pane-buttons">
-          <button
-            type="button"
-            className={view.navigationVisible ? "active" : ""}
-            title="导航窗格"
-            aria-pressed={view.navigationVisible}
-            onClick={() => view.setNavigationVisible(!view.navigationVisible)}
-          >
-            <PanelLeft aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={view.detailsVisible ? "active" : ""}
-            title="属性窗格"
-            aria-pressed={view.detailsVisible}
-            onClick={() => view.setDetailsVisible(!view.detailsVisible)}
-          >
-            <PanelRight aria-hidden="true" />
-          </button>
-        </div>
-      </header>
+        <span>
+          {selectedNodes.length} 项已选择，共 {nodes.length} 项
+        </span>
+      </div>
 
-      <div
-        className="asset-library-body"
-        data-navigation={view.navigationVisible || undefined}
-        data-details={view.detailsVisible || undefined}
-      >
+      <div className="asset-library-content" style={{ gridTemplateColumns }}>
         {view.navigationVisible && (
-          <AssetLibraryNavigation
-            library={library}
-            location={location}
-            collapsedKeys={view.collapsedKeys}
-            dropTargetKey={dropTargetKey}
-            onNavigate={view.navigate}
-            onToggleCollapsed={view.toggleCollapsed}
-            onDragOverTarget={(event, target) =>
-              handleDragOver(event, target, assetLocationKey(target))
-            }
-            onDragLeaveTarget={() => setDropTargetKey(null)}
-            onDropOnTarget={handleDrop}
-            onContextMenu={openTreeMenu}
-          />
+          <>
+            <AssetLibraryNavigation
+              library={library}
+              location={location}
+              collapsedKeys={view.collapsedKeys}
+              dropTargetKey={dropTargetKey}
+              onNavigate={view.navigate}
+              onToggleCollapsed={view.toggleCollapsed}
+              onCreateFolder={() => createFolder()}
+              onDragOverTarget={(event, target) =>
+                handleDragOver(event, target, assetLocationKey(target))
+              }
+              onDragLeaveTarget={() => setDropTargetKey(null)}
+              onDropOnTarget={handleDrop}
+              onContextMenu={openTreeMenu}
+            />
+            {resizeHandle("navigation", "调整文件夹窗格宽度")}
+          </>
         )}
         <AssetLibraryItems
           nodes={nodes}
           layout={layout}
+          sort={view.sort}
           selectedKeys={view.selectedKeys}
           focusKey={view.focusKey}
           renamingKey={view.renamingKey}
@@ -811,6 +860,7 @@ export function AssetLibrary() {
               : `此文件夹为空。可在${rootLabel(location.root)}面板中右键选择“添加到素材库”。`
           }
           locationLabel={locationLabel}
+          onSort={view.setSort}
           onNodePointerDown={handleNodePointerDown}
           onNodeClick={handleNodeClick}
           onOpenNode={openNode}
@@ -834,19 +884,44 @@ export function AssetLibrary() {
           onZoom={zoom}
         />
         {view.detailsVisible && (
-          <AssetLibraryDetails
-            folder={selectedFolderNode?.kind === "folder" ? selectedFolderNode : null}
-            entries={selectedEntryNodes}
-            thumbnailsEnabled={panelActive}
-            onUpdateEntries={commands.updateEntries}
-            onRenameFolder={commands.renameFolder}
-            onPreview={previewEntry}
-          />
+          <>
+            {resizeHandle("details", "调整属性窗格宽度")}
+            <AssetLibraryDetails
+              folder={selectedFolderNode?.kind === "folder" ? selectedFolderNode : null}
+              entries={selectedEntryNodes}
+              thumbnailsEnabled={panelActive}
+              collapsedSections={view.collapsedSections}
+              onToggleSection={view.toggleSection}
+              onUpdateEntries={commands.updateEntries}
+              onRenameFolder={commands.renameFolder}
+              onPreview={previewEntry}
+            />
+          </>
         )}
       </div>
 
-      <footer className="asset-library-footer">
-        <div className="asset-library-view-tools">
+      <footer className="media-bin-footer">
+        <div className="media-bin-view-tools">
+          <button
+            type="button"
+            className={view.navigationVisible ? "active" : ""}
+            title="文件夹窗格"
+            aria-label="文件夹窗格"
+            aria-pressed={view.navigationVisible}
+            onClick={() => view.setNavigationVisible(!view.navigationVisible)}
+          >
+            <PanelLeft aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={view.detailsVisible ? "active" : ""}
+            title="属性窗格"
+            aria-label="属性窗格"
+            aria-pressed={view.detailsVisible}
+            onClick={() => view.setDetailsVisible(!view.detailsVisible)}
+          >
+            <PanelRight aria-hidden="true" />
+          </button>
           <input
             type="range"
             min="0"
@@ -857,18 +932,19 @@ export function AssetLibrary() {
             onChange={(event) => view.setSize(Number(event.currentTarget.value))}
           />
         </div>
-        <span className="asset-library-status">
-          {folderCount > 0 && `${folderCount} 个文件夹，`}
-          {entryCount} 个素材
-          {selectedNodes.length > 0 && ` · 已选择 ${selectedNodes.length} 项`}
-        </span>
-        <div className="asset-library-action-tools">
-          <button type="button" title="新建文件夹 (Ctrl+Shift+N)" onClick={() => createFolder()}>
+        <div className="media-bin-action-tools">
+          <button
+            type="button"
+            title="新建文件夹 (Ctrl+Shift+N)"
+            aria-label="新建文件夹"
+            onClick={() => createFolder()}
+          >
             <FolderPlus aria-hidden="true" />
           </button>
           <button
             type="button"
             title="删除 (Delete)"
+            aria-label="删除"
             disabled={selectedNodes.length === 0}
             onClick={() => removeNodes(selection)}
           >

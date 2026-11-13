@@ -5,7 +5,10 @@ import worker, {
   handleRequest as handleRequestJs,
   readLatestRelease as readLatestReleaseJs,
 } from "../../../site/_worker.js";
-import { initReleaseDownload as initReleaseDownloadJs } from "../../../site/src/download.js";
+import {
+  detectPlatform as detectPlatformJs,
+  initReleaseDownload as initReleaseDownloadJs,
+} from "../../../site/src/download.js";
 import {
   CDN_BASE,
   GITHUB_BASE,
@@ -468,4 +471,28 @@ test("website version label follows the manifest and preserves 0.4.1 when offlin
   assert.equal(label.textContent, "V2.1.1 / WINDOWS");
   await initReleaseDownload(document, async () => Response.json(macosRelease()));
   assert.equal(label.textContent, "V2.1.1 / WINDOWS · MACOS");
+});
+
+test("the default download platform follows the visitor's system", () => {
+  const detectPlatform = detectPlatformJs as (navigator?: {
+    userAgent?: string;
+    userAgentData?: { platform: string };
+  }) => string;
+  const chrome = "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+  assert.equal(
+    detectPlatform({ userAgent: `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ${chrome}` }),
+    "macos",
+  );
+  assert.equal(detectPlatform({ userAgentData: { platform: "macOS" }, userAgent: "" }), "macos");
+  for (const navigator of [
+    { userAgent: `Mozilla/5.0 (Windows NT 10.0; Win64; x64) ${chrome}` },
+    { userAgent: `Mozilla/5.0 (X11; Linux x86_64) ${chrome}` },
+    { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Mobile/15E148" },
+    { userAgent: "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) Mobile/15E148" },
+    { userAgentData: { platform: "Windows" }, userAgent: "Macintosh" },
+    {},
+    undefined,
+  ]) {
+    assert.equal(detectPlatform(navigator), "windows");
+  }
 });

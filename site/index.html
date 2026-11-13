@@ -280,32 +280,57 @@
               面向视频创作者的本地工作空间。<br />管理素材，检索画面，整理镜头，导出片段。
             </p>
             <div class="hero-actions">
-              <a class="button button-primary" href="/api/download"
-                ><svg
-                  viewBox="0 0 20 20"
-                  width="18"
-                  height="18"
-                  fill="currentColor"
-                  aria-hidden="true"
+              <div class="download-picker" data-download-picker>
+                <a class="button button-primary" href="/api/download" data-download-link
+                  ><svg
+                    data-platform-icon="windows"
+                    viewBox="0 0 20 20"
+                    width="18"
+                    height="18"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M1 3.5 8.5 2.4v7H1zm8.5-1.3L19 1v8.4H9.5zM1 10.5h7.5v7L1 16.5zm8.5 0H19V19l-9.5-1.3z"
+                    />
+                  </svg>
+                  <svg
+                    data-platform-icon="macos"
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="currentColor"
+                    aria-hidden="true"
+                    hidden
+                  >
+                    <path
+                      d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"
+                    /></svg
+                  ><span data-download-label>Windows 版</span></a
                 >
-                  <path
-                    d="M1 3.5 8.5 2.4v7H1zm8.5-1.3L19 1v8.4H9.5zM1 10.5h7.5v7L1 16.5zm8.5 0H19V19l-9.5-1.3z"
-                  /></svg
-                >Windows 版</a
-              >
-              <a class="button button-primary" href="/api/download?platform=macos"
-                ><svg
-                  viewBox="0 0 24 24"
-                  width="18"
-                  height="18"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"
-                  /></svg
-                >macOS 版</a
-              >
+                <details class="download-menu">
+                  <summary class="button button-primary" aria-label="选择系统">
+                    <svg
+                      viewBox="0 0 12 12"
+                      width="12"
+                      height="12"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                      aria-hidden="true"
+                    >
+                      <path d="m2.5 4.5 3.5 3.5 3.5-3.5" />
+                    </svg>
+                  </summary>
+                  <div class="download-options">
+                    <a href="/api/download" data-platform="windows" aria-current="true"
+                      >Windows 版</a
+                    >
+                    <a href="/api/download?platform=macos" data-platform="macos">macOS 版</a>
+                  </div>
+                </details>
+              </div>
+
               <a
                 class="button button-secondary"
                 href="https://github.com/GCL-MAD-CLUB/Locution-Pro"
@@ -876,8 +901,31 @@
             Your next story<br />is already<br />in your footage.
           </h2>
           <div class="download-actions">
-            <a class="button button-primary" href="/api/download">下载 Windows 版</a>
-            <a class="button button-primary" href="/api/download?platform=macos">下载 macOS 版</a>
+            <div class="download-picker" data-download-picker>
+              <a class="button button-primary" href="/api/download" data-download-link
+                ><span>下载 <span data-download-label>Windows 版</span></span></a
+              >
+              <details class="download-menu">
+                <summary class="button button-primary" aria-label="选择系统">
+                  <svg
+                    viewBox="0 0 12 12"
+                    width="12"
+                    height="12"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.4"
+                    aria-hidden="true"
+                  >
+                    <path d="m2.5 4.5 3.5 3.5 3.5-3.5" />
+                  </svg>
+                </summary>
+                <div class="download-options">
+                  <a href="/api/download" data-platform="windows" aria-current="true">Windows 版</a>
+                  <a href="/api/download?platform=macos" data-platform="macos">macOS 版</a>
+                </div>
+              </details>
+            </div>
+
             <a
               class="button button-secondary"
               href="https://github.com/GCL-MAD-CLUB/Locution-Pro"

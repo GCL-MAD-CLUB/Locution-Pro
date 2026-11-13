@@ -177,6 +177,74 @@ pub(crate) struct ProjectStoryboardState {
     pub(crate) shot_annotations: HashMap<String, ProjectStoryboardAnnotation>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ProjectAssetLibraryRoot {
+    Subtitles,
+    Storyboards,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ProjectAssetLibraryColorLabel {
+    Red,
+    Yellow,
+    Green,
+    Blue,
+    Purple,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ProjectAssetLibraryFolder {
+    pub(crate) id: String,
+    pub(crate) root: ProjectAssetLibraryRoot,
+    pub(crate) parent_id: Option<String>,
+    pub(crate) name: String,
+    pub(crate) created_at: i64,
+}
+
+/// Media identity captured with an entry; entries never refer back to cues or shots.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ProjectAssetLibraryMedia {
+    pub(crate) video_id: String,
+    pub(crate) path: String,
+    pub(crate) file_name: String,
+    pub(crate) fingerprint: String,
+    pub(crate) frame_rate: f64,
+    pub(crate) duration_us: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ProjectAssetLibraryAnnotation {
+    pub(crate) rating: u8,
+    pub(crate) retained: bool,
+    pub(crate) excluded: bool,
+    pub(crate) color_label: Option<ProjectAssetLibraryColorLabel>,
+    pub(crate) custom_label: Option<String>,
+    pub(crate) title: Option<String>,
+    pub(crate) keywords: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ProjectAssetLibraryEntry {
+    pub(crate) id: String,
+    pub(crate) root: ProjectAssetLibraryRoot,
+    pub(crate) folder_id: Option<String>,
+    pub(crate) name: String,
+    pub(crate) created_at: i64,
+    pub(crate) media: ProjectAssetLibraryMedia,
+    pub(crate) start_us: i64,
+    pub(crate) end_us: i64,
+    pub(crate) text: String,
+    pub(crate) annotation: ProjectAssetLibraryAnnotation,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct ProjectAssetLibraryState {
+    pub(crate) folders: Vec<ProjectAssetLibraryFolder>,
+    pub(crate) entries: Vec<ProjectAssetLibraryEntry>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ProjectWorkspace {
     pub(crate) projects: Vec<MediaDocument>,
@@ -186,6 +254,8 @@ pub(crate) struct ProjectWorkspace {
     pub(crate) subtitles: HashMap<String, ProjectSubtitleState>,
     #[serde(default)]
     pub(crate) storyboards: HashMap<String, ProjectStoryboardState>,
+    #[serde(default)]
+    pub(crate) asset_library: ProjectAssetLibraryState,
 }
 
 #[derive(Debug, Clone, Serialize)]

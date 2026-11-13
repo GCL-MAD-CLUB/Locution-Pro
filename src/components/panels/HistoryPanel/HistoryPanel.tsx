@@ -12,6 +12,7 @@ import {
   FileOutput,
   FileVideo,
   FolderOpen,
+  Library,
   Link2,
   ListRestart,
   Pencil,
@@ -68,6 +69,8 @@ function historyOperationIcon(category: ProjectHistoryCategory) {
       return <Captions />;
     case "storyboard":
       return <Clapperboard />;
+    case "library":
+      return <Library />;
     case "proxy":
       return <FileVideo />;
     case "export":

@@ -14,6 +14,7 @@ import {
   type ProjectHistoryState,
 } from "../../../src/systems/ProjectSystem/ProjectHistory.ts";
 import type {
+  AssetLibraryEntry,
   MediaBinFolder,
   MediaBinItem,
   MediaDocument,
@@ -32,6 +33,7 @@ function state(): ProjectFileState {
     useProxy: false,
     subtitles: {},
     storyboards: {},
+    assetLibrary: { folders: [], entries: [] },
   };
 }
 function edit(before: ProjectFileState, after: ProjectFileState, group?: string) {
@@ -68,6 +70,35 @@ test("project events round-trip media order, nested folders, annotations and edi
   assert.deepEqual(applyProjectFileEvent(before, change.event), after);
   assert.deepEqual(applyProjectFileEvent(after, change.inverseEvent), before);
   assert.equal(edit(before, before), null);
+});
+
+test("asset-library edits undo, redo and merge as one library operation", () => {
+  const before = state();
+  const entry = { id: "asset:1", name: "clip" } as AssetLibraryEntry;
+  const added = { ...before, assetLibrary: { folders: [], entries: [entry] } };
+  const trimmed = {
+    ...before,
+    assetLibrary: { folders: [], entries: [{ ...entry, end_us: 40_000 }] },
+  };
+  const change = createProjectHistoryEntry("添加到素材库", "library", before, added)!;
+  assert.equal(change.category, "library");
+  assert.deepEqual(
+    change.event.operations.map((operation) => operation.type),
+    ["asset-library.set"],
+  );
+  assert.deepEqual(applyProjectFileEvent(before, change.event), added);
+  assert.deepEqual(applyProjectFileEvent(added, change.inverseEvent), before);
+
+  let history = appendProjectHistoryEntry(
+    createProjectHistory(true),
+    createProjectHistoryEntry("调整切点", "library", before, added, "trim")!,
+  );
+  history = appendProjectHistoryEntry(
+    history,
+    createProjectHistoryEntry("调整切点", "library", added, trimmed, "trim")!,
+  );
+  assert.equal(history.entries.length, 1);
+  assert.deepEqual(applyProjectFileEvent(trimmed, history.entries[0].inverseEvent), before);
 });
 
 test("background save marks the captured cursor and leaves subsequent edits dirty", () => {

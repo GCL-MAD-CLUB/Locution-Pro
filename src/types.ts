@@ -247,12 +247,64 @@ export interface ProjectExportState {
   existingFileMode: "ask" | "uniqueName" | "overwrite" | "skip";
 }
 
+/** The two fixed top-level folders of the asset library. */
+export type AssetLibraryRoot = "subtitles" | "storyboards";
+
+export type AssetLibraryColorLabel = "red" | "yellow" | "green" | "blue" | "purple";
+
+export interface AssetLibraryFolder {
+  id: string;
+  root: AssetLibraryRoot;
+  parent_id: string | null;
+  name: string;
+  created_at: number;
+}
+
+/** Media identity captured when an entry was added; it never refers back to a cue or shot. */
+export interface AssetLibraryMedia {
+  video_id: string;
+  path: string;
+  file_name: string;
+  fingerprint: string;
+  frame_rate: number;
+  duration_us: number;
+}
+
+export interface AssetLibraryAnnotation {
+  rating: number;
+  retained: boolean;
+  excluded: boolean;
+  color_label: AssetLibraryColorLabel | null;
+  custom_label: string | null;
+  title: string | null;
+  keywords: string[];
+}
+
+export interface AssetLibraryEntry {
+  id: string;
+  root: AssetLibraryRoot;
+  folder_id: string | null;
+  name: string;
+  created_at: number;
+  media: AssetLibraryMedia;
+  start_us: number;
+  end_us: number;
+  text: string;
+  annotation: AssetLibraryAnnotation;
+}
+
+export interface ProjectAssetLibraryState {
+  folders: AssetLibraryFolder[];
+  entries: AssetLibraryEntry[];
+}
+
 export interface ProjectWorkspace {
   projects: MediaDocument[];
   media_bin: ProjectMediaBinState;
   editor: ProjectEditorState;
   subtitles?: Record<string, SubtitleState>;
   storyboards?: Record<string, StoryboardState>;
+  asset_library?: ProjectAssetLibraryState;
 }
 
 export interface DemuxedAudioTrack {

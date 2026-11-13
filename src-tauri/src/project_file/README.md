@@ -18,23 +18,23 @@
 
 ## 内容模型
 
-当前内容模型为 V4，`models/mod.rs` 的 Current 指向 v4。V3 保存分镜和字幕标注，V4 增加稳定 project_id。V1 经完整相邻迁移链升级，正常保存统一写入当前模型；更高内容版本应明确拒绝，不按应用 SemVer 猜测格式。
+当前内容模型为 V5，`models/mod.rs` 的 Current 指向 v5。V3 保存分镜和字幕标注，V4 增加稳定 project_id，V5 增加素材库 `asset_library`。V1 经完整相邻迁移链升级，正常保存统一写入当前模型；更高内容版本应明确拒绝，不按应用 SemVer 猜测格式。
 
 已发布 vN DTO 与迁移冻结。新增模型必须提供完整 DTO、ProjectModel 和前一版的 UpgradeFrom，再更新 Current 与升级链；不得原地修改旧模型。
 
-媒体组织、轨道关系、原始字幕与标注、镜头、删除恢复信息、堆叠和关键字属于项目。自动合并字幕只是共享读取视图，不能将显示合并悄悄写回源 cue。临时勾选、搜索、视图与导出范围不加入项目模型。
+媒体组织、轨道关系、原始字幕与标注、镜头、删除恢复信息、堆叠、关键字和素材库属于项目。素材库条目是加入时的快照：媒体身份、入出点、文本和标注（关键字按名称）都复制进条目，之后与字幕、分镜不再关联。自动合并字幕只是共享读取视图，不能将显示合并悄悄写回源 cue。临时勾选、搜索、视图与导出范围不加入项目模型。
 
 ## 磁盘 JSON 字段
 
-内容载荷是 JSON。键名由各类型上的 serde 属性决定，已有键不因 Rust 类型改名而批量重命名。`from_runtime` 与 `into_runtime` 经 `serde_json::Value` 互转，所以运行时 `ProjectWorkspace`（及其中的 `MediaDocument`）与当前 V4 DTO 必须写出同一套键。
+内容载荷是 JSON。键名由各类型上的 serde 属性决定，已有键不因 Rust 类型改名而批量重命名。`from_runtime` 与 `into_runtime` 经 `serde_json::Value` 互转，所以运行时 `ProjectWorkspace`（及其中的 `MediaDocument`）与当前 V5 DTO 必须写出同一套键。
 
-没有 `rename_all` 的结构体使用 Rust 字段名。模型和运行时工作区里这些名字是 snake_case：根上的 `project_id`、`saved_at`、`app_version`，工作区的 `projects`、`media_bin`、`editor`、`subtitles`、`storyboards`，以及媒体、轨道和镜头时间，例如 `file_name`、`avg_frame_rate`、`start_us`。工作区列表的键保持 `projects`。运行时元素类型已是 `MediaDocument`，磁盘 DTO 仍把这条媒体记录放在该列表中，键不改成类型名。
+没有 `rename_all` 的结构体使用 Rust 字段名。模型和运行时工作区里这些名字是 snake_case：根上的 `project_id`、`saved_at`、`app_version`，工作区的 `projects`、`media_bin`、`editor`、`subtitles`、`storyboards`、`asset_library`，以及媒体、轨道和镜头时间，例如 `file_name`、`avg_frame_rate`、`start_us`。工作区列表的键保持 `projects`。运行时元素类型已是 `MediaDocument`，磁盘 DTO 仍把这条媒体记录放在该列表中，键不改成类型名。
 
-字幕标注、`SubtitleState`，以及分镜标注、关键字、堆叠、使用计数和 `StoryboardState` 使用 `rename_all = "camelCase"`。因此键是 `cueAnnotations`、`colorLabel`、`customLabel`、`shotAnnotations`、`keywordNodes`、`shotStacks`、`recentKeywordIds`、`keywordUsageCounters`、`deletedShots`、`keywordIds`、`parentId`、`shotIds`。镜头记录本身仍是 snake_case。枚举使用 `rename_all = "snake_case"`，例如 `embedded`、`external`、`imported`、`decomposed`，颜色为 `red`、`yellow`、`green`、`blue`、`purple`。
+字幕标注、`SubtitleState`，以及分镜标注、关键字、堆叠、使用计数和 `StoryboardState` 使用 `rename_all = "camelCase"`。因此键是 `cueAnnotations`、`colorLabel`、`customLabel`、`shotAnnotations`、`keywordNodes`、`shotStacks`、`recentKeywordIds`、`keywordUsageCounters`、`deletedShots`、`keywordIds`、`parentId`、`shotIds`。镜头记录本身仍是 snake_case。素材库同样是 snake_case：`folders`、`entries`、`parent_id`、`folder_id`、`created_at`、`media`（`video_id`、`fingerprint`、`frame_rate`、`duration_us`）、`annotation`（`color_label`、`custom_label`、`keywords`），根文件夹 `root` 为 `subtitles` 或 `storyboards`。枚举使用 `rename_all = "snake_case"`，例如 `embedded`、`external`、`imported`、`decomposed`，颜色为 `red`、`yellow`、`green`、`blue`、`purple`。
 
 导入命令的 `ImportResult` 把同一份媒体记录放在字段 `project` 下，没有 serde rename。该键属于命令载荷，不是 `.lcp` 正文；类型改为 `MediaDocument` 后键仍然是 `project`。
 
-当前和历史内容结构大多带 `deny_unknown_fields`，未声明的键解码失败。没有 `default` 的字段必须出现；`Option` 写成具体值或 `null`。`#[serde(default)]` 让旧文件缺键时取 `Default`（空串、`None`、空集合）。`project_id`、`tape_name`、工作区 `subtitles`、分镜 `custom_label` 与 `keyword_usage_counters` 按此读取。V4 的 `storyboards` 没有 `default`，迁移后的模型总是带这个键；运行时 `ProjectWorkspace` 的 `subtitles` 与 `storyboards` 标了 `default`，缺键时解码为空表。`synonyms` 与 `deleted_shots` 同时使用 `default` 和 `skip_serializing_if = "Vec::is_empty"`，缺键读成空数组，空数组不写出；在 camelCase 类型上对应键是 `synonyms` 与 `deletedShots`。
+当前和历史内容结构大多带 `deny_unknown_fields`，未声明的键解码失败。没有 `default` 的字段必须出现；`Option` 写成具体值或 `null`。`#[serde(default)]` 让旧文件缺键时取 `Default`（空串、`None`、空集合）。`project_id`、`tape_name`、工作区 `subtitles`、`asset_library`、分镜 `custom_label` 与 `keyword_usage_counters` 按此读取。V4 及之后的 `storyboards` 没有 `default`，迁移后的模型总是带这个键；运行时 `ProjectWorkspace` 的 `subtitles` 与 `storyboards` 标了 `default`，缺键时解码为空表。`synonyms` 与 `deleted_shots` 同时使用 `default` 和 `skip_serializing_if = "Vec::is_empty"`，缺键读成空数组，空数组不写出；在 camelCase 类型上对应键是 `synonyms` 与 `deletedShots`。
 
 只为打开旧文件、保存时不再写回的键使用 `default`、`skip_serializing`，并用 `rename` 对准旧名：`subtitle_selections`、`export_state`。
 
@@ -67,7 +67,7 @@ V2 及以上使用 XChaCha20-Poly1305 信封和 HKDF-SHA-256 派生，每次保�
 
 ## 本机配置与兼容
 
-ProjectStatesCache 与 backend/workspace 管理按项目和面板保存的本机状态，不进入 V4。单面板写入不能覆盖其他面板或导出设置。
+ProjectStatesCache 与 backend/workspace 管理按项目和面板保存的本机状态，不进入项目内容模型。单面板写入不能覆盖其他面板或导出设置。
 
 来源工作区、锁定、播放位置和来源导航在本机恢复；临时搜索、筛选、选择和导出范围不随项目交付。项目自动保存也不应成为这些本机配置的备份。
 

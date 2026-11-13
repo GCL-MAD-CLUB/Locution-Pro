@@ -2,6 +2,7 @@ import type {
   MediaBinFolder,
   MediaBinItem,
   MediaDocument,
+  ProjectAssetLibraryState,
   StoryboardState,
   SubtitleState,
 } from "../../types";
@@ -28,6 +29,7 @@ export type ProjectHistoryCategory =
   | "demux"
   | "subtitle"
   | "storyboard"
+  | "library"
   | "proxy"
   | "export"
   | "default";
@@ -42,6 +44,7 @@ export interface ProjectFileState {
   useProxy: boolean;
   subtitles: Record<string, SubtitleState>;
   storyboards: Record<string, StoryboardState>;
+  assetLibrary: ProjectAssetLibraryState;
 }
 
 interface ProjectSetOperation {
@@ -91,6 +94,11 @@ interface SubtitleSetOperation {
   value: SubtitleState | null;
 }
 
+interface AssetLibrarySetOperation {
+  type: "asset-library.set";
+  value: ProjectAssetLibraryState;
+}
+
 export type ProjectFileOperation =
   | ProjectSetOperation
   | MediaFolderSetOperation
@@ -99,7 +107,8 @@ export type ProjectFileOperation =
   | StringSetSetOperation
   | BooleanSetOperation
   | SubtitleSetOperation
-  | StoryboardSetOperation;
+  | StoryboardSetOperation
+  | AssetLibrarySetOperation;
 
 export interface ProjectFileEvent {
   id: string;
@@ -367,6 +376,10 @@ export function createProjectHistoryEntry(
       value: previousStoryboard,
     });
   }
+  if (before.assetLibrary !== after.assetLibrary) {
+    eventOperations.push({ type: "asset-library.set", value: after.assetLibrary });
+    inverseOperations.push({ type: "asset-library.set", value: before.assetLibrary });
+  }
   if (eventOperations.length === 0 && !panelSourceSelection) {
     return null;
   }
@@ -469,6 +482,9 @@ export function applyProjectFileEvent(
         } else {
           delete next.storyboards[operation.videoContext];
         }
+        break;
+      case "asset-library.set":
+        next.assetLibrary = operation.value;
         break;
     }
   }

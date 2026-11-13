@@ -4,6 +4,10 @@
   type DockLayoutNode,
   type PanelManagerInitialState,
 } from "../components/common/DockLayout";
+import {
+  assetLibraryPanelDefinition,
+  assetLibraryPanelType,
+} from "../components/panels/AssetLibrary";
 import { historyPanelDefinition } from "../components/panels/HistoryPanel";
 import { mediaBinPanelDefinition, mediaBinPanelType } from "../components/panels/MediaBin";
 import { sourcePanelDefinition, sourcePanelType } from "../components/panels/SourceMonitor";
@@ -18,6 +22,7 @@ export const appPanelRegistry = new PanelRegistry([
   mediaBinPanelDefinition,
   subtitlePanelDefinition,
   storyboardPanelDefinition,
+  assetLibraryPanelDefinition,
   historyPanelDefinition,
 ]);
 
@@ -27,6 +32,7 @@ export const initialAppPanelState: PanelManagerInitialState = {
     { id: "media", type: mediaBinPanelType, params: { rootFolderId: null } },
     { id: "subtitles", type: subtitlePanelType, params: {} },
     { id: "storyboard", type: storyboardPanelType, params: {} },
+    { id: "asset-library", type: assetLibraryPanelType, params: {} },
   ],
   layout: {
     root: {
@@ -46,7 +52,7 @@ export const initialAppPanelState: PanelManagerInitialState = {
     },
     areas: {
       leftTop: { tabs: ["source"], activePanelId: "source" },
-      leftBottom: { tabs: ["media"], activePanelId: "media" },
+      leftBottom: { tabs: ["media", "asset-library"], activePanelId: "media" },
       middle: { tabs: ["subtitles", "storyboard"], activePanelId: "subtitles" },
     },
   },

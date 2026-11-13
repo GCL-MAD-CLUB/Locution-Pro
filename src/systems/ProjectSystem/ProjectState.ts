@@ -6,6 +6,7 @@ import {
   updateScopedStoryboard,
   updateScopedSubtitles,
 } from "../../core/editor/multiSource";
+import { emptyAssetLibrary, normalizedAssetLibrary } from "../../core/editor/assetLibrary";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/shallow";
 import { createStore } from "zustand/vanilla";
@@ -31,6 +32,7 @@ import type {
   MediaBinItem,
   MediaStream,
   MediaDocument,
+  ProjectAssetLibraryState,
   ProjectExportState,
   ProjectWorkspace,
   StoryboardState,
@@ -140,6 +142,11 @@ interface ProjectCommands {
     recipe: (storyboard: StoryboardState) => StoryboardState,
     historyGroupId?: string,
   ) => void;
+  assetLibraryUpdated: (
+    historyLabel: string,
+    recipe: (library: ProjectAssetLibraryState) => ProjectAssetLibraryState,
+    historyGroupId?: string,
+  ) => void;
   projectHistoryJumped: (cursor: number) => boolean;
   projectHistoryFutureDiscarded: () => void;
   projectRestored: () => boolean;
@@ -166,6 +173,7 @@ interface ProjectSystemState {
   mediaBinReadOnly: boolean;
   subtitles: Record<string, SubtitleState>;
   storyboards: Record<string, StoryboardState>;
+  assetLibrary: ProjectAssetLibraryState;
   exportState: ProjectExportState | null;
   projectHistory: ProjectHistoryState;
   /** In-memory file state from the most recent successful project save. */
@@ -603,6 +611,7 @@ function initialProjectState(project: MediaDocument | null) {
       projectId: null,
       subtitles: {},
       storyboards: {},
+      assetLibrary: emptyAssetLibrary(),
       exportState: null,
     };
   }
@@ -624,6 +633,7 @@ function initialProjectState(project: MediaDocument | null) {
     projectId: null,
     subtitles: {},
     storyboards: {},
+    assetLibrary: emptyAssetLibrary(),
     exportState: null,
   };
 }
@@ -639,6 +649,7 @@ function emptyProjectFileState(): ProjectFileState {
     useProxy: false,
     subtitles: {},
     storyboards: {},
+    assetLibrary: emptyAssetLibrary(),
   };
 }
 
@@ -744,6 +755,7 @@ function openedProjectState(workspace: ProjectWorkspace, projectId: string) {
     storyboards: Object.keys(workspace.storyboards ?? {}).length
       ? normalizedStoryboardKeywords(workspace.storyboards ?? {})
       : {},
+    assetLibrary: normalizedAssetLibrary(workspace.asset_library),
     exportState: readExportState(projectId),
   };
 }
@@ -759,6 +771,7 @@ function projectFileStateFromStore(state: ProjectSystemState): ProjectFileState 
     useProxy: state.useProxy,
     subtitles: state.subtitles,
     storyboards: state.storyboards,
+    assetLibrary: state.assetLibrary,
   };
 }
 
@@ -2146,6 +2159,17 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
         },
         historyGroupId,
       ),
+    assetLibraryUpdated: (historyLabel, recipe, historyGroupId) =>
+      commitProjectEvent(
+        set,
+        historyLabel,
+        "library",
+        (state) => {
+          const assetLibrary = recipe(state.assetLibrary);
+          return assetLibrary === state.assetLibrary ? state : { assetLibrary };
+        },
+        historyGroupId,
+      ),
     projectHistoryJumped: (targetCursor) => {
       let changed = false;
       set((state) => {
@@ -2342,6 +2366,7 @@ export function getProjectWorkspaceSnapshot(): ProjectWorkspace {
     },
     subtitles: state.subtitles,
     storyboards: state.storyboards,
+    asset_library: state.assetLibrary,
   };
 }
 

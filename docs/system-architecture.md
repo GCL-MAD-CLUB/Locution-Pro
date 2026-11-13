@@ -30,6 +30,8 @@
 
 字幕自动整理集中在 `core/editor/subtitlePreprocessing.ts`。同轨、纯文本完全相同且相接或重叠的连续 cue 可合并为缓存读取视图，原始 cue 不变。所有显示、计数、搜索、预览和导出使用该视图；删除等显式编辑通过来源 cue 映射作用于原数据。位图轨不参与文本预处理。
 
+素材库是项目内容 `asset_library`，纯规则位于 `core/editor/assetLibrary.ts`，面板只通过 `assetLibraryUpdated` 提交整库替换，形成一条 `library` 历史。条目在加入时复制媒体身份、入出点、文本与标注（关键字按名称），此后不读取也不写回字幕、分镜状态；字幕与分镜面板只负责构造快照。播放时按视频 id、再按指纹解析项目媒体，解析不到即离线，条目保留。
+
 ## 面板来源与播放
 
 `application/media/panelMediaSources.ts` 组织来源，`panelMediaPersistence.ts` 与 `projectPanelPersistence.ts` 负责本机恢复和顺序写入。

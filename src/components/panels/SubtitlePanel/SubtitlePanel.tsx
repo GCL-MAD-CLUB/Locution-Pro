@@ -65,6 +65,13 @@ import {
 } from "../../../systems/ExportSystem";
 import { normalizeFrameRate, timeUsToFrame } from "../../../core/editor/timeline";
 import {
+  assetLibraryMediaFromSource,
+  createAssetLibraryId,
+  subtitleAssetName,
+  withAssetLibraryCaptures,
+  type AssetLibraryCapture,
+} from "../../../core/editor/assetLibrary";
+import {
   timelineThumbnails,
   timelineThumbnailVisibleRange,
   timelineThumbnailResolutionForDisplay,
@@ -830,9 +837,10 @@ export function SubtitlePanel() {
     exportState,
     messagePublished,
     subtitleCuesDeleted,
+    assetLibraryUpdated,
   } = useProjectPort(
     ["projects", "projectId", "mediaItems", "mediaFolders", "detachedVideoIds", "exportState"],
-    ["messagePublished", "subtitleCuesDeleted"],
+    ["messagePublished", "subtitleCuesDeleted", "assetLibraryUpdated"],
   );
   const {
     query,
@@ -1320,6 +1328,43 @@ export function SubtitlePanel() {
   });
 
   const contextMenuCueIds = Array.from(selectedCueIds);
+
+  // Library entries are snapshots: range, text and annotations are copied, never linked.
+  function addCuesToAssetLibrary(cueIds: readonly string[]) {
+    const cuesById = new Map(allCues.map((cue) => [cue.id, cue]));
+    const captures = cueIds.flatMap((cueId): AssetLibraryCapture[] => {
+      const cue = cuesById.get(cueId);
+      const source = cue ? sourceForCue(cue) : undefined;
+      if (!cue || !source) return [];
+      const annotation = cueAnnotations[cueId];
+      return [
+        {
+          media: assetLibraryMediaFromSource(
+            source.videoId,
+            source.project.asset,
+            source.frameRate,
+          ),
+          startUs: cue.start_us,
+          endUs: cue.end_us,
+          name: subtitleAssetName(cue.plain_text, source.name, cue.sequence),
+          text: cue.plain_text,
+          annotation: {
+            rating: annotation?.rating ?? 0,
+            retained: annotation?.retained ?? false,
+            excluded: annotation?.excluded ?? false,
+            color_label: annotation?.colorLabel ?? null,
+            custom_label: annotation?.customLabel ?? null,
+          },
+        },
+      ];
+    });
+    if (captures.length === 0) return;
+    captures.sort((left, right) => left.startUs - right.startUs);
+    assetLibraryUpdated("添加到素材库", (library) =>
+      withAssetLibraryCaptures(library, "subtitles", captures, createAssetLibraryId, Date.now()),
+    );
+    messagePublished(`已添加 ${captures.length} 条字幕到素材库。`);
+  }
   const contextMenuRatings = contextMenuCueIds.map((cueId) => cueAnnotations[cueId]?.rating ?? 0);
   const contextMenuRating =
     contextMenuRatings.length > 0 &&
@@ -3303,6 +3348,16 @@ export function SubtitlePanel() {
               onSelect={() => deleteSelectedCues(true)}
             >
               波纹删除
+            </PopupMenuItem>
+            <PopupMenuSeparator />
+            <PopupMenuItem
+              disabled={contextMenuCueIds.length === 0}
+              onSelect={() => {
+                setContextMenu(null);
+                addCuesToAssetLibrary(contextMenuCueIds);
+              }}
+            >
+              添加到素材库
             </PopupMenuItem>
             <PopupMenuSeparator />
             <PopupMenuSubmenu

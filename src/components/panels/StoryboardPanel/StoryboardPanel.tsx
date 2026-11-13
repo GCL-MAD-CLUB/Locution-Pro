@@ -67,6 +67,13 @@ import {
 import { frameToTimeUs, normalizeFrameRate } from "../../../core/editor/timeline";
 import { storyboardShotDefaultTitle } from "../../../core/editor/storyboard";
 import {
+  assetLibraryMediaFromSource,
+  createAssetLibraryId,
+  storyboardAssetName,
+  withAssetLibraryCaptures,
+  type AssetLibraryCapture,
+} from "../../../core/editor/assetLibrary";
+import {
   storyboardGridHitIndices,
   storyboardGridScrollOffset,
   type StoryboardGridLayout,
@@ -1187,6 +1194,7 @@ export function StoryboardPanel() {
     storyboards,
     exportState,
     messagePublished,
+    assetLibraryUpdated,
   } = useProjectPort(
     [
       "mediaItems",
@@ -1197,7 +1205,7 @@ export function StoryboardPanel() {
       "storyboards",
       "exportState",
     ],
-    ["messagePublished"],
+    ["messagePublished", "assetLibraryUpdated"],
   );
   const {
     query,
@@ -1899,6 +1907,50 @@ export function StoryboardPanel() {
     [selectedAnnotationShotIds],
   );
   const keywordPanelShotIds = contextMenuShotIds;
+
+  // Library entries are snapshots: the cut points, title and annotations are copied and
+  // keywords are stored by name, so later storyboard edits never reach the library.
+  function addShotsToAssetLibrary(shotIds: readonly string[]) {
+    const shotsById = new Map(shots.map((shot) => [shot.id, shot]));
+    const keywordNames = new Map(keywordNodes.map((node) => [node.id, node.name]));
+    const captures = shotIds.flatMap((shotId): AssetLibraryCapture[] => {
+      const shot = shotsById.get(shotId);
+      const source = shot ? sourceForShot(shot) : undefined;
+      if (!shot || !source) return [];
+      const annotation = shotAnnotations[shotId];
+      return [
+        {
+          media: assetLibraryMediaFromSource(
+            source.videoId,
+            source.project.asset,
+            source.frameRate,
+          ),
+          startUs: shot.start_us,
+          endUs: shot.end_us,
+          name: storyboardAssetName(annotation?.title, source.name, shot.sequence),
+          text: "",
+          annotation: {
+            rating: annotation?.rating ?? 0,
+            retained: annotation?.retained ?? false,
+            excluded: annotation?.excluded ?? false,
+            color_label: annotation?.colorLabel ?? null,
+            custom_label: annotation?.customLabel ?? null,
+            title: annotation?.title ?? null,
+            keywords: (annotation?.keywordIds ?? []).flatMap((id) => {
+              const name = keywordNames.get(id);
+              return name ? [name] : [];
+            }),
+          },
+        },
+      ];
+    });
+    if (captures.length === 0) return;
+    captures.sort((left, right) => left.startUs - right.startUs);
+    assetLibraryUpdated("添加到素材库", (library) =>
+      withAssetLibraryCaptures(library, "storyboards", captures, createAssetLibraryId, Date.now()),
+    );
+    messagePublished(`已添加 ${captures.length} 个镜头到素材库。`);
+  }
   const contextMenuRatings = contextMenuShotIds.map(
     (shotId) => shotAnnotations[shotId]?.rating ?? 0,
   );
@@ -4686,6 +4738,16 @@ export function StoryboardPanel() {
               onSelect={() => deleteSelectedShots(true)}
             >
               波纹删除
+            </PopupMenuItem>
+            <PopupMenuSeparator />
+            <PopupMenuItem
+              disabled={contextMenuShotIds.length === 0}
+              onSelect={() => {
+                setContextMenu(null);
+                addShotsToAssetLibrary(contextMenuShotIds);
+              }}
+            >
+              添加到素材库
             </PopupMenuItem>
             <PopupMenuSeparator />
             <PopupMenuSubmenu

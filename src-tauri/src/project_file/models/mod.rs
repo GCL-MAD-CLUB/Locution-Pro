@@ -8,6 +8,7 @@ use super::handle_v1;
 mod v2;
 mod v3;
 mod v4;
+mod v5;
 
 pub(super) struct UpgradeParts {
     pub(super) workspace: Value,
@@ -47,7 +48,7 @@ pub(super) trait CurrentProjectModel: ProjectModel {
     fn set_project_id(&mut self, _project_id: &str) {}
 }
 
-pub(super) type Current = v4::Model;
+pub(super) type Current = v5::Model;
 
 pub(super) fn current_version() -> u16 {
     Current::VERSION
@@ -55,11 +56,14 @@ pub(super) fn current_version() -> u16 {
 
 pub(super) fn decode_current(version: u16, payload: &[u8]) -> AppResult<Current> {
     match version {
-        v2::Model::VERSION => {
-            v4::Model::upgrade_from(v3::Model::upgrade_from(v2::Model::decode(payload)?)?)
+        v2::Model::VERSION => v5::Model::upgrade_from(v4::Model::upgrade_from(
+            v3::Model::upgrade_from(v2::Model::decode(payload)?)?,
+        )?),
+        v3::Model::VERSION => {
+            v5::Model::upgrade_from(v4::Model::upgrade_from(v3::Model::decode(payload)?)?)
         }
-        v3::Model::VERSION => v4::Model::upgrade_from(v3::Model::decode(payload)?),
-        v4::Model::VERSION => v4::Model::decode(payload),
+        v4::Model::VERSION => v5::Model::upgrade_from(v4::Model::decode(payload)?),
+        v5::Model::VERSION => v5::Model::decode(payload),
         version if version > current_version() => Err(app_error(
             ErrorCode::ProjectVersionUnsupported,
             format!(
@@ -75,7 +79,9 @@ pub(super) fn decode_current(version: u16, payload: &[u8]) -> AppResult<Current>
 }
 
 pub(super) fn upgrade_v1(previous: handle_v1::ProjectFile) -> AppResult<Current> {
-    v4::Model::upgrade_from(v3::Model::upgrade_from(v2::Model::upgrade_from(previous)?)?)
+    v5::Model::upgrade_from(v4::Model::upgrade_from(v3::Model::upgrade_from(
+        v2::Model::upgrade_from(previous)?,
+    )?)?)
 }
 
 pub(super) fn from_runtime(
@@ -112,8 +118,10 @@ pub(super) fn content_hash(workspace: &ProjectWorkspace, project_id: &str) -> Ap
 mod tests {
     use super::{current_version, decode_current, from_runtime, into_runtime, ProjectModel};
     use crate::{
-        ProjectEditorState, ProjectMediaBinState, ProjectPreviewState, ProjectStoryboardAnnotation,
-        ProjectStoryboardColorLabel, ProjectStoryboardKeywordNode,
+        ProjectAssetLibraryAnnotation, ProjectAssetLibraryColorLabel, ProjectAssetLibraryEntry,
+        ProjectAssetLibraryFolder, ProjectAssetLibraryMedia, ProjectAssetLibraryRoot,
+        ProjectAssetLibraryState, ProjectEditorState, ProjectMediaBinState, ProjectPreviewState,
+        ProjectStoryboardAnnotation, ProjectStoryboardColorLabel, ProjectStoryboardKeywordNode,
         ProjectStoryboardKeywordUsageCounters, ProjectStoryboardShot, ProjectStoryboardStack,
         ProjectStoryboardState, ProjectSubtitleAnnotation, ProjectSubtitleColorLabel,
         ProjectSubtitleState, ProjectWorkspace,
@@ -135,7 +143,19 @@ mod tests {
             },
             subtitles: HashMap::new(),
             storyboards: HashMap::new(),
+            asset_library: ProjectAssetLibraryState::default(),
         }
+    }
+
+    /// Encodes the current model in the shape a released V4 file had.
+    fn legacy_v4_payload(model: &super::Current) -> serde_json::Value {
+        let mut encoded: serde_json::Value =
+            serde_json::from_slice(&model.encode().unwrap()).unwrap();
+        encoded["workspace"]
+            .as_object_mut()
+            .unwrap()
+            .remove("asset_library");
+        encoded
     }
 
     #[test]
@@ -156,7 +176,7 @@ mod tests {
             "app_version": "0.2.0"
         }"#;
 
-        assert_eq!(current_version(), 4);
+        assert_eq!(current_version(), 5);
         let (workspace, project_id) = into_runtime(decode_current(2, payload).unwrap()).unwrap();
         assert!(workspace.subtitles.is_empty());
         assert!(workspace.storyboards.is_empty());
@@ -300,7 +320,8 @@ mod tests {
                 "total": 10
             })
         );
-        let (restored, _) = into_runtime(decode_current(4, &encoded).unwrap()).unwrap();
+        let (restored, _) =
+            into_runtime(decode_current(current_version(), &encoded).unwrap()).unwrap();
         let subtitle = restored
             .subtitles
             .get("video:asset:fingerprint:track")
@@ -368,8 +389,7 @@ mod tests {
     #[test]
     fn v3_reader_discards_unreleased_subtitle_selection_state() {
         let model = from_runtime(&empty_workspace(), "id-1", 10, "0.2.0").unwrap();
-        let mut encoded: serde_json::Value =
-            serde_json::from_slice(&model.encode().unwrap()).unwrap();
+        let mut encoded = legacy_v4_payload(&model);
         // A genuine V3 file has no top-level `project_id`; strip it before decode.
         encoded.as_object_mut().unwrap().remove("project_id");
         let workspace = encoded["workspace"].as_object_mut().unwrap();
@@ -392,7 +412,8 @@ mod tests {
         // export_state is no longer part of the project file.
         assert!(encoded_json["workspace"].get("export_state").is_none());
 
-        let (restored, project_id) = into_runtime(decode_current(4, &encoded).unwrap()).unwrap();
+        let (restored, project_id) =
+            into_runtime(decode_current(current_version(), &encoded).unwrap()).unwrap();
         assert_eq!(project_id, "project-abc");
         assert!(restored.subtitles.is_empty());
     }
@@ -400,8 +421,7 @@ mod tests {
     #[test]
     fn v4_upgrade_generates_a_fresh_project_id_for_legacy_files() {
         let model = from_runtime(&empty_workspace(), "id-1", 10, "0.2.0").unwrap();
-        let mut encoded: serde_json::Value =
-            serde_json::from_slice(&model.encode().unwrap()).unwrap();
+        let mut encoded = legacy_v4_payload(&model);
         // A genuine V3 file has neither `project_id` nor `export_state`.
         encoded.as_object_mut().unwrap().remove("project_id");
         encoded["workspace"]
@@ -420,8 +440,7 @@ mod tests {
     #[test]
     fn pre_refactor_v4_file_without_project_id_still_decodes() {
         let model = from_runtime(&empty_workspace(), "id-1", 10, "0.2.0").unwrap();
-        let mut encoded: serde_json::Value =
-            serde_json::from_slice(&model.encode().unwrap()).unwrap();
+        let mut encoded = legacy_v4_payload(&model);
         // A dev-build V4 file predates `project_id` and still records export_state.
         encoded.as_object_mut().unwrap().remove("project_id");
         encoded["workspace"].as_object_mut().unwrap().insert(
@@ -433,5 +452,104 @@ mod tests {
         let (workspace, project_id) = into_runtime(decode_current(4, &encoded).unwrap()).unwrap();
         assert!(project_id.is_empty());
         assert!(workspace.subtitles.is_empty());
+    }
+
+    fn asset_library() -> ProjectAssetLibraryState {
+        ProjectAssetLibraryState {
+            folders: vec![ProjectAssetLibraryFolder {
+                id: "asset-folder:a".to_string(),
+                root: ProjectAssetLibraryRoot::Storyboards,
+                parent_id: None,
+                name: "开场".to_string(),
+                created_at: 1_700_000_000_000,
+            }],
+            entries: vec![ProjectAssetLibraryEntry {
+                id: "asset:1".to_string(),
+                root: ProjectAssetLibraryRoot::Storyboards,
+                folder_id: Some("asset-folder:a".to_string()),
+                name: "Hero".to_string(),
+                created_at: 1_700_000_000_001,
+                media: ProjectAssetLibraryMedia {
+                    video_id: "video".to_string(),
+                    path: "C:/media/a.mp4".to_string(),
+                    file_name: "a.mp4".to_string(),
+                    fingerprint: "fingerprint".to_string(),
+                    frame_rate: 23.976,
+                    duration_us: 10_000_000,
+                },
+                start_us: 1_000_000,
+                end_us: 2_000_000,
+                text: String::new(),
+                annotation: ProjectAssetLibraryAnnotation {
+                    rating: 3,
+                    retained: true,
+                    excluded: false,
+                    color_label: Some(ProjectAssetLibraryColorLabel::Green),
+                    custom_label: Some("选用".to_string()),
+                    title: None,
+                    keywords: vec!["close-up".to_string()],
+                },
+            }],
+        }
+    }
+
+    #[test]
+    fn v5_round_trip_preserves_the_asset_library() {
+        let mut workspace = empty_workspace();
+        workspace.asset_library = asset_library();
+
+        let model = from_runtime(&workspace, "id-1", 10, "0.4.3").unwrap();
+        let encoded = model.encode().unwrap();
+        let encoded_json: serde_json::Value = serde_json::from_slice(&encoded).unwrap();
+        let library = &encoded_json["workspace"]["asset_library"];
+        assert_eq!(library["folders"][0]["root"], "storyboards");
+        assert_eq!(library["folders"][0]["parent_id"], serde_json::Value::Null);
+        assert_eq!(library["entries"][0]["folder_id"], "asset-folder:a");
+        assert_eq!(library["entries"][0]["annotation"]["color_label"], "green");
+        assert_eq!(library["entries"][0]["media"]["frame_rate"], 23.976);
+
+        let (restored, project_id) =
+            into_runtime(decode_current(current_version(), &encoded).unwrap()).unwrap();
+        assert_eq!(project_id, "id-1");
+        let entry = &restored.asset_library.entries[0];
+        assert_eq!(entry.start_us, 1_000_000);
+        assert_eq!(entry.end_us, 2_000_000);
+        assert_eq!(entry.annotation.rating, 3);
+        assert_eq!(entry.annotation.keywords, vec!["close-up".to_string()]);
+        assert_eq!(restored.asset_library.folders[0].name, "开场");
+    }
+
+    #[test]
+    fn v4_upgrade_keeps_project_id_and_starts_with_an_empty_asset_library() {
+        let model = from_runtime(&empty_workspace(), "project-v4", 10, "0.4.2").unwrap();
+        let encoded = serde_json::to_vec(&legacy_v4_payload(&model)).unwrap();
+
+        let (restored, project_id) = into_runtime(decode_current(4, &encoded).unwrap()).unwrap();
+        assert_eq!(project_id, "project-v4");
+        assert!(restored.asset_library.folders.is_empty());
+        assert!(restored.asset_library.entries.is_empty());
+    }
+
+    #[test]
+    fn v4_reader_rejects_asset_library_fields() {
+        let mut workspace = empty_workspace();
+        workspace.asset_library = asset_library();
+        let encoded = from_runtime(&workspace, "id-1", 10, "0.4.3")
+            .unwrap()
+            .encode()
+            .unwrap();
+        assert!(decode_current(4, &encoded).is_err());
+    }
+
+    #[test]
+    fn v5_rejects_unknown_asset_library_fields() {
+        let mut workspace = empty_workspace();
+        workspace.asset_library = asset_library();
+        let model = from_runtime(&workspace, "id-1", 10, "0.4.3").unwrap();
+        let mut encoded: serde_json::Value =
+            serde_json::from_slice(&model.encode().unwrap()).unwrap();
+        encoded["workspace"]["asset_library"]["entries"][0]["cue_id"] = serde_json::json!("cue-1");
+        let encoded = serde_json::to_vec(&encoded).unwrap();
+        assert!(decode_current(current_version(), &encoded).is_err());
     }
 }

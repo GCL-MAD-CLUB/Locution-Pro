@@ -403,6 +403,8 @@ export function AssetLibrary() {
         return navigateUp();
       case "properties":
         return showProperties();
+      case "toggleDetails":
+        return view.setDetailsVisible(!view.detailsVisible);
       case "address":
         return setAddressEditing(true);
       case "search":
@@ -516,7 +518,6 @@ export function AssetLibrary() {
     hasEntries: !menuTreeLocation && selectedEntryIds.length > 0,
     sort: view.sort,
     size: view.size,
-    navigationVisible: view.navigationVisible,
     detailsVisible: view.detailsVisible,
   };
   const menuActions: AssetLibraryContextMenuActions = {
@@ -554,7 +555,6 @@ export function AssetLibrary() {
     setColorLabel,
     setSort: view.setSort,
     setSize: view.setSize,
-    setNavigationVisible: view.setNavigationVisible,
     setDetailsVisible: view.setDetailsVisible,
   };
 
@@ -576,7 +576,6 @@ export function AssetLibrary() {
     hasSelection: selectedNodes.length > 0,
     sort: view.sort,
     size: view.size,
-    navigationVisible: view.navigationVisible,
     detailsVisible: view.detailsVisible,
     itemCheckboxes: view.itemCheckboxes,
   };
@@ -589,7 +588,6 @@ export function AssetLibrary() {
     remove: refocus(() => removeNodes(selection)),
     setSort: view.setSort,
     setSize: view.setSize,
-    setNavigationVisible: view.setNavigationVisible,
     setDetailsVisible: view.setDetailsVisible,
     setItemCheckboxes: view.setItemCheckboxes,
     selectAll: refocus(selectAll),
@@ -621,7 +619,7 @@ export function AssetLibrary() {
   );
   // Side panes shrink before the item frame drops below its minimum width.
   const gridTemplateColumns = [
-    view.navigationVisible ? `minmax(0, ${view.paneWidths.navigation}px) 4px` : "",
+    `minmax(0, ${view.paneWidths.navigation}px) 4px`,
     `minmax(${minimumItemsWidth}px, 1fr)`,
     view.detailsVisible ? `4px minmax(0, ${view.paneWidths.details}px)` : "",
   ]
@@ -680,32 +678,28 @@ export function AssetLibrary() {
       <AssetLibraryCommandBar model={commandModel} actions={commandActions} />
 
       <div className="asset-library-content" style={{ gridTemplateColumns }}>
-        {view.navigationVisible && (
-          <>
-            <AssetLibraryNavigation
-              sort={view.sort}
-              library={library}
-              location={location}
-              collapsedKeys={view.collapsedKeys}
-              dropTargetKey={dropTargetKey}
-              onNavigate={view.navigate}
-              onToggleCollapsed={view.toggleCollapsed}
-              onCreateFolder={() => createFolder()}
-              onDragOverTarget={(event, target) =>
-                handleDragOver(event, target, assetLocationKey(target))
-              }
-              onDragLeaveTarget={() => setDropTargetKey(null)}
-              onDropOnTarget={handleDrop}
-              onContextMenu={openTreeMenu}
-            />
-            <AssetLibraryResizeHandle
-              pane="navigation"
-              label="调整文件夹窗格宽度"
-              width={view.paneWidths.navigation}
-              onWidthChange={setPaneWidth}
-            />
-          </>
-        )}
+        <AssetLibraryNavigation
+          sort={view.sort}
+          library={library}
+          location={location}
+          collapsedKeys={view.collapsedKeys}
+          dropTargetKey={dropTargetKey}
+          onNavigate={view.navigate}
+          onToggleCollapsed={view.toggleCollapsed}
+          onCreateFolder={() => createFolder()}
+          onDragOverTarget={(event, target) =>
+            handleDragOver(event, target, assetLocationKey(target))
+          }
+          onDragLeaveTarget={() => setDropTargetKey(null)}
+          onDropOnTarget={handleDrop}
+          onContextMenu={openTreeMenu}
+        />
+        <AssetLibraryResizeHandle
+          pane="navigation"
+          label="调整文件夹窗格宽度"
+          width={view.paneWidths.navigation}
+          onWidthChange={setPaneWidth}
+        />
         <AssetLibraryItems
           root={location.root}
           nodes={nodes}
@@ -777,13 +771,9 @@ export function AssetLibrary() {
       </div>
 
       <AssetLibraryFooter
-        navigationVisible={view.navigationVisible}
-        detailsVisible={view.detailsVisible}
         size={view.size}
         listMode={layout.mode === "list"}
         canDelete={selectedNodes.length > 0}
-        onNavigationVisibleChange={view.setNavigationVisible}
-        onDetailsVisibleChange={view.setDetailsVisible}
         onSizeChange={view.setSize}
         onCreateFolder={() => createFolder()}
         onDelete={() => removeNodes(selection)}

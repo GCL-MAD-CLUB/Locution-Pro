@@ -1,27 +1,25 @@
-import { FolderPlus, PanelLeft, PanelRight, Trash2 } from "lucide-react";
+import { FolderPlus, Grid2X2, List, Trash2 } from "lucide-react";
+import { assetLibraryViewPresets } from "../../../../core/editor/assetLibrary";
 
 export interface AssetLibraryFooterProps {
-  navigationVisible: boolean;
-  detailsVisible: boolean;
   size: number;
   listMode: boolean;
   canDelete: boolean;
-  onNavigationVisibleChange: (visible: boolean) => void;
-  onDetailsVisibleChange: (visible: boolean) => void;
   onSizeChange: (size: number) => void;
   onCreateFolder: () => void;
   onDelete: () => void;
 }
 
-/** Pane toggles and the size slider on the left, folder and delete actions on the right. */
+/** As in the Windows status bar, the view buttons switch to the details or large-icon preset. */
+function presetSize(id: "details" | "large") {
+  return assetLibraryViewPresets.find((preset) => preset.id === id)!.size;
+}
+
+/** List and icon view buttons with the size slider, then folder and delete actions. */
 export function AssetLibraryFooter({
-  navigationVisible,
-  detailsVisible,
   size,
   listMode,
   canDelete,
-  onNavigationVisibleChange,
-  onDetailsVisibleChange,
   onSizeChange,
   onCreateFolder,
   onDelete,
@@ -31,23 +29,27 @@ export function AssetLibraryFooter({
       <div className="media-bin-view-tools">
         <button
           type="button"
-          className={navigationVisible ? "active" : ""}
-          title="文件夹窗格"
-          aria-label="文件夹窗格"
-          aria-pressed={navigationVisible}
-          onClick={() => onNavigationVisibleChange(!navigationVisible)}
+          className={listMode ? "active" : ""}
+          title="列表视图"
+          aria-label="列表视图"
+          aria-pressed={listMode}
+          onClick={() => {
+            if (!listMode) onSizeChange(presetSize("details"));
+          }}
         >
-          <PanelLeft aria-hidden="true" />
+          <List aria-hidden="true" />
         </button>
         <button
           type="button"
-          className={detailsVisible ? "active" : ""}
-          title="属性窗格"
-          aria-label="属性窗格"
-          aria-pressed={detailsVisible}
-          onClick={() => onDetailsVisibleChange(!detailsVisible)}
+          className={listMode ? "" : "active"}
+          title="图标视图"
+          aria-label="图标视图"
+          aria-pressed={!listMode}
+          onClick={() => {
+            if (listMode) onSizeChange(presetSize("large"));
+          }}
         >
-          <PanelRight aria-hidden="true" />
+          <Grid2X2 aria-hidden="true" />
         </button>
         <input
           type="range"

@@ -51,6 +51,13 @@ test("Alt arrows and Alt+Enter navigate history and show properties", () => {
   assert.equal(press("ArrowDown", { altKey: true }), null);
 });
 
+test("Alt+Shift+P toggles the properties pane by physical key", () => {
+  assert.deepEqual(press("∏", { altKey: true, shiftKey: true, code: "KeyP" }), {
+    kind: "toggleDetails",
+  });
+  assert.equal(press("p", { altKey: true, code: "KeyP" }), null);
+});
+
 test("address and search keys follow the file-manager bindings", () => {
   for (const [key, modifiers] of [
     ["d", { altKey: true }],

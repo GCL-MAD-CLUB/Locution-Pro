@@ -206,6 +206,18 @@
   color: var(--color-icon-muted);
 }
 
+/* Properties pane toggle sits at the right end, where Windows places its preview toggle */
+.asset-library-command-bar > button.asset-library-command-pane-toggle {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  width: auto;
+  margin-left: auto;
+  padding: 0 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .asset-library-command-separator {
   flex: 0 0 1px;
   width: 1px;
@@ -350,8 +362,8 @@ body.is-resizing-asset-library-pane * {
   z-index: 3;
 }
 
-.asset-library-items-frame.has-checkboxes .asset-library-card-flag {
-  left: 24px;
+.asset-library-items-frame.has-checkboxes .asset-library-thumbnail-metadata {
+  left: 22px;
 }
 
 .asset-library-items-frame .media-bin-column-header > .media-bin-column-label-text {
@@ -393,10 +405,6 @@ body.is-resizing-asset-library-pane * {
 .asset-library-card.is-cut .media-bin-card-preview,
 .asset-library-card.is-cut .media-bin-card-meta {
   opacity: var(--opacity-control-disabled);
-}
-
-.asset-library-label-empty {
-  visibility: hidden;
 }
 
 .asset-library-location-cell {
@@ -475,32 +483,87 @@ body.is-resizing-asset-library-pane * {
   inset: 0;
 }
 
-.asset-library-card .media-bin-card-meta {
-  --media-list-label-size: 11px;
-}
+/* Thumbnail annotations, matching the storyboard graph preview metadata strip */
 
-.asset-library-card-flag {
+.asset-library-thumbnail-metadata {
   position: absolute;
-  top: 6px;
-  left: 6px;
+  top: 3px;
+  left: 3px;
   z-index: 2;
   display: flex;
-}
-
-.asset-library-card-marks {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 2;
-  display: flex;
-  max-width: calc(100% - 24px);
+  align-items: center;
+  box-sizing: border-box;
+  gap: 3px;
+  height: 14px;
+  padding: 1px 3px;
+  border: 1px solid var(--color-border-frame);
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--color-surface-thumbnail) 88%, var(--color-transparent));
   pointer-events: none;
 }
 
-.asset-library-card-marks > .asset-library-marks:not(:empty) {
-  padding: 2px 4px;
-  background: var(--color-media-type-badge-background);
-  border-radius: 3px;
+.asset-library-thumbnail-metadata:empty {
+  display: none;
+}
+
+.asset-library-thumbnail-metadata .shot-thumbnail-flag,
+.asset-library-thumbnail-metadata .shot-thumbnail-keyword-indicator {
+  margin: 0;
+  pointer-events: none;
+}
+
+.asset-library-thumbnail-metadata .shot-thumbnail-keyword-indicator > svg {
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+  aspect-ratio: auto;
+}
+
+/* The strip's content is 10px tall, so the swatch shrinks with it. */
+.asset-library-thumbnail-metadata .asset-library-color-mark {
+  --media-list-label-size: 9px;
+
+  border-radius: 2px;
+}
+
+.asset-library-thumbnail-rating {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1px;
+  height: 10px;
+  color: var(--color-annotation-rating);
+  line-height: 0;
+}
+
+.asset-library-thumbnail-metadata .asset-library-thumbnail-rating svg {
+  width: 10px;
+  height: 10px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.25;
+}
+
+/* List rows: a 16:9 slot as tall as the list icon, so names line up with or without frames */
+
+.asset-library-list-preview {
+  display: grid;
+  flex: 0 0 calc(var(--media-list-icon-size, 16px) * 16 / 9);
+  width: calc(var(--media-list-icon-size, 16px) * 16 / 9);
+  height: var(--media-list-icon-size, 16px);
+  place-items: center;
+  transition:
+    width 100ms linear,
+    height 100ms linear,
+    flex-basis 100ms linear;
+}
+
+.asset-library-list-preview > .asset-library-thumbnail {
+  border-radius: 2px;
+}
+
+.asset-library-list-preview .asset-library-thumbnail-placeholder {
+  width: auto;
+  height: 93.75%;
 }
 
 /* Thumbnails */
@@ -534,9 +597,12 @@ body.is-resizing-asset-library-pane * {
   aspect-ratio: 39 / 44;
 }
 
-/* Read-only annotation marks, matching storyboard thumbnail marks */
+/* List label column: flag, stars and color swatch share one 12px visible height */
 
 .asset-library-marks {
+  --asset-library-mark-height: 12px;
+  --media-list-label-size: var(--asset-library-mark-height);
+
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -544,12 +610,13 @@ body.is-resizing-asset-library-pane * {
   min-width: 0;
 }
 
+/* The storyboard thumbnail flag, scaled from 10px to the mark height */
 .asset-library-flag-mark {
   position: relative;
   display: block;
-  flex: 0 0 7px;
-  width: 7px;
-  height: 10px;
+  flex: 0 0 9px;
+  width: 9px;
+  height: var(--asset-library-mark-height);
 }
 
 .asset-library-flag-mark::before,
@@ -563,32 +630,38 @@ body.is-resizing-asset-library-pane * {
   top: 0;
   left: 0;
   width: 1px;
-  height: 9px;
+  height: var(--asset-library-mark-height);
   background: var(--color-annotation-flag-pole);
 }
 
 .asset-library-flag-mark::after {
   top: 1px;
   left: 1px;
-  width: 6px;
-  height: 4px;
+  width: 8px;
+  height: 5px;
   background: var(--color-annotation-flag-fill);
 }
 
 .asset-library-flag-mark.is-excluded::after {
   background-image: var(--image-flag-excluded);
+  background-size: 100% 100%;
 }
 
 .asset-library-rating-mark {
   display: flex;
   align-items: center;
-  gap: 1px;
-  color: var(--color-annotation-rating);
+  gap: 4px;
+  height: var(--asset-library-mark-height);
+  color: var(--color-annotation-active);
 }
 
-.asset-library-marks .asset-library-rating-mark svg {
-  width: 8px;
-  height: 8px;
+/* The star outline spans about 20 of the icon's 24 units; enlarge the box so the star
+   itself matches the mark height, and let it overflow its slot evenly. */
+.asset-library-rating-mark svg {
+  flex: 0 0 auto;
+  width: calc(var(--asset-library-mark-height) * 24 / 20);
+  height: calc(var(--asset-library-mark-height) * 24 / 20);
+  margin: calc(var(--asset-library-mark-height) * -2 / 20);
   fill: currentColor;
   stroke: currentColor;
   stroke-width: 1;
@@ -597,22 +670,8 @@ body.is-resizing-asset-library-pane * {
 .asset-library-custom-label {
   max-width: 96px;
   overflow: hidden;
-  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.asset-library-keyword-mark {
-  display: grid;
-  width: 12px;
-  height: 12px;
-  place-items: center;
-  color: var(--color-keyword-indicator-text);
-}
-
-.asset-library-marks .asset-library-keyword-mark svg {
-  width: 11px;
-  height: 11px;
 }
 
 /* Properties pane: storyboard keyword panel sections with label/control rows */
@@ -759,20 +818,6 @@ body.is-resizing-asset-library-pane * {
   padding-left: calc(8px + var(--asset-tree-depth, 0) * 10px);
 }
 
-.asset-library-marks.is-list .asset-library-rating-mark {
-  gap: 4px;
-  color: var(--color-annotation-active);
-}
-
-.asset-library-marks.is-list .asset-library-rating-mark svg {
-  width: 14px;
-  height: 14px;
-}
-
-.asset-library-marks.is-list .asset-library-custom-label {
-  font-weight: 400;
-}
-
 .asset-library-items-frame .media-bin-column-header {
   min-width: 0;
 }
@@ -816,16 +861,6 @@ body.is-resizing-asset-library-pane * {
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 4px 6px;
-}
-
-.asset-library-card .media-bin-card-meta:has(> .media-bin-label-color) {
-  grid-template-columns: 11px minmax(0, 1fr);
-}
-
-.asset-library-card .media-bin-card-meta > .media-bin-label-color {
-  grid-column: 1;
-  grid-row: 1;
-  margin-top: 2px;
 }
 
 .asset-library-card .media-bin-card-name {

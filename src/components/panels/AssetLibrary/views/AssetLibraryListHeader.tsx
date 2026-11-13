@@ -214,7 +214,6 @@ export function AssetLibraryListHeader(props: AssetLibraryListHeaderProps) {
             setHeaderMenu({ x: event.clientX, y: event.clientY });
           }}
         >
-          <span className="media-bin-column-header" role="columnheader" aria-label="标签" />
           <span
             className="media-bin-column-header asset-library-title-header"
             role="columnheader"

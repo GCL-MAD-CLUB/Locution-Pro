@@ -22,6 +22,16 @@ test("subtitle and storyboard libraries expose their own fields and column menus
   }
 });
 
+test("both libraries show the added time column by default", () => {
+  for (const root of ["subtitles", "storyboards"] as const) {
+    const shown = columns
+      .assetLibraryColumnsForRoot(root)
+      .filter((column) => columns.defaultAssetLibraryVisibleColumns.has(column.id))
+      .map((column) => column.label);
+    assert.ok(shown.includes("添加时间"), root);
+  }
+});
+
 interface Element {
   props: Record<string, unknown>;
 }

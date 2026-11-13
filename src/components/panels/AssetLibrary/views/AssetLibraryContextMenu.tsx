@@ -38,7 +38,6 @@ export interface AssetLibraryContextMenuModel {
   hasEntries: boolean;
   sort: AssetLibrarySort;
   size: number;
-  navigationVisible: boolean;
   detailsVisible: boolean;
 }
 
@@ -58,7 +57,6 @@ export interface AssetLibraryContextMenuActions {
   setColorLabel: (colorLabel: AssetLibraryColorLabel | null) => void;
   setSort: (sort: AssetLibrarySort) => void;
   setSize: (size: number) => void;
-  setNavigationVisible: (visible: boolean) => void;
   setDetailsVisible: (visible: boolean) => void;
 }
 
@@ -278,13 +276,8 @@ export function AssetLibraryContextMenu({
             />
           </PopupMenuSubmenu>
           <PopupMenuItem
-            checked={model.navigationVisible}
-            onSelect={run(() => actions.setNavigationVisible(!model.navigationVisible))}
-          >
-            文件夹窗格
-          </PopupMenuItem>
-          <PopupMenuItem
             checked={model.detailsVisible}
+            shortcut="Alt+Shift+P"
             onSelect={run(() => actions.setDetailsVisible(!model.detailsVisible))}
           >
             属性窗格

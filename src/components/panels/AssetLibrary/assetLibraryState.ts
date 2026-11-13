@@ -45,7 +45,6 @@ interface AssetLibraryPanelState {
   query: string;
   size: number;
   sort: AssetLibrarySort;
-  navigationVisible: boolean;
   detailsVisible: boolean;
   collapsedKeys: ReadonlySet<string>;
   paneWidths: Record<AssetLibraryPane, number>;
@@ -63,7 +62,6 @@ interface AssetLibraryPanelState {
   setQuery: (query: string) => void;
   setSize: (size: number) => void;
   setSort: (sort: AssetLibrarySort) => void;
-  setNavigationVisible: (visible: boolean) => void;
   setDetailsVisible: (visible: boolean) => void;
   toggleCollapsed: (key: string) => void;
   expandKeys: (keys: readonly string[]) => void;
@@ -108,7 +106,6 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   query: "",
   size: 12,
   sort: { key: "name", direction: "ascending" },
-  navigationVisible: true,
   detailsVisible: true,
   collapsedKeys: new Set<string>(),
   paneWidths: {
@@ -154,7 +151,6 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   setQuery: (query) => set({ query }),
   setSize: (size) => set({ size: Math.min(100, Math.max(0, Math.round(size))) }),
   setSort: (sort) => set({ sort }),
-  setNavigationVisible: (navigationVisible) => set({ navigationVisible }),
   setDetailsVisible: (detailsVisible) => set({ detailsVisible }),
   toggleCollapsed: (key) => set((state) => ({ collapsedKeys: toggled(state.collapsedKeys, key) })),
   expandKeys: (keys) =>

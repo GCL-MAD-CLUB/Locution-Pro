@@ -18,7 +18,6 @@ import {
   type AssetLibraryViewLayout,
 } from "../../../../core/editor/assetLibrary";
 import { formatMonitorTime } from "../../../../core/editor/time";
-import { annotationColors } from "../../../../runtime/theme";
 import "../../MediaBin/MediaBin.css";
 import { MediaBinFolderIcon, OfflineFileIcon } from "../../MediaBin/views/MediaBinFolderIcon";
 import {
@@ -28,15 +27,17 @@ import {
   type AssetLibraryColumnWidths,
 } from "../assetLibraryColumns";
 import { type AssetLibraryNode } from "../assetLibraryNodes";
-import { AssetLibraryFlagMark, AssetLibraryMarks } from "./AssetLibraryBadges";
+import { AssetLibraryMarks, AssetLibraryThumbnailMarks } from "./AssetLibraryBadges";
 import { AssetLibraryListHeader } from "./AssetLibraryListHeader";
 import { AssetLibraryThumbnail } from "./AssetLibraryThumbnail";
 
 /** Matches `.media-bin-grid`: 14px padding and a 12px gap. */
 const gridPadding = 14;
 const gridGap = 12;
-/** The fixed label column and the narrowest the flexible name column may get. */
-const labelColumnWidth = 13;
+/** Rows from the two-line height up have room to show a readable frame in the 16:9 slot. */
+const twoLineRowHeight = 36;
+/** List icons are 16px at the smallest size and scale with the shared size control. */
+const listIconSize = 16;
 
 interface MarqueeState {
   originX: number;
@@ -184,17 +185,6 @@ function KindIcon({ node }: { node: AssetLibraryNode }) {
     <span className={`media-bin-kind-icon ${subtitle ? "subtitle" : "video"}`}>
       <Icon aria-hidden="true" />
     </span>
-  );
-}
-
-/** Only entries carry a color label. */
-function LabelColor({ node }: { node: AssetLibraryNode }) {
-  if (node.kind === "folder") return null;
-  const colorLabel = node.entry.annotation.color_label;
-  return colorLabel ? (
-    <span className="media-bin-label-color" style={{ background: annotationColors[colorLabel] }} />
-  ) : (
-    <span className="media-bin-label-color asset-library-label-empty" aria-hidden="true" />
   );
 }
 
@@ -409,7 +399,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     if (column.id === "marks") {
       return (
         <span key={column.id}>
-          {node.kind === "entry" && <AssetLibraryMarks entry={node.entry} list />}
+          {node.kind === "entry" && <AssetLibraryMarks entry={node.entry} />}
         </span>
       );
     }
@@ -436,25 +426,44 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     );
   }
 
+  const twoLineRows = layout.mode === "list" && layout.rowHeight >= twoLineRowHeight;
+  const listPreviewWidth =
+    layout.mode === "list" ? Math.round((listIconSize * layout.iconScale * 16) / 9) : 0;
+
+  /** A 16:9 slot in every row; tall rows show the entry's frame, others its kind icon. */
+  function renderListPreview(node: AssetLibraryNode) {
+    return (
+      <span className="asset-library-list-preview">
+        {twoLineRows && node.kind === "entry" && node.media ? (
+          <AssetLibraryThumbnail
+            entry={node.entry}
+            media={node.media}
+            displayWidth={listPreviewWidth}
+            enabled={thumbnailsEnabled}
+          />
+        ) : (
+          <KindIcon node={node} />
+        )}
+      </span>
+    );
+  }
+
   function renderRow(node: AssetLibraryNode) {
     return (
       <div
         key={node.key}
-        className={`media-bin-row asset-library-row ${stateClassName(node)}${layout.mode === "list" && layout.rowHeight >= 36 ? " has-two-lines" : ""}`}
+        className={`media-bin-row asset-library-row ${stateClassName(node)}${twoLineRows ? " has-two-lines" : ""}`}
         role="option"
         aria-selected={selectedKeys.has(node.key)}
         {...nodeHandlers(node)}
       >
-        <span className="media-bin-label-cell">
-          <LabelColor node={node} />
-        </span>
         <span
           className={`media-bin-title-cell${
             node.kind === "folder" ? " media-bin-folder-title-cell" : ""
           }`}
         >
           {renderCheckbox(node)}
-          <KindIcon node={node} />
+          {renderListPreview(node)}
           {nameContent(node, "media-bin-name-copy")}
         </span>
         {columns.map((column) => renderCell(node, column))}
@@ -497,12 +506,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
             aria-label="媒体离线"
           />
         )}
-        <span className="asset-library-card-flag">
-          <AssetLibraryFlagMark entry={node.entry} />
-        </span>
-        <span className="asset-library-card-marks">
-          <AssetLibraryMarks entry={node.entry} showFlag={false} />
-        </span>
+        <AssetLibraryThumbnailMarks entry={node.entry} />
       </span>
     );
   }
@@ -524,10 +528,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
           {renderCardPreview(node)}
           {renderCheckbox(node, " asset-library-card-check")}
         </span>
-        <span className="media-bin-card-meta">
-          {node.kind === "entry" && node.entry.annotation.color_label && <LabelColor node={node} />}
-          {nameContent(node, "media-bin-card-name")}
-        </span>
+        <span className="media-bin-card-meta">{nameContent(node, "media-bin-card-name")}</span>
       </div>
     );
   }
@@ -536,16 +537,15 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   const detailWidths = columns.map((column) => columnWidths[column.id]);
   const style = {
     "--asset-library-columns": [
-      `${labelColumnWidth}px`,
       `${columnWidths.name}px`,
       ...detailWidths.map((width) => `${width}px`),
       "minmax(0, 1fr)",
     ].join(" "),
     "--asset-library-min-width": `${
-      labelColumnWidth + columnWidths.name + detailWidths.reduce((total, width) => total + width, 0)
+      columnWidths.name + detailWidths.reduce((total, width) => total + width, 0)
     }px`,
     "--media-list-row-height": layout.mode === "list" ? `${layout.rowHeight}px` : undefined,
-    "--media-list-icon-size": `${16 * listScale}px`,
+    "--media-list-icon-size": `${listIconSize * listScale}px`,
     "--media-list-title-icon-gap": `${6 * (1 + (listScale - 1) / 1.5)}px`,
     "--media-grid-column-count": grid.columns,
     "--media-grid-card-render-width": `${grid.cardWidth}px`,

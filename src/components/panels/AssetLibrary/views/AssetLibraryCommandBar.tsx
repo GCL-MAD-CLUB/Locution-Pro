@@ -6,6 +6,7 @@ import {
   Copy,
   Ellipsis,
   LayoutList,
+  PanelRight,
   Scissors,
   TextCursorInput,
   Trash2,
@@ -33,7 +34,6 @@ export interface AssetLibraryCommandBarModel {
   hasSelection: boolean;
   sort: AssetLibrarySort;
   size: number;
-  navigationVisible: boolean;
   detailsVisible: boolean;
   itemCheckboxes: boolean;
 }
@@ -47,7 +47,6 @@ export interface AssetLibraryCommandBarActions {
   remove: () => void;
   setSort: (sort: AssetLibrarySort) => void;
   setSize: (size: number) => void;
-  setNavigationVisible: (visible: boolean) => void;
   setDetailsVisible: (visible: boolean) => void;
   setItemCheckboxes: (visible: boolean) => void;
   selectAll: () => void;
@@ -159,13 +158,8 @@ export function AssetLibraryCommandBar({
             <PopupMenuSeparator />
             <PopupMenuSubmenu label="显示" open={showOpen} onOpenChange={setShowOpen}>
               <PopupMenuItem
-                checked={model.navigationVisible}
-                onSelect={run(() => actions.setNavigationVisible(!model.navigationVisible))}
-              >
-                文件夹窗格
-              </PopupMenuItem>
-              <PopupMenuItem
                 checked={model.detailsVisible}
+                shortcut="Alt+Shift+P"
                 onSelect={run(() => actions.setDetailsVisible(!model.detailsVisible))}
               >
                 属性窗格
@@ -218,6 +212,16 @@ export function AssetLibraryCommandBar({
       {menuButton("view", LayoutList, "查看")}
       <span className="asset-library-command-separator" aria-hidden="true" />
       {menuButton("more", Ellipsis, null)}
+      <button
+        type="button"
+        className="asset-library-command-pane-toggle"
+        title={`${model.detailsVisible ? "隐藏" : "显示"}属性窗格 (Alt+Shift+P)`}
+        aria-label={`${model.detailsVisible ? "隐藏" : "显示"}属性窗格`}
+        onClick={() => actions.setDetailsVisible(!model.detailsVisible)}
+      >
+        <PanelRight aria-hidden="true" />
+        <span>属性</span>
+      </button>
       {menu &&
         createPortal(
           <PopupMenu

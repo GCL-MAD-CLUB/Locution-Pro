@@ -3,6 +3,8 @@ import type { CSSProperties } from "react";
 import { assetLibraryEntryFlag } from "../../../../core/editor/assetLibrary";
 import { annotationColors } from "../../../../runtime/theme";
 import type { AssetLibraryColorLabel, AssetLibraryEntry } from "../../../../types";
+// Thumbnail flags and keyword indicators reuse the storyboard thumbnail marks.
+import "../../StoryboardPanel/StoryboardPanel.css";
 
 export const assetLibraryColorLabelNames: Record<AssetLibraryColorLabel, string> = {
   red: "红色",
@@ -39,7 +41,7 @@ function annotationDescription(entry: AssetLibraryEntry) {
 }
 
 /** The pole-and-banner flag drawn on storyboard thumbnails, read-only. */
-export function AssetLibraryFlagMark({ entry }: { entry: AssetLibraryEntry }) {
+function AssetLibraryFlagMark({ entry }: { entry: AssetLibraryEntry }) {
   const flag = assetLibraryEntryFlag(entry);
   return flag === "none" ? null : (
     <span
@@ -50,9 +52,9 @@ export function AssetLibraryFlagMark({ entry }: { entry: AssetLibraryEntry }) {
   );
 }
 
-export function AssetLibraryRatingMark({ rating }: { rating: number }) {
+function AssetLibraryRatingMark({ className, rating }: { className: string; rating: number }) {
   return rating > 0 ? (
-    <span className="asset-library-rating-mark" role="img" aria-label={`${rating} 星`}>
+    <span className={className} role="img" aria-label={`${rating} 星`}>
       {Array.from({ length: rating }, (_, index) => (
         <Star key={index} aria-hidden="true" />
       ))}
@@ -60,33 +62,56 @@ export function AssetLibraryRatingMark({ rating }: { rating: number }) {
   ) : null;
 }
 
-/** Compact, read-only annotation summary shown on list rows and icon tiles. */
-export function AssetLibraryMarks({
-  entry,
-  showFlag = true,
-  list = false,
-}: {
-  entry: AssetLibraryEntry;
-  showFlag?: boolean;
-  list?: boolean;
-}) {
+/** The media bin's color label swatch, shown next to the flag and stars. */
+function AssetLibraryColorMark({ colorLabel }: { colorLabel: AssetLibraryColorLabel | null }) {
+  return colorLabel ? (
+    <span
+      className="media-bin-label-color asset-library-color-mark"
+      role="img"
+      aria-label={`${assetLibraryColorLabelNames[colorLabel]}色标`}
+      style={{ background: annotationColors[colorLabel] }}
+    />
+  ) : null;
+}
+
+/** Read-only annotation summary for the list's label column. */
+export function AssetLibraryMarks({ entry }: { entry: AssetLibraryEntry }) {
   const description = annotationDescription(entry);
-  const { rating, keywords, custom_label: customLabel } = entry.annotation;
+  const { rating, color_label: colorLabel, custom_label: customLabel } = entry.annotation;
+  return (
+    <span className="asset-library-marks" title={description || undefined}>
+      <AssetLibraryFlagMark entry={entry} />
+      <AssetLibraryRatingMark className="asset-library-rating-mark" rating={rating} />
+      <AssetLibraryColorMark colorLabel={colorLabel} />
+      {customLabel && <span className="asset-library-custom-label">{customLabel}</span>}
+    </span>
+  );
+}
+
+/**
+ * The metadata strip of storyboard graph previews: flag, rating, color label and a keyword
+ * indicator in one framed strip at the thumbnail's top-left corner.
+ */
+export function AssetLibraryThumbnailMarks({ entry }: { entry: AssetLibraryEntry }) {
+  const flag = assetLibraryEntryFlag(entry);
+  const { rating, keywords, color_label: colorLabel } = entry.annotation;
   return (
     <span
-      className={`asset-library-marks${list ? " is-list" : ""}`}
-      title={description || undefined}
+      className="asset-library-thumbnail-metadata"
+      title={annotationDescription(entry) || undefined}
     >
-      {showFlag && <AssetLibraryFlagMark entry={entry} />}
-      <AssetLibraryRatingMark rating={rating} />
-      {(customLabel || (list && entry.annotation.color_label)) && (
-        <span className="asset-library-custom-label">
-          {customLabel || assetLibraryColorLabelNames[entry.annotation.color_label!]}
-        </span>
-      )}
-      {!list && entry.root === "storyboards" && keywords.length > 0 && (
+      {flag !== "none" && (
         <span
-          className="asset-library-keyword-mark"
+          className={`shot-thumbnail-flag is-${flag}`}
+          role="img"
+          aria-label={assetLibraryFlagNames[flag]}
+        />
+      )}
+      <AssetLibraryRatingMark className="asset-library-thumbnail-rating" rating={rating} />
+      <AssetLibraryColorMark colorLabel={colorLabel} />
+      {entry.root === "storyboards" && keywords.length > 0 && (
+        <span
+          className="shot-thumbnail-keyword-indicator"
           role="img"
           aria-label={`${keywords.length} 个关键字`}
         >

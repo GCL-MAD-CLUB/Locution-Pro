@@ -56,6 +56,7 @@ export const defaultAssetLibraryVisibleColumns: ReadonlySet<AssetLibraryColumnId
   "duration",
   "keywords",
   "marks",
+  "created",
 ]);
 
 export type AssetLibraryColumnWidths = Record<AssetLibraryColumnId, number>;

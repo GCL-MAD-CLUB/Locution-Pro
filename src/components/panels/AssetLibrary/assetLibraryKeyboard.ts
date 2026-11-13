@@ -20,6 +20,7 @@ export interface AssetLibraryKeyContext {
 
 export type AssetLibraryKeyCommand =
   | { kind: "back" | "forward" | "up" | "properties" | "address" | "search" | "contextMenu" }
+  | { kind: "toggleDetails" }
   | { kind: "newFolder" | "cut" | "toggleFocused" | "open" | "rename" | "clearSelection" }
   | { kind: "viewPreset"; size: number }
   /** Moves focus to `index`; Shift extends and Ctrl keeps the selection, as in a file manager. */
@@ -68,6 +69,8 @@ export function assetLibraryKeyCommand(
     if (key === "ArrowRight") return { kind: "forward" };
     if (key === "ArrowUp") return { kind: "up" };
     if (key === "Enter") return { kind: "properties" };
+    // Physical key: Alt changes `key` on macOS.
+    if (shiftKey && input.code === "KeyP") return { kind: "toggleDetails" };
     if (lowered === "d") return { kind: "address" };
     return null;
   }

@@ -8,7 +8,7 @@ import type {
   MediaAsset,
   ProjectAssetLibraryState,
 } from "../../types";
-import { frameToTimeUs, timeUsToFrame } from "./timeline";
+import { frameDurationUs, frameToTimeUs, timeUsToFrame } from "./timeline";
 
 // Asset-library entries are snapshots. Nothing here reads subtitle or storyboard state:
 // once captured, an entry owns its range, text and annotations independently.
@@ -723,6 +723,17 @@ export function assetLibraryEntryDurationUs(entry: AssetLibraryEntry) {
     );
   }
   return Math.max(0, entry.end_us - entry.start_us);
+}
+
+/**
+ * The source time a hover position over an entry's thumbnail points at. Progress 0..1 spans
+ * the entry's own range and stops on its last frame, as the media bin does for whole videos.
+ */
+export function assetLibraryEntryHoverTimeUs(entry: AssetLibraryEntry, progress: number) {
+  const durationUs = assetLibraryEntryDurationUs(entry);
+  const lastFrameUs = Math.max(0, durationUs - Math.round(frameDurationUs(entry.media.frame_rate)));
+  const safeProgress = Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) : 0;
+  return entry.start_us + Math.min(Math.round(durationUs * safeProgress), lastFrameUs);
 }
 
 export function assetLibraryEntryMatches(entry: AssetLibraryEntry, query: string) {

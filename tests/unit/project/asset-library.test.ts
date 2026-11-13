@@ -453,6 +453,25 @@ test("duration uses subtitle time ranges and inclusive storyboard frames", () =>
   assert.equal(library.assetLibraryEntryDurationUs(shot), timeline.frameToTimeUs(30, frameRate));
 });
 
+test("hover time scrubs inside the entry's range and stops on its last frame", () => {
+  const subtitle = entry("subtitle", null, { start_us: 80_000, end_us: 480_000 });
+  assert.equal(library.assetLibraryEntryHoverTimeUs(subtitle, 0), 80_000);
+  assert.equal(library.assetLibraryEntryHoverTimeUs(subtitle, 0.5), 280_000);
+  assert.equal(library.assetLibraryEntryHoverTimeUs(subtitle, 1), 480_000 - frameUs);
+  assert.equal(library.assetLibraryEntryHoverTimeUs(subtitle, 2), 480_000 - frameUs);
+  assert.equal(library.assetLibraryEntryHoverTimeUs(subtitle, -1), 80_000);
+  assert.equal(library.assetLibraryEntryHoverTimeUs(subtitle, Number.NaN), 80_000);
+  const singleFrame = entry("shot", null, {
+    root: "storyboards",
+    start_us: 80_000,
+    end_us: 80_000,
+  });
+  assert.equal(library.assetLibraryEntryHoverTimeUs(singleFrame, 1), 80_000);
+  // Storyboard ranges include their last frame, so the far edge lands on end_us itself.
+  const shot = entry("shot", null, { root: "storyboards", start_us: 80_000, end_us: 480_000 });
+  assert.equal(library.assetLibraryEntryHoverTimeUs(shot, 1), 480_000);
+});
+
 test("entry names preserve authored line breaks through capture, rename and reload", () => {
   const base = entry("multiline", null, { name: "first\nsecond" });
   const renamed = library.renamedAssetLibraryEntry(base, "new first\r\nnew second");

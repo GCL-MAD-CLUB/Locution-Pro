@@ -10,6 +10,8 @@ export interface ResolvedAssetMedia {
   assetId: string;
   fingerprint: string;
   videoPath: string;
+  /** The proxy when one exists, for smooth hover scrubbing like the media bin. */
+  previewPath: string;
 }
 
 /**
@@ -33,6 +35,7 @@ export function resolveAssetMedia(
           assetId: project.asset.id,
           fingerprint: project.asset.fingerprint,
           videoPath: project.asset.path,
+          previewPath: project.proxy_path || project.asset.path,
         }
       : null;
   };

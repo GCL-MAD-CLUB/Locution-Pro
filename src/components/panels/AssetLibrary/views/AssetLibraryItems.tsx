@@ -28,6 +28,7 @@ import {
 } from "../assetLibraryColumns";
 import { type AssetLibraryNode } from "../assetLibraryNodes";
 import { AssetLibraryMarks, AssetLibraryThumbnailMarks } from "./AssetLibraryBadges";
+import { AssetLibraryHoverFrame } from "./AssetLibraryHoverFrame";
 import { AssetLibraryListHeader } from "./AssetLibraryListHeader";
 import { AssetLibraryThumbnail } from "./AssetLibraryThumbnail";
 
@@ -38,6 +39,12 @@ const gridGap = 12;
 const twoLineRowHeight = 36;
 /** List icons are 16px at the smallest size and scale with the shared size control. */
 const listIconSize = 16;
+
+/** The media bin's icon-view hover scrub: which card and where along its thumbnail. */
+interface HoverScrub {
+  key: string;
+  progress: number;
+}
 
 interface MarqueeState {
   originX: number;
@@ -211,6 +218,23 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const [contentWidth, setContentWidth] = useState(0);
+  const [hoverScrub, setHoverScrub] = useState<HoverScrub | null>(null);
+  /** Selected cards keep their last scrub position after the pointer leaves, as in the media bin. */
+  const [keptScrubProgress, setKeptScrubProgress] = useState<Readonly<Record<string, number>>>({});
+
+  // Unmounted cards never get pointerleave; drop scrubs for cards that left the view, and the
+  // live scrub while the panel is in the background.
+  useEffect(() => {
+    const shown = new Set(nodes.map((node) => node.key));
+    setHoverScrub((current) =>
+      current && thumbnailsEnabled && shown.has(current.key) ? current : null,
+    );
+    setKeptScrubProgress((current) =>
+      Object.keys(current).every((key) => shown.has(key))
+        ? current
+        : Object.fromEntries(Object.entries(current).filter(([key]) => shown.has(key))),
+    );
+  }, [nodes, thumbnailsEnabled]);
   const grid =
     layout.mode === "icons"
       ? mediaGridLayout(
@@ -472,7 +496,30 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     );
   }
 
-  function renderCardPreview(node: AssetLibraryNode) {
+  function updateHoverScrub(event: ReactPointerEvent<HTMLElement>, key: string) {
+    if (event.buttons !== 0) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const progress = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width));
+    setHoverScrub((current) =>
+      current?.key === key && current.progress === progress ? current : { key, progress },
+    );
+  }
+
+  function finishHoverScrub(key: string) {
+    if (hoverScrub?.key !== key) return;
+    const { progress } = hoverScrub;
+    setKeptScrubProgress(({ [key]: _removed, ...remaining }) =>
+      selectedKeys.has(key) ? { ...remaining, [key]: progress } : remaining,
+    );
+    setHoverScrub(null);
+  }
+
+  function scrubProgress(node: AssetLibraryNode) {
+    if (hoverScrub?.key === node.key) return hoverScrub.progress;
+    return selectedKeys.has(node.key) ? (keptScrubProgress[node.key] ?? null) : null;
+  }
+
+  function renderCardPreview(node: AssetLibraryNode, progress: number | null) {
     if (node.kind === "folder") {
       return (
         <span className="media-bin-card-preview folder">
@@ -482,8 +529,15 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     }
     const subtitle = node.entry.root === "subtitles";
     const BadgeIcon = subtitle ? Captions : Film;
+    const scrubbable = Boolean(node.media);
     return (
-      <span className={`media-bin-card-preview ${subtitle ? "subtitle" : "video"}`}>
+      <span
+        className={`media-bin-card-preview ${subtitle ? "subtitle" : "video"}`}
+        onPointerMove={
+          scrubbable && thumbnailsEnabled ? (event) => updateHoverScrub(event, node.key) : undefined
+        }
+        onPointerLeave={scrubbable ? () => finishHoverScrub(node.key) : undefined}
+      >
         {node.media ? (
           <>
             <AssetLibraryThumbnail
@@ -492,6 +546,14 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
               displayWidth={grid.cardWidth}
               enabled={thumbnailsEnabled}
             />
+            {progress !== null && (
+              <AssetLibraryHoverFrame
+                key={node.media.previewPath}
+                entry={node.entry}
+                media={node.media}
+                progress={progress}
+              />
+            )}
             <span className="media-bin-card-type-badges" aria-hidden="true">
               <span className={`media-bin-card-type-badge ${subtitle ? "subtitle" : "video"}`}>
                 <BadgeIcon />
@@ -513,6 +575,8 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
 
   function renderCard(node: AssetLibraryNode) {
     const location = locationLabel?.(node);
+    const progress =
+      node.kind === "entry" && node.media && thumbnailsEnabled ? scrubProgress(node) : null;
     return (
       <div
         key={node.key}
@@ -525,8 +589,16 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
         {...nodeHandlers(node)}
       >
         <span className="media-bin-card-preview-shell">
-          {renderCardPreview(node)}
+          {renderCardPreview(node, progress)}
           {renderCheckbox(node, " asset-library-card-check")}
+          {progress !== null && (
+            <span
+              className={`media-bin-card-hover-progress${selectedKeys.has(node.key) ? " is-selected" : ""}`}
+              aria-hidden="true"
+            >
+              <span style={{ width: `${progress * 100}%` }} />
+            </span>
+          )}
         </span>
         <span className="media-bin-card-meta">{nameContent(node, "media-bin-card-name")}</span>
       </div>

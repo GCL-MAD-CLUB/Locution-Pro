@@ -440,7 +440,7 @@ fn resolve_shots(
                             parse_frame_rate(s.avg_frame_rate.as_deref())
                                 .or_else(|| parse_frame_rate(s.r_frame_rate.as_deref()))
                         })
-                        .unwrap_or(25.0);
+                        .unwrap_or(DEFAULT_MEDIA_FRAME_RATE);
                     let metadata = fs::metadata(&project.asset.path).map_err(inference_error)?;
                     let modified = canonical_media_version(&project.asset, &metadata)?;
                     let path = project.asset.path;

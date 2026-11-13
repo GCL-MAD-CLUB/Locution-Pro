@@ -19,6 +19,7 @@ import {
   getFrameTraceCache,
 } from "../../../../application/media/frameTraceCache";
 import { NativeFrameTraceSession } from "../../../../application/media/nativeFrameTrace";
+import { DEFAULT_FRAME_RATE } from "../../../../core/editor/timeline";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import type { StoryboardShot } from "../../../../types";
 import { eventSource } from "../../../../runtime/events/EventHub";
@@ -90,7 +91,7 @@ export function StoryboardMotionPanel({
   assetId,
   fingerprint,
   videoSource,
-  frameRate = 25,
+  frameRate = DEFAULT_FRAME_RATE,
   playbackFrame,
   isPlaying,
   onSeekFrame,

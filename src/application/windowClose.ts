@@ -1,13 +1,16 @@
 import { normalizeError } from "../errors/runtime";
 
 /** How long a quit waits for task cancellation and incomplete-output cleanup.
- * The frontend asks the backend to stop each running task. `cancel_task` is
- * the only path that sets the cancel flag, kills FFmpeg, and deletes the
- * paths registered for that task, and it resolves after that cleanup.
+ * The frontend asks the backend to stop each running task. `cancel_task` and
+ * the destroy fallback `cancel_all_tasks` both go through `claim_cancellation`,
+ * which sets the cancel flag, kills FFmpeg, and deletes that task's paths.
+ * The request resolves after that cleanup. A later cancel waits for the same
+ * in-flight request, so quit does not destroy the window while it is running.
  * A hung task must not block quit forever: after this wait the window is
  * destroyed even if cancellation has not settled. Sixty seconds covers process
  * teardown and deletion of in-progress export files. Destroying the window
- * lets the backend claim any cleanup the request did not finish.
+ * only claims tasks that have not been claimed yet. Work already taken by an
+ * in-flight `cancel_task` is not cleaned up again.
  */
 export const CLOSE_TASK_CLEANUP_TIMEOUT_MS = 60_000;
 

@@ -7,7 +7,7 @@ on:
       - ".github/actions/setup-npm/action.yml"
       - ".github/workflows/deploy-user-guide.yml"
       - "docs/user-guide/**"
-      - "scripts/check-user-guide.mjs"
+      - "scripts/check-user-guide.ts"
       - "package.json"
       - "package-lock.json"
   workflow_dispatch:

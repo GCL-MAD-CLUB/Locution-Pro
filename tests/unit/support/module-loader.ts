@@ -4,11 +4,11 @@ import ts from "typescript";
 
 /** Isolate module state; every dependency substitution must be explicit. */
 export function createModuleLoader(base: string) {
-  return function loadModule(
+  return function loadModule<T>(
     path: string,
     imports: Record<string, unknown> | ((name: string) => unknown) = {},
     globals: Record<string, unknown> = {},
-  ) {
+  ): T {
     const filename = new URL(path, base);
     const compiled = ts.transpileModule(readFileSync(filename, "utf8"), {
       fileName: filename.pathname,
@@ -30,7 +30,7 @@ export function createModuleLoader(base: string) {
           getNewLine: () => "\n",
         }),
       );
-    const exports = {};
+    const exports: Record<string, unknown> = {};
     runInNewContext(
       compiled.outputText,
       {
@@ -45,7 +45,7 @@ export function createModuleLoader(base: string) {
       },
       { filename: filename.pathname },
     );
-    return exports as any;
+    return exports as unknown as T;
   };
 }
 

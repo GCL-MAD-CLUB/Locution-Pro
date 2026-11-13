@@ -147,7 +147,7 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
   !define LOCUTION_PAYLOAD_MANIFEST "${LOCUTION_INSTALLER_SOURCE_DIR}\..\target\installer\payload-manifest.json"
 !endif
 !define LOCUTION_FINAL_PAYLOAD_MANIFEST "${LOCUTION_PAYLOAD_MANIFEST}.nsis.json"
-!system 'node "${LOCUTION_INSTALLER_SOURCE_DIR}\..\..\scripts\prepare-installer-manifest.mjs" --finalize-main "${LOCUTION_PAYLOAD_MANIFEST}" "${MAINBINARYSRCPATH}" "${MAINBINARYNAME}.exe"' = 0
+!system 'node "${LOCUTION_INSTALLER_SOURCE_DIR}\..\..\scripts\prepare-installer-manifest.ts" --finalize-main "${LOCUTION_PAYLOAD_MANIFEST}" "${MAINBINARYSRCPATH}" "${MAINBINARYNAME}.exe"' = 0
 !undef LOCUTION_PAYLOAD_MANIFEST
 !define LOCUTION_PAYLOAD_MANIFEST "${LOCUTION_FINAL_PAYLOAD_MANIFEST}"
 !ifdef LOCUTION_UPDATE_ONLY

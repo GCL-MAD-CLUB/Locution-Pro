@@ -53,7 +53,7 @@ ProRes 的质量档位会对应不同 profile；需要精确后期规格时，�
 
 ## 代理格式
 
-创建代理时可选 H.264 MP4、H.264 MP4 All-Intra、H.264 QuickTime、VP8 WebM 或 VP9 WebM 等预设。代理用于轻量预览和审核，不改变原始文件格式，也不代表所有播放器都能播放对应成品。
+创建代理时可选无损重封装 MOV（仅复制流，不重新编码）、H.264 MP4、H.264 MP4 All-Intra、H.264 QuickTime、VP8 WebM 或 VP9 WebM 等预设。代理用于轻量预览和审核，不改变原始文件格式，也不代表所有播放器都能播放对应成品。
 
 详见[管理离线媒体与代理](/media/offline-proxies)。
 

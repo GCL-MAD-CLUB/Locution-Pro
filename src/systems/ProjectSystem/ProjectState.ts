@@ -123,7 +123,8 @@ interface ProjectCommands {
   sourcePreviewCleared: () => void;
   sourcePreviewSelected: () => void;
   proxyPreviewSelected: () => void;
-  proxyGenerated: (path: string) => void;
+  /** Records a proxy for `assetId` (default: the active source) without retargeting the preview. */
+  proxyGenerated: (path: string, assetId?: string) => void;
   messagePublished: (message: string) => void;
   warningsReplaced: (warnings: UserNotice[]) => void;
   warningsAppended: (warnings: UserNotice[]) => void;
@@ -2084,8 +2085,17 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
           : { ...state, proxyDialogOpen: false, useProxy: false };
       }),
     proxyPreviewSelected: () => set((state) => (state.proxyPath ? { useProxy: true } : state)),
-    proxyGenerated: (proxyPath) =>
+    proxyGenerated: (proxyPath, assetId) =>
       commitProjectEvent(set, "生成代理文件", "proxy", (state) => {
+        if (assetId && assetId !== state.project?.asset.id) {
+          const target = state.projects[assetId];
+          return target
+            ? {
+                projects: { ...state.projects, [assetId]: { ...target, proxy_path: proxyPath } },
+                projectDirty: true,
+              }
+            : state;
+        }
         const project = state.project ? { ...state.project, proxy_path: proxyPath } : null;
         return {
           project,

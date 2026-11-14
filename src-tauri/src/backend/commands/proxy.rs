@@ -12,6 +12,10 @@ pub(crate) async fn generate_proxy(
     let task = register_task(&task_id, state.inner())?;
     let preferences = preferences_clone(&state)?;
     let project = media_sources.get(&asset_id)?.clone();
+    let options = ProxyOptions {
+        preset: effective_proxy_preset(options.preset, &project),
+        ..options
+    };
     let proxy_path = proxy_output_path(&project, &preferences, &options)?;
     emit_ffmpeg_progress(&app, &task_id, 0.0);
     if let Some(parent) = proxy_path.parent() {
@@ -35,25 +39,7 @@ pub(crate) async fn generate_proxy(
     }
     task.check_cancelled()?;
     if !proxy_path.exists() {
-        let mut args = vec![
-            "-y".to_string(),
-            "-hide_banner".to_string(),
-            "-loglevel".to_string(),
-            "error".to_string(),
-            "-i".to_string(),
-            project.asset.path.clone(),
-            "-map".to_string(),
-            "0:v:0".to_string(),
-            "-map".to_string(),
-            "0:a:0?".to_string(),
-            "-sn".to_string(),
-        ];
-        if let Some(video_filter) = proxy_video_filter(&options)? {
-            args.push("-vf".to_string());
-            args.push(video_filter);
-        }
-        append_proxy_preset_args(&mut args, options.preset, options.watermark);
-        args.push(proxy_path.to_string_lossy().into_owned());
+        let args = proxy_ffmpeg_args(&project, &options, &proxy_path)?;
 
         let program = ffmpeg_program(&preferences);
         run_status_with_ffmpeg_progress(

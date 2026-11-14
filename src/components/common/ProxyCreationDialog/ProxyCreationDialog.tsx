@@ -1,35 +1,22 @@
 ﻿import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { useState } from "react";
-import { invokeCommand, runOperation } from "../../../errors";
+import { useEffect, useState } from "react";
 import {
-  cancelFfmpegTask,
-  createFfmpegTaskId,
-  listenToFfmpegTaskProgress,
-} from "../../../platform/tauri/ffmpegProgress";
+  canOfferRemux,
+  defaultProxyPreset,
+  type ProxyCreationOptions,
+  type ProxyFrameSize,
+  type ProxyLocation,
+  type ProxyPreset,
+  type ProxyWatermark,
+} from "../../../application/media/proxyGeneration";
+import { runProxyGenerationTask } from "../../../application/media/proxyGenerationTask";
+import { runOperation } from "../../../errors";
 import { mediaDisplayName, useProjectPort } from "../../../systems/ProjectSystem";
 import { usePreferencesPort } from "../../../systems/PreferencesSystem";
-import { isTauriRuntime } from "../../../platform/tauri/runtime";
-import type { ProxyResult } from "../../../types";
+import { isMacOSRuntime, isTauriRuntime } from "../../../platform/tauri/runtime";
 import { ModalDialog } from "../ModalDialog";
 import { SelectDropdown, selectDropdownItems, type SelectDropdownItem } from "../SelectDropdown";
-import { createTaskProgress } from "../../../systems/TaskSystem";
 import "./ProxyCreationDialog.css";
-
-export type ProxyFrameSize = "full" | "half" | "quarter" | "custom";
-export type ProxyPreset =
-  "h264_mp4" | "h264_mp4_all_intra" | "h264_quicktime" | "vp8_webm" | "vp9_webm";
-export type ProxyWatermark = "none";
-export type ProxyLocation = "source_proxy_folder" | "custom" | "preferences_cache";
-
-export interface ProxyCreationOptions {
-  frameSize: ProxyFrameSize;
-  customWidth: number;
-  customHeight: number;
-  preset: ProxyPreset;
-  watermark: ProxyWatermark;
-  location: ProxyLocation;
-  customLocation: string;
-}
 
 const frameSizeOptions: Array<[ProxyFrameSize, string]> = [
   ["full", "完整"],
@@ -37,6 +24,8 @@ const frameSizeOptions: Array<[ProxyFrameSize, string]> = [
   ["quarter", "四分之一"],
   ["custom", "自定义"],
 ];
+
+const remuxPresetOption: [ProxyPreset, string] = ["remux", "无损重封装 MOV（推荐，不重新编码）"];
 
 const presetOptions: Array<[ProxyPreset, string]> = [
   ["h264_mp4", "H.264 MP4 代理"],
@@ -74,11 +63,22 @@ export function ProxyCreationDialog() {
   const [frameSize, setFrameSize] = useState<ProxyFrameSize>("full");
   const [customWidth, setCustomWidth] = useState(1280);
   const [customHeight, setCustomHeight] = useState(720);
-  const [preset, setPreset] = useState<ProxyPreset>("h264_mp4");
+  const [preset, setPreset] = useState<ProxyPreset>(() =>
+    defaultProxyPreset(project, isMacOSRuntime()),
+  );
   const [watermark, setWatermark] = useState<ProxyWatermark>("none");
   const [location, setLocation] = useState<ProxyLocation>("source_proxy_folder");
   const [customLocation, setCustomLocation] = useState("");
   const projectDisplayName = mediaDisplayName(project, mediaItems, activeVideoId);
+  const remuxOffered = canOfferRemux(project, isMacOSRuntime());
+  const isRemux = preset === "remux";
+
+  useEffect(() => {
+    if (isProxyDialogOpen) {
+      setPreset(defaultProxyPreset(project, isMacOSRuntime()));
+    }
+    // Reset only when the dialog opens; edits while open belong to the user.
+  }, [isProxyDialogOpen]);
 
   async function chooseCustomLocation(previousLocation: ProxyLocation) {
     const outcome = await runOperation("proxy.generate", () =>
@@ -147,40 +147,18 @@ export function ProxyCreationDialog() {
       return;
     }
 
-    const proxyTaskId = createFfmpegTaskId("proxy");
-    let proxyCancelled = false;
-    const proxyTask = await createTaskProgress({
-      operation: "proxy.generate",
-      label: `生成代理 ${projectDisplayName}`,
-      current: 0,
-      total: 1,
-      listener: listenToFfmpegTaskProgress(proxyTaskId),
-      on_cancel: async () => {
-        proxyCancelled = true;
-        await cancelFfmpegTask(proxyTaskId);
-      },
+    const outcome = await runProxyGenerationTask({
+      assetId: project.asset.id,
+      displayName: projectDisplayName,
+      options,
     });
-    if (proxyTask.cancelled) {
-      proxyTask.remove();
-      return;
-    }
-    try {
-      const result = await invokeCommand<ProxyResult>("generate_proxy", {
-        assetId: project.asset.id,
-        options,
-        taskId: proxyTaskId,
-      });
-      proxyGenerated(result.proxy_path);
-      setMessage("已生成预览代理。");
-      proxyTask.update({ current: 1 });
-      proxyTask.remove();
-    } catch (error) {
-      if (proxyCancelled) {
-        proxyTask.remove();
-        setMessage("已取消代理生成。");
-        return;
-      }
-      proxyTask.fail(error, { displayName: projectDisplayName, resourceKind: "proxy" });
+    if (outcome.status === "success") {
+      proxyGenerated(outcome.proxyPath, project.asset.id);
+      setMessage(
+        options.preset === "remux" ? "已无损重封装，预览保持原画质。" : "已生成预览代理。",
+      );
+    } else if (outcome.status === "cancelled") {
+      setMessage("已取消代理生成。");
     }
   }
 
@@ -219,6 +197,7 @@ export function ProxyCreationDialog() {
             value={frameSize}
             items={selectDropdownItems(frameSizeOptions)}
             onChange={(value) => setFrameSize(value as ProxyFrameSize)}
+            disabled={isRemux}
           />
           <div className="proxy-dialog-size-inputs">
             <label>
@@ -229,7 +208,7 @@ export function ProxyCreationDialog() {
                 step={2}
                 value={customWidth}
                 onChange={(event) => setCustomWidth(Number(event.currentTarget.value))}
-                disabled={frameSize !== "custom"}
+                disabled={isRemux || frameSize !== "custom"}
               />
             </label>
             <label>
@@ -240,7 +219,7 @@ export function ProxyCreationDialog() {
                 step={2}
                 value={customHeight}
                 onChange={(event) => setCustomHeight(Number(event.currentTarget.value))}
-                disabled={frameSize !== "custom"}
+                disabled={isRemux || frameSize !== "custom"}
               />
             </label>
           </div>
@@ -249,7 +228,7 @@ export function ProxyCreationDialog() {
       <ProxySelect
         label="预设"
         value={preset}
-        options={presetOptions}
+        options={remuxOffered ? [remuxPresetOption, ...presetOptions] : presetOptions}
         onChange={(value) => setPreset(value as ProxyPreset)}
       />
       <ProxySelect
@@ -289,6 +268,7 @@ function ProxySelect({ label, value, options, onChange }: ProxySelectProps) {
 
 interface ProxySelectControlProps<T extends string = string> {
   value: string;
+  disabled?: boolean;
   selectedLabel?: string;
   items: Array<SelectDropdownItem<T>>;
   onChange: (value: T) => void;
@@ -296,6 +276,7 @@ interface ProxySelectControlProps<T extends string = string> {
 
 function ProxySelectControl<T extends string>({
   value,
+  disabled,
   selectedLabel,
   items,
   onChange,
@@ -305,6 +286,7 @@ function ProxySelectControl<T extends string>({
       className="proxy-dialog-select"
       menuClassName="proxy-dialog-select-menu"
       value={value as T}
+      disabled={disabled}
       selectedLabel={selectedLabel}
       items={items}
       onChange={onChange}

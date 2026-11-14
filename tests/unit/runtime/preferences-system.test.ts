@@ -52,6 +52,7 @@ function savedPreferences(patch: Partial<Preferences> = {}): Preferences {
     ffprobe_path: "ffprobe",
     auto_save_interval_minutes: 11,
     auto_save_max_snapshots: 4,
+    auto_remux_matroska: false,
     ...patch,
   };
 }

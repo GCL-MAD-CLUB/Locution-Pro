@@ -24,6 +24,10 @@ pub(crate) enum ProxyFrameSize {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ProxyPreset {
+    /// Lossless stream-copy into QuickTime so AVFoundation (macOS WKWebView)
+    /// can play containers such as Matroska. Falls back to `H264Mp4` when the
+    /// source video codec cannot be played without re-encoding.
+    Remux,
     H264Mp4,
     H264Mp4AllIntra,
     H264Quicktime,

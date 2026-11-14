@@ -228,6 +228,7 @@ pub(crate) fn normalize_preferences(preferences: Preferences) -> AppResult<Prefe
     let normalized = Preferences {
         appearance: preferences.appearance,
         show_home_on_startup: preferences.show_home_on_startup,
+        auto_remux_matroska: preferences.auto_remux_matroska,
         auto_save_enabled: preferences.auto_save_enabled,
         auto_save_current_project: preferences.auto_save_current_project,
         auto_save_dir,
@@ -434,6 +435,7 @@ mod tests {
         assert_eq!(preferences.auto_save_interval_minutes, 5);
         assert_eq!(preferences.auto_save_max_snapshots, 20);
         assert!(preferences.show_home_on_startup);
+        assert!(preferences.auto_remux_matroska);
         assert!(preferences.auto_save_enabled);
         assert!(preferences.auto_save_current_project);
         assert_eq!(
@@ -449,6 +451,7 @@ mod tests {
         let preferences = normalize_preferences(Preferences {
             appearance: crate::models::Appearance::Light,
             show_home_on_startup: false,
+            auto_remux_matroska: false,
             auto_save_enabled: false,
             auto_save_current_project: false,
             auto_save_dir: cache_root
@@ -462,6 +465,7 @@ mod tests {
         let restored: Preferences =
             serde_json::from_str(&serde_json::to_string(&preferences).unwrap()).unwrap();
         assert!(!restored.show_home_on_startup);
+        assert!(!restored.auto_remux_matroska);
         assert_eq!(restored.appearance, crate::models::Appearance::Light);
         assert!(!restored.auto_save_enabled);
         assert!(!restored.auto_save_current_project);

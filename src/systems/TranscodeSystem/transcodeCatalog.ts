@@ -1023,7 +1023,7 @@ export function subtitleEncoderLabel(codec: string) {
 
 /** Effects need these FFmpeg filters; unsupported ones are not offered. */
 export const effectFilters = {
-  toneMapping: ["zscale", "tonemap"],
+  toneMapping: ["setparams", "zscale", "tonemap"],
   lut: ["lut3d"],
   imageOverlay: ["overlay"],
   textOverlay: ["drawtext"],

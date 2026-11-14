@@ -239,6 +239,18 @@ fn draw_text_filter(
     )
 }
 
+/// The HDR transfer to tone-map from: the source's own PQ or HLG tag, PQ
+/// (HDR10) when the source does not say, and `None` for a tagged SDR source,
+/// which needs no tone mapping.
+fn tone_mapping_input_transfer(transfer: Option<&str>) -> Option<&'static str> {
+    match transfer.map(str::trim) {
+        Some("smpte2084") => Some("smpte2084"),
+        Some("arib-std-b67") => Some("arib-std-b67"),
+        None | Some("") | Some("unknown") | Some("unspecified") => Some("smpte2084"),
+        Some(_) => None,
+    }
+}
+
 /// Splits user-supplied extra options like a shell would, honoring quotes.
 pub(crate) fn split_extra_args(value: &str) -> Vec<String> {
     let mut args = Vec::new();
@@ -268,12 +280,38 @@ pub(crate) fn split_extra_args(value: &str) -> Vec<String> {
     args
 }
 
+/// Which codec a copied subtitle stream gets in the target container:
+/// `copy` when the container holds it, a text conversion when it does not,
+/// or `None` for a bitmap stream the container cannot hold.
+fn copied_subtitle_codec(container: &str, codec: Option<&str>, bitmap: bool) -> Option<String> {
+    let mp4_family = HVC1_TAG_MUXERS.contains(&container) || FAST_START_MUXERS.contains(&container);
+    let target = if mp4_family {
+        "mov_text"
+    } else if container == "webm" {
+        "webvtt"
+    } else if container == "matroska" {
+        // Matroska holds every subtitle codec except MP4's timed text.
+        if codec == Some("mov_text") {
+            return Some("subrip".to_string());
+        }
+        return Some("copy".to_string());
+    } else {
+        return Some("copy".to_string());
+    };
+    if codec == Some(target) {
+        Some("copy".to_string())
+    } else if bitmap {
+        None
+    } else {
+        Some(target.to_string())
+    }
+}
+
 enum SubtitlePlan {
     None,
-    /// `(input index, stream specifier)` pairs muxed with one codec.
+    /// `(input index, stream specifier, codec)` for every muxed stream.
     Mux {
-        streams: Vec<(usize, String)>,
-        codec: String,
+        streams: Vec<(usize, String, String)>,
     },
     BurnText {
         file: String,
@@ -339,31 +377,51 @@ fn plan_subtitles(
     match subtitles.mode {
         TranscodeSubtitleMode::Copy | TranscodeSubtitleMode::Convert => {
             let copy = subtitles.mode == TranscodeSubtitleMode::Copy;
-            let codec = if copy {
-                "copy".to_string()
-            } else {
-                subtitles.codec.clone()
-            };
+            let container = settings.container.as_str();
             if let Some(input) = external_input {
+                // External subtitle files are text (SRT, ASS, VTT...).
+                let codec = if copy {
+                    copied_subtitle_codec(container, None, false)
+                        .unwrap_or_else(|| "copy".to_string())
+                } else {
+                    subtitles.codec.clone()
+                };
                 return Ok(SubtitlePlan::Mux {
-                    streams: vec![(input, "s:0".to_string())],
-                    codec,
+                    streams: vec![(input, "s:0".to_string(), codec)],
                 });
             }
             let bitmap_target = BITMAP_SUBTITLE_ENCODERS.contains(&subtitles.codec.as_str());
             let candidates = source
                 .subtitles
                 .iter()
-                .filter(|stream| copy || stream.bitmap == bitmap_target)
+                .filter(|stream| {
+                    if copy {
+                        copied_subtitle_codec(container, Some(&stream.codec), stream.bitmap)
+                            .is_some()
+                    } else {
+                        stream.bitmap == bitmap_target
+                    }
+                })
                 .collect();
-            let streams: Vec<(usize, String)> = selected(candidates)
+            let streams: Vec<(usize, String, String)> = selected(candidates)
                 .into_iter()
-                .map(|index| (0, format!("s:{index}")))
+                .filter_map(|index| {
+                    let stream = source
+                        .subtitles
+                        .iter()
+                        .find(|stream| stream.index == index)?;
+                    let codec = if copy {
+                        copied_subtitle_codec(container, Some(&stream.codec), stream.bitmap)?
+                    } else {
+                        subtitles.codec.clone()
+                    };
+                    Some((0, format!("s:{index}"), codec))
+                })
                 .collect();
             if streams.is_empty() {
                 Ok(SubtitlePlan::None)
             } else {
-                Ok(SubtitlePlan::Mux { streams, codec })
+                Ok(SubtitlePlan::Mux { streams })
             }
         }
         TranscodeSubtitleMode::Burn => {
@@ -664,11 +722,18 @@ pub(crate) fn build_transcode_plan(
             chain.push("bwdif=mode=send_frame:parity=auto:deint=all".to_string());
         }
         if effects.tone_mapping.enabled {
-            let target = settings.video.pixel_format.as_deref().unwrap_or("yuv420p");
-            chain.push(format!(
-                "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap={}:desat=0,zscale=t=bt709:m=bt709:r=tv,format={target}",
-                effects.tone_mapping.algorithm
-            ));
+            if let Some(transfer) = tone_mapping_input_transfer(
+                source
+                    .video
+                    .first()
+                    .and_then(|stream| stream.color_transfer.as_deref()),
+            ) {
+                let target = settings.video.pixel_format.as_deref().unwrap_or("yuv420p");
+                chain.push(format!(
+                    "setparams=color_primaries=bt2020:color_trc={transfer}:colorspace=bt2020nc:range=tv,zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap={}:desat=0,zscale=t=bt709:m=bt709:r=tv,format={target}",
+                    effects.tone_mapping.algorithm
+                ));
+            }
         }
         if effects.lut.enabled && !effects.lut.path.trim().is_empty() {
             chain.push(format!(
@@ -898,11 +963,18 @@ pub(crate) fn build_transcode_plan(
 
     // Subtitles.
     match &subtitle_plan {
-        SubtitlePlan::Mux { streams, codec } => {
-            for (input, stream) in streams {
+        SubtitlePlan::Mux { streams } => {
+            for (input, stream, _) in streams {
                 rest.extend(["-map".to_string(), format!("{input}:{stream}")]);
             }
-            rest.extend(["-c:s".to_string(), codec.clone()]);
+            let first = &streams[0].2;
+            if streams.iter().all(|(_, _, codec)| codec == first) {
+                rest.extend(["-c:s".to_string(), first.clone()]);
+            } else {
+                for (output_index, (_, _, codec)) in streams.iter().enumerate() {
+                    rest.extend([format!("-c:s:{output_index}"), codec.clone()]);
+                }
+            }
         }
         _ => rest.push("-sn".to_string()),
     }
@@ -1112,6 +1184,7 @@ pub(crate) fn transcode_source_info(probe: &ProbeOutput) -> TranscodeSourceInfo 
                 .or_else(|| stream.r_frame_rate.clone()),
             sample_rate: optional_i64(stream.sample_rate.as_deref()),
             channels: stream.channels,
+            color_transfer: stream.color_transfer.clone(),
         });
     }
     info
@@ -1540,6 +1613,7 @@ mod tests {
             sample_rate: Some(48_000),
             channels: Some(2),
             bitmap,
+            color_transfer: None,
         }
     }
 
@@ -1593,7 +1667,7 @@ mod tests {
     }
 
     #[test]
-    fn default_settings_encode_h264_aac_and_copy_every_audio_and_subtitle_stream() {
+    fn default_settings_encode_h264_aac_and_copy_what_mp4_can_hold() {
         let plan = plan(TranscodeSettings::default());
         assert_eq!(plan.passes.len(), 1);
         let args = &plan.passes[0];
@@ -1602,7 +1676,11 @@ mod tests {
         assert!(has_pair(args, "-pix_fmt", "yuv420p"));
         assert!(has_pair(args, "-map", "0:a"));
         assert!(has_pair(args, "-b:a", "320k"));
-        assert!(has_pair(args, "-c:s", "copy"));
+        // MP4 cannot hold ASS or SubRip: copied text streams become timed
+        // text, and the PGS stream, which cannot be converted, is left out.
+        assert!(has_pair(args, "-map", "0:s:0") && has_pair(args, "-map", "0:s:2"));
+        assert!(!has_pair(args, "-map", "0:s:1"));
+        assert!(has_pair(args, "-c:s", "mov_text"));
         assert!(has_pair(args, "-movflags", "+faststart"));
         assert!(has_pair(args, "-f", "mp4"));
         assert_eq!(args.last().map(String::as_str), Some("/out/clip.mp4"));
@@ -1644,6 +1722,44 @@ mod tests {
         assert!(args.contains(&"-an".to_string()));
         assert!(has_pair(&args, "-map", "0:s:0"));
         assert!(!has_pair(&args, "-map", "0:s:2"));
+    }
+
+    #[test]
+    fn copied_subtitles_keep_compatible_streams_and_convert_the_rest() {
+        let mut settings = TranscodeSettings::default();
+        settings.container = "matroska".to_string();
+        let mut mixed = source();
+        mixed.subtitles[2].codec = "mov_text".to_string();
+        let args = build_transcode_plan(
+            &job(settings),
+            &mixed,
+            Path::new("/out/clip.mkv"),
+            Path::new("/tmp/transcode"),
+            None,
+        )
+        .expect("plan")
+        .passes
+        .remove(0);
+        assert!(has_pair(&args, "-map", "0:s:1"), "Matroska keeps PGS");
+        assert!(has_pair(&args, "-c:s:0", "copy"));
+        assert!(has_pair(&args, "-c:s:1", "copy"));
+        assert!(has_pair(&args, "-c:s:2", "subrip"));
+        assert_eq!(
+            copied_subtitle_codec("webm", Some("webvtt"), false).as_deref(),
+            Some("copy")
+        );
+        assert_eq!(
+            copied_subtitle_codec("webm", Some("ass"), false).as_deref(),
+            Some("webvtt")
+        );
+        assert_eq!(
+            copied_subtitle_codec("mov", Some("dvd_subtitle"), true),
+            None
+        );
+        assert_eq!(
+            copied_subtitle_codec("avi", Some("ass"), false).as_deref(),
+            Some("copy")
+        );
     }
 
     #[test]
@@ -1811,6 +1927,37 @@ mod tests {
         assert_eq!(plan.temp_files.len(), 1);
         assert_eq!(plan.temp_files[0].1, "REV [source] clip.mkv");
         assert_eq!(plan.duration_us, 57_600_000);
+    }
+
+    #[test]
+    fn tone_mapping_follows_the_source_transfer() {
+        let mut settings = TranscodeSettings::default();
+        settings.effects.tone_mapping.enabled = true;
+        let tone_mapped = |transfer: Option<&str>| {
+            let mut hdr = source();
+            hdr.video[0].color_transfer = transfer.map(str::to_string);
+            let args = build_transcode_plan(
+                &job(settings.clone()),
+                &hdr,
+                Path::new("/out/clip.mp4"),
+                Path::new("/tmp/transcode"),
+                None,
+            )
+            .expect("plan")
+            .passes
+            .remove(0);
+            value_of(&args, "-vf").to_string()
+        };
+        assert!(tone_mapped(Some("arib-std-b67"))
+            .starts_with("setparams=color_primaries=bt2020:color_trc=arib-std-b67:"));
+        assert!(tone_mapped(None).starts_with(
+            "setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc"
+        ));
+        assert_eq!(
+            tone_mapped(Some("bt709")),
+            "",
+            "an SDR source is not tone mapped"
+        );
     }
 
     #[test]

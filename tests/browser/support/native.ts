@@ -309,6 +309,7 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
               sampleRate: null,
               channels: null,
               bitmap: false,
+              colorTransfer: null,
             },
           ],
           audio: [],

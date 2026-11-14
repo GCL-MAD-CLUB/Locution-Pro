@@ -424,6 +424,8 @@ pub(crate) struct TranscodeSourceStream {
     pub(crate) sample_rate: Option<i64>,
     pub(crate) channels: Option<i64>,
     pub(crate) bitmap: bool,
+    /// Transfer characteristic reported by the source, e.g. `smpte2084`.
+    pub(crate) color_transfer: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]

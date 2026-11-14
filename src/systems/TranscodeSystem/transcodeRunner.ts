@@ -77,13 +77,17 @@ export function ensureTranscodeReady(): Promise<void> {
     ]);
     if (capabilities.status === "success") store.getState().setCapabilities(capabilities.value);
     store.getState().restore(config.status === "success" ? config.value : null);
-    lastSavedConfig = JSON.stringify(transcodeConfigSnapshot(store.getState()));
+    // Only what was loaded counts as saved: sources queued while the config
+    // was loading must still be written, or quitting now would drop them.
+    lastSavedConfig =
+      config.status === "success" && config.value !== null ? JSON.stringify(config.value) : "";
     for (const source of store.getState().sources) {
       if (source.infoStatus === "pending") probeTranscodeSource(source);
     }
     store.subscribe(scheduleConfigSave);
     store.subscribe(syncWatchTimer);
     syncWatchTimer();
+    scheduleConfigSave();
   })();
   return startup;
 }

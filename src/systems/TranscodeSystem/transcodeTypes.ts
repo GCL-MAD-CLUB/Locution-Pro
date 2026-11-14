@@ -144,6 +144,7 @@ export interface TranscodeSourceStream {
   sampleRate: number | null;
   channels: number | null;
   bitmap: boolean;
+  colorTransfer: string | null;
 }
 
 export interface TranscodeSourceInfo {

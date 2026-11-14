@@ -1,0 +1,8 @@
+/* Folder destinations indent by depth, like the library's navigation tree */
+.asset-library-folder-menu-label {
+  display: block;
+  padding-inline-start: calc(var(--asset-library-folder-menu-depth, 0) * 14px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

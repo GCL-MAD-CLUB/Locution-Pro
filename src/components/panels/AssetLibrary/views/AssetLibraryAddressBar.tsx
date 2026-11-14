@@ -17,7 +17,7 @@ import {
 } from "../../../../core/editor/assetLibrary";
 import type { AssetLibraryFolder, ProjectAssetLibraryState } from "../../../../types";
 import { PopupMenu, PopupMenuItem, useCloseOnOutsidePointer } from "../../../common/PopupMenu";
-import { assetLibraryDropTargetProps } from "../assetLibraryDragDrop";
+import { assetLibraryDropTargetProps } from "../../../common/utils/assetLibraryDropTarget";
 import { assetLocationKey } from "../assetLibraryNodes";
 
 type AddressMenu =

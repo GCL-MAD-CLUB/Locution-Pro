@@ -36,6 +36,7 @@ import type { AssetLibraryColorLabel, AssetLibraryEntry } from "../../../types";
 import { usePanelManagerState } from "../../common/DockLayout";
 import { isPopupMenuEventTarget, useCloseOnOutsidePointer } from "../../common/PopupMenu";
 import { annotationShortcutAction } from "../../common/utils/annotationShortcuts";
+import { useExternalAssetLibraryDropTarget } from "../../common/utils/assetLibraryDropTarget";
 import "./AssetLibrary.css";
 import { assetLibraryCommands } from "./assetLibraryCommands";
 import { assetLibraryDragDrop, type AssetLibraryDragPreview } from "./assetLibraryDragDrop";
@@ -115,6 +116,9 @@ export function AssetLibrary() {
   const [columns, setColumns] = useState(1);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [dragPreview, setDragPreview] = useState<AssetLibraryDragPreview | null>(null);
+  // Shots and subtitles dragged in from their panels light up the spot they would land in.
+  const externalDropTarget = useExternalAssetLibraryDropTarget();
+  const shownDropTargetKey = dropTargetKey ?? externalDropTarget?.key ?? null;
   const dragCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => dragCleanupRef.current?.(), []);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
@@ -645,7 +649,7 @@ export function AssetLibrary() {
         backStack={view.backStack}
         forwardStack={view.forwardStack}
         editing={addressEditing}
-        dropTargetKey={dropTargetKey}
+        dropTargetKey={shownDropTargetKey}
         onEditingChange={(editing) => {
           setAddressEditing(editing);
           if (!editing) sectionRef.current?.focus({ preventScroll: true });
@@ -684,7 +688,7 @@ export function AssetLibrary() {
           library={library}
           location={location}
           collapsedKeys={view.collapsedKeys}
-          dropTargetKey={dropTargetKey}
+          dropTargetKey={shownDropTargetKey}
           onNavigate={view.navigate}
           onToggleCollapsed={view.toggleCollapsed}
           onCreateFolder={() => createFolder()}
@@ -706,7 +710,7 @@ export function AssetLibrary() {
           focusKey={view.focusKey}
           renamingKey={view.renamingKey}
           cutKeys={cutKeys}
-          dropTargetKey={dropTargetKey}
+          dropTargetKey={shownDropTargetKey}
           thumbnailsEnabled={panelActive}
           emptyText={query ? "没有匹配的素材" : "此文件夹为空。"}
           locationLabel={locationLabel}

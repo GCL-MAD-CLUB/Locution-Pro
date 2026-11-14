@@ -91,7 +91,7 @@ interface StoryboardListViewProps {
     focusRange?: boolean,
   ) => void;
   onDoubleClickShot: (event: ReactMouseEvent<HTMLElement>, shot: StoryboardShot) => void;
-  onStartKeywordDrag: (event: ReactPointerEvent<HTMLButtonElement>, shot: StoryboardShot) => void;
+  onStartKeywordDrag: (event: ReactPointerEvent<HTMLElement>, shot: StoryboardShot) => void;
   onOpenAnnotationMenu: (
     event: ReactMouseEvent<HTMLButtonElement>,
     shotId: string,
@@ -462,6 +462,7 @@ export function StoryboardListView({
                     onSelectShot(event, shot);
                   }}
                   onDoubleClick={(event) => onDoubleClickShot(event, shot)}
+                  onPointerDown={(event) => onStartKeywordDrag(event, shot)}
                 >
                   <div className="shot-thumbnail-cell" role="cell">
                     <StoryboardShotThumbnail
@@ -490,7 +491,6 @@ export function StoryboardListView({
                         setActiveCell(null);
                         onSelectShot(event, shot, true);
                       }}
-                      onStartKeywordDrag={(event) => onStartKeywordDrag(event, shot)}
                       onToggleStack={() => stack && setShotStackExpanded(shot.id, !stack.expanded)}
                       onSetRating={(nextRating) => setShotRatings(targetShotIds(), nextRating)}
                       onSetFlag={(nextFlag) => setShotFlags(targetShotIds(), nextFlag)}

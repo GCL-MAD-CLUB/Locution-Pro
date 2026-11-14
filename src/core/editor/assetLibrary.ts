@@ -605,14 +605,17 @@ export function withAssetLibraryCaptures(
   captures: readonly AssetLibraryCapture[],
   createId: AssetLibraryIdFactory,
   now: number,
+  folderId: string | null = null,
 ) {
   if (captures.length === 0) return library;
+  // A folder that went away meanwhile leaves the captures at the library root.
+  const folder = library.folders.find((item) => item.id === folderId && item.root === root);
   return {
     ...library,
     entries: [
       ...library.entries,
       ...captures.map((capture) =>
-        assetLibraryEntryFromCapture(root, capture, createId("asset"), now),
+        assetLibraryEntryFromCapture(root, capture, createId("asset"), now, folder?.id ?? null),
       ),
     ],
   };
@@ -815,6 +818,28 @@ export function sortedAssetLibraryNodes(
       left.start_us - right.start_us,
   );
   return { folders: sortedFolders, entries: sortedEntries };
+}
+
+/** A library's folders in tree order with their depth, for menus that pick a destination. */
+export function assetLibraryFolderOutline(
+  library: ProjectAssetLibraryState,
+  root: AssetLibraryRoot,
+) {
+  const sort: AssetLibrarySort = { key: "name", direction: "ascending" };
+  const folders = library.folders.filter((folder) => folder.root === root);
+  const outline: { folder: AssetLibraryFolder; depth: number }[] = [];
+  const visited = new Set<string>();
+  const walk = (parentId: string | null, depth: number) => {
+    const children = folders.filter((folder) => folder.parent_id === parentId);
+    for (const folder of sortedAssetLibraryNodes(children, [], sort).folders) {
+      if (visited.has(folder.id)) continue;
+      visited.add(folder.id);
+      outline.push({ folder, depth });
+      walk(folder.id, depth + 1);
+    }
+  };
+  walk(null, 1);
+  return outline;
 }
 
 export const assetLibraryIconThreshold = 30;

@@ -24,6 +24,8 @@ import {
   animatePlaybackFollowScroll,
   playbackFollowScrollDuration,
 } from "../../common/utils/playbackFollowScroll";
+import { startAssetLibraryItemDrag } from "../../common/utils/assetLibraryItemDrag";
+import { DragStackPreview, maximumDragStackLayers } from "../../common/DragStackPreview";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowDownAZ,
@@ -100,6 +102,7 @@ import {
   PopupMenuSubmenu,
   useCloseOnOutsidePointer,
 } from "../../common/PopupMenu";
+import { AssetLibraryFolderMenuItems } from "../../common/AssetLibraryFolderMenu";
 import "./SubtitlePanel.css";
 import {
   SubtitleColorLabelButtons,
@@ -321,6 +324,7 @@ interface SubtitleContextMenuState extends SubtitleMenuAnchor {
   flagSubmenuOpen: boolean;
   ratingSubmenuOpen: boolean;
   colorSubmenuOpen: boolean;
+  librarySubmenuOpen: boolean;
   exportSubmenuOpen: boolean;
 }
 
@@ -835,11 +839,20 @@ export function SubtitlePanel() {
     mediaFolders,
     detachedVideoIds,
     exportState,
+    assetLibrary,
     messagePublished,
     subtitleCuesDeleted,
     assetLibraryUpdated,
   } = useProjectPort(
-    ["projects", "projectId", "mediaItems", "mediaFolders", "detachedVideoIds", "exportState"],
+    [
+      "projects",
+      "projectId",
+      "mediaItems",
+      "mediaFolders",
+      "detachedVideoIds",
+      "exportState",
+      "assetLibrary",
+    ],
     ["messagePublished", "subtitleCuesDeleted", "assetLibraryUpdated"],
   );
   const {
@@ -889,6 +902,14 @@ export function SubtitlePanel() {
   const selectionAnchorRef = useRef<string | null>(null);
   const selectionFocusRef = useRef<string | null>(null);
   const marqueeCleanupRef = useRef<(() => void) | null>(null);
+  const cueLibraryDragCleanupRef = useRef<(() => void) | null>(null);
+  const [cueLibraryDragPreview, setCueLibraryDragPreview] = useState<{
+    x: number;
+    y: number;
+    thumbnailSrc: string | null;
+    aspectRatio: number;
+    layerCount: number;
+  } | null>(null);
   const sprayGestureCleanupRef = useRef<(() => void) | null>(null);
   const [cueSort, setCueSort] = useState<SubtitleSort>(defaultSubtitleSort);
   const [trackMenu, setTrackMenu] = useState<SubtitleMenuAnchor | null>(null);
@@ -1330,7 +1351,7 @@ export function SubtitlePanel() {
   const contextMenuCueIds = Array.from(selectedCueIds);
 
   // Library entries are snapshots: range, text and annotations are copied, never linked.
-  function addCuesToAssetLibrary(cueIds: readonly string[]) {
+  function addCuesToAssetLibrary(cueIds: readonly string[], folderId: string | null = null) {
     const cuesById = new Map(allCues.map((cue) => [cue.id, cue]));
     const captures = cueIds.flatMap((cueId): AssetLibraryCapture[] => {
       const cue = cuesById.get(cueId);
@@ -1361,7 +1382,14 @@ export function SubtitlePanel() {
     if (captures.length === 0) return;
     captures.sort((left, right) => left.startUs - right.startUs);
     assetLibraryUpdated("添加到素材库", (library) =>
-      withAssetLibraryCaptures(library, "subtitles", captures, createAssetLibraryId, Date.now()),
+      withAssetLibraryCaptures(
+        library,
+        "subtitles",
+        captures,
+        createAssetLibraryId,
+        Date.now(),
+        folderId,
+      ),
     );
     messagePublished(`已添加 ${captures.length} 条字幕到素材库。`);
   }
@@ -1408,6 +1436,7 @@ export function SubtitlePanel() {
     (contextMenu.flagSubmenuOpen ||
       contextMenu.ratingSubmenuOpen ||
       contextMenu.colorSubmenuOpen ||
+      contextMenu.librarySubmenuOpen ||
       contextMenu.exportSubmenuOpen),
   );
   const videoLabel = mediaDisplayName(project, mediaItems, activeVideoId);
@@ -1653,6 +1682,7 @@ export function SubtitlePanel() {
         scrollAnimationRef.current();
       }
       marqueeCleanupRef.current?.();
+      cueLibraryDragCleanupRef.current?.();
       sprayGestureCleanupRef.current?.();
       document.body.classList.remove("is-resizing-subtitle-column");
     },
@@ -1960,6 +1990,7 @@ export function SubtitlePanel() {
       flagSubmenuOpen: false,
       ratingSubmenuOpen: false,
       colorSubmenuOpen: false,
+      librarySubmenuOpen: false,
     });
   }
 
@@ -1977,6 +2008,29 @@ export function SubtitlePanel() {
       y: event.clientY,
       cueId,
       kind,
+    });
+  }
+
+  // Dragging a cue row into the subtitle library of the asset library panel adds the cue,
+  // or the whole selection when the cue is part of it, as "添加到素材库" does.
+  function startCueLibraryDrag(event: ReactPointerEvent<HTMLElement>, cue: SubtitleCue) {
+    if (sprayActive) return;
+    const cueIds = selectedCueIds.has(cue.id) ? Array.from(selectedCueIds) : [cue.id];
+    const thumbnail = event.currentTarget.querySelector<HTMLImageElement>("img.cue-frame");
+    const sourceWidth = thumbnail?.naturalWidth ?? 0;
+    const sourceHeight = thumbnail?.naturalHeight ?? 0;
+    const preview = {
+      thumbnailSrc: thumbnail?.currentSrc || thumbnail?.src || null,
+      aspectRatio: sourceWidth > 0 && sourceHeight > 0 ? sourceWidth / sourceHeight : 16 / 9,
+      layerCount: Math.min(maximumDragStackLayers, cueIds.length),
+    };
+    startAssetLibraryItemDrag(event, {
+      root: "subtitles",
+      cleanupRef: cueLibraryDragCleanupRef,
+      // Over its own panel the drag keeps the grabbing pointer rather than a no-drop sign.
+      neutralArea: panelRef.current,
+      onPreview: (pointer) => setCueLibraryDragPreview(pointer && { ...pointer, ...preview }),
+      onDrop: (location) => addCuesToAssetLibrary(cueIds, location.folderId),
     });
   }
 
@@ -2680,12 +2734,19 @@ export function SubtitlePanel() {
           onPointerDown={startMarqueeSelection}
           onContextMenu={openContextMenu}
           onSelectCue={handleCueSelection}
+          onStartCueDrag={startCueLibraryDrag}
           onDoubleClickCue={handleCueDoubleClick}
           onOpenAnnotationMenu={openAnnotationMenu}
           cueLabel={(cue) => cueLabel(cueAnnotations[cue.id])}
         />
       </div>
 
+      {cueLibraryDragPreview && (
+        <DragStackPreview
+          {...cueLibraryDragPreview}
+          placeholder={<Captions aria-hidden="true" />}
+        />
+      )}
       {marqueeSelection &&
         createPortal(
           <div
@@ -3350,15 +3411,36 @@ export function SubtitlePanel() {
               波纹删除
             </PopupMenuItem>
             <PopupMenuSeparator />
-            <PopupMenuItem
+            <PopupMenuSubmenu
+              label="添加到素材库"
+              open={contextMenu.librarySubmenuOpen}
               disabled={contextMenuCueIds.length === 0}
-              onSelect={() => {
-                setContextMenu(null);
-                addCuesToAssetLibrary(contextMenuCueIds);
-              }}
+              enableMnemonics
+              menuClassName="subtitle-context-menu"
+              onOpenChange={(open) =>
+                setContextMenu((current) =>
+                  current
+                    ? {
+                        ...current,
+                        librarySubmenuOpen: open,
+                        flagSubmenuOpen: open ? false : current.flagSubmenuOpen,
+                        ratingSubmenuOpen: open ? false : current.ratingSubmenuOpen,
+                        colorSubmenuOpen: open ? false : current.colorSubmenuOpen,
+                        exportSubmenuOpen: open ? false : current.exportSubmenuOpen,
+                      }
+                    : current,
+                )
+              }
             >
-              添加到素材库
-            </PopupMenuItem>
+              <AssetLibraryFolderMenuItems
+                library={assetLibrary}
+                root="subtitles"
+                onSelect={(folderId) => {
+                  setContextMenu(null);
+                  addCuesToAssetLibrary(contextMenuCueIds, folderId);
+                }}
+              />
+            </PopupMenuSubmenu>
             <PopupMenuSeparator />
             <PopupMenuSubmenu
               label="设置旗标(F)"
@@ -3375,6 +3457,7 @@ export function SubtitlePanel() {
                         flagSubmenuOpen: open,
                         ratingSubmenuOpen: open ? false : current.ratingSubmenuOpen,
                         colorSubmenuOpen: open ? false : current.colorSubmenuOpen,
+                        librarySubmenuOpen: open ? false : current.librarySubmenuOpen,
                       }
                     : current,
                 )
@@ -3404,6 +3487,7 @@ export function SubtitlePanel() {
                         ratingSubmenuOpen: open,
                         flagSubmenuOpen: open ? false : current.flagSubmenuOpen,
                         colorSubmenuOpen: open ? false : current.colorSubmenuOpen,
+                        librarySubmenuOpen: open ? false : current.librarySubmenuOpen,
                       }
                     : current,
                 )
@@ -3466,6 +3550,7 @@ export function SubtitlePanel() {
                         ...current,
                         exportSubmenuOpen: open ? false : current.exportSubmenuOpen,
                         colorSubmenuOpen: open,
+                        librarySubmenuOpen: open ? false : current.librarySubmenuOpen,
                         flagSubmenuOpen: open ? false : current.flagSubmenuOpen,
                         ratingSubmenuOpen: open ? false : current.ratingSubmenuOpen,
                       }
@@ -3499,6 +3584,7 @@ export function SubtitlePanel() {
                         flagSubmenuOpen: open ? false : current.flagSubmenuOpen,
                         ratingSubmenuOpen: open ? false : current.ratingSubmenuOpen,
                         colorSubmenuOpen: open ? false : current.colorSubmenuOpen,
+                        librarySubmenuOpen: open ? false : current.librarySubmenuOpen,
                       }
                     : current,
                 )

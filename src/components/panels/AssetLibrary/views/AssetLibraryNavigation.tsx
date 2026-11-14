@@ -22,7 +22,7 @@ import { MediaBinFolderIcon } from "../../MediaBin/views/MediaBinFolderIcon";
 import {
   assetLibraryDropTargetProps,
   assetLibraryTreeDropPrefix as treeDropPrefix,
-} from "../assetLibraryDragDrop";
+} from "../../../common/utils/assetLibraryDropTarget";
 import { assetLocationKey } from "../assetLibraryNodes";
 
 interface AssetLibraryNavigationProps {

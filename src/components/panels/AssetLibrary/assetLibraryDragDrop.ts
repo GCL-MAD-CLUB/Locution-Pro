@@ -5,14 +5,17 @@ import {
   sameAssetLibraryLocation,
   type AssetLibraryLocation,
 } from "../../../core/editor/assetLibrary";
-import type { AssetLibraryRoot, ProjectAssetLibraryState } from "../../../types";
+import type { ProjectAssetLibraryState } from "../../../types";
+import { maximumDragStackLayers } from "../../common/DragStackPreview";
+import {
+  assetLibraryDropTargetAt,
+  assetLibraryTreeDropPrefix,
+} from "../../common/utils/assetLibraryDropTarget";
 import type { AssetLibraryCommands } from "./assetLibraryCommands";
 import { assetLibrarySelectionFromKeys, type AssetLibraryNode } from "./assetLibraryNodes";
 
 /** Pointer travel before a press on an item becomes a drag, matching the storyboard. */
 const dragThresholdPx = 4;
-/** The storyboard's shot drag preview stacks at most this many cards. */
-const maximumDragLayers = 10;
 
 export interface AssetLibraryDragPreview {
   node: AssetLibraryNode;
@@ -27,36 +30,6 @@ export interface AssetLibraryDragPreview {
 // The storyboard panel's shot drag classes: a no-drop cursor by default, grabbing over a target.
 const draggingClass = "is-dragging-storyboard-shot";
 const allowedClass = "is-storyboard-shot-drag-allowed";
-
-/** Tree rows use their own drop keys, apart from the same folders in the item pane. */
-export const assetLibraryTreeDropPrefix = "tree:";
-
-/**
- * Drop targets carry these attributes. The items pane, folder items, tree rows and address
- * crumbs all mark themselves, so one hit test finds whichever is under the pointer.
- */
-export function assetLibraryDropTargetProps(location: AssetLibraryLocation, key: string) {
-  return {
-    "data-asset-drop-root": location.root,
-    "data-asset-drop-folder": location.folderId ?? "",
-    "data-asset-drop-key": key,
-  };
-}
-
-function dropTargetAt(clientX: number, clientY: number) {
-  const element = document
-    .elementFromPoint(clientX, clientY)
-    ?.closest<HTMLElement>("[data-asset-drop-root]");
-  if (!element) return null;
-  const { assetDropRoot, assetDropFolder, assetDropKey } = element.dataset;
-  return {
-    location: {
-      root: assetDropRoot as AssetLibraryRoot,
-      folderId: assetDropFolder || null,
-    } satisfies AssetLibraryLocation,
-    key: assetDropKey ?? "",
-  };
-}
 
 /** Ends a drag without the release also counting as a click on whatever is under it. */
 function suppressNextClick() {
@@ -109,7 +82,7 @@ export function assetLibraryDragDrop(context: AssetLibraryDragDropContext) {
     let dragging = false;
 
     const targetAt = (clientX: number, clientY: number) => {
-      const target = dropTargetAt(clientX, clientY);
+      const target = assetLibraryDropTargetAt(clientX, clientY);
       return target &&
         assetLibraryCanDropInto(library, location.root, dragged.folderIds, target.location)
         ? target
@@ -145,7 +118,7 @@ export function assetLibraryDragDrop(context: AssetLibraryDragDropContext) {
         node,
         thumbnailSrc: thumbnail?.currentSrc || thumbnail?.src || null,
         aspectRatio: sourceWidth > 0 && sourceHeight > 0 ? sourceWidth / sourceHeight : 16 / 9,
-        layerCount: Math.min(maximumDragLayers, keys.length),
+        layerCount: Math.min(maximumDragStackLayers, keys.length),
         x: moveEvent.clientX,
         y: moveEvent.clientY,
       });

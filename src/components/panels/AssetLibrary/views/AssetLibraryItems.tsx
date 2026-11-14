@@ -26,7 +26,7 @@ import {
   type AssetLibraryColumnId,
   type AssetLibraryColumnWidths,
 } from "../assetLibraryColumns";
-import { assetLibraryDropTargetProps } from "../assetLibraryDragDrop";
+import { assetLibraryDropTargetProps } from "../../../common/utils/assetLibraryDropTarget";
 import { assetFolderKey, type AssetLibraryNode } from "../assetLibraryNodes";
 import { AssetLibraryMarks, AssetLibraryThumbnailMarks } from "./AssetLibraryBadges";
 import { AssetLibraryHoverFrame } from "./AssetLibraryHoverFrame";

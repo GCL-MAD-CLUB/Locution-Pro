@@ -256,6 +256,46 @@ test("captures become decoupled entries with snapshot annotations", () => {
   assert.equal(library.subtitleAssetName("", "clip.mp4", 2), "clip 字幕 2");
 });
 
+test("captures dropped on a folder land in it, or at the root once it is gone", () => {
+  const base = {
+    ...library.emptyAssetLibrary(),
+    folders: [folder("shots", null, "shots", "storyboards"), folder("cues", null)],
+  };
+  const capture = {
+    media: entry("m", null).media,
+    startUs: 0,
+    endUs: 400_000,
+    name: "shot",
+    text: "",
+  };
+  const add = (folderId: string | null) =>
+    library.withAssetLibraryCaptures(base, "storyboards", [capture], sequentialIds(), 7, folderId)
+      .entries[0]!.folder_id;
+  assert.equal(add("shots"), "shots");
+  assert.equal(add("missing"), null);
+  // A folder from the other library never takes the capture.
+  assert.equal(add("cues"), null);
+  assert.equal(add(null), null);
+});
+
+test("the folder outline lists one library in tree order with depths", () => {
+  const base = {
+    ...library.emptyAssetLibrary(),
+    folders: [
+      folder("b", null, "B"),
+      folder("a2", "a", "A2"),
+      folder("a", null, "A"),
+      folder("a1", "a", "A1"),
+      folder("s", null, "Shots", "storyboards"),
+    ],
+  };
+  const outline = library
+    .assetLibraryFolderOutline(base, "subtitles")
+    .map(({ folder: item, depth }) => `${depth}:${item.id}`);
+  assert.equal(outline.join(" "), "1:a 2:a1 2:a2 1:b");
+  assert.equal(library.assetLibraryFolderOutline(base, "storyboards").length, 1);
+});
+
 test("annotation helpers return the same entry when nothing changes", () => {
   const base = entry("e", null);
   assert.equal(library.withAssetLibraryRating(base, 0), base);

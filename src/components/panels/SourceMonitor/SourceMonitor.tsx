@@ -13,7 +13,16 @@ import { flushSync } from "react-dom";
 import { useSourcePreviewRequest } from "../../../application/media/panelMediaSources";
 import { usePersistedProjectPanelState } from "../../../application/media/projectPanelPersistence";
 import type { StillExportRequest } from "../../../application/media/stillExportTask";
-import { isTauriRuntime } from "../../../platform/tauri/runtime";
+import { isMacOSRuntime, isTauriRuntime } from "../../../platform/tauri/runtime";
+import {
+  defaultProxyOptions,
+  isRemuxProxyPath,
+  shouldAutoRemux,
+  unplayableSourceMessage,
+} from "../../../application/media/proxyGeneration";
+import { runProxyGenerationTask } from "../../../application/media/proxyGenerationTask";
+import { usePreferencesPort } from "../../../systems/PreferencesSystem";
+import type { MediaDocument } from "../../../types";
 import { isPopupMenuOpen } from "../../common/PopupMenu";
 import { StillExportDialog } from "../../common/StillExportDialog/StillExportDialog";
 import {
@@ -230,6 +239,7 @@ export function SourceMonitor() {
     sourcePreviewSelected,
     proxyPreviewSelected,
     proxyDialogOpened,
+    proxyGenerated,
     storyboardUpdated,
   } = useProjectPort(
     [
@@ -249,9 +259,12 @@ export function SourceMonitor() {
       "sourcePreviewSelected",
       "proxyPreviewSelected",
       "proxyDialogOpened",
+      "proxyGenerated",
       "storyboardUpdated",
     ],
   );
+  const { preferences } = usePreferencesPort(["preferences"], []);
+  const autoRemuxAttemptsRef = useRef(new Set<string>());
   const {
     currentFrame,
     setCurrentFrame,
@@ -1096,16 +1109,54 @@ export function SourceMonitor() {
   }
 
   function handleVideoError() {
-    if (!useProxy && project) {
+    if (!project) {
+      return;
+    }
+    if (!useProxy) {
       if (proxyPath) {
         preservePreviewPlayback();
         proxyPreviewSelected();
         messagePublished("原文件无法直接播放，已切换到代理。");
       } else {
         pendingPreviewRestoreRef.current = null;
+        const assetId = project.asset.id;
+        if (
+          shouldAutoRemux({
+            project,
+            isMacOS: isMacOSRuntime(),
+            enabled: preferences.auto_remux_matroska,
+            alreadyAttempted: autoRemuxAttemptsRef.current.has(assetId),
+          })
+        ) {
+          autoRemuxAttemptsRef.current.add(assetId);
+          void autoRemuxSource(project);
+          return;
+        }
         proxyDialogOpened();
-        messagePublished("原文件无法直接播放，请先创建代理。");
+        messagePublished(unplayableSourceMessage(project, isMacOSRuntime()));
       }
+    } else if (isRemuxProxyPath(proxyPath)) {
+      // Stream copy keeps codec features AVFoundation may still reject (e.g. 10-bit H.264).
+      pendingPreviewRestoreRef.current = null;
+      proxyDialogOpened();
+      messagePublished("无损重封装的文件仍无法播放，请创建 H.264 代理。");
+    }
+  }
+
+  async function autoRemuxSource(source: MediaDocument) {
+    const displayName = mediaDisplayName(source, mediaItems, activeVideoId);
+    messagePublished("macOS 无法直接预览 MKV，正在无损重封装（不重新编码）...");
+    const outcome = await runProxyGenerationTask({
+      assetId: source.asset.id,
+      displayName,
+      options: defaultProxyOptions("remux"),
+      label: `无损重封装 ${displayName}`,
+    });
+    if (outcome.status === "success") {
+      proxyGenerated(outcome.proxyPath, source.asset.id);
+      messagePublished("已无损重封装，预览保持原画质。");
+    } else if (outcome.status === "cancelled") {
+      messagePublished("已取消代理生成。");
     }
   }
 

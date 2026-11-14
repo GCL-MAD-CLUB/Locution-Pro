@@ -30,6 +30,10 @@ pub(crate) struct Preferences {
     pub(crate) auto_save_interval_minutes: u32,
     #[serde(default = "default_auto_save_max_snapshots")]
     pub(crate) auto_save_max_snapshots: u32,
+    /// macOS only: remux an eligible Matroska source losslessly when the
+    /// preview cannot play it, instead of asking for a re-encoded proxy.
+    #[serde(default = "default_enabled")]
+    pub(crate) auto_remux_matroska: bool,
 }
 
 const fn default_enabled() -> bool {
@@ -60,6 +64,7 @@ impl Default for Preferences {
             ffprobe_path: DEFAULT_FFPROBE_PROGRAM.to_string(),
             auto_save_interval_minutes: default_auto_save_interval_minutes(),
             auto_save_max_snapshots: default_auto_save_max_snapshots(),
+            auto_remux_matroska: true,
         }
     }
 }

@@ -30,6 +30,7 @@ export function defaultPreferences(): Preferences {
     ffprobe_path: "ffprobe",
     auto_save_interval_minutes: 5,
     auto_save_max_snapshots: 20,
+    auto_remux_matroska: true,
   };
 }
 

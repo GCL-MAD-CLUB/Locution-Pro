@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { applyAppearance, knownAppearances } from "../../../runtime/theme";
 import { runOperation } from "../../../errors";
-import { isTauriRuntime } from "../../../platform/tauri/runtime";
+import { isMacOSRuntime, isTauriRuntime } from "../../../platform/tauri/runtime";
 import { useProjectPort } from "../../../systems/ProjectSystem";
 import { defaultPreferences, usePreferencesPort } from "../../../systems/PreferencesSystem";
 import type { Appearance, Preferences } from "../../../types";
@@ -284,6 +284,29 @@ function PreferencesEditor({
                 </p>
                 <p className="preferences-description">
                   此设置在下次启动时生效。你也可以随时通过顶部主页按钮打开主页。
+                </p>
+              </fieldset>
+            )}
+            {item.id === "general" && isMacOSRuntime() && (
+              <fieldset className="preferences-group" disabled={busy}>
+                <legend>预览</legend>
+                <label className="preferences-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={draft.auto_remux_matroska}
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked;
+                      setDraft((current) => ({
+                        ...current,
+                        auto_remux_matroska: checked,
+                      }));
+                    }}
+                  />
+                  自动无损重封装 MKV
+                </label>
+                <p className="preferences-description">
+                  MKV 无法直接预览时，若视频为 H.264、HEVC、ProRes 或 MJPEG，自动复制音视频流生成
+                  MOV 文件，不重新编码视频，画质与原文件相同。
                 </p>
               </fieldset>
             )}

@@ -462,6 +462,7 @@ mod tests {
                 parent_id: None,
                 name: "开场".to_string(),
                 created_at: 1_700_000_000_000,
+                hidden: true,
             }],
             entries: vec![ProjectAssetLibraryEntry {
                 id: "asset:1".to_string(),
@@ -489,6 +490,7 @@ mod tests {
                     title: None,
                     keywords: vec!["close-up".to_string()],
                 },
+                hidden: false,
             }],
         }
     }
@@ -517,6 +519,33 @@ mod tests {
         assert_eq!(entry.annotation.rating, 3);
         assert_eq!(entry.annotation.keywords, vec!["close-up".to_string()]);
         assert_eq!(restored.asset_library.folders[0].name, "开场");
+        assert!(restored.asset_library.folders[0].hidden);
+        assert!(!entry.hidden);
+    }
+
+    #[test]
+    fn v5_asset_library_without_hidden_flags_still_decodes() {
+        let mut workspace = empty_workspace();
+        workspace.asset_library = asset_library();
+        let model = from_runtime(&workspace, "id-1", 10, "0.4.3").unwrap();
+        let mut encoded: serde_json::Value =
+            serde_json::from_slice(&model.encode().unwrap()).unwrap();
+        // V5 files saved before the hidden column carry no hidden flags.
+        let library = &mut encoded["workspace"]["asset_library"];
+        library["folders"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("hidden");
+        library["entries"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("hidden");
+
+        let encoded = serde_json::to_vec(&encoded).unwrap();
+        let (restored, _) =
+            into_runtime(decode_current(current_version(), &encoded).unwrap()).unwrap();
+        assert!(!restored.asset_library.folders[0].hidden);
+        assert!(!restored.asset_library.entries[0].hidden);
     }
 
     #[test]

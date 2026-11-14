@@ -57,6 +57,7 @@ function entry(
     end_us: 1_000_000,
     text: "",
     annotation: library.emptyAssetLibraryAnnotation(),
+    hidden: false,
     ...overrides,
   };
 }

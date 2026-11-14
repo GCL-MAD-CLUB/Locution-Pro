@@ -29,6 +29,27 @@ export interface AssetLibraryLocation {
   folderId: string | null;
 }
 
+/** The project above both libraries. It lists the two libraries and holds no items itself. */
+export interface AssetLibraryProjectPlace {
+  root: "project";
+  folderId: null;
+}
+
+export const assetLibraryProjectPlace: AssetLibraryProjectPlace = {
+  root: "project",
+  folderId: null,
+};
+export const assetLibraryProjectLabel = "此项目";
+
+/** Where the panel can be: the project, or a folder or top level of one library. */
+export type AssetLibraryPlace = AssetLibraryLocation | AssetLibraryProjectPlace;
+
+export function isAssetLibraryProjectPlace(
+  place: AssetLibraryPlace,
+): place is AssetLibraryProjectPlace {
+  return place.root === "project";
+}
+
 export interface AssetLibrarySelection {
   folderIds: readonly string[];
   entryIds: readonly string[];
@@ -159,6 +180,7 @@ export function normalizedAssetLibrary(
         parent_id: typeof folder.parent_id === "string" ? folder.parent_id : null,
         name,
         created_at: finiteNumber(folder.created_at),
+        hidden: folder.hidden === true,
       },
     ];
   });
@@ -215,6 +237,7 @@ export function normalizedAssetLibrary(
         end_us: Math.max(startUs, Math.round(finiteNumber(entry.end_us, startUs))),
         text: typeof entry.text === "string" ? entry.text : "",
         annotation: normalizedAnnotation(entry.annotation),
+        hidden: entry.hidden === true,
       },
     ];
   });
@@ -256,7 +279,7 @@ export function assetLibraryFolderPath(
   return path;
 }
 
-export function sameAssetLibraryLocation(left: AssetLibraryLocation, right: AssetLibraryLocation) {
+export function sameAssetLibraryLocation(left: AssetLibraryPlace, right: AssetLibraryPlace) {
   return left.root === right.root && left.folderId === right.folderId;
 }
 
@@ -343,6 +366,7 @@ export function withAssetLibraryFolder(
     parent_id: location.folderId,
     name: uniqueAssetLibraryName(siblingFolderNames(library.folders, location), name),
     created_at: now,
+    hidden: false,
   };
   return { library: { ...library, folders: [...library.folders, folder] }, folder };
 }
@@ -596,6 +620,7 @@ export function assetLibraryEntryFromCapture(
     end_us: Math.max(startUs, Math.round(capture.endUs)),
     text: capture.text,
     annotation: normalizedAnnotation(capture.annotation),
+    hidden: false,
   };
 }
 
@@ -955,21 +980,21 @@ export function formatAssetLibraryDate(timestamp: number) {
   return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${minutes}`;
 }
 
-export interface AssetLibraryHistory {
-  location: AssetLibraryLocation;
-  backStack: AssetLibraryLocation[];
-  forwardStack: AssetLibraryLocation[];
+export interface AssetLibraryHistory<Place = AssetLibraryPlace> {
+  location: Place;
+  backStack: Place[];
+  forwardStack: Place[];
 }
 
 /**
  * Moves `steps` entries back (negative) or forward (positive). Skipped locations stay in
  * history in visiting order, as in a browser's history menu.
  */
-export function steppedAssetLibraryHistory(
-  history: AssetLibraryHistory,
+export function steppedAssetLibraryHistory<Place>(
+  history: AssetLibraryHistory<Place>,
   steps: number,
   limit = 50,
-): AssetLibraryHistory | null {
+): AssetLibraryHistory<Place> | null {
   const { location, backStack, forwardStack } = history;
   if (steps < 0) {
     const count = Math.min(Math.floor(-steps), backStack.length);

@@ -217,6 +217,11 @@
   height: 14px;
 }
 
+/* A filter in effect tints its menu button's icon. */
+.asset-library-command-bar > button.is-on svg:not(.asset-library-command-chevron) {
+  color: var(--color-accent);
+}
+
 .asset-library-command-bar > button svg.asset-library-command-chevron {
   width: 10px;
   height: 10px;
@@ -389,15 +394,31 @@ body.is-resizing-asset-library-pane * {
   visibility: visible;
 }
 
+/* The card checkbox shares the annotation strip's top edge and 14px height. */
 .asset-library-card .asset-library-card-check {
   position: absolute;
-  top: 6px;
-  left: 6px;
+  top: 3px;
+  left: 3px;
   z-index: 3;
+  width: 14px;
+  height: 14px;
 }
 
 .asset-library-items-frame.has-checkboxes .asset-library-thumbnail-metadata {
-  left: 22px;
+  left: 20px;
+}
+
+/* Shown hidden items fade their content; selection, checkboxes and the 隐藏 cell stay solid. */
+.asset-library {
+  --asset-library-hidden-opacity: 0.6;
+}
+
+.asset-library-row.is-hidden > span:not(.media-bin-title-cell, .media-bin-boolean-cell),
+.asset-library-row.is-hidden > .media-bin-title-cell > :not(.asset-library-check),
+.asset-library-card.is-hidden .media-bin-card-preview,
+.asset-library-card.is-hidden .media-bin-card-meta,
+.asset-library-tree-row.is-hidden > .media-bin-title-cell {
+  opacity: var(--asset-library-hidden-opacity);
 }
 
 .asset-library-items-frame .media-bin-column-header > .media-bin-column-label-text {

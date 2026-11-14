@@ -317,6 +317,9 @@ struct AssetLibraryFolder {
     parent_id: Option<String>,
     name: String,
     created_at: i64,
+    // Added after V5 shipped in development builds; those files have no hidden flags.
+    #[serde(default)]
+    hidden: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -355,6 +358,8 @@ struct AssetLibraryEntry {
     end_us: i64,
     text: String,
     annotation: AssetLibraryAnnotation,
+    #[serde(default)]
+    hidden: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

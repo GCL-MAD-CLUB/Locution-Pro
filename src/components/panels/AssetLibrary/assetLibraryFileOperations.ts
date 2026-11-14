@@ -1,10 +1,13 @@
 import {
   assetLibraryClipboard,
   assetLibraryFolderDescendantIds,
+  assetLibraryProjectLabel,
   assetLibraryRootLabels,
+  isAssetLibraryProjectPlace,
   renamedAssetLibraryEntry,
   sameAssetLibraryLocation,
   type AssetLibraryLocation,
+  type AssetLibraryPlace,
   type AssetLibrarySelection,
 } from "../../../core/editor/assetLibrary";
 import type { AssetLibraryFolder, ProjectAssetLibraryState } from "../../../types";
@@ -20,13 +23,13 @@ import { readAssetLibraryClipboard, setAssetLibraryClipboard } from "./assetLibr
 
 export interface AssetLibraryFileOperationContext {
   library: ProjectAssetLibraryState;
-  location: AssetLibraryLocation;
+  location: AssetLibraryPlace;
   path: readonly AssetLibraryFolder[];
   query: string;
   commands: AssetLibraryCommands;
   view: {
-    navigate: (location: AssetLibraryLocation) => void;
-    replaceLocation: (location: AssetLibraryLocation) => void;
+    navigate: (location: AssetLibraryPlace) => void;
+    replaceLocation: (location: AssetLibraryPlace) => void;
     select: (keys: Iterable<string>, focusKey?: string | null, anchorKey?: string | null) => void;
     setQuery: (query: string) => void;
     setRenamingKey: (key: string | null) => void;
@@ -46,7 +49,9 @@ export function assetLibraryFileOperations(context: AssetLibraryFileOperationCon
   }
 
   return {
-    createFolder(target: AssetLibraryLocation = location) {
+    createFolder(target: AssetLibraryPlace = location) {
+      // The project holds only the two libraries.
+      if (isAssetLibraryProjectPlace(target)) return;
       const folder = commands.createFolder(target);
       if (!folder) return;
       if (!sameAssetLibraryLocation(target, location)) view.navigate(target);
@@ -64,9 +69,15 @@ export function assetLibraryFileOperations(context: AssetLibraryFileOperationCon
       messagePublished(asCut ? `已剪切 ${count} 项。` : `已复制 ${count} 项。`);
     },
 
-    pasteInto(target: AssetLibraryLocation) {
+    pasteInto(target: AssetLibraryPlace) {
       const { clipboard: current, cut: isCut } = readAssetLibraryClipboard();
       if (!current) return;
+      if (isAssetLibraryProjectPlace(target)) {
+        messagePublished(
+          `不能粘贴到“${assetLibraryProjectLabel}”，请先打开“${rootLabel(current.root)}”。`,
+        );
+        return;
+      }
       if (current.root !== target.root) {
         messagePublished(`${rootLabel(current.root)}素材不能粘贴到“${rootLabel(target.root)}”。`);
         return;
@@ -142,7 +153,7 @@ export function assetLibraryFileOperations(context: AssetLibraryFileOperationCon
     renameNode(node: AssetLibraryNode, name: string) {
       view.setRenamingKey(null);
       if (node.kind === "folder") commands.renameFolder(node.folder.id, name);
-      else {
+      else if (node.kind === "entry") {
         commands.updateEntries("重命名素材", [node.entry.id], (entry) =>
           renamedAssetLibraryEntry(entry, name),
         );

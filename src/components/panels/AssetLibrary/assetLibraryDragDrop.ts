@@ -4,8 +4,9 @@ import {
   assetLibraryClipboard,
   sameAssetLibraryLocation,
   type AssetLibraryLocation,
+  type AssetLibraryPlace,
 } from "../../../core/editor/assetLibrary";
-import type { ProjectAssetLibraryState } from "../../../types";
+import type { AssetLibraryRoot, ProjectAssetLibraryState } from "../../../types";
 import { maximumDragStackLayers } from "../../common/DragStackPreview";
 import {
   assetLibraryDropTargetAt,
@@ -43,7 +44,7 @@ function suppressNextClick() {
 
 export interface AssetLibraryDragDropContext {
   library: ProjectAssetLibraryState;
-  location: AssetLibraryLocation;
+  location: AssetLibraryPlace;
   selectedKeys: ReadonlySet<string>;
   selectedNodes: readonly AssetLibraryNode[];
   selectOnly: (key: string) => void;
@@ -60,6 +61,11 @@ export interface AssetLibraryDragDropContext {
  * default, Ctrl copies, Esc cancels. Like the media bin, this avoids HTML drag and drop, which
  * the desktop window reserves for dropping files from the system.
  */
+function nodeRoot(node: AssetLibraryNode): AssetLibraryRoot | null {
+  if (node.kind === "folder") return node.folder.root;
+  return node.kind === "entry" ? node.entry.root : null;
+}
+
 export function assetLibraryDragDrop(context: AssetLibraryDragDropContext) {
   const { library, location, selectedKeys, selectedNodes, commands, messagePublished } = context;
 
@@ -67,8 +73,14 @@ export function assetLibraryDragDrop(context: AssetLibraryDragDropContext) {
     if (event.button !== 0) return;
     if ((event.target as HTMLElement).closest("input, textarea, button")) return;
     context.cleanupRef.current?.();
+    const draggedRoot = nodeRoot(node);
+    if (!draggedRoot) return;
     const selected = selectedKeys.has(node.key);
-    const keys = selected ? selectedNodes.map((item) => item.key) : [node.key];
+    // A search across the project can select items from both libraries; only those in the
+    // pressed item's library move, since each library keeps its own kind of item.
+    const keys = selected
+      ? selectedNodes.filter((item) => nodeRoot(item) === draggedRoot).map((item) => item.key)
+      : [node.key];
     const dragged = assetLibrarySelectionFromKeys(keys);
     const thumbnail = event.currentTarget.querySelector<HTMLImageElement>(
       ".asset-library-thumbnail img",
@@ -84,7 +96,7 @@ export function assetLibraryDragDrop(context: AssetLibraryDragDropContext) {
     const targetAt = (clientX: number, clientY: number) => {
       const target = assetLibraryDropTargetAt(clientX, clientY);
       return target &&
-        assetLibraryCanDropInto(library, location.root, dragged.folderIds, target.location)
+        assetLibraryCanDropInto(library, draggedRoot, dragged.folderIds, target.location)
         ? target
         : null;
     };

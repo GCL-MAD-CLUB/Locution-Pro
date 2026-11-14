@@ -36,9 +36,13 @@ export interface AssetLibraryContextMenuModel {
   canDelete: boolean;
   canSelectAll: boolean;
   hasEntries: boolean;
+  /** Whether the menu acts on items; a menu on blank space or a library root does not. */
+  hasItems: boolean;
+  /** Every item the menu acts on is hidden, so "隐藏" shows checked and unhides them. */
+  itemsHidden: boolean;
+  showHidden: boolean;
   sort: AssetLibrarySort;
   size: number;
-  detailsVisible: boolean;
 }
 
 export interface AssetLibraryContextMenuActions {
@@ -57,7 +61,8 @@ export interface AssetLibraryContextMenuActions {
   setColorLabel: (colorLabel: AssetLibraryColorLabel | null) => void;
   setSort: (sort: AssetLibrarySort) => void;
   setSize: (size: number) => void;
-  setDetailsVisible: (visible: boolean) => void;
+  setHidden: (hidden: boolean) => void;
+  setShowHidden: (visible: boolean) => void;
 }
 
 type Submenu = "flag" | "rating" | "color" | "sort" | "view" | null;
@@ -275,15 +280,23 @@ export function AssetLibraryContextMenu({
               onSelect={(sort) => run(() => actions.setSort(sort))()}
             />
           </PopupMenuSubmenu>
-          <PopupMenuItem
-            checked={model.detailsVisible}
-            shortcut="Alt+Shift+P"
-            onSelect={run(() => actions.setDetailsVisible(!model.detailsVisible))}
-          >
-            属性窗格
-          </PopupMenuItem>
         </>
       )}
+      <PopupMenuSeparator />
+      {model.hasItems && (
+        <PopupMenuItem
+          checked={model.itemsHidden}
+          onSelect={run(() => actions.setHidden(!model.itemsHidden))}
+        >
+          隐藏
+        </PopupMenuItem>
+      )}
+      <PopupMenuItem
+        checked={model.showHidden}
+        onSelect={run(() => actions.setShowHidden(!model.showHidden))}
+      >
+        查看隐藏内容
+      </PopupMenuItem>
       <PopupMenuSeparator />
       <PopupMenuItem shortcut="Alt+Enter" onSelect={run(actions.showProperties)}>
         属性

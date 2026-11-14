@@ -10,21 +10,21 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  assetLibraryChildren,
-  assetLibraryDescendants,
-  assetLibraryEntryMatches,
   assetLibraryFolderPath,
   assetLibraryLocationExists,
+  assetLibraryProjectLabel,
+  assetLibraryProjectPlace,
   assetLibraryRootLabels,
   assetLibraryViewLayout,
+  isAssetLibraryProjectPlace,
   sameAssetLibraryLocation,
-  sortedAssetLibraryNodes,
   withAssetLibraryColorLabel,
   withAssetLibraryFlag,
   withAssetLibraryRating,
   withAssetLibraryRatingDelta,
   type AssetLibraryFlag,
   type AssetLibraryLocation,
+  type AssetLibraryPlace,
   type AssetLibrarySelection,
 } from "../../../core/editor/assetLibrary";
 import { useEditCapability } from "../../../runtime/capabilities/EditCapability";
@@ -47,7 +47,9 @@ import {
   isAssetLibraryEditableTarget,
   type AssetLibraryKeyCommand,
 } from "./assetLibraryKeyboard";
-import { resolveAssetMedia } from "./assetLibraryMedia";
+import { assetLibrarySelectionHidden } from "../../../core/editor/assetLibraryVisibility";
+import { assetLibraryFilterActive } from "../../../core/editor/assetLibraryFilter";
+import { useAssetLibraryNodes } from "./useAssetLibraryNodes";
 import { useSlowClickRename } from "./useSlowClickRename";
 import {
   assetEntryKey,
@@ -56,6 +58,7 @@ import {
   assetLibrarySelectionSize,
   assetLocationKey,
   assetNodeParent,
+  assetNodeTarget,
   type AssetLibraryNode,
 } from "./assetLibraryNodes";
 import { useAssetLibraryClipboard, useAssetLibraryState } from "./assetLibraryState";
@@ -71,7 +74,7 @@ import {
   type AssetLibraryContextMenuModel,
   type AssetLibraryContextMenuState,
 } from "./views/AssetLibraryContextMenu";
-import { AssetLibraryDetails } from "./views/AssetLibraryDetails";
+import { AssetLibraryDetails, type AssetLibraryContainer } from "./views/AssetLibraryDetails";
 import { AssetLibraryDragPreview as DragPreview } from "./views/AssetLibraryDragPreview";
 import { AssetLibraryFooter } from "./views/AssetLibraryFooter";
 import { AssetLibraryItems } from "./views/AssetLibraryItems";
@@ -83,15 +86,6 @@ const minimumItemsWidth = 160;
 interface ContextMenuState extends AssetLibraryContextMenuState {
   /** For tree menus, the location that was right-clicked. */
   treeLocation?: AssetLibraryLocation;
-}
-
-function folderMatches(name: string, query: string) {
-  const lowered = name.toLocaleLowerCase();
-  return query
-    .toLocaleLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((term) => lowered.includes(term));
 }
 
 export function AssetLibrary() {
@@ -127,14 +121,18 @@ export function AssetLibrary() {
   const sectionRef = useRef<HTMLElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
-  const locationValid = assetLibraryLocationExists(library, view.location);
-  const location: AssetLibraryLocation = locationValid
-    ? view.location
-    : { root: view.location.root, folderId: null };
+  // A folder that no longer exists falls back to the top of its library.
+  const place = view.location;
+  const location: AssetLibraryPlace =
+    isAssetLibraryProjectPlace(place) || assetLibraryLocationExists(library, place)
+      ? place
+      : { root: place.root, folderId: null };
+  const atProject = isAssetLibraryProjectPlace(location);
+  const locationValid = location === place;
   const { replaceLocation } = view;
   useEffect(() => {
-    if (!locationValid) replaceLocation({ root: view.location.root, folderId: null });
-  }, [locationValid, replaceLocation, view.location.root]);
+    if (!locationValid) replaceLocation(location);
+  }, [location, locationValid, replaceLocation]);
 
   const query = view.query.trim();
   const layout = assetLibraryViewLayout(view.size);
@@ -153,49 +151,17 @@ export function AssetLibrary() {
     ]);
   }, [expandKeys, location.root, location.folderId, path]);
 
-  const mediaByEntryId = useMemo(
-    () =>
-      new Map(
-        library.entries.map((entry) => [entry.id, resolveAssetMedia(entry, mediaItems, projects)]),
-      ),
-    [library.entries, mediaItems, projects],
-  );
-  const childCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    const add = (parentId: string | null) => {
-      if (parentId) counts.set(parentId, (counts.get(parentId) ?? 0) + 1);
-    };
-    library.folders.forEach((folder) => add(folder.parent_id));
-    library.entries.forEach((entry) => add(entry.folder_id));
-    return counts;
-  }, [library]);
-
-  const nodes = useMemo<AssetLibraryNode[]>(() => {
-    const source = query
-      ? assetLibraryDescendants(library, location)
-      : assetLibraryChildren(library, location);
-    const sorted = sortedAssetLibraryNodes(
-      query ? source.folders.filter((folder) => folderMatches(folder.name, query)) : source.folders,
-      query
-        ? source.entries.filter((entry) => assetLibraryEntryMatches(entry, query))
-        : source.entries,
-      view.sort,
-    );
-    return [
-      ...sorted.folders.map((folder) => ({
-        kind: "folder" as const,
-        key: assetFolderKey(folder.id),
-        folder,
-        childCount: childCounts.get(folder.id) ?? 0,
-      })),
-      ...sorted.entries.map((entry) => ({
-        kind: "entry" as const,
-        key: assetEntryKey(entry.id),
-        entry,
-        media: mediaByEntryId.get(entry.id) ?? null,
-      })),
-    ];
-  }, [childCounts, library, location.folderId, location.root, mediaByEntryId, query, view.sort]);
+  const { showHidden } = view;
+  const { nodes, mediaByEntryId, childCounts } = useAssetLibraryNodes({
+    library,
+    location,
+    query,
+    sort: view.sort,
+    filter: view.filter,
+    showHidden,
+    mediaItems,
+    projects,
+  });
 
   const nodeIndex = useMemo(() => new Map(nodes.map((node, index) => [node.key, index])), [nodes]);
   const selectedNodes = nodes.filter((node) => view.selectedKeys.has(node.key));
@@ -222,8 +188,8 @@ export function AssetLibrary() {
     [clipboard, cut],
   );
 
-  function rootLabel(root: AssetLibraryLocation["root"]) {
-    return assetLibraryRootLabels[root];
+  function rootLabel(root: AssetLibraryPlace["root"]) {
+    return root === "project" ? assetLibraryProjectLabel : assetLibraryRootLabels[root];
   }
 
   function selectOnly(key: string) {
@@ -292,18 +258,22 @@ export function AssetLibrary() {
   }
 
   function openNode(node: AssetLibraryNode) {
-    if (node.kind === "folder") {
-      view.navigate({ root: node.folder.root, folderId: node.folder.id });
-    } else {
-      previewEntry(node.entry);
-    }
+    const target = assetNodeTarget(node);
+    if (target) view.navigate(target);
+    else if (node.kind === "entry") previewEntry(node.entry);
   }
 
+  /** Up goes to the parent folder, and from a library's top level to the project. */
   function navigateUp() {
-    if (!location.folderId) return;
+    if (isAssetLibraryProjectPlace(location)) return;
+    const key = assetLocationKey(location);
     const parent = path.at(-2);
-    view.navigate({ root: location.root, folderId: parent?.id ?? null });
-    view.select([assetFolderKey(location.folderId)], assetFolderKey(location.folderId));
+    view.navigate(
+      location.folderId
+        ? { root: location.root, folderId: parent?.id ?? null }
+        : assetLibraryProjectPlace,
+    );
+    view.select([key], key);
   }
 
   const { createFolder, copyNodes, pasteInto, duplicateNodes, removeNodes, renameNode } =
@@ -317,8 +287,10 @@ export function AssetLibrary() {
       messagePublished,
     });
 
+  /** Folders and entries rename; the two libraries listed in the project do not. */
   function startRename(key: string | null) {
-    if (key && nodeIndex.has(key)) view.setRenamingKey(key);
+    const node = key === null ? undefined : nodes[nodeIndex.get(key) ?? -1];
+    if (node && node.kind !== "library") view.setRenamingKey(node.key);
   }
 
   useEditCapability({
@@ -349,7 +321,7 @@ export function AssetLibrary() {
     }
     slowClickRename.armOnPointerDown(event, node.key, selected && view.selectedKeys.size === 1);
     if (event.button !== 0) return;
-    startNodeDrag(event, node);
+    if (node.kind !== "library") startNodeDrag(event, node);
     if (event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (!selected) selectOnly(node.key);
   }
@@ -520,19 +492,23 @@ export function AssetLibrary() {
   const singleMenuNode = !menuTreeLocation && selectedNodes.length === 1 ? selectedNodes[0]! : null;
   const menuModel: AssetLibraryContextMenuModel = {
     canOpen: Boolean(singleMenuNode) || Boolean(menuTreeLocation),
-    openLabel: singleMenuNode?.kind === "entry" ? "在源监视器中预览" : "打开",
-    canCreateFolder: true,
+    openLabel: singleMenuNode?.kind === "entry" ? "预览" : "打开",
+    canCreateFolder: !isAssetLibraryProjectPlace(menuTarget),
     canCut: assetLibrarySelectionSize(menuSelection) > 0,
     canCopy: assetLibrarySelectionSize(menuSelection) > 0,
     canPaste: Boolean(clipboard) && clipboard?.root === menuTarget.root,
     canDuplicate: assetLibrarySelectionSize(menuSelection) > 0,
-    canRename: menuTreeLocation ? Boolean(menuTreeLocation.folderId) : Boolean(singleMenuNode),
+    canRename: menuTreeLocation
+      ? Boolean(menuTreeLocation.folderId)
+      : Boolean(singleMenuNode && singleMenuNode.kind !== "library"),
     canDelete: assetLibrarySelectionSize(menuSelection) > 0,
     canSelectAll: nodes.length > 0,
     hasEntries: !menuTreeLocation && selectedEntryIds.length > 0,
+    hasItems: assetLibrarySelectionSize(menuSelection) > 0,
+    itemsHidden: assetLibrarySelectionHidden(library, menuSelection),
+    showHidden,
     sort: view.sort,
     size: view.size,
-    detailsVisible: view.detailsVisible,
   };
   const menuActions: AssetLibraryContextMenuActions = {
     open: () => {
@@ -569,7 +545,8 @@ export function AssetLibrary() {
     setColorLabel,
     setSort: view.setSort,
     setSize: view.setSize,
-    setDetailsVisible: view.setDetailsVisible,
+    setHidden: (hidden) => commands.setHidden(menuSelection, hidden),
+    setShowHidden: view.setShowHidden,
   };
 
   // --- Command bar ---------------------------------------------------------------------
@@ -584,14 +561,17 @@ export function AssetLibrary() {
     canCut: selectedNodes.length > 0,
     canCopy: selectedNodes.length > 0,
     canPaste: Boolean(clipboard) && clipboard?.root === location.root,
-    canRename: Boolean(singleSelected),
+    canRename: Boolean(singleSelected && singleSelected.kind !== "library"),
     canDelete: selectedNodes.length > 0,
     hasItems: nodes.length > 0,
     hasSelection: selectedNodes.length > 0,
     sort: view.sort,
+    filter: view.filter,
     size: view.size,
+    navigationVisible: view.navigationVisible,
     detailsVisible: view.detailsVisible,
     itemCheckboxes: view.itemCheckboxes,
+    showHidden,
   };
   const commandActions: AssetLibraryCommandBarActions = {
     createFolder: () => createFolder(),
@@ -601,9 +581,12 @@ export function AssetLibrary() {
     rename: refocus(() => startRename(singleSelected?.key ?? null)),
     remove: refocus(() => removeNodes(selection)),
     setSort: view.setSort,
+    setFilter: view.setFilter,
     setSize: view.setSize,
+    setNavigationVisible: view.setNavigationVisible,
     setDetailsVisible: view.setDetailsVisible,
     setItemCheckboxes: view.setItemCheckboxes,
+    setShowHidden: view.setShowHidden,
     selectAll: refocus(selectAll),
     selectNone: refocus(() => view.select([], null, null)),
     invertSelection: refocus(invertSelection),
@@ -618,22 +601,39 @@ export function AssetLibrary() {
   const locationLabel = query
     ? (node: AssetLibraryNode) => {
         const parent = assetNodeParent(node);
-        if (sameAssetLibraryLocation(parent, location)) return null;
+        if (isAssetLibraryProjectPlace(parent) || sameAssetLibraryLocation(parent, location)) {
+          return null;
+        }
         const names = assetLibraryFolderPath(library, parent.folderId)
           .slice(path.length)
           .map((folder) => folder.name);
-        return names.join(" / ");
+        // A search across the project also names the library each item is in.
+        return (atProject ? [assetLibraryRootLabels[parent.root], ...names] : names).join(" / ");
       }
     : undefined;
 
-  const selectedFolderNode =
-    selectedNodes.length === 1 && selectedNodes[0]!.kind === "folder" ? selectedNodes[0]! : null;
+  // As in a file manager, a single selected folder or library is described; with nothing
+  // selected, the open place is: the project, a library, or a folder.
+  const openFolder = path.at(-1);
+  const single = selectedNodes.length === 1 ? selectedNodes[0]! : null;
+  let detailsContainer: AssetLibraryContainer | null = null;
+  if (single?.kind === "folder") detailsContainer = { ...single, kind: "folder" };
+  else if (single?.kind === "library") detailsContainer = { kind: "root", root: single.root };
+  else if (selectedNodes.length > 0) detailsContainer = null;
+  else if (atProject) detailsContainer = { kind: "project" };
+  else if (openFolder) {
+    detailsContainer = {
+      kind: "folder",
+      folder: openFolder,
+      childCount: childCounts.get(openFolder.id) ?? 0,
+    };
+  } else detailsContainer = { kind: "root", root: location.root };
   const selectedEntryNodes = selectedNodes.flatMap((node) =>
     node.kind === "entry" ? [{ entry: node.entry, media: node.media }] : [],
   );
   // Side panes shrink before the item frame drops below its minimum width.
   const gridTemplateColumns = [
-    `minmax(0, ${view.paneWidths.navigation}px) 4px`,
+    view.navigationVisible ? `minmax(0, ${view.paneWidths.navigation}px) 4px` : "",
     `minmax(${minimumItemsWidth}px, 1fr)`,
     view.detailsVisible ? `4px minmax(0, ${view.paneWidths.details}px)` : "",
   ]
@@ -687,26 +687,31 @@ export function AssetLibrary() {
       <AssetLibraryCommandBar model={commandModel} actions={commandActions} />
 
       <div className="asset-library-content" style={{ gridTemplateColumns }}>
-        <AssetLibraryNavigation
-          sort={view.sort}
-          library={library}
-          location={location}
-          collapsedKeys={view.collapsedKeys}
-          dropTargetKey={shownDropTargetKey}
-          onNavigate={view.navigate}
-          onToggleCollapsed={view.toggleCollapsed}
-          onCreateFolder={() => createFolder()}
-          onContextMenu={openTreeMenu}
-        />
-        <AssetLibraryResizeHandle
-          pane="navigation"
-          label="调整文件夹窗格宽度"
-          width={view.paneWidths.navigation}
-          onWidthChange={setPaneWidth}
-        />
+        {view.navigationVisible && (
+          <>
+            <AssetLibraryNavigation
+              sort={view.sort}
+              library={library}
+              location={location}
+              collapsedKeys={view.collapsedKeys}
+              showHidden={showHidden}
+              dropTargetKey={shownDropTargetKey}
+              onNavigate={view.navigate}
+              onToggleCollapsed={view.toggleCollapsed}
+              onCreateFolder={() => createFolder()}
+              onContextMenu={openTreeMenu}
+            />
+            <AssetLibraryResizeHandle
+              pane="navigation"
+              label="调整文件夹窗格宽度"
+              width={view.paneWidths.navigation}
+              onWidthChange={setPaneWidth}
+            />
+          </>
+        )}
         <AssetLibraryItems
           root={location.root}
-          location={location}
+          location={atProject ? null : location}
           nodes={nodes}
           layout={layout}
           sort={view.sort}
@@ -716,11 +721,16 @@ export function AssetLibrary() {
           cutKeys={cutKeys}
           dropTargetKey={shownDropTargetKey}
           thumbnailsEnabled={panelActive}
-          emptyText={query ? "没有匹配的素材" : "此文件夹为空。"}
+          emptyText={
+            query || assetLibraryFilterActive(view.filter) ? "没有匹配的素材" : "此文件夹为空。"
+          }
           locationLabel={locationLabel}
           visibleColumns={view.visibleColumns[location.root]}
           columnWidths={view.columnWidths[location.root]}
           itemCheckboxes={view.itemCheckboxes}
+          onSetHidden={(node, hidden) =>
+            commands.setHidden(assetLibrarySelectionFromKeys([node.key]), hidden)
+          }
           onSort={view.setSort}
           onToggleColumn={view.toggleColumn}
           onColumnWidthChange={view.setColumnWidth}
@@ -747,7 +757,8 @@ export function AssetLibrary() {
               onWidthChange={setPaneWidth}
             />
             <AssetLibraryDetails
-              folder={selectedFolderNode?.kind === "folder" ? selectedFolderNode : null}
+              library={library}
+              container={detailsContainer}
               entries={selectedEntryNodes}
               thumbnailsEnabled={panelActive}
               collapsedSections={view.collapsedSections}

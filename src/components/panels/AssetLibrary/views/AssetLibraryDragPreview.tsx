@@ -5,7 +5,7 @@ import type { AssetLibraryDragPreview as DragPreview } from "../assetLibraryDrag
 
 function PlaceholderIcon({ preview }: { preview: DragPreview }) {
   const { node } = preview;
-  if (node.kind === "folder") return <MediaBinFolderIcon />;
+  if (node.kind !== "entry") return <MediaBinFolderIcon />;
   return node.entry.root === "subtitles" ? (
     <Captions aria-hidden="true" />
   ) : (

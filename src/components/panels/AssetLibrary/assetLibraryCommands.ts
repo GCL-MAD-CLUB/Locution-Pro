@@ -10,6 +10,7 @@ import {
   type AssetLibraryLocation,
   type AssetLibrarySelection,
 } from "../../../core/editor/assetLibrary";
+import { withAssetLibraryNodesHidden } from "../../../core/editor/assetLibraryVisibility";
 import type {
   AssetLibraryEntry,
   AssetLibraryFolder,
@@ -54,6 +55,12 @@ export function assetLibraryCommands(update: AssetLibraryUpdate) {
         return result.library;
       });
       return folder as AssetLibraryFolder | null;
+    },
+
+    setHidden(selection: AssetLibrarySelection, hidden: boolean) {
+      update(hidden ? "隐藏素材" : "取消隐藏素材", (library) =>
+        withAssetLibraryNodesHidden(library, selection, hidden),
+      );
     },
 
     renameFolder(folderId: string, name: string) {

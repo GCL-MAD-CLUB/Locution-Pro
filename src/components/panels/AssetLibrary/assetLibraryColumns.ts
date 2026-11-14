@@ -11,7 +11,8 @@ export type AssetLibraryColumnId =
   | "keywords"
   | "inPoint"
   | "duration"
-  | "created";
+  | "created"
+  | "hidden";
 
 export interface AssetLibraryColumn {
   id: AssetLibraryColumnId;
@@ -46,11 +47,37 @@ export const assetLibraryColumns: readonly AssetLibraryColumn[] = [
     minimum: 60,
     maximum: 240,
   },
+  { id: "hidden", label: "隐藏", sortKey: null, width: 48, minimum: 40, maximum: 80 },
 ];
 
+/** A library, or the project, which mixes both libraries and so shows every column. */
+export type AssetLibraryColumnScope = AssetLibraryRoot | "project";
+
 /** Each library defines its own fields and order. Only the table mechanics are shared. */
-const libraryColumnIds: Record<AssetLibraryRoot, readonly AssetLibraryColumnId[]> = {
-  subtitles: ["name", "location", "subtitle", "source", "marks", "inPoint", "duration", "created"],
+const libraryColumnIds: Record<AssetLibraryColumnScope, readonly AssetLibraryColumnId[]> = {
+  project: [
+    "name",
+    "location",
+    "subtitle",
+    "source",
+    "marks",
+    "keywords",
+    "inPoint",
+    "duration",
+    "created",
+    "hidden",
+  ],
+  subtitles: [
+    "name",
+    "location",
+    "subtitle",
+    "source",
+    "marks",
+    "inPoint",
+    "duration",
+    "created",
+    "hidden",
+  ],
   storyboards: [
     "name",
     "location",
@@ -60,16 +87,17 @@ const libraryColumnIds: Record<AssetLibraryRoot, readonly AssetLibraryColumnId[]
     "inPoint",
     "duration",
     "created",
+    "hidden",
   ],
 };
 
-export function assetLibraryColumnsForRoot(root: AssetLibraryRoot) {
+export function assetLibraryColumnsForRoot(root: AssetLibraryColumnScope) {
   return libraryColumnIds[root].map((id) =>
     assetLibraryColumns.find((column) => column.id === id)!,
   );
 }
 
-export function assetLibraryToggleableColumns(root: AssetLibraryRoot) {
+export function assetLibraryToggleableColumns(root: AssetLibraryColumnScope) {
   return assetLibraryColumnsForRoot(root).filter(
     (column) => column.id !== "name" && column.id !== "location",
   );
@@ -83,6 +111,7 @@ export const defaultAssetLibraryVisibleColumns: ReadonlySet<AssetLibraryColumnId
   "keywords",
   "marks",
   "created",
+  "hidden",
 ]);
 
 export type AssetLibraryColumnWidths = Record<AssetLibraryColumnId, number>;

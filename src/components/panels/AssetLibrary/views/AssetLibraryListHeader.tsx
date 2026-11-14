@@ -5,7 +5,6 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import type { AssetLibraryRoot } from "../../../../types";
 import { createPortal } from "react-dom";
 import type { AssetLibrarySort, AssetLibrarySortKey } from "../../../../core/editor/assetLibrary";
 import {
@@ -19,6 +18,7 @@ import {
   assetLibraryToggleableColumns,
   type AssetLibraryColumn,
   type AssetLibraryColumnId,
+  type AssetLibraryColumnScope,
   type AssetLibraryColumnWidths,
 } from "../assetLibraryColumns";
 
@@ -30,7 +30,7 @@ interface ColumnResize {
 }
 
 export interface AssetLibraryListHeaderProps {
-  root: AssetLibraryRoot;
+  root: AssetLibraryColumnScope;
   columns: readonly AssetLibraryColumn[];
   columnWidths: AssetLibraryColumnWidths;
   visibleColumns: ReadonlySet<AssetLibraryColumnId>;

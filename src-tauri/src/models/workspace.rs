@@ -201,6 +201,8 @@ pub(crate) struct ProjectAssetLibraryFolder {
     pub(crate) parent_id: Option<String>,
     pub(crate) name: String,
     pub(crate) created_at: i64,
+    #[serde(default)]
+    pub(crate) hidden: bool,
 }
 
 /// Media identity captured with an entry; entries never refer back to cues or shots.
@@ -237,6 +239,8 @@ pub(crate) struct ProjectAssetLibraryEntry {
     pub(crate) end_us: i64,
     pub(crate) text: String,
     pub(crate) annotation: ProjectAssetLibraryAnnotation,
+    #[serde(default)]
+    pub(crate) hidden: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

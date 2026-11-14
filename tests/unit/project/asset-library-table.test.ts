@@ -28,8 +28,14 @@ test("list columns follow the library's field order", () => {
       .assetLibraryColumnsForRoot(root)
       .map((column) => column.id)
       .join(" ");
-  assert.equal(ids("storyboards"), "name location source marks keywords inPoint duration created");
-  assert.equal(ids("subtitles"), "name location subtitle source marks inPoint duration created");
+  assert.equal(
+    ids("storyboards"),
+    "name location source marks keywords inPoint duration created hidden",
+  );
+  assert.equal(
+    ids("subtitles"),
+    "name location subtitle source marks inPoint duration created hidden",
+  );
 });
 
 test("both libraries show the added time column by default", () => {

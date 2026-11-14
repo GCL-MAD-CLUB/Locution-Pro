@@ -1,4 +1,3 @@
-import type { AssetLibraryRoot } from "../../../../types";
 import { Captions, Film } from "lucide-react";
 import {
   useEffect,
@@ -12,6 +11,7 @@ import {
 import {
   assetLibraryEntryDurationUs,
   assetLibraryGridLayout,
+  assetLibraryRootLabels,
   formatAssetLibraryDate,
   type AssetLibraryLocation,
   type AssetLibrarySort,
@@ -27,7 +27,9 @@ import {
   type AssetLibraryColumnWidths,
 } from "../assetLibraryColumns";
 import { assetLibraryDropTargetProps } from "../../../common/utils/assetLibraryDropTarget";
-import { assetFolderKey, type AssetLibraryNode } from "../assetLibraryNodes";
+import { assetNodeTarget, type AssetLibraryNode } from "../assetLibraryNodes";
+import type { AssetLibraryColumnScope } from "../assetLibraryColumns";
+import { assetLibraryRootIcons } from "./AssetLibraryTreeIcons";
 import { AssetLibraryMarks, AssetLibraryThumbnailMarks } from "./AssetLibraryBadges";
 import { AssetLibraryHoverFrame } from "./AssetLibraryHoverFrame";
 import { AssetLibraryListHeader } from "./AssetLibraryListHeader";
@@ -58,9 +60,10 @@ interface MarqueeState {
 }
 
 export interface AssetLibraryItemsProps {
-  root: AssetLibraryRoot;
-  /** The folder on show, which the empty part of the pane drops into. */
-  location: AssetLibraryLocation;
+  /** The column set: one library, or the project, which shows every column. */
+  root: AssetLibraryColumnScope;
+  /** The folder on show, which the empty part of the pane drops into; the project takes none. */
+  location: AssetLibraryLocation | null;
   nodes: readonly AssetLibraryNode[];
   layout: AssetLibraryViewLayout;
   sort: AssetLibrarySort;
@@ -82,6 +85,8 @@ export interface AssetLibraryItemsProps {
   /** Checkbox clicks add or remove one item without touching the rest of the selection. */
   onToggleNodeSelected: (node: AssetLibraryNode) => void;
   onToggleAllSelected: () => void;
+  /** The "隐藏" column checkbox, for the one item in its row. */
+  onSetHidden: (node: AssetLibraryNode, hidden: boolean) => void;
   onNodePointerDown: (event: ReactPointerEvent<HTMLElement>, node: AssetLibraryNode) => void;
   onNodeClick: (event: ReactMouseEvent<HTMLElement>, node: AssetLibraryNode) => void;
   onOpenNode: (node: AssetLibraryNode) => void;
@@ -95,17 +100,24 @@ export interface AssetLibraryItemsProps {
   onZoom: (steps: number) => void;
 }
 
+function nodeHidden(node: AssetLibraryNode) {
+  if (node.kind === "library") return false;
+  return node.kind === "folder" ? node.folder.hidden : node.entry.hidden;
+}
+
 function nodeName(node: AssetLibraryNode) {
+  if (node.kind === "library") return assetLibraryRootLabels[node.root];
   return node.kind === "folder" ? node.folder.name : node.entry.name;
 }
 
 function nodeDuration(node: AssetLibraryNode) {
-  return node.kind === "folder"
-    ? ""
-    : formatMonitorTime(assetLibraryEntryDurationUs(node.entry), node.entry.media.frame_rate);
+  return node.kind === "entry"
+    ? formatMonitorTime(assetLibraryEntryDurationUs(node.entry), node.entry.media.frame_rate)
+    : "";
 }
 
 function cellText(node: AssetLibraryNode, column: AssetLibraryColumnId) {
+  if (node.kind === "library") return "";
   if (column === "created") {
     return formatAssetLibraryDate(
       node.kind === "folder" ? node.folder.created_at : node.entry.created_at,
@@ -196,6 +208,14 @@ function RenameInput({
 
 /** The media bin's kind glyphs, drawn in one fixed-size box so every row lines up. */
 function KindIcon({ node }: { node: AssetLibraryNode }) {
+  if (node.kind === "library") {
+    const Icon = assetLibraryRootIcons[node.root];
+    return (
+      <span className="media-bin-kind-icon folder">
+        <Icon />
+      </span>
+    );
+  }
   if (node.kind === "folder") {
     return (
       <span className="media-bin-kind-icon folder">
@@ -368,14 +388,11 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   }
 
   function nodeHandlers(node: AssetLibraryNode) {
+    // Folders and libraries take drops into themselves.
+    const target = assetNodeTarget(node);
     return {
       "data-asset-key": node.key,
-      ...(node.kind === "folder"
-        ? assetLibraryDropTargetProps(
-            { root: node.folder.root, folderId: node.folder.id },
-            assetFolderKey(node.folder.id),
-          )
-        : {}),
+      ...(target ? assetLibraryDropTargetProps(target, node.key) : {}),
       onPointerDown: (event: ReactPointerEvent<HTMLElement>) =>
         props.onNodePointerDown(event, node),
       onClick: (event: ReactMouseEvent<HTMLElement>) => props.onNodeClick(event, node),
@@ -386,11 +403,12 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
 
   function stateClassName(node: AssetLibraryNode) {
     return [
-      node.kind === "folder" ? "media-bin-folder-row" : "",
+      node.kind === "entry" ? "" : "media-bin-folder-row",
       selectedKeys.has(node.key) ? "selected" : "",
       focusKey === node.key ? "is-focused" : "",
       cutKeys.has(node.key) ? "is-cut" : "",
       dropTargetKey === node.key ? "folder-drop-target" : "",
+      nodeHidden(node) ? "is-hidden" : "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -441,6 +459,23 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
       return (
         <span key={column.id} className="asset-library-location-cell" title={location ?? undefined}>
           {location}
+        </span>
+      );
+    }
+    if (column.id === "hidden") {
+      if (node.kind === "library") return <span key={column.id} />;
+      return (
+        <span key={column.id} className="media-bin-boolean-cell">
+          <input
+            type="checkbox"
+            checked={nodeHidden(node)}
+            tabIndex={-1}
+            aria-label={`隐藏“${nodeName(node)}”`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+            onChange={(event) => props.onSetHidden(node, event.currentTarget.checked)}
+          />
         </span>
       );
     }
@@ -544,10 +579,11 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   }
 
   function renderCardPreview(node: AssetLibraryNode, progress: number | null) {
-    if (node.kind === "folder") {
+    if (node.kind !== "entry") {
+      const Icon = node.kind === "library" ? assetLibraryRootIcons[node.root] : MediaBinFolderIcon;
       return (
         <span className="media-bin-card-preview folder">
-          <MediaBinFolderIcon />
+          <Icon />
         </span>
       );
     }
@@ -677,7 +713,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
             props.onContextMenu(event, null);
           }
         }}
-        {...assetLibraryDropTargetProps(location, "content")}
+        {...(location ? assetLibraryDropTargetProps(location, "content") : {})}
       >
         {showHeader && (
           <AssetLibraryListHeader

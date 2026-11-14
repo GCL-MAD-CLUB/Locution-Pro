@@ -6,6 +6,7 @@ import {
   Copy,
   Ellipsis,
   LayoutList,
+  ListFilter,
   PanelRight,
   Scissors,
   TextCursorInput,
@@ -16,6 +17,11 @@ import { useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "re
 import { createPortal } from "react-dom";
 import type { AssetLibrarySort } from "../../../../core/editor/assetLibrary";
 import {
+  assetLibraryFilterActive,
+  emptyAssetLibraryFilter,
+  type AssetLibraryFilter,
+} from "../../../../core/editor/assetLibraryFilter";
+import {
   PopupMenu,
   PopupMenuItem,
   PopupMenuSeparator,
@@ -23,6 +29,7 @@ import {
   useCloseOnOutsidePointer,
 } from "../../../common/PopupMenu";
 import { AssetLibrarySortItems, AssetLibraryViewPresetItems } from "./AssetLibraryContextMenu";
+import { AssetLibraryFilterItems } from "./AssetLibraryFilterItems";
 
 export interface AssetLibraryCommandBarModel {
   canCut: boolean;
@@ -33,9 +40,12 @@ export interface AssetLibraryCommandBarModel {
   hasItems: boolean;
   hasSelection: boolean;
   sort: AssetLibrarySort;
+  filter: AssetLibraryFilter;
   size: number;
+  navigationVisible: boolean;
   detailsVisible: boolean;
   itemCheckboxes: boolean;
+  showHidden: boolean;
 }
 
 export interface AssetLibraryCommandBarActions {
@@ -46,18 +56,24 @@ export interface AssetLibraryCommandBarActions {
   rename: () => void;
   remove: () => void;
   setSort: (sort: AssetLibrarySort) => void;
+  setFilter: (filter: AssetLibraryFilter) => void;
   setSize: (size: number) => void;
+  setNavigationVisible: (visible: boolean) => void;
   setDetailsVisible: (visible: boolean) => void;
   setItemCheckboxes: (visible: boolean) => void;
+  setShowHidden: (visible: boolean) => void;
   selectAll: () => void;
   selectNone: () => void;
   invertSelection: () => void;
   showProperties: () => void;
 }
 
-type CommandMenu = "new" | "sort" | "view" | "more";
+type CommandMenu = "new" | "sort" | "view" | "filter" | "more";
 
-/** File-manager command bar: create, clipboard, rename and delete, then sort, view and more. */
+/**
+ * File-manager command bar: create, clipboard, rename and delete, then sort, view, filter
+ * and more.
+ */
 export function AssetLibraryCommandBar({
   model,
   actions,
@@ -110,12 +126,12 @@ export function AssetLibraryCommandBar({
     );
   }
 
-  function menuButton(kind: CommandMenu, Icon: LucideIcon, label: string | null) {
+  function menuButton(kind: CommandMenu, Icon: LucideIcon, label: string | null, on = false) {
     const open = menu?.kind === kind;
     return (
       <button
         type="button"
-        className={`asset-library-command-menu-button${label ? "" : " is-icon"}${open ? " active" : ""}`}
+        className={`asset-library-command-menu-button${label ? "" : " is-icon"}${open ? " active" : ""}${on ? " is-on" : ""}`}
         title={label ?? "更多选项"}
         aria-label={label ?? "更多选项"}
         aria-haspopup="menu"
@@ -158,20 +174,41 @@ export function AssetLibraryCommandBar({
             <PopupMenuSeparator />
             <PopupMenuSubmenu label="显示" open={showOpen} onOpenChange={setShowOpen}>
               <PopupMenuItem
+                checked={model.navigationVisible}
+                onSelect={run(() => actions.setNavigationVisible(!model.navigationVisible))}
+              >
+                导航窗格
+              </PopupMenuItem>
+              <PopupMenuItem
                 checked={model.detailsVisible}
                 shortcut="Alt+Shift+P"
                 onSelect={run(() => actions.setDetailsVisible(!model.detailsVisible))}
               >
                 属性窗格
               </PopupMenuItem>
+              <PopupMenuSeparator />
               <PopupMenuItem
                 checked={model.itemCheckboxes}
                 onSelect={run(() => actions.setItemCheckboxes(!model.itemCheckboxes))}
               >
                 项目复选框
               </PopupMenuItem>
+              <PopupMenuItem
+                checked={model.showHidden}
+                onSelect={run(() => actions.setShowHidden(!model.showHidden))}
+              >
+                隐藏的项目
+              </PopupMenuItem>
             </PopupMenuSubmenu>
           </>
+        );
+      case "filter":
+        return (
+          <AssetLibraryFilterItems
+            filter={model.filter}
+            onChange={actions.setFilter}
+            onClear={run(() => actions.setFilter(emptyAssetLibraryFilter))}
+          />
         );
       case "more":
         return (
@@ -210,6 +247,7 @@ export function AssetLibraryCommandBar({
       <span className="asset-library-command-separator" aria-hidden="true" />
       {menuButton("sort", ArrowUpDown, "排序")}
       {menuButton("view", LayoutList, "查看")}
+      {menuButton("filter", ListFilter, "筛选", assetLibraryFilterActive(model.filter))}
       <span className="asset-library-command-separator" aria-hidden="true" />
       {menuButton("more", Ellipsis, null)}
       <button

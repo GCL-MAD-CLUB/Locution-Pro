@@ -258,6 +258,8 @@ export interface AssetLibraryFolder {
   parent_id: string | null;
   name: string;
   created_at: number;
+  /** Left out of the library views unless they show hidden items. */
+  hidden: boolean;
 }
 
 /** Media identity captured when an entry was added; it never refers back to a cue or shot. */
@@ -291,6 +293,7 @@ export interface AssetLibraryEntry {
   end_us: number;
   text: string;
   annotation: AssetLibraryAnnotation;
+  hidden: boolean;
 }
 
 export interface ProjectAssetLibraryState {

@@ -1,4 +1,3 @@
-import type { AssetLibraryRoot } from "../../../types";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import { createPanelState } from "../../../runtime/systems/PanelState";
@@ -6,14 +5,19 @@ import {
   sameAssetLibraryLocation,
   steppedAssetLibraryHistory,
   type AssetLibraryClipboard,
-  type AssetLibraryLocation,
+  type AssetLibraryPlace,
   type AssetLibrarySort,
 } from "../../../core/editor/assetLibrary";
+import {
+  emptyAssetLibraryFilter,
+  type AssetLibraryFilter,
+} from "../../../core/editor/assetLibraryFilter";
 import {
   clampAssetLibraryColumnWidth,
   defaultAssetLibraryColumnWidths,
   defaultAssetLibraryVisibleColumns,
   type AssetLibraryColumnId,
+  type AssetLibraryColumnScope,
   type AssetLibraryColumnWidths,
 } from "./assetLibraryColumns";
 
@@ -29,15 +33,15 @@ export function clampAssetLibraryPaneWidth(pane: AssetLibraryPane, width: number
   return Math.round(Math.min(maximum, Math.max(minimum, width)));
 }
 
-export const defaultAssetLibraryLocation: AssetLibraryLocation = {
+export const defaultAssetLibraryLocation: AssetLibraryPlace = {
   root: "subtitles",
   folderId: null,
 };
 
 interface AssetLibraryPanelState {
-  location: AssetLibraryLocation;
-  backStack: AssetLibraryLocation[];
-  forwardStack: AssetLibraryLocation[];
+  location: AssetLibraryPlace;
+  backStack: AssetLibraryPlace[];
+  forwardStack: AssetLibraryPlace[];
   selectedKeys: ReadonlySet<string>;
   anchorKey: string | null;
   focusKey: string | null;
@@ -45,15 +49,20 @@ interface AssetLibraryPanelState {
   query: string;
   size: number;
   sort: AssetLibrarySort;
+  /** Narrows the listed materials by annotation; folders stay listed. */
+  filter: AssetLibraryFilter;
+  navigationVisible: boolean;
   detailsVisible: boolean;
   collapsedKeys: ReadonlySet<string>;
   paneWidths: Record<AssetLibraryPane, number>;
   collapsedSections: ReadonlySet<string>;
   itemCheckboxes: boolean;
-  visibleColumns: Record<AssetLibraryRoot, ReadonlySet<AssetLibraryColumnId>>;
-  columnWidths: Record<AssetLibraryRoot, AssetLibraryColumnWidths>;
-  navigate: (location: AssetLibraryLocation) => void;
-  replaceLocation: (location: AssetLibraryLocation) => void;
+  /** Hidden folders and entries are listed, faded, instead of left out. */
+  showHidden: boolean;
+  visibleColumns: Record<AssetLibraryColumnScope, ReadonlySet<AssetLibraryColumnId>>;
+  columnWidths: Record<AssetLibraryColumnScope, AssetLibraryColumnWidths>;
+  navigate: (location: AssetLibraryPlace) => void;
+  replaceLocation: (location: AssetLibraryPlace) => void;
   /** Steps through history; a larger count jumps straight to an entry from the history menu. */
   goBack: (steps?: number) => void;
   goForward: (steps?: number) => void;
@@ -62,12 +71,15 @@ interface AssetLibraryPanelState {
   setQuery: (query: string) => void;
   setSize: (size: number) => void;
   setSort: (sort: AssetLibrarySort) => void;
+  setFilter: (filter: AssetLibraryFilter) => void;
+  setNavigationVisible: (visible: boolean) => void;
   setDetailsVisible: (visible: boolean) => void;
   toggleCollapsed: (key: string) => void;
   expandKeys: (keys: readonly string[]) => void;
   setPaneWidth: (pane: AssetLibraryPane, width: number) => void;
   toggleSection: (section: string) => void;
   setItemCheckboxes: (visible: boolean) => void;
+  setShowHidden: (visible: boolean) => void;
   toggleColumn: (column: AssetLibraryColumnId) => void;
   setColumnWidth: (column: AssetLibraryColumnId, width: number) => void;
   resetColumnWidths: () => void;
@@ -106,6 +118,8 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   query: "",
   size: 12,
   sort: { key: "name", direction: "ascending" },
+  filter: emptyAssetLibraryFilter,
+  navigationVisible: true,
   detailsVisible: true,
   collapsedKeys: new Set<string>(),
   paneWidths: {
@@ -114,11 +128,14 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   },
   collapsedSections: new Set<string>(),
   itemCheckboxes: false,
+  showHidden: false,
   visibleColumns: {
+    project: defaultAssetLibraryVisibleColumns,
     subtitles: defaultAssetLibraryVisibleColumns,
     storyboards: defaultAssetLibraryVisibleColumns,
   },
   columnWidths: {
+    project: defaultAssetLibraryColumnWidths,
     subtitles: defaultAssetLibraryColumnWidths,
     storyboards: defaultAssetLibraryColumnWidths,
   },
@@ -151,6 +168,8 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   setQuery: (query) => set({ query }),
   setSize: (size) => set({ size: Math.min(100, Math.max(0, Math.round(size))) }),
   setSort: (sort) => set({ sort }),
+  setFilter: (filter) => set({ filter }),
+  setNavigationVisible: (navigationVisible) => set({ navigationVisible }),
   setDetailsVisible: (detailsVisible) => set({ detailsVisible }),
   toggleCollapsed: (key) => set((state) => ({ collapsedKeys: toggled(state.collapsedKeys, key) })),
   expandKeys: (keys) =>
@@ -167,6 +186,7 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   toggleSection: (section) =>
     set((state) => ({ collapsedSections: toggled(state.collapsedSections, section) })),
   setItemCheckboxes: (itemCheckboxes) => set({ itemCheckboxes }),
+  setShowHidden: (showHidden) => set({ showHidden }),
   toggleColumn: (column) =>
     set((state) => ({
       visibleColumns: {

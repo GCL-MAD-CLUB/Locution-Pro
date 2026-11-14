@@ -8,19 +8,25 @@ import {
 import { createPortal } from "react-dom";
 import {
   assetLibraryLocationExists,
-  assetLibraryLocationFromPath,
-  assetLibraryPathText,
+  assetLibraryProjectLabel,
+  assetLibraryProjectPlace,
   assetLibraryRootLabels,
   assetLibraryRoots,
+  isAssetLibraryProjectPlace,
   sameAssetLibraryLocation,
   sortedAssetLibraryNodes,
   type AssetLibraryLocation,
+  type AssetLibraryPlace,
 } from "../../../../core/editor/assetLibrary";
+import {
+  assetLibraryPlaceFromPath,
+  assetLibraryPlacePathText,
+} from "../../../../core/editor/assetLibraryPlace";
 import type { AssetLibraryFolder, ProjectAssetLibraryState } from "../../../../types";
 import { PopupMenu, PopupMenuItem, useCloseOnOutsidePointer } from "../../../common/PopupMenu";
 import { assetLibraryDropTargetProps } from "../../../common/utils/assetLibraryDropTarget";
 import { assetLocationKey } from "../assetLibraryNodes";
-import { assetLibraryRootIcons } from "./AssetLibraryTreeIcons";
+import { AssetLibraryProjectIcon, assetLibraryRootIcons } from "./AssetLibraryTreeIcons";
 
 type AddressMenu =
   | { kind: "roots"; x: number; y: number }
@@ -29,14 +35,14 @@ type AddressMenu =
 
 export interface AssetLibraryAddressBarProps {
   library: ProjectAssetLibraryState;
-  location: AssetLibraryLocation;
+  location: AssetLibraryPlace;
   path: readonly AssetLibraryFolder[];
-  backStack: readonly AssetLibraryLocation[];
-  forwardStack: readonly AssetLibraryLocation[];
+  backStack: readonly AssetLibraryPlace[];
+  forwardStack: readonly AssetLibraryPlace[];
   editing: boolean;
   dropTargetKey: string | null;
   onEditingChange: (editing: boolean) => void;
-  onNavigate: (location: AssetLibraryLocation) => void;
+  onNavigate: (location: AssetLibraryPlace) => void;
   onGoBack: (steps: number) => void;
   onGoForward: (steps: number) => void;
   onNavigateUp: () => void;
@@ -46,7 +52,7 @@ export interface AssetLibraryAddressBarProps {
 }
 
 /** Drop-target keys for crumbs, kept apart from tree and item keys. */
-export function assetLibraryCrumbDropKey(location: AssetLibraryLocation) {
+export function assetLibraryCrumbDropKey(location: AssetLibraryPlace) {
   return `crumb:${assetLocationKey(location)}`;
 }
 
@@ -91,7 +97,8 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
     capturePointerdown: true,
     ignorePopupMenuTargets: true,
   });
-  const RootIcon = assetLibraryRootIcons[location.root];
+  const project = isAssetLibraryProjectPlace(location);
+  const RootIcon = project ? AssetLibraryProjectIcon : assetLibraryRootIcons[location.root];
   const pathIds = new Set(path.map((folder) => folder.id));
 
   function childFolders(parent: AssetLibraryLocation) {
@@ -133,15 +140,17 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
     );
   }
 
-  function crumb(target: AssetLibraryLocation, label: string, current: boolean) {
+  function crumb(target: AssetLibraryPlace, label: string, current: boolean) {
     const dropKey = assetLibraryCrumbDropKey(target);
+    // The project holds no items, so its crumb takes no drops.
+    const dropTarget = isAssetLibraryProjectPlace(target) ? null : target;
     return (
       <button
         type="button"
         className={`${current ? "is-current" : ""}${dropTargetKey === dropKey ? " is-drop-target" : ""}`}
         title={label}
         onClick={() => props.onNavigate(target)}
-        {...assetLibraryDropTargetProps(target, dropKey)}
+        {...(dropTarget ? assetLibraryDropTargetProps(dropTarget, dropKey) : {})}
       >
         {label}
       </button>
@@ -152,14 +161,16 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
     return menu?.kind === "children" && sameAssetLibraryLocation(menu.location, parent);
   }
 
-  function historyItem(target: AssetLibraryLocation, index: number, onSelect: () => void) {
+  function historyItem(target: AssetLibraryPlace, index: number, onSelect: () => void) {
+    const exists =
+      isAssetLibraryProjectPlace(target) || assetLibraryLocationExists(library, target);
     return (
       <PopupMenuItem
         key={`${index}:${assetLocationKey(target)}`}
-        disabled={!assetLibraryLocationExists(library, target)}
+        disabled={!exists}
         onSelect={choose(onSelect)}
       >
-        {assetLibraryPathText(library, target)}
+        {assetLibraryPlacePathText(library, target)}
       </PopupMenuItem>
     );
   }
@@ -219,7 +230,7 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
   }
 
   function submitPath(text: string) {
-    const target = assetLibraryLocationFromPath(library, text, location);
+    const target = assetLibraryPlaceFromPath(library, text, location);
     if (!target) {
       props.onInvalidPath(text.trim());
       return false;
@@ -229,8 +240,7 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
     return true;
   }
 
-  const rootLocation: AssetLibraryLocation = { root: location.root, folderId: null };
-  const hasChildren = childFolders(location).length > 0;
+  const hasChildren = !project && childFolders(location).length > 0;
 
   return (
     <div className="asset-library-location-row">
@@ -259,7 +269,7 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
           type="button"
           title="上一级 (Alt+↑)"
           aria-label="上一级"
-          disabled={!location.folderId}
+          disabled={project}
           onClick={props.onNavigateUp}
         >
           <ArrowUp aria-hidden="true" />
@@ -271,7 +281,7 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
         </span>
         {props.editing ? (
           <AddressInput
-            initialValue={assetLibraryPathText(library, location)}
+            initialValue={assetLibraryPlacePathText(library, location)}
             onSubmit={submitPath}
             onCancel={() => props.onEditingChange(false)}
           />
@@ -284,8 +294,14 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
               if (event.target === event.currentTarget) props.onEditingChange(true);
             }}
           >
-            {chevron("切换顶层文件夹", { kind: "roots", x: 0, y: 0 }, menu?.kind === "roots")}
-            {crumb(rootLocation, assetLibraryRootLabels[location.root], path.length === 0)}
+            {crumb(assetLibraryProjectPlace, assetLibraryProjectLabel, project)}
+            {chevron("切换素材库", { kind: "roots", x: 0, y: 0 }, menu?.kind === "roots")}
+            {!project &&
+              crumb(
+                { root: location.root, folderId: null },
+                assetLibraryRootLabels[location.root],
+                path.length === 0,
+              )}
             {path.map((folder, index) => {
               const parent: AssetLibraryLocation = {
                 root: folder.root,
@@ -307,6 +323,7 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
               );
             })}
             {hasChildren &&
+              !project &&
               chevron(
                 "显示子文件夹",
                 { kind: "children", location, x: 0, y: 0 },

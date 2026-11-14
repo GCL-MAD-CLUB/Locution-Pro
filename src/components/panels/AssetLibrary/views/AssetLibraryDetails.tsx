@@ -5,6 +5,7 @@ import {
   assetLibraryEntryDurationUs,
   assetLibraryEntryFlag,
   assetLibraryRootLabels,
+  assetLibraryRoots,
   renamedAssetLibraryEntry,
   trimmedAssetLibraryEntry,
   withAssetLibraryColorLabel,
@@ -22,6 +23,8 @@ import type {
   AssetLibraryColorLabel,
   AssetLibraryEntry,
   AssetLibraryFolder,
+  AssetLibraryRoot,
+  ProjectAssetLibraryState,
 } from "../../../../types";
 import { StoryboardColorLabelButtons } from "../../StoryboardPanel/annotations/StoryboardColorLabelButtons";
 import { StoryboardFlagIcon } from "../../StoryboardPanel/annotations/StoryboardFlagIcon";
@@ -33,11 +36,19 @@ import {
 import type { ResolvedAssetMedia } from "../assetLibraryMedia";
 import { assetLibraryColorLabelNames, assetLibraryFlagNames } from "./AssetLibraryBadges";
 import { AssetLibraryThumbnail } from "./AssetLibraryThumbnail";
+import { useVerticalOverflow } from "./useVerticalOverflow";
 
 export type AssetLibraryEntryRecipe = (entry: AssetLibraryEntry) => AssetLibraryEntry;
 
+/** The place described when no item is selected: a folder, a library, or the project. */
+export type AssetLibraryContainer =
+  | { kind: "folder"; folder: AssetLibraryFolder; childCount: number }
+  | { kind: "root"; root: AssetLibraryRoot }
+  | { kind: "project" };
+
 interface AssetLibraryDetailsProps {
-  folder: { folder: AssetLibraryFolder; childCount: number } | null;
+  library: ProjectAssetLibraryState;
+  container: AssetLibraryContainer | null;
   entries: readonly { entry: AssetLibraryEntry; media: ResolvedAssetMedia | null }[];
   thumbnailsEnabled: boolean;
   collapsedSections: ReadonlySet<string>;
@@ -634,38 +645,58 @@ function FolderProperties({
   );
 }
 
-/** Shows the storyboard-style scrollbar thumb only while the pane actually overflows. */
-function useVerticalOverflow() {
-  const ref = useRef<HTMLElement | null>(null);
-  const [overflow, setOverflow] = useState(false);
-  useLayoutEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-    let frame: number | null = null;
-    const measure = () => {
-      frame = null;
-      const next = element.scrollHeight > element.clientHeight + 1;
-      setOverflow((current) => (current === next ? current : next));
-    };
-    const schedule = () => {
-      if (frame === null) frame = window.requestAnimationFrame(measure);
-    };
-    const resizeObserver = new ResizeObserver(schedule);
-    resizeObserver.observe(element);
-    const mutationObserver = new MutationObserver(schedule);
-    mutationObserver.observe(element, { childList: true, characterData: true, subtree: true });
-    measure();
-    return () => {
-      if (frame !== null) window.cancelAnimationFrame(frame);
-      resizeObserver.disconnect();
-      mutationObserver.disconnect();
-    };
-  }, []);
-  return { ref, overflow };
+/** The project and the two libraries describe their contents; they cannot be renamed. */
+function ContainerProperties({
+  library,
+  root,
+  sections,
+}: {
+  library: ProjectAssetLibraryState;
+  root: AssetLibraryRoot | null;
+  sections: SectionState;
+}) {
+  const inScope = (itemRoot: AssetLibraryRoot) => root === null || itemRoot === root;
+  const folders = library.folders.filter((folder) => inScope(folder.root));
+  const entries = library.entries.filter((entry) => inScope(entry.root));
+  const topLevel = root
+    ? folders.filter((folder) => !folder.parent_id).length +
+      entries.filter((entry) => !entry.folder_id).length
+    : assetLibraryRoots.length;
+  return (
+    <Section id="info" title={root ? "素材库" : "项目"} state={sections}>
+      <Field label="名称">
+        <ReadOnlyValue value={root ? assetLibraryRootLabels[root] : "此项目"} />
+      </Field>
+      {root && (
+        <Field label="位置">
+          <ReadOnlyValue value="此项目" />
+        </Field>
+      )}
+      <Field label="内容">
+        <ReadOnlyValue value={`${topLevel} 项`} />
+      </Field>
+      <Field label="文件夹">
+        <ReadOnlyValue value={`${folders.length} 个`} />
+      </Field>
+      {root ? (
+        <Field label="素材">
+          <ReadOnlyValue value={`${entries.length} 个`} />
+        </Field>
+      ) : (
+        assetLibraryRoots.map((libraryRoot) => (
+          <Field key={libraryRoot} label={`${assetLibraryRootLabels[libraryRoot]}素材`}>
+            <ReadOnlyValue
+              value={`${entries.filter((entry) => entry.root === libraryRoot).length} 个`}
+            />
+          </Field>
+        ))
+      )}
+    </Section>
+  );
 }
 
 export function AssetLibraryDetails(props: AssetLibraryDetailsProps) {
-  const { folder, entries, collapsedSections, onToggleSection } = props;
+  const { container, entries, collapsedSections, onToggleSection } = props;
   const sections: SectionState = { collapsed: collapsedSections, onToggle: onToggleSection };
   const { ref, overflow } = useVerticalOverflow();
   const open = !collapsedSections.has(panelSection);
@@ -701,13 +732,21 @@ export function AssetLibraryDetails(props: AssetLibraryDetailsProps) {
         )}
       </>
     );
-  } else if (folder) {
+  } else if (container?.kind === "folder") {
     content = (
       <FolderProperties
-        folder={folder.folder}
-        childCount={folder.childCount}
+        folder={container.folder}
+        childCount={container.childCount}
         sections={sections}
         onRename={props.onRenameFolder}
+      />
+    );
+  } else if (container) {
+    content = (
+      <ContainerProperties
+        library={props.library}
+        root={container.kind === "root" ? container.root : null}
+        sections={sections}
       />
     );
   } else {

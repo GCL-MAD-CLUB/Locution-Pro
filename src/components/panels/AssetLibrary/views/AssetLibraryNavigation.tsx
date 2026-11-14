@@ -10,7 +10,10 @@ import {
   assetLibraryRootLabels,
   assetLibraryRoots,
   sortedAssetLibraryNodes,
+  assetLibraryProjectLabel,
+  assetLibraryProjectPlace,
   type AssetLibraryLocation,
+  type AssetLibraryPlace,
   type AssetLibrarySort,
 } from "../../../../core/editor/assetLibrary";
 import type {
@@ -28,27 +31,28 @@ import { AssetLibraryProjectIcon, assetLibraryRootIcons } from "./AssetLibraryTr
 
 interface AssetLibraryNavigationProps {
   library: ProjectAssetLibraryState;
-  location: AssetLibraryLocation;
+  location: AssetLibraryPlace;
   sort: AssetLibrarySort;
   collapsedKeys: ReadonlySet<string>;
+  showHidden: boolean;
   dropTargetKey: string | null;
-  onNavigate: (location: AssetLibraryLocation) => void;
+  onNavigate: (location: AssetLibraryPlace) => void;
   onToggleCollapsed: (key: string) => void;
   onCreateFolder: () => void;
   onContextMenu: (event: ReactMouseEvent<HTMLElement>, location: AssetLibraryLocation) => void;
 }
 
-/** The "此项目" row above both libraries, collapsed under this key like a folder. */
-const projectKey = "project";
-const projectLabel = "此项目";
+/** The "此项目" row above both libraries; it opens like a folder and lists them. */
+const projectKey = assetLocationKey(assetLibraryProjectPlace);
+const projectLabel = assetLibraryProjectLabel;
 
 /** How long a drag must hover over a collapsed folder before it opens, as in a file manager. */
 const dragExpandDelayMs = 700;
 
 interface VisibleTreeRow {
   key: string;
-  target: AssetLibraryLocation;
-  parent: AssetLibraryLocation | null;
+  target: AssetLibraryPlace;
+  parent: AssetLibraryPlace | null;
   expandable: boolean;
   expanded: boolean;
 }
@@ -62,6 +66,7 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
   // Location keys make lookups match at every depth, not just under the roots.
   const childrenByParent = new Map<string, AssetLibraryFolder[]>();
   for (const folder of library.folders) {
+    if (folder.hidden && !props.showHidden) continue;
     const key = parentKey(folder.root, folder.parent_id);
     childrenByParent.set(key, [...(childrenByParent.get(key) ?? []), folder]);
   }
@@ -84,7 +89,7 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
   // Rows in display order, for arrow-key movement through the expanded tree.
   function visibleRows() {
     const rows: VisibleTreeRow[] = [];
-    const walk = (target: AssetLibraryLocation, parent: AssetLibraryLocation | null) => {
+    const walk = (target: AssetLibraryLocation, parent: AssetLibraryPlace) => {
       const key = assetLocationKey(target);
       const children = sortedChildren(key);
       const expanded = children.length > 0 && !collapsedKeys.has(key);
@@ -93,8 +98,16 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
         children.forEach((folder) => walk({ root: folder.root, folderId: folder.id }, target));
       }
     };
-    if (!collapsedKeys.has(projectKey)) {
-      assetLibraryRoots.forEach((root) => walk({ root, folderId: null }, null));
+    const projectOpen = !collapsedKeys.has(projectKey);
+    rows.push({
+      key: projectKey,
+      target: assetLibraryProjectPlace,
+      parent: null,
+      expandable: true,
+      expanded: projectOpen,
+    });
+    if (projectOpen) {
+      assetLibraryRoots.forEach((root) => walk({ root, folderId: null }, assetLibraryProjectPlace));
     }
     return rows;
   }
@@ -139,6 +152,7 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
     label: string,
     icon: ReactElement,
     depth: number,
+    hidden = false,
   ): ReactElement {
     const key = assetLocationKey(target);
     const children = sortedChildren(key);
@@ -155,7 +169,9 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
         <div
           className={`media-bin-row media-bin-folder-row asset-library-tree-row${
             active ? " selected" : ""
-          }${dropTargetKey === treeDropPrefix + key ? " folder-drop-target" : ""}`}
+          }${dropTargetKey === treeDropPrefix + key ? " folder-drop-target" : ""}${
+            hidden ? " is-hidden" : ""
+          }`}
           style={{ "--asset-tree-depth": depth } as CSSProperties}
           onClick={() => props.onNavigate(target)}
           onContextMenu={(event) => props.onContextMenu(event, target)}
@@ -183,6 +199,7 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
                   <MediaBinFolderIcon />
                 </span>,
                 depth + 1,
+                folder.hidden,
               ),
             )}
           </ul>
@@ -222,11 +239,20 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
           aria-label="文件夹"
           onKeyDown={handleKeyDown}
         >
-          {/* Only the arrow toggles the group; clicking this row does not. */}
-          <li role="treeitem" aria-selected={false} aria-expanded={projectExpanded}>
+          {/* The project opens like a folder; the arrow or a double-click expands it. */}
+          <li
+            role="treeitem"
+            aria-selected={activeKey === projectKey}
+            aria-expanded={projectExpanded}
+          >
             <div
-              className="media-bin-row media-bin-folder-row asset-library-tree-row"
+              className={`media-bin-row media-bin-folder-row asset-library-tree-row${
+                activeKey === projectKey ? " selected" : ""
+              }`}
               style={{ "--asset-tree-depth": 0 } as CSSProperties}
+              onClick={() => props.onNavigate(assetLibraryProjectPlace)}
+              onDoubleClick={() => props.onToggleCollapsed(projectKey)}
+              onContextMenu={(event) => event.preventDefault()}
             >
               <span className="media-bin-title-cell media-bin-folder-title-cell">
                 {renderToggle(projectKey, projectLabel, projectExpanded)}

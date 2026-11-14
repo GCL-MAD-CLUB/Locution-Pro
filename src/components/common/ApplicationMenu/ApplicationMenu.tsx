@@ -80,6 +80,8 @@ export interface ApplicationMenuModel {
     subtitles: ApplicationMenuWindowItem;
     storyboard: ApplicationMenuWindowItem;
     history: ApplicationMenuWindowItem;
+    /** Panels of the transcode page. */
+    transcode: ApplicationMenuWindowGroup;
   };
   help: {
     locutionProHelp: ApplicationMenuCommand;
@@ -102,6 +104,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
   const [recentProjectMenuOpen, setRecentProjectMenuOpen] = useState(false);
   const [recentImportMenuOpen, setRecentImportMenuOpen] = useState(false);
   const [projectWindowMenuOpen, setProjectWindowMenuOpen] = useState(false);
+  const [transcodeWindowMenuOpen, setTranscodeWindowMenuOpen] = useState(false);
   const [preferencesMenuOpen, setPreferencesMenuOpen] = useState(false);
   const menuRef = useRef<HTMLElement>(null);
 
@@ -148,6 +151,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
   useEffect(() => {
     if (!windowMenuOpen) {
       setProjectWindowMenuOpen(false);
+      setTranscodeWindowMenuOpen(false);
     }
   }, [windowMenuOpen]);
 
@@ -523,6 +527,25 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
             >
               {windowMenu.history.label}
             </PopupMenuItem>
+            <PopupMenuSubmenu
+              label="转码"
+              open={transcodeWindowMenuOpen}
+              disabled={!windowMenu.transcode.enabled}
+              menuClassName="application-menu-popup"
+              onOpenChange={setTranscodeWindowMenuOpen}
+            >
+              {windowMenu.transcode.items.map((item) => (
+                <PopupMenuItem
+                  key={item.id}
+                  checked={item.checked}
+                  disabled={!item.enabled}
+                  title={item.title}
+                  onSelect={select(item.execute)}
+                >
+                  {item.label}
+                </PopupMenuItem>
+              ))}
+            </PopupMenuSubmenu>
           </PopupMenu>
         )}
       </div>

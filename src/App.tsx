@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Loader2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useStore } from "zustand";
 import {
   appPanelRegistry,
   initialAppPanelState,
@@ -11,6 +12,12 @@ import {
   withAppPanelDefaults,
 } from "./application/appPanelRegistry";
 import { finishWindowClose, windowCloseAction } from "./application/windowClose";
+import { subtitleStreamNotFoundCode } from "./application/media/mediaAnalysisTask";
+import {
+  showTranscodePanel,
+  transcodePanelStore,
+  transcodePanels,
+} from "./application/transcodePanelRegistry";
 import { publishEvent, useBroadcastEvent } from "./runtime/events/react";
 import { readAppStorage } from "./runtime/storage";
 import { useProjections } from "./runtime/state/StateHub";
@@ -42,7 +49,12 @@ import { HistoryPanelServicesProvider, historyPanelType } from "./components/pan
 import { exportWorkspaceStore, useExportWorkspaceState } from "./systems/ExportSystem";
 import { ImportWorkspace } from "./components/panels/ImportWorkspace";
 import { TranscodeWorkspace } from "./components/panels/TranscodeWorkspace";
-import { encoderBinName, enqueueTranscodeSources } from "./systems/TranscodeSystem";
+import {
+  encoderBinName,
+  enqueueTranscodeSources,
+  parentDirectory,
+  transcodeQueueStore,
+} from "./systems/TranscodeSystem";
 import { mediaBinPanelType, type MediaBinPanelParams } from "./components/panels/MediaBin";
 import { ProjectDiscardDialog, ProjectSaveDialog } from "./components/common/ProjectSaveDialog";
 import { ExportConflictDialog } from "./components/common/ExportConflictDialog";
@@ -321,6 +333,7 @@ function AppContent() {
   const focusedPanelId = usePanelManagerState((state) => state.focusedPanelId);
   const panelInstances = usePanelManagerState((state) => state.instances);
   const openPanel = usePanelManagerState((state) => state.openPanel);
+  const transcodePanelInstances = useStore(transcodePanelStore, (state) => state.instances);
   const closePanel = usePanelManagerState((state) => state.closePanel);
   const [projectHomeMode, setProjectHomeMode] = useState<"startup" | "manual" | null>("startup");
   const [preferencesCategory, setPreferencesCategory] = useState<PreferencesCategory | null>(null);
@@ -1284,7 +1297,11 @@ function AppContent() {
     );
   }
 
-  async function importMedia(pathsToImport?: string[], folderId: string | null = null) {
+  async function importMedia(
+    pathsToImport?: string[],
+    folderId: string | null = null,
+    { quietWarnings = [] }: { quietWarnings?: readonly string[] } = {},
+  ) {
     if (isMediaBinReadOnly || isBusy) {
       return;
     }
@@ -1335,7 +1352,11 @@ function AppContent() {
             folderId,
           );
         }
-        warningsAppended(results.flatMap((result) => result.warnings));
+        warningsAppended(
+          results
+            .flatMap((result) => result.warnings)
+            .filter((notice) => !quietWarnings.includes(notice.code)),
+        );
         rememberImportedMedia(results.map((result) => result.project.asset.path));
       },
     });
@@ -1415,6 +1436,14 @@ function AppContent() {
     return "handled" as const;
   });
 
+  // The transcode queue runs in the background, so it always needs to know
+  // where the project lives to resolve the encoder bin folder.
+  useEffect(() => {
+    transcodeQueueStore
+      .getState()
+      .setProjectDirectory(projectFilePath ? parentDirectory(projectFilePath) : "");
+  }, [projectFilePath]);
+
   useBroadcastEvent(identity, "transcode.enqueue.requested", async ({ payload }) => {
     const added = enqueueTranscodeSources(payload.paths);
     setActiveWorkspace("transcode");
@@ -1445,7 +1474,8 @@ function AppContent() {
       };
       mediaFolderAdded(folder);
     }
-    await importMedia(payload.paths, folder.id);
+    // Encoder outputs often carry no subtitles; that is not worth a notice here.
+    await importMedia(payload.paths, folder.id, { quietWarnings: [subtitleStreamNotFoundCode] });
     return "handled" as const;
   });
 
@@ -1763,6 +1793,20 @@ function AppContent() {
         checked: Boolean(panelInstances.history),
         enabled: true,
         execute: () => showSingletonPanel("history", historyPanelType, {}, "middle"),
+      },
+      transcode: {
+        enabled: true,
+        items: transcodePanels.map((panel) => ({
+          id: panel.id,
+          label: panel.label,
+          checked: Boolean(transcodePanelInstances[panel.id]),
+          enabled: true,
+          execute: () => {
+            setActiveWorkspace("transcode");
+            setProjectHomeMode(null);
+            showTranscodePanel(panel.id);
+          },
+        })),
       },
     },
     help: {

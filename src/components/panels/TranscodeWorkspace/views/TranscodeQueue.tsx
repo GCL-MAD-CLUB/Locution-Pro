@@ -15,6 +15,7 @@ import {
   startTranscodeQueue,
   stopTranscodeQueue,
   transcodeQueueStore,
+  transcodePresetLabel,
   useTranscodeQueueState,
   type TranscodeOutput,
   type TranscodeSource,
@@ -350,7 +351,7 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
                       onEditOutput(source, output);
                     }}
                   >
-                    {output.presetName}
+                    {transcodePresetLabel({ userPresets }, output.presetId, output.presetName)}
                   </button>
                   <span
                     className={`transcode-output-path ${output.destination ? "" : "is-missing"}`}

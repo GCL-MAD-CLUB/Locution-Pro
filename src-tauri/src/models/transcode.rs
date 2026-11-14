@@ -379,6 +379,31 @@ pub(crate) struct TranscodeResult {
     pub(crate) sidecar_paths: Vec<String>,
 }
 
+/// One still of the source and of the output as the settings would render it.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TranscodePreviewRequest {
+    pub(crate) input_path: String,
+    /// Output file name without extension; text overlays may show it.
+    pub(crate) output_name: String,
+    pub(crate) settings: TranscodeSettings,
+    /// Source time of the still.
+    pub(crate) time_us: i64,
+    /// Encode a short segment with the real encoder so compression shows,
+    /// instead of rendering the filters alone.
+    #[serde(default)]
+    pub(crate) encoded: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TranscodePreviewFrames {
+    /// PNG of the source frame.
+    pub(crate) source_path: String,
+    /// PNG of the output frame; absent when the output has no video.
+    pub(crate) output_path: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TranscodeCodecEntry {

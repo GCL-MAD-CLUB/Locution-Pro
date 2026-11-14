@@ -63,6 +63,7 @@ export type OperationKey =
   | "thumbnail.video"
   | "transcode.prepare"
   | "transcode.run"
+  | "transcode.preview"
   | "window.closeListener"
   | "window.title"
   | "workspace.load"

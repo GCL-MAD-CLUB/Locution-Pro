@@ -178,6 +178,14 @@ export function buildNativeMenu(model: ApplicationMenuModel, editingText: boolea
       check("window.subtitles", windowMenu.subtitles),
       check("window.storyboard", windowMenu.storyboard),
       check("window.history", windowMenu.history),
+      {
+        kind: "submenu",
+        label: "转码",
+        enabled: windowMenu.transcode.enabled,
+        items: windowMenu.transcode.items.map((entry) =>
+          check(`window.transcode.${entry.id}`, entry),
+        ),
+      },
       separator,
       { kind: "predefined", action: "bringAllToFront", label: "前置全部窗口" },
     ],

@@ -96,6 +96,7 @@ interface TestMenuModel {
     subtitles: MenuWindowItem;
     storyboard: MenuWindowItem;
     history: MenuWindowItem;
+    transcode: { enabled: boolean; items: MenuWindowItem[] };
   };
   help: {
     aboutLocutionPro: MenuCommand;
@@ -183,6 +184,10 @@ function createModel(calls: string[], enabled = true): ApplicationMenuModel {
       subtitles: toggle("subtitles", "字幕", false),
       storyboard: toggle("storyboard", "分镜", true),
       history: toggle("history", "历史记录", false),
+      transcode: {
+        enabled: true,
+        items: [{ id: "transcode-queue", ...toggle("transcode-queue", "队列", true) }],
+      },
     },
     help: {
       aboutLocutionPro: command("about"),
@@ -235,6 +240,9 @@ test("the menu bar follows the macOS layout with system roles", () => {
   const project = find(entries, (entry) => entry.id === "window.project.p1")!;
   assert.equal(project.kind, "check");
   assert.equal(project.label, "　项目 1");
+  const transcodeQueue = find(entries, (entry) => entry.id === "window.transcode.transcode-queue")!;
+  assert.equal(transcodeQueue.kind, "check");
+  assert.equal(transcodeQueue.checked, true);
   assert.equal(find(entries, (entry) => entry.label === "导入最近使用的文件")!.enabled, false);
 });
 

@@ -5,6 +5,11 @@ use super::*;
 const TRANSCODE_CONFIG_FILE_NAME: &str = "TranscodeConfig.json";
 const TRANSCODE_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 const TRANSCODE_LISTING_TIMEOUT: Duration = Duration::from_secs(20);
+const TRANSCODE_PREVIEW_TIMEOUT: Duration = Duration::from_secs(120);
+/// Length of the segment an encoded preview compresses.
+const TRANSCODE_PREVIEW_SEGMENT_US: i64 = 1_000_000;
+/// Preview stills older than this are removed when a new one is made.
+const TRANSCODE_PREVIEW_RETENTION: Duration = Duration::from_secs(120);
 
 const BITMAP_SUBTITLE_CODECS: &[&str] = &[
     "hdmv_pgs_subtitle",
@@ -934,6 +939,26 @@ pub(crate) fn build_transcode_plan(
                 number_arg(effects.loudness.range_lu.clamp(1.0, 50.0)),
                 number_arg(effects.loudness.true_peak_db.clamp(-9.0, 0.0)),
             ));
+            // loudnorm resamples to 192 kHz internally and pads its last
+            // 100 ms block, so restore the rate and cut the padding off.
+            let sample_rate = settings
+                .audio
+                .sample_rate
+                .or_else(|| source.audio.first().and_then(|stream| stream.sample_rate))
+                .filter(|rate| *rate > 0);
+            if let Some(rate) = sample_rate {
+                audio_filters.push(format!("aresample={rate}"));
+            }
+            if duration_us > 0 {
+                // With an output-side seek the audio still starts at the
+                // source's beginning, so the cut lands after the range start.
+                let end_us = if output_seek {
+                    range_start_us + duration_us
+                } else {
+                    duration_us
+                };
+                audio_filters.push(format!("atrim=end={}", seconds_arg(end_us)));
+            }
         }
         if audio_copy {
             if !audio_filters.is_empty() {
@@ -1057,6 +1082,119 @@ pub(crate) fn build_transcode_plan(
         temp_files,
         duration_us,
     })
+}
+
+/// Settings that render one output still: audio, muxed subtitles and
+/// retiming are dropped because a single frame cannot show them. A filter
+/// preview swaps the encoder for PNG; an encoded preview keeps the real
+/// encoder and limits the range to a short segment.
+pub(crate) fn preview_settings(
+    settings: &TranscodeSettings,
+    time_us: i64,
+    encoded: bool,
+) -> TranscodeSettings {
+    let mut preview = settings.clone();
+    let time_us = time_us.max(0);
+    preview.export_audio = false;
+    if preview.subtitles.mode != TranscodeSubtitleMode::Burn {
+        preview.export_subtitles = false;
+    }
+    preview.effects.time_tuner.enabled = false;
+    preview.effects.loudness.enabled = false;
+    preview.comment.clear();
+    preview.fast_start = false;
+    preview.range_start_us = (time_us > 0).then_some(time_us);
+    if encoded {
+        preview.range_end_us = Some(time_us + TRANSCODE_PREVIEW_SEGMENT_US);
+        if preview.video.codec == "copy" {
+            // A stream copy cannot start mid-GOP; the still shows the source.
+            preview.video.codec = "png".to_string();
+            preview.container = "image2".to_string();
+            preview.extension = "png".to_string();
+            preview.extra_args.clear();
+            preview.range_end_us = None;
+        }
+    } else {
+        preview.range_end_us = None;
+        preview.video.codec = "png".to_string();
+        preview.video.rate_control = TranscodeRateControl::Auto;
+        preview.video.pixel_format = None;
+        preview.video.profile = None;
+        preview.video.level = None;
+        preview.video.speed_preset = None;
+        preview.video.keyframe_interval = None;
+        preview.video.frame_rate = None;
+        preview.container = "image2".to_string();
+        preview.extension = "png".to_string();
+        preview.extra_args.clear();
+    }
+    preview
+}
+
+/// FFmpeg arguments that write one PNG still of the source at `time_us`.
+pub(crate) fn source_still_args(input_path: &str, time_us: i64, output: &Path) -> Vec<String> {
+    let mut args = vec![
+        "-y".to_string(),
+        "-hide_banner".to_string(),
+        "-loglevel".to_string(),
+        "error".to_string(),
+    ];
+    if time_us > 0 {
+        args.extend(["-ss".to_string(), seconds_arg(time_us)]);
+    }
+    args.extend([
+        "-i".to_string(),
+        input_path.to_string(),
+        "-map".to_string(),
+        "0:v:0".to_string(),
+        "-frames:v".to_string(),
+        "1".to_string(),
+        "-update".to_string(),
+        "1".to_string(),
+        "-f".to_string(),
+        "image2".to_string(),
+        output.to_string_lossy().into_owned(),
+    ]);
+    args
+}
+
+/// Limits a planned single-image pass to its first frame.
+pub(crate) fn single_frame_pass(mut args: Vec<String>) -> Vec<String> {
+    if let Some(index) = args.iter().rposition(|arg| arg == "-f") {
+        args.splice(
+            index..index,
+            [
+                "-frames:v".to_string(),
+                "1".to_string(),
+                "-update".to_string(),
+                "1".to_string(),
+            ],
+        );
+    }
+    args
+}
+
+fn remove_stale_previews(directory: &Path) {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+    let now = std::time::SystemTime::now();
+    for entry in entries.flatten() {
+        let stale = entry
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age > TRANSCODE_PREVIEW_RETENTION);
+        if stale {
+            let path = entry.path();
+            let _ = if path.is_dir() {
+                fs::remove_dir_all(&path)
+            } else {
+                fs::remove_file(&path)
+            };
+        }
+    }
 }
 
 /// Rows of an FFmpeg `-muxers`, `-encoders` or `-filters` listing as
@@ -1494,6 +1632,164 @@ pub(crate) async fn transcode_media(
     })
 }
 
+#[tauri::command]
+pub(crate) async fn transcode_preview_frames(
+    request: TranscodePreviewRequest,
+    task_id: String,
+    state: tauri::State<'_, AppState>,
+) -> CommandResult<TranscodePreviewFrames> {
+    let task = register_task(&task_id, state.inner())?;
+    let preferences = preferences_clone(&state)?;
+    validate_transcode_settings(&request.settings)?;
+    let input_path = PathBuf::from(&request.input_path);
+    if !input_path.is_file() {
+        return Err(app_error(
+            ErrorCode::FileNotFound,
+            format!("Transcode source does not exist: {}", input_path.display()),
+        ));
+    }
+    let probe = probe_media_with_timeout(
+        &input_path,
+        &preferences,
+        state.inner(),
+        &task_id,
+        task.cancel_token(),
+        TRANSCODE_PROBE_TIMEOUT,
+    )
+    .await?;
+    let source = transcode_source_info(&probe);
+    if source.video.is_empty() {
+        return Err(invalid_settings("The source has no video to preview"));
+    }
+    let time_us = if source.duration_us > 0 {
+        request.time_us.clamp(0, (source.duration_us - 1).max(0))
+    } else {
+        request.time_us.max(0)
+    };
+
+    let preview_root = configured_cache_root(&preferences)
+        .join("Transcode")
+        .join("Preview");
+    let work_dir = preview_root.join(Uuid::new_v4().to_string());
+    {
+        let preview_root = preview_root.clone();
+        let work_dir = work_dir.clone();
+        spawn_blocking_cancellable(
+            task.cancel_token(),
+            "prepare transcode preview",
+            move |_| {
+                remove_stale_previews(&preview_root);
+                fs::create_dir_all(&work_dir).map_err(|error| {
+                    app_error(
+                        ErrorCode::TranscodeWriteFailed,
+                        format!(
+                            "Failed to create preview directory {}: {error}",
+                            work_dir.display()
+                        ),
+                    )
+                })
+            },
+        )
+        .await?;
+    }
+
+    let program = ffmpeg_program(&preferences);
+    let run = |args: Vec<String>| {
+        let program = program.clone();
+        let task_id = task_id.clone();
+        let cancel = task.cancel_token();
+        let state = state.inner();
+        async move {
+            run_output_with_timeout(
+                &program,
+                &args,
+                state,
+                &task_id,
+                cancel,
+                TRANSCODE_PREVIEW_TIMEOUT,
+            )
+            .await
+            .map(|_| ())
+        }
+    };
+
+    let source_path = work_dir.join("source.png");
+    run(source_still_args(
+        &request.input_path,
+        time_us,
+        &source_path,
+    ))
+    .await?;
+    task.check_cancelled()?;
+
+    let settings = preview_settings(&request.settings, time_us, request.encoded);
+    if !settings.export_video {
+        return Ok(TranscodePreviewFrames {
+            source_path: source_path.to_string_lossy().into_owned(),
+            output_path: None,
+        });
+    }
+    let job = TranscodeJob {
+        input_path: request.input_path.clone(),
+        output_dir: work_dir.to_string_lossy().into_owned(),
+        output_name: request.output_name.clone(),
+        overwrite: true,
+        settings,
+    };
+    let still_path = work_dir.join("output.png");
+    let encoded = job.settings.container != "image2";
+    let planned_path = if encoded {
+        let stem = if request.output_name.trim().is_empty() {
+            "preview".to_string()
+        } else {
+            safe_component(request.output_name.trim())
+        };
+        work_dir.join(format!("{stem}.{}", job.settings.extension))
+    } else {
+        still_path.clone()
+    };
+    let font_file = overlay_font_file();
+    let plan = build_transcode_plan(
+        &job,
+        &source,
+        &planned_path,
+        &work_dir,
+        font_file.as_deref(),
+    )?;
+    for (path, body) in &plan.temp_files {
+        fs::write(path, body).map_err(|error| {
+            app_error(
+                ErrorCode::TranscodeWriteFailed,
+                format!(
+                    "Failed to write preview overlay text {}: {error}",
+                    path.display()
+                ),
+            )
+        })?;
+    }
+    if encoded {
+        for args in plan.passes {
+            run(args).await?;
+            task.check_cancelled()?;
+        }
+        run(source_still_args(
+            &planned_path.to_string_lossy(),
+            0,
+            &still_path,
+        ))
+        .await?;
+    } else if let Some(args) = plan.passes.into_iter().last() {
+        run(single_frame_pass(args)).await?;
+    }
+    task.check_cancelled()?;
+    Ok(TranscodePreviewFrames {
+        source_path: source_path.to_string_lossy().into_owned(),
+        output_path: still_path
+            .is_file()
+            .then(|| still_path.to_string_lossy().into_owned()),
+    })
+}
+
 fn transcode_config_path() -> PathBuf {
     preferences_file().with_file_name(TRANSCODE_CONFIG_FILE_NAME)
 }
@@ -1922,11 +2218,81 @@ mod tests {
         assert!(filters.contains("drawtext=timecode='00\\:00\\:00\\:00':rate=24000/1001"));
         assert_eq!(
             value_of(args, "-af"),
-            "atempo=1.042,loudnorm=I=-24:LRA=7:TP=-2"
+            "atempo=1.042,loudnorm=I=-24:LRA=7:TP=-2,aresample=48000,atrim=end=57.600000"
         );
         assert_eq!(plan.temp_files.len(), 1);
         assert_eq!(plan.temp_files[0].1, "REV [source] clip.mkv");
         assert_eq!(plan.duration_us, 57_600_000);
+    }
+
+    #[test]
+    fn filter_preview_renders_one_png_with_the_video_filters() {
+        let mut settings = TranscodeSettings::default();
+        settings.video.width = Some(1280);
+        settings.video.height = Some(720);
+        settings.effects.loudness.enabled = true;
+        settings.effects.time_tuner.enabled = true;
+        settings.effects.time_tuner.duration_change_percent = 4.0;
+        settings.range_end_us = Some(9_000_000);
+        let preview = preview_settings(&settings, 2_500_000, false);
+        assert!(!preview.export_audio && !preview.export_subtitles);
+        assert_eq!(preview.video.codec, "png");
+        assert_eq!(preview.container, "image2");
+        assert_eq!(preview.range_start_us, Some(2_500_000));
+        assert_eq!(preview.range_end_us, None);
+        let plan = build_transcode_plan(
+            &job(preview),
+            &source(),
+            Path::new("/tmp/preview/output.png"),
+            Path::new("/tmp/preview"),
+            None,
+        )
+        .expect("preview plan");
+        assert_eq!(plan.passes.len(), 1);
+        let args = single_frame_pass(plan.passes[0].clone());
+        assert!(has_pair(&args, "-ss", "2.500000"));
+        assert!(value_of(&args, "-vf").starts_with("scale=1280:720"));
+        assert!(!value_of(&args, "-vf").contains("setpts"));
+        assert!(has_pair(&args, "-c:v", "png") && args.contains(&"-an".to_string()));
+        let tail = &args[args.len() - 7..];
+        assert_eq!(
+            tail,
+            [
+                "-frames:v",
+                "1",
+                "-update",
+                "1",
+                "-f",
+                "image2",
+                "/tmp/preview/output.png"
+            ]
+        );
+    }
+
+    #[test]
+    fn encoded_preview_keeps_the_encoder_for_a_short_segment() {
+        let mut settings = TranscodeSettings::default();
+        settings.video.rate_control = TranscodeRateControl::TwoPass;
+        settings.subtitles.mode = TranscodeSubtitleMode::Burn;
+        let preview = preview_settings(&settings, 4_000_000, true);
+        assert_eq!(preview.video.codec, settings.video.codec);
+        assert_eq!(preview.range_start_us, Some(4_000_000));
+        assert_eq!(preview.range_end_us, Some(5_000_000));
+        assert!(
+            preview.export_subtitles,
+            "burned subtitles show in the still"
+        );
+
+        let mut copy = TranscodeSettings::default();
+        copy.video.codec = "copy".to_string();
+        let still = preview_settings(&copy, 1_000_000, true);
+        assert_eq!(still.video.codec, "png");
+        assert_eq!(still.range_end_us, None);
+
+        let args = source_still_args("/media/a b.mkv", 0, Path::new("/tmp/source.png"));
+        assert!(!args.contains(&"-ss".to_string()));
+        assert!(has_pair(&args, "-map", "0:v:0") && has_pair(&args, "-frames:v", "1"));
+        assert_eq!(args.last().map(String::as_str), Some("/tmp/source.png"));
     }
 
     #[test]

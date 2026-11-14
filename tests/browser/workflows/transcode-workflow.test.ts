@@ -99,3 +99,76 @@ test("取消勾选在转码页面打开导入素材后导入仍回到编辑页",
   await app.locator(".import-submit").click();
   await expect(workspaceButton(app, "编辑")).toHaveAttribute("aria-current", "page");
 });
+
+test("转码页面由独立面板组成，关闭的面板可从窗口菜单重新打开", async ({ app }) => {
+  await importIntoTranscode(app);
+  const tabLabel = (name: string) => app.locator(".dock-tab-label", { hasText: name }).first();
+  for (const name of ["队列", "监视文件夹", "预设浏览器", "编码"]) {
+    await expect(tabLabel(name)).toBeVisible();
+  }
+
+  await tabLabel("监视文件夹").click();
+  await expect(app.getByRole("button", { name: "添加监视文件夹" })).toBeVisible();
+
+  await tabLabel("监视文件夹").click({ button: "right" });
+  await app.getByRole("menuitem", { name: "关闭面板", exact: true }).click();
+  await expect(app.locator(".dock-tab-label", { hasText: "监视文件夹" })).toHaveCount(0);
+
+  await app.getByRole("button", { name: "窗口(W)", exact: true }).click();
+  await app.getByRole("menuitem", { name: "转码", exact: true }).click();
+  await app.getByRole("menuitemcheckbox", { name: "监视文件夹", exact: true }).click();
+  await expect(tabLabel("监视文件夹")).toBeVisible();
+});
+
+test("导出设置可预览源与输出画面，并可按实际编码画质对比", async ({ app, native }) => {
+  await importIntoTranscode(app);
+  await queue(app).getByRole("button", { name: "MP4", exact: true }).click();
+  const dialog = app.getByRole("dialog", { name: "导出设置", exact: true });
+  const preview = dialog.getByRole("region", { name: "预览", exact: true });
+  await expect(preview.getByRole("tab", { name: "分屏对比", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(preview.getByRole("img", { name: "输出画面" })).toBeVisible();
+  await expect(preview.getByRole("slider", { name: "对比分界" })).toBeVisible();
+  await expect
+    .poll(async () => (await native.calls("transcode_preview_frames")).length)
+    .toBeGreaterThan(0);
+  const [first] = await native.calls("transcode_preview_frames");
+  expect(first.args.request).toMatchObject({
+    inputPath: "C:/media/clip.MP4",
+    timeUs: 5_000_000,
+    encoded: false,
+    settings: { container: "mp4" },
+  });
+
+  // The editing page's timeline drives the preview time and the source range.
+  await expect(preview.locator(".monitor-time")).toHaveText("00:00:05:00");
+  await preview.getByTitle("下一帧", { exact: true }).click();
+  await expect(preview.locator(".monitor-time")).toHaveText("00:00:05:01");
+  await expect
+    .poll(async () =>
+      (await native.calls("transcode_preview_frames")).some(
+        (call) => call.args.request.timeUs === 5_041_667,
+      ),
+    )
+    .toBe(true);
+  await preview.getByRole("button", { name: "设为入点", exact: true }).click();
+  await expect(dialog.getByRole("textbox", { name: "入点", exact: true })).toHaveValue(
+    "00:00:05.042",
+  );
+  await expect(preview.locator(".timeline-cue-range")).toBeVisible();
+  await preview.getByRole("button", { name: "清除范围", exact: true }).click();
+  await expect(dialog.getByRole("textbox", { name: "入点", exact: true })).toHaveValue("");
+
+  await preview.getByRole("tab", { name: "并排", exact: true }).click();
+  await expect(preview.getByRole("img", { name: "源画面" })).toBeVisible();
+  await expect(preview.getByRole("img", { name: "输出画面" })).toBeVisible();
+
+  await preview.getByRole("checkbox", { name: "按实际编码画质" }).check();
+  await expect
+    .poll(async () =>
+      (await native.calls("transcode_preview_frames")).some((call) => call.args.request.encoded),
+    )
+    .toBe(true);
+});

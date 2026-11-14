@@ -106,6 +106,7 @@ pub fn run() {
             transcode_codec_details,
             probe_transcode_source,
             transcode_media,
+            transcode_preview_frames,
             load_transcode_config,
             save_transcode_config,
             read_transcode_preset,

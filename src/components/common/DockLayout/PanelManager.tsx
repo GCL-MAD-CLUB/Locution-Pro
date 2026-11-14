@@ -185,7 +185,9 @@ export interface PanelManagerState {
   closePanels: (areaId: DockAreaId, panelIds: Iterable<string>) => void;
 }
 
-function createPanelManagerStore(
+export type PanelManagerStore = StoreApi<PanelManagerState>;
+
+export function createPanelManagerStore(
   initialState: PanelManagerInitialState,
   defaultState: PanelManagerInitialState,
 ) {
@@ -414,18 +416,30 @@ function createPanelManagerStore(
 
 const PanelManagerContext = createContext<StoreApi<PanelManagerState> | null>(null);
 
+type PanelManagerProviderProps =
+  | {
+      initialState: PanelManagerInitialState;
+      defaultState?: PanelManagerInitialState;
+      store?: undefined;
+      children: ReactNode;
+    }
+  | {
+      /** A store created outside React, for layouts that outlive their page. */
+      store: PanelManagerStore;
+      initialState?: undefined;
+      defaultState?: undefined;
+      children: ReactNode;
+    };
+
 export function PanelManagerProvider({
   initialState,
   defaultState = initialState,
+  store,
   children,
-}: {
-  initialState: PanelManagerInitialState;
-  defaultState?: PanelManagerInitialState;
-  children: ReactNode;
-}) {
-  const storeRef = useRef<StoreApi<PanelManagerState> | null>(null);
-  if (!storeRef.current) {
-    storeRef.current = createPanelManagerStore(initialState, defaultState);
+}: PanelManagerProviderProps) {
+  const storeRef = useRef<StoreApi<PanelManagerState> | null>(store ?? null);
+  if (!storeRef.current && initialState) {
+    storeRef.current = createPanelManagerStore(initialState, defaultState ?? initialState);
   }
   return (
     <PanelManagerContext.Provider value={storeRef.current}>{children}</PanelManagerContext.Provider>

@@ -214,3 +214,84 @@ test("timecodes parse and format symmetrically", () => {
   assert.equal(output.formatTimecode(3_723_500_000), "01:02:03.500");
   assert.equal(output.formatTimecode(null), "");
 });
+
+function sourceInfo(
+  streams: { audio?: boolean; subtitles?: string[] } = {},
+): import("../../../src/systems/TranscodeSystem/transcodeTypes.ts").TranscodeSourceInfo {
+  const stream = (index: number, codec: string) => ({
+    index,
+    codec,
+    language: null,
+    title: null,
+    width: 1920,
+    height: 1080,
+    frameRate: "25/1",
+    sampleRate: 48_000,
+    channels: 2,
+    bitmap: false,
+    colorTransfer: null,
+  });
+  return {
+    durationUs: 6_000_000,
+    video: [stream(0, "h264")],
+    audio: streams.audio === false ? [] : [stream(0, "aac")],
+    subtitles: (streams.subtitles ?? []).map((codec, index) => stream(index, codec)),
+  };
+}
+
+test("moving to MKV keeps the source subtitle format when the container holds it", () => {
+  const { catalog, types } = loadSystem();
+  const withAss = sourceInfo({ subtitles: ["ass"] });
+  const mkv = catalog.applyContainer(
+    types.defaultTranscodeSettings(),
+    "matroska",
+    capabilities,
+    undefined,
+    withAss,
+  );
+  assert.equal(mkv.subtitles.codec, "ass");
+  const withPgs = sourceInfo({ subtitles: ["hdmv_pgs_subtitle"] });
+  const fallback = catalog.applyContainer(
+    types.defaultTranscodeSettings(),
+    "matroska",
+    capabilities,
+    undefined,
+    withPgs,
+  );
+  assert.equal(fallback.subtitles.codec, "subrip");
+});
+
+test("the output summary leaves out streams the source does not have", () => {
+  const { output, types } = loadSystem();
+  const settings = types.defaultTranscodeSettings();
+  const silent = output.outputSummary(settings, sourceInfo({ audio: false }));
+  assert.equal(silent.length, 1, "only the video line remains");
+  assert.match(silent[0], /H\.264/);
+  const full = output.outputSummary(settings, sourceInfo({ subtitles: ["subrip"] }));
+  assert.equal(full.length, 3);
+  assert.equal(output.outputSummary(settings, null).length, 3, "unknown sources show everything");
+});
+
+test("presets in the queue are named with their group", () => {
+  const { queue, presets } = loadSystem();
+  const hevc = presets.systemPresets.find(
+    (preset) => preset.group !== presets.systemPresets[0].group,
+  )!;
+  assert.equal(
+    queue.transcodePresetLabel({ userPresets: [] }, hevc.id, hevc.name),
+    `${hevc.group} · ${hevc.name}`,
+  );
+  assert.equal(queue.transcodePresetLabel({ userPresets: [] }, null, "自定义"), "自定义");
+});
+
+test("the panel layout is saved and restored with the transcode config", () => {
+  const { queue } = loadSystem();
+  const store = queue.transcodeQueueStore;
+  const layout = { instances: [{ id: "transcode-queue", type: "transcode-queue", params: {} }] };
+  store.getState().setPanelLayout(layout);
+  const snapshot = JSON.parse(JSON.stringify(queue.transcodeConfigSnapshot(store.getState())));
+  assert.deepEqual(snapshot.panelLayout, layout);
+  store.getState().setPanelLayout(null);
+  store.getState().restore(snapshot);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.getState().panelLayout)), layout);
+});

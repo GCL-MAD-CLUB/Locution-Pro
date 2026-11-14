@@ -3,6 +3,7 @@ import type {
   TranscodeCodecEntry,
   TranscodeRateControl,
   TranscodeSettings,
+  TranscodeSourceInfo,
 } from "./transcodeTypes";
 
 export type TranscodeContainerKind = "video" | "audio" | "subtitle";
@@ -875,6 +876,32 @@ export function pixelFormatOptions(supported: readonly string[]): TranscodeOptio
   return [{ value: "", label: "自动" }, { separator: true }, ...withSeparator(common, others)];
 }
 
+/** FFmpeg subtitle encoders that write each source subtitle codec unchanged. */
+const subtitleEncoderForCodec: Record<string, string> = {
+  ass: "ass",
+  ssa: "ssa",
+  subrip: "subrip",
+  srt: "subrip",
+  webvtt: "webvtt",
+  mov_text: "mov_text",
+  dvd_subtitle: "dvdsub",
+  dvb_subtitle: "dvbsub",
+  text: "text",
+};
+
+/**
+ * The subtitle encoder a conversion should default to: the source's own
+ * format when the target can hold it (so ASS styling survives a move to MKV),
+ * otherwise the target's first offered encoder.
+ */
+export function preferredSubtitleEncoder(options: string[], source?: TranscodeSourceInfo | null) {
+  for (const stream of source?.subtitles ?? []) {
+    const encoder = subtitleEncoderForCodec[stream.codec];
+    if (encoder && options.includes(encoder)) return encoder;
+  }
+  return options[0];
+}
+
 function firstValue(items: TranscodeOptionItem[], preferred: string) {
   const values = optionValues(items);
   return values.includes(preferred) ? preferred : (values[0] ?? preferred);
@@ -889,6 +916,7 @@ export function applyContainer(
   muxer: string,
   capabilities: TranscodeCapabilities | null,
   extension?: string,
+  source?: TranscodeSourceInfo | null,
 ): TranscodeSettings {
   const container = findContainer(muxer);
   const next: TranscodeSettings = structuredClone(settings);
@@ -935,7 +963,7 @@ export function applyContainer(
       next.subtitles.mode = "convert";
     }
     if (next.subtitles.mode === "convert" && !options.includes(next.subtitles.codec)) {
-      next.subtitles.codec = options[0] ?? next.subtitles.codec;
+      next.subtitles.codec = preferredSubtitleEncoder(options, source) ?? next.subtitles.codec;
     }
   }
   return next;

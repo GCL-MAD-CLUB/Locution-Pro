@@ -42,6 +42,11 @@ export interface TranscodeQueueState {
   activeOutputId: string | null;
   /** Folder of the saved project file; empty until the project is saved. */
   projectDirectory: string;
+  /**
+   * The transcode page's panel layout as last saved. Opaque here: the page
+   * validates it against its own panel registry before using it.
+   */
+  panelLayout: unknown;
 
   addSources: (paths: string[], options?: AddTranscodeSourcesOptions) => TranscodeSource[];
   setSourceInfo: (sourceId: string, info: TranscodeSourceInfo | null) => void;
@@ -66,6 +71,7 @@ export interface TranscodeQueueState {
   setRunning: (running: boolean) => void;
   requestStop: (requested: boolean) => void;
   setActiveOutput: (outputId: string | null) => void;
+  setPanelLayout: (layout: unknown) => void;
   restore: (config: unknown) => void;
 }
 
@@ -82,6 +88,19 @@ export function findTranscodePreset(
   presetId: string | null,
 ) {
   return allTranscodePresets(state).find((preset) => preset.id === presetId) ?? null;
+}
+
+/**
+ * How an output's preset is named in lists. Several groups share names such
+ * as "高质量 2160p 4K", so a known preset is shown with its group.
+ */
+export function transcodePresetLabel(
+  state: Pick<TranscodeQueueState, "userPresets">,
+  presetId: string | null,
+  fallbackName: string,
+) {
+  const preset = findTranscodePreset(state, presetId);
+  return preset ? `${preset.group} · ${preset.name}` : fallbackName;
 }
 
 /** The preset new sources start with: the last one used, when it still works here. */
@@ -263,6 +282,7 @@ export function transcodeConfigSnapshot(state: TranscodeQueueState) {
     autoEncodeWatchFolders: state.autoEncodeWatchFolders,
     lastDestination: state.lastDestination,
     defaultPresetId: state.defaultPresetId,
+    panelLayout: state.panelLayout ?? null,
     queue: state.sources.map((source) => ({
       path: source.path,
       watchFolderId: source.watchFolderId,
@@ -293,6 +313,7 @@ export const transcodeQueueStore = createStore<TranscodeQueueState>()((set, get)
   stopRequested: false,
   activeOutputId: null,
   projectDirectory: "",
+  panelLayout: null,
 
   addSources: (paths, options = {}) => {
     const state = get();
@@ -540,6 +561,7 @@ export const transcodeQueueStore = createStore<TranscodeQueueState>()((set, get)
   setRunning: (running) => set({ running }),
   requestStop: (stopRequested) => set({ stopRequested }),
   setActiveOutput: (activeOutputId) => set({ activeOutputId }),
+  setPanelLayout: (panelLayout) => set({ panelLayout }),
 
   restore: (config) => {
     if (!isRecord(config)) {
@@ -552,6 +574,7 @@ export const transcodeQueueStore = createStore<TranscodeQueueState>()((set, get)
       userPresets: list(config.userPresets).flatMap((preset) => restorePreset(preset) ?? []),
       watchFolders: list(config.watchFolders).flatMap((folder) => restoreWatchFolder(folder) ?? []),
       autoEncodeWatchFolders: config.autoEncodeWatchFolders === true,
+      panelLayout: isRecord(config.panelLayout) ? config.panelLayout : null,
       lastDestination: restoreDestination(config.lastDestination),
       defaultPresetId:
         typeof config.defaultPresetId === "string" ? config.defaultPresetId : defaultPresetId,

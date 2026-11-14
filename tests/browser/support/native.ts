@@ -315,6 +315,11 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
           audio: [],
           subtitles: [],
         };
+      case "transcode_preview_frames":
+        return {
+          sourcePath: "C:/cache/preview/source.png",
+          outputPath: args.request.settings.exportVideo ? "C:/cache/preview/output.png" : null,
+        };
       case "transcode_media":
         return {
           outputPath: `${args.job.outputDir}/${args.job.outputName}.${args.job.settings.extension}`,

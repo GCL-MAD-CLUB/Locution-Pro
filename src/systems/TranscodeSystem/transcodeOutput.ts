@@ -182,7 +182,10 @@ function rateSummary(settings: TranscodeSettings) {
 /** One line per exported stream type describing the output settings. */
 export function outputSummary(settings: TranscodeSettings, info: TranscodeSourceInfo | null) {
   const lines: string[] = [];
-  if (settings.exportVideo) {
+  // Once the source is read, streams it does not have are left out instead
+  // of being described as if they were going to be written.
+  const known = info !== null;
+  if (settings.exportVideo && (!known || info.video.length > 0)) {
     const source = info?.video[0];
     const { video } = settings;
     const size =
@@ -208,7 +211,7 @@ export function outputSummary(settings: TranscodeSettings, info: TranscodeSource
             .join("，"),
     );
   }
-  if (settings.exportAudio) {
+  if (settings.exportAudio && (!known || info.audio.length > 0)) {
     const { audio } = settings;
     lines.push(
       audio.codec === "copy"
@@ -223,7 +226,9 @@ export function outputSummary(settings: TranscodeSettings, info: TranscodeSource
             .join("，"),
     );
   }
-  if (settings.exportSubtitles) {
+  const hasSubtitleSource =
+    !known || info.subtitles.length > 0 || Boolean(settings.subtitles.externalPath.trim());
+  if (settings.exportSubtitles && hasSubtitleSource) {
     const labels = {
       copy: "字幕：复制到文件",
       convert: "字幕：转换并封装",

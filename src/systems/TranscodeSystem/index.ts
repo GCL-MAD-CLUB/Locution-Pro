@@ -13,6 +13,7 @@ export {
 export {
   allTranscodePresets,
   findTranscodePreset,
+  transcodePresetLabel,
   selectedOutputIds,
   transcodeQueueStore,
   useTranscodeQueueState,

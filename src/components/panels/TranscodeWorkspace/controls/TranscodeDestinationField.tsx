@@ -80,10 +80,17 @@ export function TranscodeDestinationField({
         </p>
       )}
       {destination?.kind === "mediaBin" && (
-        <p className="transcode-destination-path" title={mediaBinDirectory ?? ""}>
-          完成后自动放入项目媒体箱的 {encoderBinName} 文件夹
-          {mediaBinDirectory ? `，文件写入 ${mediaBinDirectory}` : ""}
-        </p>
+        <>
+          <p className="transcode-destination-note">
+            完成后自动放入项目媒体箱的 {encoderBinName} 文件夹
+            {mediaBinDirectory ? "，文件写入：" : ""}
+          </p>
+          {mediaBinDirectory && (
+            <p className="transcode-destination-path" title={mediaBinDirectory}>
+              {mediaBinDirectory}
+            </p>
+          )}
+        </>
       )}
       {missing && <p className="transcode-required-note">必须选择输出位置后才能开始编码。</p>}
     </div>

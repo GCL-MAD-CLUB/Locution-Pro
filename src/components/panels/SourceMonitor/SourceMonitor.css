@@ -134,7 +134,8 @@
   min-width: 0;
 }
 
-.source-control-row.empty-state {
+.source-control-row.empty-state,
+.source-control-row.without-menus {
   grid-template-columns:
     var(--monitor-time-width) minmax(var(--transport-column-min-width), 1fr)
     var(--monitor-time-width);

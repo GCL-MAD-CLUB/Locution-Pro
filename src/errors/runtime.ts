@@ -293,6 +293,7 @@ const operationPolicies = {
   "thumbnail.video": silent("生成视频封面失败"),
   "transcode.prepare": silent("读取转码信息失败"),
   "transcode.run": silent("转码失败"),
+  "transcode.preview": silent("生成转码预览失败"),
   "window.closeListener": modal("窗口关闭监听失败"),
   "window.title": silent("更新窗口标题失败"),
   "workspace.load": silent("加载工作区布局失败"),

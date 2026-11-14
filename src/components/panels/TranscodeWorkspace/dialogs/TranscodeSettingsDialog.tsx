@@ -29,6 +29,7 @@ import { TranscodeCheck, TranscodeDropdown } from "../controls/TranscodeFields";
 import { TranscodeAudioTab } from "./TranscodeAudioTab";
 import { TranscodeEffectsTab } from "./TranscodeEffectsTab";
 import { TranscodeMuxerTab } from "./TranscodeMuxerTab";
+import { TranscodePreview } from "./TranscodePreview";
 import { TranscodeSubtitleTab } from "./TranscodeSubtitleTab";
 import { TranscodeVideoTab } from "./TranscodeVideoTab";
 
@@ -105,7 +106,7 @@ export function TranscodeSettingsDialog({
 
   function changeContainer(muxer: string) {
     const extension = capabilities?.muxers.find((entry) => entry.name === muxer)?.name;
-    setSettings((current) => applyContainer(current, muxer, capabilities, extension));
+    setSettings((current) => applyContainer(current, muxer, capabilities, extension, source.info));
     setPresetId(null);
     setPresetName("自定义");
   }
@@ -131,6 +132,11 @@ export function TranscodeSettingsDialog({
       rangeStartUs: start && start > 0 ? start : null,
       rangeEndUs: end && end > (start ?? 0) ? end : null,
     }));
+  }
+
+  function changeRangeFromTimeline(startUs: number | null, endUs: number | null) {
+    setSettings((current) => ({ ...current, rangeStartUs: startUs, rangeEndUs: endUs }));
+    setRangeDraft({ start: formatTimecode(startUs), end: formatTimecode(endUs) });
   }
 
   function savePreset() {
@@ -194,173 +200,187 @@ export function TranscodeSettingsDialog({
       onConfirm={confirm}
     >
       <div className="transcode-settings-layout export-settings-panel">
-        <section className="transcode-settings-main">
-          <ExportField label="格式">
-            <TranscodeDropdown
-              ariaLabel="格式"
-              value={settings.container}
-              items={containerOptions(capabilities)}
-              onChange={changeContainer}
-            />
-          </ExportField>
-          <ExportField label="预设">
-            <div className="transcode-inline transcode-preset-row">
+        <div className="transcode-settings-left">
+          <TranscodePreview
+            source={source}
+            settings={settings}
+            outputName={outputName}
+            onRangeChange={changeRangeFromTimeline}
+          />
+          <section className="transcode-settings-main">
+            <ExportField label="格式">
               <TranscodeDropdown
-                ariaLabel="预设"
-                value={presetId ?? customPresetValue}
-                items={presetItems}
-                fallbackLabel={presetName}
-                onChange={(id) => id !== customPresetValue && choosePreset(id)}
+                ariaLabel="格式"
+                value={settings.container}
+                items={containerOptions(capabilities)}
+                onChange={changeContainer}
               />
-              <button
-                type="button"
-                className="toolbar-button"
-                title="保存为预设"
-                onClick={() => {
-                  setSavingPreset(true);
-                  setNewPresetName(presetId ? `${presetName} 副本` : "");
-                }}
-              >
-                保存预设…
-              </button>
-            </div>
-          </ExportField>
-          {savingPreset && (
-            <ExportField label="预设名称">
-              <div className="transcode-inline">
-                <input
-                  className="export-text-input"
-                  aria-label="新预设名称"
-                  autoFocus
-                  value={newPresetName}
-                  onChange={(event) => setNewPresetName(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") savePreset();
-                    if (event.key === "Escape") {
-                      event.stopPropagation();
-                      setSavingPreset(false);
-                    }
-                  }}
+            </ExportField>
+            <ExportField label="预设">
+              <div className="transcode-inline transcode-preset-row">
+                <TranscodeDropdown
+                  ariaLabel="预设"
+                  value={presetId ?? customPresetValue}
+                  items={presetItems}
+                  fallbackLabel={presetName}
+                  onChange={(id) => id !== customPresetValue && choosePreset(id)}
                 />
                 <button
                   type="button"
-                  className="accent-button"
-                  disabled={!newPresetName.trim()}
-                  onClick={savePreset}
-                >
-                  保存
-                </button>
-                <button
-                  type="button"
                   className="toolbar-button"
-                  onClick={() => setSavingPreset(false)}
+                  title="保存为预设"
+                  onClick={() => {
+                    setSavingPreset(true);
+                    setNewPresetName(presetId ? `${presetName} 副本` : "");
+                  }}
                 >
-                  取消
+                  保存预设…
                 </button>
               </div>
             </ExportField>
-          )}
-          <ExportField label="注释">
-            <input
-              className="export-text-input"
-              aria-label="注释"
-              value={settings.comment}
-              onChange={(event) => {
-                const comment = event.currentTarget.value;
-                setSettings((current) => ({ ...current, comment }));
-              }}
-            />
-          </ExportField>
-          <ExportField label="输出名称">
-            <div className="transcode-inline">
+            {savingPreset && (
+              <ExportField label="预设名称">
+                <div className="transcode-inline">
+                  <input
+                    className="export-text-input"
+                    aria-label="新预设名称"
+                    autoFocus
+                    value={newPresetName}
+                    onChange={(event) => setNewPresetName(event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") savePreset();
+                      if (event.key === "Escape") {
+                        event.stopPropagation();
+                        setSavingPreset(false);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="accent-button"
+                    disabled={!newPresetName.trim()}
+                    onClick={savePreset}
+                  >
+                    保存
+                  </button>
+                  <button
+                    type="button"
+                    className="toolbar-button"
+                    onClick={() => setSavingPreset(false)}
+                  >
+                    取消
+                  </button>
+                </div>
+              </ExportField>
+            )}
+            <ExportField label="注释">
               <input
                 className="export-text-input"
-                aria-label="输出名称"
-                value={outputName}
-                onChange={(event) => setOutputName(event.currentTarget.value)}
+                aria-label="注释"
+                value={settings.comment}
+                onChange={(event) => {
+                  const comment = event.currentTarget.value;
+                  setSettings((current) => ({ ...current, comment }));
+                }}
               />
-              <span className="transcode-hint">.{settings.extension}</span>
+            </ExportField>
+            <ExportField label="输出名称">
+              <div className="transcode-inline">
+                <input
+                  className="export-text-input"
+                  aria-label="输出名称"
+                  value={outputName}
+                  onChange={(event) => setOutputName(event.currentTarget.value)}
+                />
+                <span className="transcode-hint">.{settings.extension}</span>
+              </div>
+            </ExportField>
+            <ExportField label="输出位置" stacked>
+              <TranscodeDestinationField
+                destination={destination}
+                mediaBinDirectory={mediaBinDirectory}
+                onChange={setDestination}
+              />
+            </ExportField>
+            <div className="export-settings-checks transcode-stream-checks">
+              <TranscodeCheck
+                label="导出视频"
+                checked={settings.exportVideo}
+                disabled={!containerSupports(settings.container, "video")}
+                onChange={(exportVideo) =>
+                  update((draft) => void (draft.exportVideo = exportVideo))
+                }
+              />
+              <TranscodeCheck
+                label="导出音频"
+                checked={settings.exportAudio}
+                disabled={!containerSupports(settings.container, "audio")}
+                onChange={(exportAudio) =>
+                  update((draft) => void (draft.exportAudio = exportAudio))
+                }
+              />
+              <TranscodeCheck
+                label="导出字幕"
+                checked={settings.exportSubtitles}
+                onChange={(exportSubtitles) =>
+                  update((draft) => void (draft.exportSubtitles = exportSubtitles))
+                }
+              />
             </div>
-          </ExportField>
-          <ExportField label="输出位置" stacked>
-            <TranscodeDestinationField
-              destination={destination}
-              mediaBinDirectory={mediaBinDirectory}
-              onChange={setDestination}
-            />
-          </ExportField>
-          <div className="export-settings-checks transcode-stream-checks">
-            <TranscodeCheck
-              label="导出视频"
-              checked={settings.exportVideo}
-              disabled={!containerSupports(settings.container, "video")}
-              onChange={(exportVideo) => update((draft) => void (draft.exportVideo = exportVideo))}
-            />
-            <TranscodeCheck
-              label="导出音频"
-              checked={settings.exportAudio}
-              disabled={!containerSupports(settings.container, "audio")}
-              onChange={(exportAudio) => update((draft) => void (draft.exportAudio = exportAudio))}
-            />
-            <TranscodeCheck
-              label="导出字幕"
-              checked={settings.exportSubtitles}
-              onChange={(exportSubtitles) =>
-                update((draft) => void (draft.exportSubtitles = exportSubtitles))
-              }
-            />
-          </div>
-          {nothingExported && (
-            <p className="transcode-required-note">请至少导出视频、音频或字幕之一。</p>
-          )}
+            {nothingExported && (
+              <p className="transcode-required-note">请至少导出视频、音频或字幕之一。</p>
+            )}
 
-          <h3 className="export-settings-subheading">摘要</h3>
-          <dl className="transcode-summary">
-            <dt>输出</dt>
-            <dd>
-              {outputSummary(settings, source.info).map((line) => (
-                <span key={line}>{line}</span>
-              ))}
-            </dd>
-            <dt>源</dt>
-            <dd>
-              {source.infoStatus === "pending" ? (
-                <span>正在读取媒体信息…</span>
-              ) : source.infoStatus === "failed" ? (
-                <span>无法读取媒体信息</span>
-              ) : (
-                sourceSummary(source.info).map((line) => <span key={line}>{line}</span>)
-              )}
-            </dd>
-          </dl>
+            <h3 className="export-settings-subheading">摘要</h3>
+            <dl className="transcode-summary">
+              <dt>输出</dt>
+              <dd>
+                {outputSummary(settings, source.info).map((line) => (
+                  <span key={line}>{line}</span>
+                ))}
+              </dd>
+              <dt>源</dt>
+              <dd>
+                {source.infoStatus === "pending" ? (
+                  <span>正在读取媒体信息…</span>
+                ) : source.infoStatus === "failed" ? (
+                  <span>无法读取媒体信息</span>
+                ) : (
+                  sourceSummary(source.info).map((line) => <span key={line}>{line}</span>)
+                )}
+              </dd>
+            </dl>
 
-          <h3 className="export-settings-subheading">源范围</h3>
-          <ExportField label="入点">
-            <input
-              className="export-text-input"
-              aria-label="入点"
-              placeholder="00:00:00"
-              value={rangeDraft.start}
-              onChange={(event) =>
-                setRangeDraft({ ...rangeDraft, start: event.currentTarget.value })
-              }
-              onBlur={() => commitRange(rangeDraft)}
-            />
-          </ExportField>
-          <ExportField label="出点">
-            <input
-              className="export-text-input"
-              aria-label="出点"
-              placeholder="整个剪辑"
-              value={rangeDraft.end}
-              onChange={(event) => setRangeDraft({ ...rangeDraft, end: event.currentTarget.value })}
-              onBlur={() => commitRange(rangeDraft)}
-            />
-          </ExportField>
-          <p className="transcode-note">
-            估计文件大小：{estimated === null ? "取决于画面内容" : formatBytes(estimated)}
-          </p>
-        </section>
+            <h3 className="export-settings-subheading">源范围</h3>
+            <ExportField label="入点">
+              <input
+                className="export-text-input"
+                aria-label="入点"
+                placeholder="00:00:00"
+                value={rangeDraft.start}
+                onChange={(event) =>
+                  setRangeDraft({ ...rangeDraft, start: event.currentTarget.value })
+                }
+                onBlur={() => commitRange(rangeDraft)}
+              />
+            </ExportField>
+            <ExportField label="出点">
+              <input
+                className="export-text-input"
+                aria-label="出点"
+                placeholder="整个剪辑"
+                value={rangeDraft.end}
+                onChange={(event) =>
+                  setRangeDraft({ ...rangeDraft, end: event.currentTarget.value })
+                }
+                onBlur={() => commitRange(rangeDraft)}
+              />
+            </ExportField>
+            <p className="transcode-note">
+              估计文件大小：{estimated === null ? "取决于画面内容" : formatBytes(estimated)}
+            </p>
+          </section>
+        </div>
 
         <section className="transcode-settings-tabs">
           <div className="transcode-tab-strip" role="tablist" aria-label="导出设置分类">

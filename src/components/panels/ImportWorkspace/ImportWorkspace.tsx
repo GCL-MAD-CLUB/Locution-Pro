@@ -1,6 +1,9 @@
 ﻿import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { scheduleMediaAnalysis } from "../../../application/media/mediaAnalysisTask";
+import {
+  scheduleMediaAnalysis,
+  subtitleStreamNotFoundCode,
+} from "../../../application/media/mediaAnalysisTask";
 import { scheduleMediaAutoBinding } from "../../../application/media/mediaAutoBindTask";
 import { defaultMediaBinFolderColor, useProjectPort } from "../../../systems/ProjectSystem";
 import { isTauriRuntime } from "../../../platform/tauri/runtime";
@@ -145,7 +148,11 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
               },
             })
           : Promise.resolve();
-        scheduleMediaAnalysis(results, autoBinding);
+        // Media opened for transcoding is not imported for dialogue browsing,
+        // so a file without subtitles is expected rather than worth a notice.
+        scheduleMediaAnalysis(results, autoBinding, {
+          quietWarnings: settings.openInTranscode ? [subtitleStreamNotFoundCode] : [],
+        });
       }
       const remaining = selection.files.filter((entry) => !completed.has(entry.path));
       selection.retainFiles(remaining);

@@ -1,41 +1,15 @@
-.transcode-workspace {
-  position: relative;
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-  padding: 2px 1px 1px;
-  overflow: hidden;
-  background: var(--color-surface-input);
-}
-
-.transcode-workspace-main {
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.2fr);
-  grid-template-rows: minmax(200px, 1.1fr) minmax(180px, 0.9fr);
-  gap: var(--resizer-size);
-  min-height: 0;
-  background: var(--color-border-divider);
-}
-
-.transcode-workspace .export-zone-content {
+/* Each transcode panel fills its dock surface and lays out top to bottom. */
+.transcode-panel {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-}
-
-.transcode-media-content > * {
-  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
+  background: var(--color-surface-canvas);
 }
 
-.transcode-zone-tabs {
-  gap: 4px;
-  padding-left: 6px;
-}
-
-.transcode-zone-tabs button,
 .transcode-tab-strip button {
   height: 100%;
   padding: 0 10px;
@@ -46,13 +20,11 @@
   cursor: pointer;
 }
 
-.transcode-zone-tabs button.active,
 .transcode-tab-strip button.active {
   color: var(--color-text-highlight);
   border-bottom-color: var(--color-accent);
 }
 
-.transcode-zone-tabs button:hover,
 .transcode-tab-strip button:hover {
   color: var(--color-text-highlight);
 }
@@ -509,13 +481,17 @@
   border-color: var(--color-warning);
 }
 
-.transcode-destination-path {
+.transcode-destination-path,
+.transcode-destination-note {
   margin: 0;
-  overflow: hidden;
   color: var(--color-text);
   font-size: 11.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Long paths wrap anywhere instead of being cut off. */
+  overflow-wrap: anywhere;
+}
+
+.transcode-destination-note {
+  color: var(--color-text-muted);
 }
 
 .transcode-destination .transcode-required-note {
@@ -527,7 +503,7 @@
   opacity: var(--opacity-control-disabled);
 }
 
-.transcode-workspace .export-check-label input[type="checkbox"],
+.transcode-panel .export-check-label input[type="checkbox"],
 .transcode-settings-dialog .export-check-label input[type="checkbox"] {
   margin: 0;
   accent-color: var(--color-accent);
@@ -536,8 +512,8 @@
 /* ---- Export settings dialog ---- */
 
 .modal-dialog.transcode-settings-dialog {
-  width: min(1100px, calc(100vw - 32px));
-  height: min(760px, calc(100vh - 32px));
+  width: min(1320px, calc(100vw - 32px));
+  height: min(880px, calc(100vh - 32px));
 }
 
 .transcode-settings-body {
@@ -548,15 +524,232 @@
 
 .transcode-settings-layout.export-settings-panel {
   display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(380px, 1.1fr);
+  grid-template-columns: minmax(360px, 1.2fr) minmax(380px, 1fr);
   flex-direction: row;
 }
 
+.transcode-settings-left {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: var(--resizer-size) solid var(--color-border-divider);
+}
+
 .transcode-settings-main {
+  flex: 1 1 auto;
   min-height: 0;
   padding: 12px 16px;
   overflow-y: auto;
-  border-right: var(--resizer-size) solid var(--color-border-divider);
+}
+
+/* ---- Preview and comparison ---- */
+
+.transcode-preview {
+  display: flex;
+  flex: 0 0 52%;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 220px;
+  padding: 8px 12px;
+  border-bottom: var(--resizer-size) solid var(--color-border-divider);
+}
+
+.transcode-preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.transcode-segmented {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--color-border-panel);
+  border-radius: var(--radius-sm);
+}
+
+.transcode-segmented button {
+  padding: 3px 10px;
+  color: var(--color-text);
+  font-size: 12px;
+  background: none;
+  cursor: pointer;
+}
+
+.transcode-segmented button + button {
+  border-left: 1px solid var(--color-border-panel);
+}
+
+.transcode-segmented button.active {
+  color: var(--color-text-highlight);
+  background: var(--color-surface-hover);
+}
+
+.transcode-preview-busy {
+  color: var(--color-text);
+}
+
+.transcode-preview-stage {
+  position: relative;
+  user-select: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-surface-preview-inset);
+  border-radius: var(--radius-sm);
+}
+
+.transcode-preview-stage.is-actual-size {
+  overflow: auto;
+}
+
+.transcode-preview-empty {
+  display: grid;
+  height: 100%;
+  margin: 0;
+  place-items: center;
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.transcode-preview-stage.is-fit .transcode-preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.transcode-preview-stage.is-actual-size .transcode-preview-image {
+  max-width: none;
+}
+
+.transcode-preview-image {
+  display: block;
+}
+
+.transcode-preview-split {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.transcode-preview-stage.is-actual-size .transcode-preview-split {
+  width: max-content;
+  height: max-content;
+}
+
+.transcode-preview-split-source {
+  position: absolute;
+  inset: 0;
+}
+
+.transcode-preview-stage.is-actual-size .transcode-preview-split-source {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.transcode-preview-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  margin-left: -6px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.transcode-preview-divider::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 5px;
+  width: 2px;
+  background: var(--color-text-highlight);
+  box-shadow: 0 0 0 1px var(--color-shadow);
+  content: "";
+}
+
+/* A round grip in the middle shows the divider can be dragged. */
+.transcode-preview-divider::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  background: var(--color-text-highlight);
+  border: 2px solid var(--color-accent);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  content: "";
+}
+
+.transcode-preview-divider:focus-visible {
+  outline: 1px solid var(--color-accent);
+}
+
+.transcode-preview-tag {
+  position: absolute;
+  top: 6px;
+  padding: 1px 6px;
+  color: var(--color-text-highlight);
+  font-size: 11px;
+  background: var(--color-surface-elevated);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+.transcode-preview-tag.is-left {
+  left: 6px;
+}
+
+.transcode-preview-tag.is-right {
+  right: 6px;
+}
+
+.transcode-preview-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+}
+
+.transcode-preview-stage.is-actual-size .transcode-preview-pair {
+  width: max-content;
+  height: max-content;
+}
+
+.transcode-preview-pair figure {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+}
+
+.transcode-preview-pair .transcode-preview-image {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.transcode-preview-pair figcaption {
+  flex: 0 0 auto;
+  padding-top: 2px;
+  color: var(--color-text);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* The monitor's own timeline, reused under the preview. */
+.transcode-preview-timeline.source-controls {
+  flex: 0 0 auto;
+  padding-top: 0;
+}
+
+.transcode-preview-range {
+  display: inline-flex;
+  gap: 4px;
 }
 
 .transcode-settings-tabs {

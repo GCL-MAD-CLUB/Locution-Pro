@@ -15,6 +15,8 @@ export interface AssetLibraryKeyContext {
   focusIndex: number;
   /** Items per row in icon view; `null` in the list. */
   iconColumns: number | null;
+  /** First index of each shown group; each group starts its own rows of icons. */
+  groupStarts?: readonly number[];
   hasSelection: boolean;
 }
 
@@ -52,6 +54,33 @@ export function isAssetLibraryEditableTarget(target: EventTarget | null) {
 const viewPresetByCode = new Map(
   assetLibraryViewPresets.map((preset) => [`Digit${preset.shortcut.slice(-1)}`, preset]),
 );
+
+/**
+ * Up or down one row of icons. Each group lays out its own rows, so leaving a group's first
+ * or last row lands in the same column of the neighboring group's nearest row.
+ */
+function iconRowTarget(index: number, down: boolean, context: AssetLibraryKeyContext) {
+  const columns = context.iconColumns!;
+  const last = context.itemCount - 1;
+  const starts = (context.groupStarts ?? []).filter((start) => start > 0 && start <= last);
+  const groupIndex = starts.filter((start) => start <= index).length;
+  const bounds = [0, ...starts, last + 1];
+  const start = bounds[groupIndex]!;
+  const end = bounds[groupIndex + 1]!;
+  const column = (index - start) % columns;
+  if (down) {
+    if (index + columns < end) return index + columns;
+    const lastRowStart = start + Math.floor((end - 1 - start) / columns) * columns;
+    if (index < lastRowStart || end > last) return end - 1;
+    return Math.min(bounds[groupIndex + 2]! - 1, end + column);
+  }
+  if (index - columns >= start) return index - columns;
+  if (start === 0) return index - columns;
+  const previousStart = bounds[groupIndex - 1]!;
+  const previousLastRow =
+    previousStart + Math.floor((start - 1 - previousStart) / columns) * columns;
+  return Math.min(start - 1, previousLastRow + column);
+}
 
 /**
  * File-manager keys for the item pane. Returns `null` for keys the panel leaves to others,
@@ -94,11 +123,14 @@ export function assetLibraryKeyCommand(
     ...(context.iconColumns === null ? {} : { ArrowLeft: -1, ArrowRight: 1 }),
   };
   const last = context.itemCount - 1;
+  const verticalIcons = context.iconColumns !== null && (key === "ArrowUp" || key === "ArrowDown");
   const target =
     key in steps
       ? context.focusIndex < 0
         ? 0
-        : context.focusIndex + steps[key]!
+        : verticalIcons
+          ? iconRowTarget(context.focusIndex, key === "ArrowDown", context)
+          : context.focusIndex + steps[key]!
       : key === "Home"
         ? 0
         : key === "End"

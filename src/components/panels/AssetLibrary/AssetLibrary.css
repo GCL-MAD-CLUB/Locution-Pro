@@ -217,9 +217,10 @@
   height: 14px;
 }
 
-/* A filter in effect tints its menu button's icon. */
-.asset-library-command-bar > button.is-on svg:not(.asset-library-command-chevron) {
-  color: var(--color-accent);
+/* A filter in effect lights the whole menu button, as hover does, without its background. */
+.asset-library-command-bar > button.is-on,
+.asset-library-command-bar > button.is-on svg.asset-library-command-chevron {
+  color: var(--color-text-control-hover);
 }
 
 .asset-library-command-bar > button svg.asset-library-command-chevron {

@@ -8,6 +8,12 @@ import {
   type AssetLibrarySort,
   type AssetLibrarySortKey,
 } from "../../../../core/editor/assetLibrary";
+import {
+  assetLibraryGroupingFor,
+  assetLibraryGroupKeyLabels,
+  assetLibraryGroupKeys,
+  type AssetLibraryGrouping,
+} from "../../../../core/editor/assetLibraryGroup";
 import type { AssetLibraryColorLabel } from "../../../../types";
 import {
   PopupMenu,
@@ -42,6 +48,7 @@ export interface AssetLibraryContextMenuModel {
   itemsHidden: boolean;
   showHidden: boolean;
   sort: AssetLibrarySort;
+  group: AssetLibraryGrouping;
   size: number;
 }
 
@@ -60,12 +67,13 @@ export interface AssetLibraryContextMenuActions {
   setRating: (rating: number) => void;
   setColorLabel: (colorLabel: AssetLibraryColorLabel | null) => void;
   setSort: (sort: AssetLibrarySort) => void;
+  setGroup: (group: AssetLibraryGrouping) => void;
   setSize: (size: number) => void;
   setHidden: (hidden: boolean) => void;
   setShowHidden: (visible: boolean) => void;
 }
 
-type Submenu = "flag" | "rating" | "color" | "sort" | "view" | null;
+type Submenu = "flag" | "rating" | "color" | "sort" | "group" | "view" | null;
 
 const sortLabels: Record<AssetLibrarySortKey, string> = {
   name: "名称",
@@ -110,6 +118,45 @@ export function AssetLibrarySortItems({
       >
         递减
       </PopupMenuItem>
+    </>
+  );
+}
+
+/** Group keys, or none, then the order of the groups, as in a file manager. */
+export function AssetLibraryGroupItems({
+  group,
+  onSelect,
+}: {
+  group: AssetLibraryGrouping;
+  onSelect: (group: AssetLibraryGrouping) => void;
+}) {
+  return (
+    <>
+      {[...assetLibraryGroupKeys, null].map((key) => (
+        <PopupMenuItem
+          key={key ?? "none"}
+          checked={group.key === key}
+          indicator="dot"
+          onSelect={() => onSelect(assetLibraryGroupingFor(key))}
+        >
+          {key ? assetLibraryGroupKeyLabels[key] : "(无)"}
+        </PopupMenuItem>
+      ))}
+      {group.key && (
+        <>
+          <PopupMenuSeparator />
+          {(["ascending", "descending"] as const).map((direction) => (
+            <PopupMenuItem
+              key={direction}
+              checked={group.direction === direction}
+              indicator="dot"
+              onSelect={() => onSelect({ ...group, direction })}
+            >
+              {direction === "ascending" ? "递增" : "递减"}
+            </PopupMenuItem>
+          ))}
+        </>
+      )}
     </>
   );
 }
@@ -278,6 +325,16 @@ export function AssetLibraryContextMenu({
             <AssetLibrarySortItems
               sort={model.sort}
               onSelect={(sort) => run(() => actions.setSort(sort))()}
+            />
+          </PopupMenuSubmenu>
+          <PopupMenuSubmenu
+            label="分组依据"
+            open={submenu === "group"}
+            onOpenChange={toggle("group")}
+          >
+            <AssetLibraryGroupItems
+              group={model.group}
+              onSelect={(group) => run(() => actions.setGroup(group))()}
             />
           </PopupMenuSubmenu>
         </>

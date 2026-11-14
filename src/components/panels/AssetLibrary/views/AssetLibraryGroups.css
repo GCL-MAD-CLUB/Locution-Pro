@@ -1,0 +1,39 @@
+/* File-manager group headers: a chevron and the group name, folding the items below. */
+.asset-library-items > .asset-library-group-header {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  width: 100%;
+  height: 26px;
+  margin-top: 4px;
+  padding: 0 8px;
+  color: var(--color-text-field);
+  font-size: 12.5px;
+  text-align: left;
+  background: var(--color-transparent);
+  border: 0;
+  border-radius: 0;
+}
+
+.asset-library-items-frame.is-list .asset-library-items > .asset-library-group-header {
+  width: max(100%, var(--asset-library-min-width));
+}
+
+.asset-library-items > .asset-library-group-header:hover {
+  color: var(--color-text-control-hover);
+  background: var(--color-footer-control-hover-background);
+}
+
+.asset-library-items > .asset-library-group-header svg {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  color: var(--color-icon-muted);
+}
+
+/* Each group lays out its own rows of icons and only takes the height it needs. */
+.asset-library-items > .media-bin-grid.asset-library-group-grid {
+  min-height: 0;
+  padding-top: 4px;
+  padding-bottom: 8px;
+}

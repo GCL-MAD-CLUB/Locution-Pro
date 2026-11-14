@@ -126,6 +126,22 @@ test("icon arrows move across and down the grid, clamped to the items", () => {
   assert.equal(move("ArrowUp", { ...iconContext, focusIndex: 1 }), 0);
 });
 
+test("icon rows end at each group, and up and down cross into the neighboring group", () => {
+  // Groups of 5 and 4 items in three columns: rows [0 1 2] [3 4] | [5 6 7] [8].
+  const grouped: KeyContext = { ...iconContext, itemCount: 9, groupStarts: [0, 5] };
+  const move = (key: string, focusIndex: number) =>
+    (press(key, {}, { ...grouped, focusIndex }) as { index: number }).index;
+  assert.equal(move("ArrowDown", 1), 4);
+  assert.equal(move("ArrowDown", 2), 4);
+  assert.equal(move("ArrowDown", 4), 6);
+  assert.equal(move("ArrowDown", 3), 5);
+  assert.equal(move("ArrowDown", 7), 8);
+  assert.equal(move("ArrowUp", 6), 4);
+  assert.equal(move("ArrowUp", 7), 4);
+  assert.equal(move("ArrowUp", 8), 5);
+  assert.equal(move("ArrowRight", 4), 5);
+});
+
 test("Home, End and the first arrow press start from the ends", () => {
   assert.deepEqual(press("End", { ctrlKey: true }), {
     kind: "move",

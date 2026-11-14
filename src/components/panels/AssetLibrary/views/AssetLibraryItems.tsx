@@ -1,5 +1,6 @@
-import { Captions, Film } from "lucide-react";
+import { Captions, ChevronDown, ChevronRight, Film } from "lucide-react";
 import {
+  Fragment,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -19,6 +20,7 @@ import {
 } from "../../../../core/editor/assetLibrary";
 import { formatMonitorTime } from "../../../../core/editor/time";
 import "../../MediaBin/MediaBin.css";
+import "./AssetLibraryGroups.css";
 import { MediaBinFolderIcon, OfflineFileIcon } from "../../MediaBin/views/MediaBinFolderIcon";
 import {
   assetLibraryColumnsForRoot,
@@ -29,6 +31,7 @@ import {
 import { assetLibraryDropTargetProps } from "../../../common/utils/assetLibraryDropTarget";
 import { assetNodeTarget, type AssetLibraryNode } from "../assetLibraryNodes";
 import type { AssetLibraryColumnScope } from "../assetLibraryColumns";
+import type { AssetLibraryNodeGroup } from "../useAssetLibraryNodes";
 import { assetLibraryRootIcons } from "./AssetLibraryTreeIcons";
 import { AssetLibraryMarks, AssetLibraryThumbnailMarks } from "./AssetLibraryBadges";
 import { AssetLibraryHoverFrame } from "./AssetLibraryHoverFrame";
@@ -65,6 +68,9 @@ export interface AssetLibraryItemsProps {
   /** The folder on show, which the empty part of the pane drops into; the project takes none. */
   location: AssetLibraryLocation | null;
   nodes: readonly AssetLibraryNode[];
+  /** Grouped items under collapsible headers, or `null` when not grouped. */
+  groups: readonly AssetLibraryNodeGroup[] | null;
+  onToggleGroup: (group: string) => void;
   layout: AssetLibraryViewLayout;
   sort: AssetLibrarySort;
   selectedKeys: ReadonlySet<string>;
@@ -249,6 +255,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     root,
     location,
     nodes,
+    groups,
     layout,
     sort,
     selectedKeys,
@@ -667,8 +674,49 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     );
   }
 
+  function renderGroupHeader(group: AssetLibraryNodeGroup) {
+    const Chevron = group.collapsed ? ChevronRight : ChevronDown;
+    return (
+      <button
+        key={`group:${group.id}`}
+        type="button"
+        className="asset-library-group-header"
+        aria-expanded={!group.collapsed}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => props.onToggleGroup(group.id)}
+      >
+        <Chevron aria-hidden="true" />
+        <span>{group.label}</span>
+      </button>
+    );
+  }
+
+  function renderItems() {
+    if (!groups) {
+      return layout.mode === "list" ? (
+        nodes.map(renderRow)
+      ) : (
+        <div className="media-bin-grid">{nodes.map(renderCard)}</div>
+      );
+    }
+    return groups.map((group) => (
+      <Fragment key={group.id}>
+        {renderGroupHeader(group)}
+        {!group.collapsed &&
+          (layout.mode === "list" ? (
+            group.nodes.map(renderRow)
+          ) : (
+            <div className="media-bin-grid asset-library-group-grid">
+              {group.nodes.map(renderCard)}
+            </div>
+          ))}
+      </Fragment>
+    ));
+  }
+
+  const empty = nodes.length === 0 && !groups?.length;
   const listScale = layout.mode === "list" ? layout.iconScale : 1;
-  const showHeader = layout.mode === "list" || nodes.length === 0;
+  const showHeader = layout.mode === "list" || empty;
   const detailWidths = columns.map((column) => columnWidths[column.id]);
   const style = {
     "--asset-library-columns": [
@@ -732,13 +780,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
             onToggleAllSelected={props.onToggleAllSelected}
           />
         )}
-        {nodes.length === 0 ? (
-          <div className="asset-library-empty">{emptyText}</div>
-        ) : layout.mode === "list" ? (
-          nodes.map(renderRow)
-        ) : (
-          <div className="media-bin-grid">{nodes.map(renderCard)}</div>
-        )}
+        {empty ? <div className="asset-library-empty">{emptyText}</div> : renderItems()}
         {marqueeStyle && <div className="asset-library-marquee" style={marqueeStyle} />}
       </div>
     </div>

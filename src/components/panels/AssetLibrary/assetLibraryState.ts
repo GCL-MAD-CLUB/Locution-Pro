@@ -13,6 +13,10 @@ import {
   type AssetLibraryFilter,
 } from "../../../core/editor/assetLibraryFilter";
 import {
+  noAssetLibraryGrouping,
+  type AssetLibraryGrouping,
+} from "../../../core/editor/assetLibraryGroup";
+import {
   clampAssetLibraryColumnWidth,
   defaultAssetLibraryColumnWidths,
   defaultAssetLibraryVisibleColumns,
@@ -51,6 +55,9 @@ interface AssetLibraryPanelState {
   sort: AssetLibrarySort;
   /** Narrows the listed materials by annotation; folders stay listed. */
   filter: AssetLibraryFilter;
+  group: AssetLibraryGrouping;
+  /** Groups folded away in the open place; navigating or regrouping opens them again. */
+  collapsedGroups: ReadonlySet<string>;
   navigationVisible: boolean;
   detailsVisible: boolean;
   collapsedKeys: ReadonlySet<string>;
@@ -72,6 +79,8 @@ interface AssetLibraryPanelState {
   setSize: (size: number) => void;
   setSort: (sort: AssetLibrarySort) => void;
   setFilter: (filter: AssetLibraryFilter) => void;
+  setGroup: (group: AssetLibraryGrouping) => void;
+  toggleGroupCollapsed: (group: string) => void;
   setNavigationVisible: (visible: boolean) => void;
   setDetailsVisible: (visible: boolean) => void;
   toggleCollapsed: (key: string) => void;
@@ -100,6 +109,7 @@ const clearedNavigationState = {
   focusKey: null,
   renamingKey: null,
   query: "",
+  collapsedGroups: new Set<string>() as ReadonlySet<string>,
 };
 
 function stepHistory(state: AssetLibraryPanelState, steps: number) {
@@ -119,6 +129,8 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   size: 12,
   sort: { key: "name", direction: "ascending" },
   filter: emptyAssetLibraryFilter,
+  group: noAssetLibraryGrouping,
+  collapsedGroups: new Set<string>(),
   navigationVisible: true,
   detailsVisible: true,
   collapsedKeys: new Set<string>(),
@@ -169,6 +181,9 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   setSize: (size) => set({ size: Math.min(100, Math.max(0, Math.round(size))) }),
   setSort: (sort) => set({ sort }),
   setFilter: (filter) => set({ filter }),
+  setGroup: (group) => set({ group, collapsedGroups: new Set() }),
+  toggleGroupCollapsed: (group) =>
+    set((state) => ({ collapsedGroups: toggled(state.collapsedGroups, group) })),
   setNavigationVisible: (navigationVisible) => set({ navigationVisible }),
   setDetailsVisible: (detailsVisible) => set({ detailsVisible }),
   toggleCollapsed: (key) => set((state) => ({ collapsedKeys: toggled(state.collapsedKeys, key) })),

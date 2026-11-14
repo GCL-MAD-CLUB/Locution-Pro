@@ -21,6 +21,7 @@ import {
   emptyAssetLibraryFilter,
   type AssetLibraryFilter,
 } from "../../../../core/editor/assetLibraryFilter";
+import type { AssetLibraryGrouping } from "../../../../core/editor/assetLibraryGroup";
 import {
   PopupMenu,
   PopupMenuItem,
@@ -28,7 +29,11 @@ import {
   PopupMenuSubmenu,
   useCloseOnOutsidePointer,
 } from "../../../common/PopupMenu";
-import { AssetLibrarySortItems, AssetLibraryViewPresetItems } from "./AssetLibraryContextMenu";
+import {
+  AssetLibraryGroupItems,
+  AssetLibrarySortItems,
+  AssetLibraryViewPresetItems,
+} from "./AssetLibraryContextMenu";
 import { AssetLibraryFilterItems } from "./AssetLibraryFilterItems";
 
 export interface AssetLibraryCommandBarModel {
@@ -40,6 +45,7 @@ export interface AssetLibraryCommandBarModel {
   hasItems: boolean;
   hasSelection: boolean;
   sort: AssetLibrarySort;
+  group: AssetLibraryGrouping;
   filter: AssetLibraryFilter;
   size: number;
   navigationVisible: boolean;
@@ -56,6 +62,7 @@ export interface AssetLibraryCommandBarActions {
   rename: () => void;
   remove: () => void;
   setSort: (sort: AssetLibrarySort) => void;
+  setGroup: (group: AssetLibraryGrouping) => void;
   setFilter: (filter: AssetLibraryFilter) => void;
   setSize: (size: number) => void;
   setNavigationVisible: (visible: boolean) => void;
@@ -82,7 +89,8 @@ export function AssetLibraryCommandBar({
   actions: AssetLibraryCommandBarActions;
 }) {
   const [menu, setMenu] = useState<{ kind: CommandMenu; x: number; y: number } | null>(null);
-  const [showOpen, setShowOpen] = useState(false);
+  /** The one submenu of the open menu: 分组依据 under 排序, 显示 under 查看. */
+  const [submenuOpen, setSubmenuOpen] = useState(false);
   useCloseOnOutsidePointer(Boolean(menu), () => setMenu(null), {
     capturePointerdown: true,
     ignorePopupMenuTargets: true,
@@ -90,7 +98,7 @@ export function AssetLibraryCommandBar({
 
   function close() {
     setMenu(null);
-    setShowOpen(false);
+    setSubmenuOpen(false);
   }
 
   function run(action: () => void) {
@@ -102,7 +110,7 @@ export function AssetLibraryCommandBar({
 
   function openMenu(event: ReactMouseEvent<HTMLButtonElement>, kind: CommandMenu) {
     const bounds = event.currentTarget.getBoundingClientRect();
-    setShowOpen(false);
+    setSubmenuOpen(false);
     setMenu({ kind, x: bounds.left, y: bounds.bottom + 2 });
   }
 
@@ -159,10 +167,19 @@ export function AssetLibraryCommandBar({
         );
       case "sort":
         return (
-          <AssetLibrarySortItems
-            sort={model.sort}
-            onSelect={(sort) => run(() => actions.setSort(sort))()}
-          />
+          <>
+            <AssetLibrarySortItems
+              sort={model.sort}
+              onSelect={(sort) => run(() => actions.setSort(sort))()}
+            />
+            <PopupMenuSeparator />
+            <PopupMenuSubmenu label="分组依据" open={submenuOpen} onOpenChange={setSubmenuOpen}>
+              <AssetLibraryGroupItems
+                group={model.group}
+                onSelect={(group) => run(() => actions.setGroup(group))()}
+              />
+            </PopupMenuSubmenu>
+          </>
         );
       case "view":
         return (
@@ -172,7 +189,7 @@ export function AssetLibraryCommandBar({
               onSelect={(size) => run(() => actions.setSize(size))()}
             />
             <PopupMenuSeparator />
-            <PopupMenuSubmenu label="显示" open={showOpen} onOpenChange={setShowOpen}>
+            <PopupMenuSubmenu label="显示" open={submenuOpen} onOpenChange={setSubmenuOpen}>
               <PopupMenuItem
                 checked={model.navigationVisible}
                 onSelect={run(() => actions.setNavigationVisible(!model.navigationVisible))}

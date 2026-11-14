@@ -148,10 +148,12 @@ export function AssetLibraryFilterItems({
           </PopupMenuItem>
         ))}
       </PopupMenuSubmenu>
-      <PopupMenuSeparator />
-      <PopupMenuItem disabled={!assetLibraryFilterActive(filter)} onSelect={onClear}>
-        清除筛选
-      </PopupMenuItem>
+      {assetLibraryFilterActive(filter) && (
+        <>
+          <PopupMenuSeparator />
+          <PopupMenuItem onSelect={onClear}>清除筛选</PopupMenuItem>
+        </>
+      )}
     </>
   );
 }

@@ -54,6 +54,7 @@ import { useSlowClickRename } from "./useSlowClickRename";
 import {
   assetEntryKey,
   assetFolderKey,
+  assetLibraryDetailsContainer,
   assetLibrarySelectionFromKeys,
   assetLibrarySelectionSize,
   assetLocationKey,
@@ -74,7 +75,7 @@ import {
   type AssetLibraryContextMenuModel,
   type AssetLibraryContextMenuState,
 } from "./views/AssetLibraryContextMenu";
-import { AssetLibraryDetails, type AssetLibraryContainer } from "./views/AssetLibraryDetails";
+import { AssetLibraryDetails } from "./views/AssetLibraryDetails";
 import { AssetLibraryDragPreview as DragPreview } from "./views/AssetLibraryDragPreview";
 import { AssetLibraryFooter } from "./views/AssetLibraryFooter";
 import { AssetLibraryItems } from "./views/AssetLibraryItems";
@@ -152,12 +153,14 @@ export function AssetLibrary() {
   }, [expandKeys, location.root, location.folderId, path]);
 
   const { showHidden } = view;
-  const { nodes, mediaByEntryId, childCounts } = useAssetLibraryNodes({
+  const { nodes, groups, itemCount, mediaByEntryId, childCounts } = useAssetLibraryNodes({
     library,
     location,
     query,
     sort: view.sort,
     filter: view.filter,
+    group: view.group,
+    collapsedGroups: view.collapsedGroups,
     showHidden,
     mediaItems,
     projects,
@@ -439,6 +442,7 @@ export function AssetLibrary() {
       itemCount: nodes.length,
       focusIndex,
       iconColumns: layout.mode === "icons" ? columns : null,
+      groupStarts: groups?.flatMap((group) => (group.collapsed ? [] : [group.start])),
       hasSelection: view.selectedKeys.size > 0,
     });
     if (command) {
@@ -508,6 +512,7 @@ export function AssetLibrary() {
     itemsHidden: assetLibrarySelectionHidden(library, menuSelection),
     showHidden,
     sort: view.sort,
+    group: view.group,
     size: view.size,
   };
   const menuActions: AssetLibraryContextMenuActions = {
@@ -544,6 +549,7 @@ export function AssetLibrary() {
     setRating,
     setColorLabel,
     setSort: view.setSort,
+    setGroup: view.setGroup,
     setSize: view.setSize,
     setHidden: (hidden) => commands.setHidden(menuSelection, hidden),
     setShowHidden: view.setShowHidden,
@@ -566,6 +572,7 @@ export function AssetLibrary() {
     hasItems: nodes.length > 0,
     hasSelection: selectedNodes.length > 0,
     sort: view.sort,
+    group: view.group,
     filter: view.filter,
     size: view.size,
     navigationVisible: view.navigationVisible,
@@ -581,6 +588,7 @@ export function AssetLibrary() {
     rename: refocus(() => startRename(singleSelected?.key ?? null)),
     remove: refocus(() => removeNodes(selection)),
     setSort: view.setSort,
+    setGroup: view.setGroup,
     setFilter: view.setFilter,
     setSize: view.setSize,
     setNavigationVisible: view.setNavigationVisible,
@@ -612,22 +620,12 @@ export function AssetLibrary() {
       }
     : undefined;
 
-  // As in a file manager, a single selected folder or library is described; with nothing
-  // selected, the open place is: the project, a library, or a folder.
-  const openFolder = path.at(-1);
-  const single = selectedNodes.length === 1 ? selectedNodes[0]! : null;
-  let detailsContainer: AssetLibraryContainer | null = null;
-  if (single?.kind === "folder") detailsContainer = { ...single, kind: "folder" };
-  else if (single?.kind === "library") detailsContainer = { kind: "root", root: single.root };
-  else if (selectedNodes.length > 0) detailsContainer = null;
-  else if (atProject) detailsContainer = { kind: "project" };
-  else if (openFolder) {
-    detailsContainer = {
-      kind: "folder",
-      folder: openFolder,
-      childCount: childCounts.get(openFolder.id) ?? 0,
-    };
-  } else detailsContainer = { kind: "root", root: location.root };
+  const detailsContainer = assetLibraryDetailsContainer(
+    selectedNodes,
+    location,
+    path.at(-1),
+    childCounts,
+  );
   const selectedEntryNodes = selectedNodes.flatMap((node) =>
     node.kind === "entry" ? [{ entry: node.entry, media: node.media }] : [],
   );
@@ -713,6 +711,8 @@ export function AssetLibrary() {
           root={location.root}
           location={atProject ? null : location}
           nodes={nodes}
+          groups={groups}
+          onToggleGroup={view.toggleGroupCollapsed}
           layout={layout}
           sort={view.sort}
           selectedKeys={view.selectedKeys}
@@ -774,7 +774,7 @@ export function AssetLibrary() {
       <AssetLibraryFooter
         size={view.size}
         listMode={layout.mode === "list"}
-        itemCount={nodes.length}
+        itemCount={itemCount}
         selectedCount={selectedNodes.length}
         onSizeChange={view.setSize}
       />

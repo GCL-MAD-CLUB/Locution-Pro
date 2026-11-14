@@ -45,6 +45,13 @@ pub(crate) struct ImportSettingsConfig {
     pub(crate) auto_bind_type: String,
     pub(crate) auto_bind_preset: String,
     pub(crate) auto_bind_preference: String,
+    /// Sends imported media to the transcode queue instead of the editor.
+    #[serde(default = "default_open_in_transcode")]
+    pub(crate) open_in_transcode: bool,
+}
+
+fn default_open_in_transcode() -> bool {
+    true
 }
 
 impl Default for ImportSettingsConfig {
@@ -60,6 +67,7 @@ impl Default for ImportSettingsConfig {
             auto_bind_type: "all".to_string(),
             auto_bind_preset: "direct".to_string(),
             auto_bind_preference: "smart".to_string(),
+            open_in_transcode: default_open_in_transcode(),
         }
     }
 }
@@ -174,6 +182,8 @@ struct WorkspaceImportSettingsXml {
     auto_bind_preset: String,
     #[serde(rename = "@autoBindPreference")]
     auto_bind_preference: String,
+    #[serde(rename = "@openInTranscode")]
+    open_in_transcode: bool,
 }
 
 impl Default for WorkspaceImportSettingsXml {
@@ -195,6 +205,7 @@ impl From<ImportSettingsConfig> for WorkspaceImportSettingsXml {
             auto_bind_type: settings.auto_bind_type,
             auto_bind_preset: settings.auto_bind_preset,
             auto_bind_preference: settings.auto_bind_preference,
+            open_in_transcode: settings.open_in_transcode,
         }
     }
 }
@@ -212,6 +223,7 @@ impl From<WorkspaceImportSettingsXml> for ImportSettingsConfig {
             auto_bind_type: settings.auto_bind_type,
             auto_bind_preset: settings.auto_bind_preset,
             auto_bind_preference: settings.auto_bind_preference,
+            open_in_transcode: settings.open_in_transcode,
         }
     }
 }
@@ -921,6 +933,7 @@ mod tests {
                     auto_bind_type: "audio".to_string(),
                     auto_bind_preset: "virtual-copy".to_string(),
                     auto_bind_preference: "name".to_string(),
+                    open_in_transcode: false,
                 },
             },
             focused_panel_id: Some("history".to_string()),

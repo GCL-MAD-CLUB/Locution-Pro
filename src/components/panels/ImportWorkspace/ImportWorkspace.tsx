@@ -4,6 +4,8 @@ import { scheduleMediaAnalysis } from "../../../application/media/mediaAnalysisT
 import { scheduleMediaAutoBinding } from "../../../application/media/mediaAutoBindTask";
 import { defaultMediaBinFolderColor, useProjectPort } from "../../../systems/ProjectSystem";
 import { isTauriRuntime } from "../../../platform/tauri/runtime";
+import { publishEvent } from "../../../runtime/events/react";
+import { enqueueTranscodeSources } from "../../../systems/TranscodeSystem";
 import { ImportSidebar } from "./controls/ImportSidebar";
 import { ImportToolbar } from "./controls/ImportToolbar";
 import { ImportFileView } from "./browser/ImportFileView";
@@ -150,7 +152,22 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
       const message = `已导入 ${completed.size} 个媒体${remaining.length ? `，${remaining.length} 个未完成，可重试` : ""}。`;
       setStatus(message);
       messagePublished(message);
-      if (completed.size && !remaining.length) onImportCompleted?.();
+      const transcodePaths = [
+        ...results.map((result) => result.project.asset.path),
+        ...subtitles.map((item) => item.path),
+      ];
+      if (settings.openInTranscode && transcodePaths.length && !remaining.length) {
+        // The app shell queues the media and shows the transcode page.
+        void publishEvent(
+          "transcode.enqueue.requested",
+          { paths: transcodePaths },
+          { system: "import-workspace" },
+        );
+      } else {
+        if (settings.openInTranscode && transcodePaths.length)
+          enqueueTranscodeSources(transcodePaths);
+        if (completed.size && !remaining.length) onImportCompleted?.();
+      }
     } finally {
       importing.current = false;
       setBusy(false);

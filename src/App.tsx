@@ -41,6 +41,8 @@ import { ExportWorkspace } from "./components/panels/ExportWorkspace";
 import { HistoryPanelServicesProvider, historyPanelType } from "./components/panels/HistoryPanel";
 import { exportWorkspaceStore, useExportWorkspaceState } from "./systems/ExportSystem";
 import { ImportWorkspace } from "./components/panels/ImportWorkspace";
+import { TranscodeWorkspace } from "./components/panels/TranscodeWorkspace";
+import { encoderBinName, enqueueTranscodeSources } from "./systems/TranscodeSystem";
 import { mediaBinPanelType, type MediaBinPanelParams } from "./components/panels/MediaBin";
 import { ProjectDiscardDialog, ProjectSaveDialog } from "./components/common/ProjectSaveDialog";
 import { ExportConflictDialog } from "./components/common/ExportConflictDialog";
@@ -81,6 +83,7 @@ import {
 import { normalizeError } from "./errors/runtime";
 import {
   captureProjectAutoSave,
+  defaultMediaBinFolderColor,
   getProjectWorkspaceSnapshot,
   loadProjectStates,
   mediaDisplayName,
@@ -304,6 +307,7 @@ const appWorkspaces = [
   { id: "import", label: "导入" },
   { id: "edit", label: "编辑" },
   { id: "export", label: "导出" },
+  { id: "transcode", label: "转码" },
 ] as const;
 
 type AppWorkspace = (typeof appWorkspaces)[number]["id"];
@@ -363,6 +367,7 @@ function AppContent() {
     mediaProjectsAdded,
     mediaItemsAdded,
     mediaItemsMovedToFolder,
+    mediaFolderAdded,
     messagePublished,
     warningsReplaced,
     warningsAppended,
@@ -393,6 +398,7 @@ function AppContent() {
       "mediaProjectsAdded",
       "mediaItemsAdded",
       "mediaItemsMovedToFolder",
+      "mediaFolderAdded",
       "messagePublished",
       "warningsReplaced",
       "warningsAppended",
@@ -1409,6 +1415,40 @@ function AppContent() {
     return "handled" as const;
   });
 
+  useBroadcastEvent(identity, "transcode.enqueue.requested", async ({ payload }) => {
+    const added = enqueueTranscodeSources(payload.paths);
+    setActiveWorkspace("transcode");
+    setProjectHomeMode(null);
+    messagePublished(
+      added.length > 0 ? `已将 ${added.length} 个媒体添加到转码队列。` : "所选媒体已在转码队列中。",
+    );
+    return "handled" as const;
+  });
+
+  /** Files finished outputs into the project's root `encoder` media bin. */
+  useBroadcastEvent(identity, "transcode.output.completed", async ({ payload }) => {
+    if (payload.paths.length === 0 || isMediaBinReadOnly) {
+      return "handled" as const;
+    }
+    let folder = mediaFolders.find(
+      (candidate) =>
+        !candidate.parent_id &&
+        candidate.name.toLocaleLowerCase() === encoderBinName.toLocaleLowerCase(),
+    );
+    if (!folder) {
+      folder = {
+        id: `media-bin:${crypto.randomUUID()}`,
+        name: encoderBinName,
+        parent_id: null,
+        color: defaultMediaBinFolderColor(),
+        hidden: false,
+      };
+      mediaFolderAdded(folder);
+    }
+    await importMedia(payload.paths, folder.id);
+    return "handled" as const;
+  });
+
   useBroadcastEvent(identity, "export.requested", async ({ payload }) => {
     exportWorkspaceStore.getState().setSource(payload.source);
     setActiveWorkspace("export");
@@ -1537,6 +1577,7 @@ function AppContent() {
       />
     ),
     edit: <DockLayout />,
+    transcode: <TranscodeWorkspace />,
     export: (
       <ExportWorkspace
         onExportStarted={() =>

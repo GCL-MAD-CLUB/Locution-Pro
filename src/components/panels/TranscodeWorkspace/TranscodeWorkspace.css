@@ -1,0 +1,607 @@
+.transcode-workspace {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 2px 1px 1px;
+  overflow: hidden;
+  background: var(--color-surface-input);
+}
+
+.transcode-workspace-main {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.2fr);
+  grid-template-rows: minmax(200px, 1.1fr) minmax(180px, 0.9fr);
+  gap: var(--resizer-size);
+  min-height: 0;
+  background: var(--color-border-divider);
+}
+
+.transcode-workspace .export-zone-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.transcode-media-content > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.transcode-zone-tabs {
+  gap: 4px;
+  padding-left: 6px;
+}
+
+.transcode-zone-tabs button,
+.transcode-tab-strip button {
+  height: 100%;
+  padding: 0 10px;
+  color: var(--color-text);
+  font-size: 12px;
+  background: none;
+  border-bottom: 2px solid var(--color-transparent);
+  cursor: pointer;
+}
+
+.transcode-zone-tabs button.active,
+.transcode-tab-strip button.active {
+  color: var(--color-text-highlight);
+  border-bottom-color: var(--color-accent);
+}
+
+.transcode-zone-tabs button:hover,
+.transcode-tab-strip button:hover {
+  color: var(--color-text-highlight);
+}
+
+/* Toolbars shared by the queue, watch folders and preset browser. */
+.transcode-panel-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--color-border-workspace-section);
+}
+
+.transcode-toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.transcode-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: var(--color-text);
+  background: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.transcode-icon-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.transcode-icon-button:hover:not(:disabled) {
+  color: var(--color-text-highlight);
+  background: var(--color-surface-hover);
+}
+
+.transcode-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-control-disabled);
+}
+
+.transcode-start:not(:disabled) {
+  color: var(--color-accent);
+}
+
+.transcode-panel-toolbar .toolbar-button {
+  min-height: 24px;
+}
+
+.transcode-panel-toolbar .toolbar-button:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-control-disabled);
+}
+
+.transcode-queue-count {
+  color: var(--color-text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.transcode-search {
+  display: flex;
+  flex: 1 1 120px;
+  align-items: center;
+  gap: 6px;
+  min-width: 100px;
+  height: 24px;
+  padding: 0 8px;
+  background: var(--color-surface-input-inset);
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-md);
+}
+
+.transcode-search svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--color-text);
+}
+
+.transcode-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--color-text-highlight);
+  font: inherit;
+  font-size: 12px;
+  background: none;
+  border: 0;
+  outline: none;
+}
+
+.transcode-empty {
+  margin: auto;
+  max-width: 560px;
+  padding: 24px;
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+/* ---- Queue ---- */
+
+.transcode-queue,
+.transcode-presets,
+.transcode-watch {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.transcode-queue-destination {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border-workspace-section);
+}
+
+.transcode-queue-destination-label {
+  padding-top: 4px;
+  color: var(--color-text);
+  font-size: 12px;
+  text-align: right;
+}
+
+.transcode-queue-table,
+.transcode-preset-table,
+.transcode-watch-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+  scrollbar-color: var(--color-border-overlay-default) var(--color-surface-canvas);
+}
+
+.transcode-queue-row,
+.transcode-preset-row {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+  padding: 0 12px 0 36px;
+  color: var(--color-text);
+  font-size: 12px;
+  text-align: left;
+  background: none;
+  cursor: default;
+}
+
+.transcode-queue-row {
+  grid-template-columns: minmax(90px, 0.8fr) minmax(120px, 1.1fr) minmax(160px, 2fr) 96px;
+}
+
+.transcode-queue-row.is-heading,
+.transcode-preset-row.is-heading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-left: 36px;
+  color: var(--color-text-table-header);
+  background: var(--color-surface-canvas);
+  border-bottom: 1px solid var(--color-border-workspace-section);
+}
+
+.transcode-queue-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 12px;
+  color: var(--color-text-highlight);
+  font-size: 12px;
+  border-top: 1px solid var(--color-border-workspace-section);
+}
+
+.transcode-queue-source svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+}
+
+.transcode-queue-source-name,
+.transcode-output-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transcode-queue-row:hover,
+.transcode-queue-source:hover,
+.transcode-preset-row:hover:not(.is-heading) {
+  background: var(--color-surface-hover);
+}
+
+.transcode-queue-row.selected,
+.transcode-queue-source.selected,
+.transcode-preset-row.selected {
+  background: var(--color-selection-muted);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+.is-drop-target {
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.transcode-link {
+  justify-self: start;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--color-accent);
+  font-size: 12px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  cursor: pointer;
+}
+
+.transcode-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.transcode-link:disabled {
+  cursor: default;
+  opacity: var(--opacity-control-disabled);
+}
+
+.transcode-output-path.is-missing,
+.transcode-required-note,
+.transcode-warning,
+.transcode-note.is-warning {
+  color: var(--color-warning);
+}
+
+.transcode-queue-row.is-failed .transcode-status {
+  color: var(--color-danger);
+}
+
+.transcode-queue-row.is-done .transcode-status {
+  color: var(--color-text-highlight);
+}
+
+.transcode-status {
+  display: grid;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.transcode-row-progress,
+.transcode-encoding-progress {
+  display: block;
+  height: 4px;
+  overflow: hidden;
+  background: var(--color-surface-control);
+  border-radius: var(--radius-pill);
+}
+
+.transcode-row-progress > span,
+.transcode-encoding-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+  transition: width var(--duration-fast) linear;
+}
+
+/* ---- Preset browser ---- */
+
+.transcode-preset-row {
+  grid-template-columns: minmax(150px, 2fr) minmax(70px, 1fr) minmax(90px, 1.2fr) 72px 80px;
+  width: 100%;
+}
+
+.transcode-preset-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transcode-preset-row.is-unavailable {
+  opacity: var(--opacity-control-disabled);
+}
+
+.transcode-preset-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 12px;
+  color: var(--color-text-highlight);
+  font-size: 12px;
+  background: none;
+  border-top: 1px solid var(--color-border-workspace-section);
+  cursor: pointer;
+}
+
+.transcode-preset-group svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---- Watch folders ---- */
+
+.transcode-watch-folder {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border-workspace-section);
+}
+
+.transcode-watch-folder header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transcode-watch-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-highlight);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transcode-watch-fields {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px 10px;
+  padding-top: 8px;
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.transcode-watch-fields > span {
+  padding-top: 4px;
+  text-align: right;
+}
+
+/* ---- Encoding ---- */
+
+.transcode-encoding {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px 16px;
+  overflow: auto;
+}
+
+.transcode-encoding.is-idle {
+  align-items: center;
+  justify-content: center;
+}
+
+.transcode-encoding-title {
+  overflow: hidden;
+  color: var(--color-text-highlight);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transcode-encoding-progress {
+  height: 6px;
+}
+
+.transcode-encoding-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  color: var(--color-text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Shared form pieces ---- */
+
+.transcode-summary {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 6px 10px;
+  margin: 0;
+  color: var(--color-text);
+  font-size: 12px;
+}
+
+.transcode-summary dt {
+  color: var(--color-text-highlight);
+  font-weight: 600;
+  text-align: right;
+}
+
+.transcode-summary dd {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  min-width: 0;
+  word-break: break-all;
+}
+
+.transcode-note,
+.transcode-required-note {
+  margin: 6px 0;
+  color: var(--color-text);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.transcode-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.transcode-inline > .select-dropdown,
+.transcode-inline > .export-text-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.transcode-hint {
+  flex: 0 0 auto;
+  color: var(--color-text);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.transcode-check-row {
+  padding: 6px 0 6px 86px;
+}
+
+.transcode-destination {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.transcode-destination .select-dropdown.is-required {
+  border-color: var(--color-warning);
+}
+
+.transcode-destination-path {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transcode-destination .transcode-required-note {
+  margin: 0;
+}
+
+.export-check-label.is-disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-control-disabled);
+}
+
+.transcode-workspace .export-check-label input[type="checkbox"],
+.transcode-settings-dialog .export-check-label input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+/* ---- Export settings dialog ---- */
+
+.modal-dialog.transcode-settings-dialog {
+  width: min(1100px, calc(100vw - 32px));
+  height: min(760px, calc(100vh - 32px));
+}
+
+.transcode-settings-body {
+  display: flex;
+  min-height: 0;
+  background: var(--color-surface-canvas);
+}
+
+.transcode-settings-layout.export-settings-panel {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(380px, 1.1fr);
+  flex-direction: row;
+}
+
+.transcode-settings-main {
+  min-height: 0;
+  padding: 12px 16px;
+  overflow-y: auto;
+  border-right: var(--resizer-size) solid var(--color-border-divider);
+}
+
+.transcode-settings-tabs {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.transcode-tab-strip {
+  display: flex;
+  flex: 0 0 30px;
+  align-items: stretch;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--color-border-workspace-section);
+}
+
+.transcode-tab-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 16px 16px;
+  overflow-y: auto;
+  scrollbar-color: var(--color-border-overlay-default) var(--color-surface-canvas);
+}
+
+.transcode-tab-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+
+.transcode-stream-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-left: 86px;
+}
+
+.transcode-effects {
+  margin: 0 -16px;
+}
+
+.transcode-number-input {
+  font-variant-numeric: tabular-nums;
+}
+
+.transcode-dropdown-menu {
+  max-height: min(320px, calc(100vh - 16px));
+}

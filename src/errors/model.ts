@@ -61,6 +61,8 @@ export type OperationKey =
   | "thumbnail.storyboard.cache.write"
   | "thumbnail.storyboard.generate"
   | "thumbnail.video"
+  | "transcode.prepare"
+  | "transcode.run"
   | "window.closeListener"
   | "window.title"
   | "workspace.load"

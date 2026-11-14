@@ -18,6 +18,7 @@ export const defaultImportSettings: ImportSettings = {
   autoBindType: "all",
   autoBindPreset: "direct",
   autoBindPreference: "smart",
+  openInTranscode: true,
 };
 
 const emptyImportBrowserConfig: ImportBrowserConfig = {
@@ -43,6 +44,7 @@ function normalizeImportSettings(
         : "all",
     autoBindPreset: value?.autoBindPreset === "virtual-copy" ? "virtual-copy" : "direct",
     autoBindPreference: value?.autoBindPreference === "name" ? "name" : "smart",
+    openInTranscode: value?.openInTranscode !== false,
   };
 }
 

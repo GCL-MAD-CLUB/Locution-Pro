@@ -736,6 +736,21 @@ export function assetLibraryEntryHoverTimeUs(entry: AssetLibraryEntry, progress:
   return entry.start_us + Math.min(Math.round(durationUs * safeProgress), lastFrameUs);
 }
 
+/**
+ * Whether dragged items from `root` may drop into `target`: the same root only, and never
+ * into a dragged folder or anything inside it.
+ */
+export function assetLibraryCanDropInto(
+  library: ProjectAssetLibraryState,
+  root: AssetLibraryRoot,
+  draggedFolderIds: readonly string[],
+  target: AssetLibraryLocation,
+) {
+  if (target.root !== root) return false;
+  if (!target.folderId) return true;
+  return !assetLibraryFolderDescendantIds(library.folders, draggedFolderIds).has(target.folderId);
+}
+
 export function assetLibraryEntryMatches(entry: AssetLibraryEntry, query: string) {
   const terms = query.toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return true;
@@ -758,8 +773,6 @@ function entrySortValue(entry: AssetLibraryEntry, key: AssetLibrarySortKey) {
   switch (key) {
     case "created":
       return entry.created_at;
-    case "start":
-      return entry.start_us;
     case "duration":
       return assetLibraryEntryDurationUs(entry);
     case "rating":
@@ -767,6 +780,15 @@ function entrySortValue(entry: AssetLibraryEntry, key: AssetLibrarySortKey) {
     default:
       return 0;
   }
+}
+
+/** An in-point only means something within one media file, so entries group by source first. */
+function compareSourceThenStart(left: AssetLibraryEntry, right: AssetLibraryEntry) {
+  return (
+    nameCollator.compare(left.media.file_name, right.media.file_name) ||
+    nameCollator.compare(left.media.path, right.media.path) ||
+    left.start_us - right.start_us
+  );
 }
 
 /** Folders always precede entries, as in a file manager; both follow the chosen order. */
@@ -786,7 +808,9 @@ export function sortedAssetLibraryNodes(
     (left, right) =>
       (sort.key === "name"
         ? nameCollator.compare(left.name, right.name)
-        : entrySortValue(left, sort.key) - entrySortValue(right, sort.key)) * direction ||
+        : sort.key === "start"
+          ? compareSourceThenStart(left, right)
+          : entrySortValue(left, sort.key) - entrySortValue(right, sort.key)) * direction ||
       nameCollator.compare(left.name, right.name) ||
       left.start_us - right.start_us,
   );
@@ -811,6 +835,18 @@ export function assetLibraryViewLayout(size: number): AssetLibraryViewLayout {
   }
   const progress = (clamped - assetLibraryIconThreshold) / (100 - assetLibraryIconThreshold);
   return { mode: "icons", cardWidth: Math.round(120 + progress * 200) };
+}
+
+/**
+ * Icon-view columns that fill the row: the column count whose cards come closest to the
+ * requested width, then cards stretched or narrowed to share the row exactly. Unlike the
+ * media bin layout, which only narrows cards, sizes round to their nearest column count, so
+ * neighbouring icon sizes keep different widths once the pane holds a few cards.
+ */
+export function assetLibraryGridLayout(availableWidth: number, cardWidth: number, gap: number) {
+  const width = Math.max(0, finiteNumber(availableWidth));
+  const columns = Math.max(1, Math.round((width + gap) / (cardWidth + gap)));
+  return { columns, cardWidth: Math.max(0, (width - gap * (columns - 1)) / columns) };
 }
 
 export type AssetLibraryViewPresetId = "extraLarge" | "large" | "medium" | "small" | "details";

@@ -268,6 +268,16 @@
   line-height: 16px;
 }
 
+/* Own the scrollbar-side divider once, including empty space and the preview. */
+.asset-library-details-content {
+  display: flex;
+  flex: 1 0 auto;
+  min-height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--color-border-panel);
+}
+
 .asset-library-details button,
 .asset-library-details input,
 .asset-library-details textarea {
@@ -375,7 +385,7 @@ body.is-resizing-asset-library-pane * {
 }
 
 /* One scrollport owns the header and rows; no scrollbar compensation or scroll syncing. */
-.asset-library-items-frame.is-list .asset-library-items {
+.asset-library-items-frame.has-table-header .asset-library-items {
   scroll-padding-top: 24px;
 }
 
@@ -387,7 +397,7 @@ body.is-resizing-asset-library-pane * {
   min-width: var(--asset-library-min-width);
 }
 
-.asset-library-items-frame.is-list .asset-library-empty {
+.asset-library-items-frame.has-table-header .asset-library-empty {
   min-height: calc(100% - 24px);
 }
 
@@ -417,7 +427,9 @@ body.is-resizing-asset-library-pane * {
   padding: 24px;
   place-items: center;
   color: var(--color-text-disabled);
+  font-size: 12px;
   font-style: italic;
+  line-height: 16px;
   text-align: center;
 }
 
@@ -597,10 +609,10 @@ body.is-resizing-asset-library-pane * {
   aspect-ratio: 39 / 44;
 }
 
-/* List label column: flag, stars and color swatch share one 12px visible height */
+/* List label column: flag, stars and color swatch share one 11px visible height */
 
 .asset-library-marks {
-  --asset-library-mark-height: 12px;
+  --asset-library-mark-height: 10px;
   --media-list-label-size: var(--asset-library-mark-height);
 
   display: flex;
@@ -714,7 +726,6 @@ body.is-resizing-asset-library-pane * {
 .asset-library-details-summary {
   flex: 0 0 auto;
   padding: 7px 10px;
-  border-right: 1px solid var(--color-border-panel);
   border-bottom: 1px solid var(--color-border-panel);
 }
 

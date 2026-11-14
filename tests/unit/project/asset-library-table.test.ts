@@ -22,6 +22,16 @@ test("subtitle and storyboard libraries expose their own fields and column menus
   }
 });
 
+test("list columns follow the library's field order", () => {
+  const ids = (root: "subtitles" | "storyboards") =>
+    columns
+      .assetLibraryColumnsForRoot(root)
+      .map((column) => column.id)
+      .join(" ");
+  assert.equal(ids("storyboards"), "name location marks keywords source inPoint duration created");
+  assert.equal(ids("subtitles"), "name location marks subtitle source inPoint duration created");
+});
+
 test("both libraries show the added time column by default", () => {
   for (const root of ["subtitles", "storyboards"] as const) {
     const shown = columns
@@ -105,7 +115,7 @@ function invoke(handle: Element, eventName: string, clientX: number) {
 
 test("dragging a boundary grows the preceding visible column and hidden columns are skipped", () => {
   const { handles, changes } = headerFixture(["source", "duration", "marks"]);
-  const expected = ["name", "source", "duration", "marks"] as const;
+  const expected = ["name", "marks", "source", "duration"] as const;
   assert.equal(handles.length, expected.length);
   handles.forEach((handle, index) => {
     invoke(handle, "onPointerDown", 100);

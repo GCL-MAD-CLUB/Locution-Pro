@@ -38,7 +38,7 @@ import { isPopupMenuEventTarget, useCloseOnOutsidePointer } from "../../common/P
 import { annotationShortcutAction } from "../../common/utils/annotationShortcuts";
 import "./AssetLibrary.css";
 import { assetLibraryCommands } from "./assetLibraryCommands";
-import { assetLibraryDragDrop } from "./assetLibraryDragDrop";
+import { assetLibraryDragDrop, type AssetLibraryDragPreview } from "./assetLibraryDragDrop";
 import { assetLibraryFileOperations } from "./assetLibraryFileOperations";
 import {
   assetLibraryButtonKeys,
@@ -70,13 +70,13 @@ import {
   type AssetLibraryContextMenuState,
 } from "./views/AssetLibraryContextMenu";
 import { AssetLibraryDetails } from "./views/AssetLibraryDetails";
+import { AssetLibraryDragPreview as DragPreview } from "./views/AssetLibraryDragPreview";
 import { AssetLibraryFooter } from "./views/AssetLibraryFooter";
 import { AssetLibraryItems } from "./views/AssetLibraryItems";
 import { AssetLibraryNavigation } from "./views/AssetLibraryNavigation";
 import { AssetLibraryResizeHandle } from "./views/AssetLibraryResizeHandle";
 
 const sizeStep = 5;
-const contentDropKey = "content";
 const minimumItemsWidth = 160;
 interface ContextMenuState extends AssetLibraryContextMenuState {
   /** For tree menus, the location that was right-clicked. */
@@ -114,6 +114,9 @@ export function AssetLibrary() {
   const commands = useMemo(() => assetLibraryCommands(assetLibraryUpdated), [assetLibraryUpdated]);
   const [columns, setColumns] = useState(1);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const [dragPreview, setDragPreview] = useState<AssetLibraryDragPreview | null>(null);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanupRef.current?.(), []);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const [addressEditing, setAddressEditing] = useState(false);
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -336,7 +339,9 @@ export function AssetLibrary() {
       if (!selected) selectOnly(node.key);
       return;
     }
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (event.button !== 0) return;
+    startNodeDrag(event, node);
+    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (!selected) selectOnly(node.key);
   }
 
@@ -356,19 +361,18 @@ export function AssetLibrary() {
 
   // --- Drag and drop -----------------------------------------------------------------
 
-  const { handleDragStart, handleDragEnd, handleDragOver, handleDrop } = assetLibraryDragDrop({
+  const { startNodeDrag } = assetLibraryDragDrop({
     library,
     location,
     selectedKeys: view.selectedKeys,
     selectedNodes,
     selectOnly,
     setDropTargetKey,
+    setPreview: setDragPreview,
+    cleanupRef: dragCleanupRef,
     commands,
     messagePublished,
   });
-
-  const contentTarget = (folderId: string | null): AssetLibraryLocation =>
-    folderId ? { root: location.root, folderId } : location;
 
   // --- Keyboard ------------------------------------------------------------------------
 
@@ -651,9 +655,6 @@ export function AssetLibrary() {
         onGoForward={view.goForward}
         onNavigateUp={navigateUp}
         onInvalidPath={(text) => messagePublished(`素材库中找不到“${text}”。请检查拼写并重试。`)}
-        onDragOverTarget={handleDragOver}
-        onDragLeaveTarget={() => setDropTargetKey(null)}
-        onDropOnTarget={handleDrop}
       />
 
       <div className="media-bin-search-row">
@@ -687,11 +688,6 @@ export function AssetLibrary() {
           onNavigate={view.navigate}
           onToggleCollapsed={view.toggleCollapsed}
           onCreateFolder={() => createFolder()}
-          onDragOverTarget={(event, target) =>
-            handleDragOver(event, target, assetLocationKey(target))
-          }
-          onDragLeaveTarget={() => setDropTargetKey(null)}
-          onDropOnTarget={handleDrop}
           onContextMenu={openTreeMenu}
         />
         <AssetLibraryResizeHandle
@@ -702,6 +698,7 @@ export function AssetLibrary() {
         />
         <AssetLibraryItems
           root={location.root}
+          location={location}
           nodes={nodes}
           layout={layout}
           sort={view.sort}
@@ -711,11 +708,7 @@ export function AssetLibrary() {
           cutKeys={cutKeys}
           dropTargetKey={dropTargetKey}
           thumbnailsEnabled={panelActive}
-          emptyText={
-            query
-              ? "没有匹配的素材"
-              : `此文件夹为空。可在${rootLabel(location.root)}面板中右键选择“添加到素材库”。`
-          }
+          emptyText={query ? "没有匹配的素材" : "此文件夹为空。"}
           locationLabel={locationLabel}
           visibleColumns={view.visibleColumns[location.root]}
           columnWidths={view.columnWidths[location.root]}
@@ -733,17 +726,6 @@ export function AssetLibrary() {
           onClearSelection={() => view.select([], null, null)}
           onRename={renameNode}
           onCancelRename={() => view.setRenamingKey(null)}
-          onDragStartNode={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onDragOverTarget={(event, folderId) =>
-            handleDragOver(
-              event,
-              contentTarget(folderId),
-              folderId ? assetFolderKey(folderId) : contentDropKey,
-            )
-          }
-          onDragLeaveTarget={() => setDropTargetKey(null)}
-          onDropOnTarget={(event, folderId) => handleDrop(event, contentTarget(folderId))}
           onContextMenu={openContentMenu}
           onColumnsChange={setColumns}
           onZoom={zoom}
@@ -787,6 +769,7 @@ export function AssetLibrary() {
           onClose={() => setMenu(null)}
         />
       )}
+      <DragPreview preview={dragPreview} />
     </section>
   );
 }

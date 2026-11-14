@@ -1,9 +1,7 @@
 import { Captions, ChevronRight, Film } from "lucide-react";
 import {
   useEffect,
-  useRef,
   type CSSProperties,
-  type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
@@ -21,6 +19,10 @@ import type {
   ProjectAssetLibraryState,
 } from "../../../../types";
 import { MediaBinFolderIcon } from "../../MediaBin/views/MediaBinFolderIcon";
+import {
+  assetLibraryDropTargetProps,
+  assetLibraryTreeDropPrefix as treeDropPrefix,
+} from "../assetLibraryDragDrop";
 import { assetLocationKey } from "../assetLibraryNodes";
 
 interface AssetLibraryNavigationProps {
@@ -32,9 +34,6 @@ interface AssetLibraryNavigationProps {
   onNavigate: (location: AssetLibraryLocation) => void;
   onToggleCollapsed: (key: string) => void;
   onCreateFolder: () => void;
-  onDragOverTarget: (event: DragEvent<HTMLElement>, location: AssetLibraryLocation) => void;
-  onDragLeaveTarget: () => void;
-  onDropOnTarget: (event: DragEvent<HTMLElement>, location: AssetLibraryLocation) => void;
   onContextMenu: (event: ReactMouseEvent<HTMLElement>, location: AssetLibraryLocation) => void;
 }
 
@@ -75,24 +74,18 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
   const sortedChildren = (key: string) =>
     sortedAssetLibraryNodes(childrenByParent.get(key) ?? [], [], props.sort).folders;
   const activeKey = assetLocationKey(location);
-  const dragExpandRef = useRef<{ key: string; timer: number } | null>(null);
-
-  function cancelDragExpand() {
-    if (dragExpandRef.current) window.clearTimeout(dragExpandRef.current.timer);
-    dragExpandRef.current = null;
-  }
-
-  useEffect(() => cancelDragExpand, []);
-
-  function scheduleDragExpand(key: string) {
-    if (dragExpandRef.current?.key === key) return;
-    cancelDragExpand();
-    const timer = window.setTimeout(() => {
-      dragExpandRef.current = null;
-      if (collapsedKeys.has(key)) props.onToggleCollapsed(key);
-    }, dragExpandDelayMs);
-    dragExpandRef.current = { key, timer };
-  }
+  // A drag resting on a collapsed tree folder opens it, as in a file manager. The timer is
+  // dropped as soon as the row is left or opened some other way.
+  const hoveredTreeKey = dropTargetKey?.startsWith(treeDropPrefix)
+    ? dropTargetKey.slice(treeDropPrefix.length)
+    : null;
+  const dragExpandKey = hoveredTreeKey && collapsedKeys.has(hoveredTreeKey) ? hoveredTreeKey : null;
+  const { onToggleCollapsed } = props;
+  useEffect(() => {
+    if (!dragExpandKey) return;
+    const timer = window.setTimeout(() => onToggleCollapsed(dragExpandKey), dragExpandDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [dragExpandKey, onToggleCollapsed]);
 
   // Rows in display order, for arrow-key movement through the expanded tree.
   function visibleRows() {
@@ -166,23 +159,12 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
         <div
           className={`media-bin-row media-bin-folder-row asset-library-tree-row${
             active ? " selected" : ""
-          }${dropTargetKey === key ? " folder-drop-target" : ""}`}
+          }${dropTargetKey === treeDropPrefix + key ? " folder-drop-target" : ""}`}
           style={{ "--asset-tree-depth": depth } as CSSProperties}
           onClick={() => props.onNavigate(target)}
           onDoubleClick={() => expandable && props.onToggleCollapsed(key)}
           onContextMenu={(event) => props.onContextMenu(event, target)}
-          onDragOver={(event) => {
-            props.onDragOverTarget(event, target);
-            if (expandable && !expanded && event.defaultPrevented) scheduleDragExpand(key);
-          }}
-          onDragLeave={() => {
-            cancelDragExpand();
-            props.onDragLeaveTarget();
-          }}
-          onDrop={(event) => {
-            cancelDragExpand();
-            props.onDropOnTarget(event, target);
-          }}
+          {...assetLibraryDropTargetProps(target, treeDropPrefix + key)}
         >
           <span className="media-bin-title-cell media-bin-folder-title-cell">
             {expandable ? (

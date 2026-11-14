@@ -6,14 +6,14 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type DragEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { mediaGridLayout } from "../../../../application/media/mediaGridLayout";
 import {
   assetLibraryEntryDurationUs,
+  assetLibraryGridLayout,
   formatAssetLibraryDate,
+  type AssetLibraryLocation,
   type AssetLibrarySort,
   type AssetLibraryViewLayout,
 } from "../../../../core/editor/assetLibrary";
@@ -26,7 +26,8 @@ import {
   type AssetLibraryColumnId,
   type AssetLibraryColumnWidths,
 } from "../assetLibraryColumns";
-import { type AssetLibraryNode } from "../assetLibraryNodes";
+import { assetLibraryDropTargetProps } from "../assetLibraryDragDrop";
+import { assetFolderKey, type AssetLibraryNode } from "../assetLibraryNodes";
 import { AssetLibraryMarks, AssetLibraryThumbnailMarks } from "./AssetLibraryBadges";
 import { AssetLibraryHoverFrame } from "./AssetLibraryHoverFrame";
 import { AssetLibraryListHeader } from "./AssetLibraryListHeader";
@@ -56,6 +57,8 @@ interface MarqueeState {
 
 export interface AssetLibraryItemsProps {
   root: AssetLibraryRoot;
+  /** The folder on show, which the empty part of the pane drops into. */
+  location: AssetLibraryLocation;
   nodes: readonly AssetLibraryNode[];
   layout: AssetLibraryViewLayout;
   sort: AssetLibrarySort;
@@ -84,11 +87,6 @@ export interface AssetLibraryItemsProps {
   onClearSelection: () => void;
   onRename: (node: AssetLibraryNode, name: string) => void;
   onCancelRename: () => void;
-  onDragStartNode: (event: DragEvent<HTMLElement>, node: AssetLibraryNode) => void;
-  onDragEnd: () => void;
-  onDragOverTarget: (event: DragEvent<HTMLElement>, folderId: string | null) => void;
-  onDragLeaveTarget: () => void;
-  onDropOnTarget: (event: DragEvent<HTMLElement>, folderId: string | null) => void;
   onContextMenu: (event: ReactMouseEvent<HTMLElement>, node: AssetLibraryNode | null) => void;
   onColumnsChange: (columns: number) => void;
   /** Ctrl+wheel steps the shared size control, switching between list and icons. */
@@ -120,6 +118,8 @@ function cellText(node: AssetLibraryNode, column: AssetLibraryColumnId) {
       return entry.annotation.keywords.join("、");
     case "source":
       return entry.media.file_name;
+    case "inPoint":
+      return formatMonitorTime(entry.start_us, entry.media.frame_rate);
     case "duration":
       return nodeDuration(node);
     default:
@@ -198,6 +198,7 @@ function KindIcon({ node }: { node: AssetLibraryNode }) {
 export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   const {
     root,
+    location,
     nodes,
     layout,
     sort,
@@ -237,12 +238,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   }, [nodes, thumbnailsEnabled]);
   const grid =
     layout.mode === "icons"
-      ? mediaGridLayout(
-          Math.max(0, contentWidth - gridPadding * 2),
-          nodes.length,
-          layout.cardWidth,
-          gridGap,
-        )
+      ? assetLibraryGridLayout(contentWidth - gridPadding * 2, layout.cardWidth, gridGap)
       : { columns: 1, cardWidth: 0 };
   const columns = assetLibraryColumnsForRoot(root)
     .filter((column) => column.id !== "name")
@@ -343,24 +339,19 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   }
 
   function nodeHandlers(node: AssetLibraryNode) {
-    const folderId = node.kind === "folder" ? node.folder.id : null;
     return {
       "data-asset-key": node.key,
-      draggable: renamingKey !== node.key,
+      ...(node.kind === "folder"
+        ? assetLibraryDropTargetProps(
+            { root: node.folder.root, folderId: node.folder.id },
+            assetFolderKey(node.folder.id),
+          )
+        : {}),
       onPointerDown: (event: ReactPointerEvent<HTMLElement>) =>
         props.onNodePointerDown(event, node),
       onClick: (event: ReactMouseEvent<HTMLElement>) => props.onNodeClick(event, node),
       onDoubleClick: () => props.onOpenNode(node),
       onContextMenu: (event: ReactMouseEvent<HTMLElement>) => props.onContextMenu(event, node),
-      onDragStart: (event: DragEvent<HTMLElement>) => props.onDragStartNode(event, node),
-      onDragEnd: props.onDragEnd,
-      ...(folderId
-        ? {
-            onDragOver: (event: DragEvent<HTMLElement>) => props.onDragOverTarget(event, folderId),
-            onDragLeave: props.onDragLeaveTarget,
-            onDrop: (event: DragEvent<HTMLElement>) => props.onDropOnTarget(event, folderId),
-          }
-        : {}),
     };
   }
 
@@ -606,6 +597,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   }
 
   const listScale = layout.mode === "list" ? layout.iconScale : 1;
+  const showHeader = layout.mode === "list" || nodes.length === 0;
   const detailWidths = columns.map((column) => columnWidths[column.id]);
   const style = {
     "--asset-library-columns": [
@@ -633,7 +625,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
 
   return (
     <div
-      className={`asset-library-items-frame is-${layout.mode}${
+      className={`asset-library-items-frame is-${layout.mode}${showHeader ? " has-table-header" : ""}${
         itemCheckboxes ? " has-checkboxes" : ""
       }${dropTargetKey === "content" ? " is-drop-target" : ""}`}
       style={style}
@@ -650,11 +642,9 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
             props.onContextMenu(event, null);
           }
         }}
-        onDragOver={(event) => props.onDragOverTarget(event, null)}
-        onDragLeave={props.onDragLeaveTarget}
-        onDrop={(event) => props.onDropOnTarget(event, null)}
+        {...assetLibraryDropTargetProps(location, "content")}
       >
-        {layout.mode === "list" && (
+        {showHeader && (
           <AssetLibraryListHeader
             root={root}
             columns={columns}

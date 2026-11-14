@@ -41,20 +41,3 @@ export function assetNodeParent(node: AssetLibraryNode): AssetLibraryLocation {
 export function assetLocationKey(location: AssetLibraryLocation) {
   return location.folderId ? assetFolderKey(location.folderId) : `root:${location.root}`;
 }
-
-export const assetLibraryDragType = "application/x-locution-pro-asset-library";
-
-// Drag data cannot be read during dragover, so the active drag is kept here while it lasts.
-let activeDrag: { keys: string[]; root: AssetLibraryLocation["root"] } | null = null;
-
-export function beginAssetLibraryDrag(keys: string[], root: AssetLibraryLocation["root"]) {
-  activeDrag = { keys, root };
-}
-
-export function activeAssetLibraryDrag() {
-  return activeDrag;
-}
-
-export function endAssetLibraryDrag() {
-  activeDrag = null;
-}

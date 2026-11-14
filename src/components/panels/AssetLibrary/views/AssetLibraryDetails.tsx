@@ -721,12 +721,14 @@ export function AssetLibraryDetails(props: AssetLibraryDetailsProps) {
       }`}
       aria-label="素材属性"
     >
-      <StoryboardSidebarHeading
-        title="属性"
-        open={open}
-        onToggle={() => onToggleSection(panelSection)}
-      />
-      {open && content}
+      <div className="asset-library-details-content">
+        <StoryboardSidebarHeading
+          title="属性"
+          open={open}
+          onToggle={() => onToggleSection(panelSection)}
+        />
+        {open && content}
+      </div>
     </aside>
   );
 }

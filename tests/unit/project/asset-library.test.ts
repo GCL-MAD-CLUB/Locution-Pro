@@ -431,6 +431,26 @@ test("folder sorting follows names, creation time and the selected direction", (
   );
 });
 
+test("in-point sorting groups entries by source before comparing in-points", () => {
+  const media = (fileName: string) => ({
+    ...entry("m", null).media,
+    path: `/media/${fileName}`,
+    file_name: fileName,
+  });
+  const entries = [
+    entry("b-late", null, { media: media("b.mp4"), start_us: 500_000 }),
+    entry("a-late", null, { media: media("a.mp4"), start_us: 900_000 }),
+    entry("b-early", null, { media: media("b.mp4"), start_us: 100_000 }),
+    entry("a-early", null, { media: media("a.mp4"), start_us: 200_000 }),
+  ];
+  const order = (direction: "ascending" | "descending") =>
+    library
+      .sortedAssetLibraryNodes([], entries, { key: "start", direction })
+      .entries.map((item) => item.id);
+  deepEqual(order("ascending"), ["a-early", "a-late", "b-early", "b-late"]);
+  deepEqual(order("descending"), ["b-late", "b-early", "a-late", "a-early"]);
+});
+
 test("duration uses subtitle time ranges and inclusive storyboard frames", () => {
   const subtitle = entry("subtitle", null, { start_us: 80_000, end_us: 200_000 });
   assert.equal(library.assetLibraryEntryDurationUs(subtitle), 120_000);
@@ -470,6 +490,45 @@ test("hover time scrubs inside the entry's range and stops on its last frame", (
   // Storyboard ranges include their last frame, so the far edge lands on end_us itself.
   const shot = entry("shot", null, { root: "storyboards", start_us: 80_000, end_us: 480_000 });
   assert.equal(library.assetLibraryEntryHoverTimeUs(shot, 1), 480_000);
+});
+
+test("drops stay in their root and never enter a dragged folder", () => {
+  const state = {
+    folders: [folder("a", null), folder("b", "a"), folder("c", null)],
+    entries: [],
+  } as ProjectAssetLibraryState;
+  const at = (folderId: string | null, root = "subtitles") =>
+    ({ root, folderId }) as Parameters<typeof library.assetLibraryCanDropInto>[3];
+  assert.equal(library.assetLibraryCanDropInto(state, "subtitles", ["a"], at(null)), true);
+  assert.equal(library.assetLibraryCanDropInto(state, "subtitles", ["a"], at("c")), true);
+  assert.equal(library.assetLibraryCanDropInto(state, "subtitles", ["a"], at("a")), false);
+  assert.equal(library.assetLibraryCanDropInto(state, "subtitles", ["a"], at("b")), false);
+  assert.equal(library.assetLibraryCanDropInto(state, "subtitles", [], at("b")), true);
+  assert.equal(
+    library.assetLibraryCanDropInto(state, "subtitles", [], at(null, "storyboards")),
+    false,
+  );
+});
+
+test("icon cards fill the row and each icon size keeps its own width", () => {
+  const sizes = library.assetLibraryViewPresets
+    .map((preset) => library.assetLibraryViewLayout(preset.size))
+    .flatMap((layout) => (layout.mode === "icons" ? [layout.cardWidth] : []));
+  for (const available of [520, 800, 1200]) {
+    for (const size of sizes) {
+      const { columns, cardWidth } = library.assetLibraryGridLayout(available, size, 12);
+      assert.ok(Math.abs(columns * cardWidth + 12 * (columns - 1) - available) < 1e-6);
+    }
+  }
+  for (const available of [800, 1200]) {
+    const widths = sizes.map(
+      (size) => library.assetLibraryGridLayout(available, size, 12).cardWidth,
+    );
+    assert.equal(new Set(widths).size, widths.length);
+  }
+  deepEqual(library.assetLibraryGridLayout(800, 240, 12), { columns: 3, cardWidth: 776 / 3 });
+  deepEqual(library.assetLibraryGridLayout(200, 320, 12), { columns: 1, cardWidth: 200 });
+  deepEqual(library.assetLibraryGridLayout(0, 120, 12), { columns: 1, cardWidth: 0 });
 });
 
 test("entry names preserve authored line breaks through capture, rename and reload", () => {

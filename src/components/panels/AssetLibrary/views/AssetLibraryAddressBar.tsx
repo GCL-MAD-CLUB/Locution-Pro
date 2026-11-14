@@ -1,7 +1,6 @@
 import { Captions, ChevronLeft, ChevronRight, CornerLeftUp, Film } from "lucide-react";
 import {
   useState,
-  type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -18,6 +17,7 @@ import {
 } from "../../../../core/editor/assetLibrary";
 import type { AssetLibraryFolder, ProjectAssetLibraryState } from "../../../../types";
 import { PopupMenu, PopupMenuItem, useCloseOnOutsidePointer } from "../../../common/PopupMenu";
+import { assetLibraryDropTargetProps } from "../assetLibraryDragDrop";
 import { assetLocationKey } from "../assetLibraryNodes";
 
 type AddressMenu =
@@ -39,13 +39,6 @@ export interface AssetLibraryAddressBarProps {
   onGoForward: (steps: number) => void;
   onNavigateUp: () => void;
   onInvalidPath: (text: string) => void;
-  onDragOverTarget: (
-    event: DragEvent<HTMLElement>,
-    location: AssetLibraryLocation,
-    key: string,
-  ) => void;
-  onDragLeaveTarget: () => void;
-  onDropOnTarget: (event: DragEvent<HTMLElement>, location: AssetLibraryLocation) => void;
 }
 
 /** Drop-target keys for crumbs, kept apart from tree and item keys. */
@@ -144,9 +137,7 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
         className={`${current ? "is-current" : ""}${dropTargetKey === dropKey ? " is-drop-target" : ""}`}
         title={label}
         onClick={() => props.onNavigate(target)}
-        onDragOver={(event) => props.onDragOverTarget(event, target, dropKey)}
-        onDragLeave={props.onDragLeaveTarget}
-        onDrop={(event) => props.onDropOnTarget(event, target)}
+        {...assetLibraryDropTargetProps(target, dropKey)}
       >
         {label}
       </button>

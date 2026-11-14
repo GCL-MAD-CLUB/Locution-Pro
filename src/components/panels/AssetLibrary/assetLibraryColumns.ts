@@ -3,7 +3,15 @@ import type { AssetLibraryRoot } from "../../../types";
 
 /** Resizable columns; the color marker and trailing filler stay fixed. */
 export type AssetLibraryColumnId =
-  "name" | "location" | "source" | "marks" | "subtitle" | "keywords" | "duration" | "created";
+  | "name"
+  | "location"
+  | "source"
+  | "marks"
+  | "subtitle"
+  | "keywords"
+  | "inPoint"
+  | "duration"
+  | "created";
 
 export interface AssetLibraryColumn {
   id: AssetLibraryColumnId;
@@ -21,6 +29,7 @@ export const assetLibraryColumns: readonly AssetLibraryColumn[] = [
   { id: "marks", label: "标签", sortKey: "rating", width: 160, minimum: 40, maximum: 320 },
   { id: "subtitle", label: "字幕", sortKey: null, width: 300, minimum: 60, maximum: 1200 },
   { id: "keywords", label: "关键字", sortKey: null, width: 140, minimum: 48, maximum: 420 },
+  { id: "inPoint", label: "媒体入点", sortKey: "start", width: 112, minimum: 48, maximum: 200 },
   {
     id: "duration",
     label: "媒体持续时间",
@@ -34,8 +43,17 @@ export const assetLibraryColumns: readonly AssetLibraryColumn[] = [
 
 /** Each library defines its own fields and order. Only the table mechanics are shared. */
 const libraryColumnIds: Record<AssetLibraryRoot, readonly AssetLibraryColumnId[]> = {
-  subtitles: ["name", "location", "source", "subtitle", "duration", "marks", "created"],
-  storyboards: ["name", "location", "source", "duration", "keywords", "marks", "created"],
+  subtitles: ["name", "location", "marks", "subtitle", "source", "inPoint", "duration", "created"],
+  storyboards: [
+    "name",
+    "location",
+    "marks",
+    "keywords",
+    "source",
+    "inPoint",
+    "duration",
+    "created",
+  ],
 };
 
 export function assetLibraryColumnsForRoot(root: AssetLibraryRoot) {
@@ -53,6 +71,7 @@ export function assetLibraryToggleableColumns(root: AssetLibraryRoot) {
 export const defaultAssetLibraryVisibleColumns: ReadonlySet<AssetLibraryColumnId> = new Set([
   "source",
   "subtitle",
+  "inPoint",
   "duration",
   "keywords",
   "marks",

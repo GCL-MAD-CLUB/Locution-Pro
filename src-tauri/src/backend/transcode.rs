@@ -1636,6 +1636,7 @@ pub(crate) async fn transcode_media(
 pub(crate) async fn transcode_preview_frames(
     request: TranscodePreviewRequest,
     task_id: String,
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> CommandResult<TranscodePreviewFrames> {
     let task = register_task(&task_id, state.inner())?;
@@ -1691,6 +1692,23 @@ pub(crate) async fn transcode_preview_frames(
             },
         )
         .await?;
+    }
+    // The page shows the stills through the asset protocol, whose `**` scope
+    // skips hidden folders on macOS and Linux, and the default cache lives in
+    // `~/.locution-pro`. Allowing the preview folder itself covers that.
+    {
+        use tauri::Manager;
+        app.asset_protocol_scope()
+            .allow_directory(&preview_root, true)
+            .map_err(|error| {
+                app_error(
+                    ErrorCode::TranscodeWriteFailed,
+                    format!(
+                        "Failed to allow preview directory {}: {error}",
+                        preview_root.display()
+                    ),
+                )
+            })?;
     }
 
     let program = ffmpeg_program(&preferences);

@@ -798,3 +798,7 @@
 .transcode-dropdown-menu {
   max-height: min(320px, calc(100vh - 16px));
 }
+
+.transcode-preview-image[hidden] {
+  display: none;
+}

@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } 
 import { frameToTimeUs, timeUsToFrame } from "../../../../core/editor/timeline";
 import { invokeCommand, runBackgroundOperation, runOperation } from "../../../../errors";
 import { createFfmpegTaskId } from "../../../../platform/tauri/ffmpegProgress";
-import { isTauriRuntime } from "../../../../platform/tauri/runtime";
+import { isMacOSRuntime, isTauriRuntime } from "../../../../platform/tauri/runtime";
+import {
+  defaultProxyOptions,
+  shouldAutoRemux,
+} from "../../../../application/media/proxyGeneration";
+import { runProxyGenerationTask } from "../../../../application/media/proxyGenerationTask";
+import { usePreferencesPort } from "../../../../systems/PreferencesSystem";
+import { useMediaDocumentAtPath, useProjectPort } from "../../../../systems/ProjectSystem";
 import type { TranscodeSettings, TranscodeSource } from "../../../../systems/TranscodeSystem";
 import { MonitorRange, TimelineRuler, VideoControls } from "../../SourceMonitor";
 
@@ -49,7 +56,8 @@ interface TranscodePreviewProps {
 
 /**
  * Source and output stills of the current settings, side by side or split
- * by a draggable divider, at a time picked on the source range.
+ * by a draggable divider, at a time picked on the source range. Playback runs
+ * the source itself; pausing renders the stills of the frame it stopped on.
  */
 export function TranscodePreview({
   source,
@@ -83,6 +91,20 @@ export function TranscodePreview({
   const runningTask = useRef<string | null>(null);
   const requestSerial = useRef(0);
   const stageRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackFailed, setPlaybackFailed] = useState(false);
+  // Formats the web view cannot play, such as MKV on macOS, play through the
+  // project's proxy of the same file; a missing one is remuxed like the source
+  // monitor does, so the edit page gets it too.
+  const mediaDocument = useMediaDocumentAtPath(source.path);
+  const { proxyGenerated } = useProjectPort([], ["proxyGenerated"]);
+  const { preferences } = usePreferencesPort(["preferences"], []);
+  const [preparingPlayback, setPreparingPlayback] = useState(false);
+  const remuxAttempted = useRef(false);
+  const playWhenReady = useRef(false);
+  const playbackPath = mediaDocument?.proxy_path || source.path;
+  const videoUrl = isTauriRuntime() ? convertFileSrc(playbackPath) : playbackPath;
 
   // Media info may arrive after the dialog opens; the timeline then covers the
   // whole clip and starts in the middle, since the first frame is often black.
@@ -101,15 +123,101 @@ export function TranscodePreview({
     (target: number) => {
       const next = Math.min(Math.max(Math.round(target), 0), lastFrame);
       setCurrentFrame(next);
+      const video = videoRef.current;
+      if (video && !video.paused) video.currentTime = frameToTimeUs(next, frameRate) / 1_000_000;
       return next;
     },
-    [lastFrame],
+    [frameRate, lastFrame],
   );
+  const pause = useCallback(() => videoRef.current?.pause(), []);
   const stepFrame = useCallback(
-    (direction: -1 | 1) =>
-      setCurrentFrame((value) => Math.min(Math.max(value + direction, 0), lastFrame)),
-    [lastFrame],
+    (direction: -1 | 1) => {
+      pause();
+      setCurrentFrame((value) => Math.min(Math.max(value + direction, 0), lastFrame));
+    },
+    [lastFrame, pause],
   );
+  const playStart = rangeStartFrame ?? 0;
+  const playEnd = rangeEndFrame ?? lastFrame;
+
+  function startPlayback() {
+    const video = videoRef.current;
+    if (!video) return;
+    // Playback stays inside the source range, like the output will.
+    const start = frame < playStart || frame >= playEnd ? playStart : frame;
+    setCurrentFrame(start);
+    video.currentTime = frameToTimeUs(start, frameRate) / 1_000_000;
+    void video.play().catch((error: unknown) => {
+      // A pause or seek interrupting play() is not a playback failure.
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      playWhenReady.current = true;
+      if (!remuxSource()) setPlaybackFailed(true);
+    });
+  }
+
+  /** Starts the remux proxy; false when there is none to make. */
+  function remuxSource() {
+    const document = mediaDocument;
+    if (
+      !document ||
+      !shouldAutoRemux({
+        project: document,
+        isMacOS: isMacOSRuntime(),
+        enabled: preferences.auto_remux_matroska,
+        alreadyAttempted: remuxAttempted.current,
+      })
+    ) {
+      return false;
+    }
+    remuxAttempted.current = true;
+    setPreparingPlayback(true);
+    const displayName = document.asset.file_name;
+    void runProxyGenerationTask({
+      assetId: document.asset.id,
+      displayName,
+      options: defaultProxyOptions("remux"),
+      label: `无损重封装 ${displayName}`,
+    }).then((outcome) => {
+      setPreparingPlayback(false);
+      if (outcome.status === "success") proxyGenerated(outcome.proxyPath, document.asset.id);
+      else if (outcome.status === "failed") setPlaybackFailed(true);
+    });
+    return true;
+  }
+
+  function togglePlayback() {
+    const video = videoRef.current;
+    if (!video || preparingPlayback) return;
+    if (!video.paused) {
+      video.pause();
+      return;
+    }
+    if (video.error) {
+      playWhenReady.current = true;
+      if (!remuxSource()) setPlaybackFailed(true);
+      return;
+    }
+    startPlayback();
+  }
+
+  // The playhead follows the video while it plays.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!isPlaying || !video) return;
+    let handle = 0;
+    const tick = () => {
+      const next = Math.min(Math.round(video.currentTime * frameRate), lastFrame);
+      if (next >= playEnd) {
+        video.pause();
+        setCurrentFrame(playEnd);
+        return;
+      }
+      setCurrentFrame(next);
+      handle = window.requestAnimationFrame(tick);
+    };
+    handle = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(handle);
+  }, [frameRate, isPlaying, lastFrame, playEnd]);
   const cueRange =
     rangeStartFrame !== null || rangeEndFrame !== null
       ? { startFrame: rangeStartFrame ?? 0, endFrame: rangeEndFrame ?? lastFrame }
@@ -135,7 +243,8 @@ export function TranscodePreview({
   );
 
   useEffect(() => {
-    if (!isTauriRuntime() || !hasVideo) return;
+    // Stills wait for playback to stop on a frame.
+    if (!isTauriRuntime() || !hasVideo || isPlaying) return;
     const serial = ++requestSerial.current;
     const timer = window.setTimeout(
       () => {
@@ -176,7 +285,7 @@ export function TranscodePreview({
     );
     return () => window.clearTimeout(timer);
     // requestKey stands for every input of the request.
-  }, [requestKey, hasVideo]);
+  }, [requestKey, hasVideo, isPlaying]);
 
   useEffect(
     () => () => {
@@ -226,6 +335,8 @@ export function TranscodePreview({
         {source.infoStatus === "pending" ? "正在读取媒体信息…" : "源没有可预览的视频。"}
       </p>
     );
+  } else if (isPlaying) {
+    stage = null;
   } else if (!frames) {
     stage = (
       <p className="transcode-preview-empty">
@@ -393,7 +504,37 @@ export function TranscodePreview({
           100%
         </label>
       </div>
-      <div className={`transcode-preview-stage ${sizeClass}`}>{stage}</div>
+      <div className={`transcode-preview-stage ${sizeClass}`}>
+        {hasVideo && (
+          <video
+            ref={videoRef}
+            className="transcode-preview-image"
+            src={videoUrl}
+            preload="metadata"
+            playsInline
+            hidden={!isPlaying}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => setIsPlaying(false)}
+            onCanPlay={() => {
+              if (!playWhenReady.current) return;
+              playWhenReady.current = false;
+              startPlayback();
+            }}
+            onError={() => {
+              setIsPlaying(false);
+              // A remux copies the streams as they are, which can still fail
+              // (10-bit H.264, say); the media bin can make an H.264 proxy.
+              if (mediaDocument?.proxy_path) setPlaybackFailed(true);
+              else if (playWhenReady.current && !remuxSource()) setPlaybackFailed(true);
+            }}
+          />
+        )}
+        {stage}
+        {isPlaying && mode !== "source" && (
+          <span className="transcode-preview-tag is-left">播放源画面，暂停后显示对比</span>
+        )}
+      </div>
       <div className="source-controls transcode-preview-timeline">
         <VideoControls
           mediaKey={source.path}
@@ -404,11 +545,12 @@ export function TranscodePreview({
           timelineStartFrame={timelineStartFrame}
           timelineSpanFrames={timelineSpanFrames}
           minTimelineSpanFrames={minTimelineSpanFrames}
-          isPlaying={false}
+          isPlaying={isPlaying}
           showZoom={false}
           onSeekFrame={seekFrame}
           onPlaybackFrameRequest={() => frame}
-          onPauseForPreciseSeek={() => {}}
+          onPauseForPreciseSeek={pause}
+          onTogglePlayback={playbackFailed ? undefined : togglePlayback}
           onTimelineStartFrameChange={setTimelineStartFrame}
           onTimelineSpanFramesChange={setTimelineSpanFrames}
           onStepFrame={stepFrame}
@@ -437,6 +579,16 @@ export function TranscodePreview({
           onTimelineSpanFramesChange={setTimelineSpanFrames}
         />
       </div>
+      {preparingPlayback && (
+        <p className="transcode-note">
+          macOS 无法直接播放 MKV，正在无损重封装（不重新编码），完成后自动播放。
+        </p>
+      )}
+      {playbackFailed && (
+        <p className="transcode-note">
+          无法播放这个源，可逐帧或拖动时间轴查看；也可以在媒体箱为它创建 H.264 代理。
+        </p>
+      )}
       {noOutputVideo && <p className="transcode-note">当前设置不导出视频，只显示源画面。</p>}
     </section>
   );

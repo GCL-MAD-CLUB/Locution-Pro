@@ -2300,6 +2300,13 @@ function useProjectState<Selection>(selector: (state: ProjectSystemState) => Sel
   return useStore(projectState, selector);
 }
 
+/** This project's media document for the file at `path`, if it has one. */
+export function useMediaDocumentAtPath(path: string) {
+  return useProjectState(
+    (state) => Object.values(state.projects).find((project) => project.asset.path === path) ?? null,
+  );
+}
+
 type ProjectData = Omit<ProjectSystemState, "commands">;
 
 export function useProjectPort<

@@ -25,10 +25,10 @@ export interface AssetLibraryColumn {
 export const assetLibraryColumns: readonly AssetLibraryColumn[] = [
   { id: "name", label: "名称", sortKey: "name", width: 240, minimum: 80, maximum: 1200 },
   { id: "location", label: "位置", sortKey: null, width: 160, minimum: 48, maximum: 480 },
-  { id: "source", label: "来源", sortKey: null, width: 160, minimum: 60, maximum: 480 },
-  { id: "marks", label: "标签", sortKey: "rating", width: 160, minimum: 40, maximum: 320 },
+  { id: "source", label: "来源", sortKey: null, width: 200, minimum: 60, maximum: 480 },
+  { id: "marks", label: "标签", sortKey: "rating", width: 112, minimum: 40, maximum: 320 },
   { id: "subtitle", label: "字幕", sortKey: null, width: 300, minimum: 60, maximum: 1200 },
-  { id: "keywords", label: "关键字", sortKey: null, width: 140, minimum: 48, maximum: 420 },
+  { id: "keywords", label: "关键字", sortKey: null, width: 136, minimum: 48, maximum: 420 },
   { id: "inPoint", label: "媒体入点", sortKey: "start", width: 112, minimum: 48, maximum: 200 },
   {
     id: "duration",
@@ -38,18 +38,25 @@ export const assetLibraryColumns: readonly AssetLibraryColumn[] = [
     minimum: 48,
     maximum: 200,
   },
-  { id: "created", label: "添加时间", sortKey: "created", width: 136, minimum: 60, maximum: 240 },
+  {
+    id: "created",
+    label: "项目添加时间",
+    sortKey: "created",
+    width: 136,
+    minimum: 60,
+    maximum: 240,
+  },
 ];
 
 /** Each library defines its own fields and order. Only the table mechanics are shared. */
 const libraryColumnIds: Record<AssetLibraryRoot, readonly AssetLibraryColumnId[]> = {
-  subtitles: ["name", "location", "marks", "subtitle", "source", "inPoint", "duration", "created"],
+  subtitles: ["name", "location", "subtitle", "source", "marks", "inPoint", "duration", "created"],
   storyboards: [
     "name",
     "location",
+    "source",
     "marks",
     "keywords",
-    "source",
     "inPoint",
     "duration",
     "created",

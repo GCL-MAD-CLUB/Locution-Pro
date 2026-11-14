@@ -38,6 +38,8 @@ const gridPadding = 14;
 const gridGap = 12;
 /** Rows from the two-line height up have room to show a readable frame in the 16:9 slot. */
 const twoLineRowHeight = 36;
+/** Card names clamp to this many lines, as .asset-library-card .media-bin-card-name does. */
+const cardNameLines = 4;
 /** List icons are 16px at the smallest size and scale with the shared size control. */
 const listIconSize = 16;
 
@@ -127,17 +129,35 @@ function cellText(node: AssetLibraryNode, column: AssetLibraryColumnId) {
   }
 }
 
+/** Line height of item names, which the rename field matches line for line. */
+const nameLineHeightPx = 16;
+
+/**
+ * Edits a name in place of its label. The field wraps like the label and opens at the
+ * number of lines the label showed, up to `maxLines`; longer text scrolls inside it.
+ */
 function RenameInput({
   initialValue,
+  maxLines,
+  wrap,
   onCommit,
   onCancel,
 }: {
   initialValue: string;
+  maxLines: number;
+  wrap: boolean;
   onCommit: (value: string) => void;
   onCancel: () => void;
 }) {
   const [value, setValue] = useState(initialValue);
   const finishedRef = useRef(false);
+  const fieldRef = useRef<HTMLTextAreaElement | null>(null);
+  useLayoutEffect(() => {
+    const field = fieldRef.current;
+    if (!field) return;
+    const lines = Math.round(field.scrollHeight / nameLineHeightPx);
+    field.style.height = `${Math.min(maxLines, Math.max(1, lines)) * nameLineHeightPx}px`;
+  }, [maxLines]);
   const finish = (commit: boolean) => {
     if (finishedRef.current) return;
     finishedRef.current = true;
@@ -145,9 +165,13 @@ function RenameInput({
     else onCancel();
   };
   return (
-    <input
-      className="media-bin-title-editor"
+    <textarea
+      ref={fieldRef}
+      className={`media-bin-title-editor asset-library-rename${wrap ? " is-wrapping" : ""}`}
       value={value}
+      rows={1}
+      wrap={wrap ? "soft" : "off"}
+      spellCheck={false}
       aria-label="重命名"
       autoFocus
       onFocus={(event) => event.currentTarget.select()}
@@ -158,7 +182,12 @@ function RenameInput({
       onBlur={() => finish(true)}
       onKeyDown={(event) => {
         event.stopPropagation();
-        if (event.key === "Enter") finish(true);
+        // Enter that confirms an input method candidate is not a commit.
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === "Enter") {
+          event.preventDefault();
+          finish(true);
+        }
         if (event.key === "Escape") finish(false);
       }}
     />
@@ -367,16 +396,20 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
       .join(" ");
   }
 
-  function nameContent(node: AssetLibraryNode, className: string) {
+  function nameContent(node: AssetLibraryNode, className: string, maxLines: number) {
+    const explicitLines = /\r?\n/.test(nodeName(node));
     return renamingKey === node.key ? (
       <RenameInput
         initialValue={nodeName(node)}
+        maxLines={maxLines}
+        // Labels with their own line breaks keep them rather than wrapping, except on cards.
+        wrap={maxLines > 1 && !(explicitLines && layout.mode === "list")}
         onCommit={(value) => props.onRename(node, value)}
         onCancel={props.onCancelRename}
       />
     ) : (
       <span
-        className={`${className}${/\r?\n/.test(nodeName(node)) ? " has-explicit-lines" : ""}`}
+        className={`${className}${explicitLines ? " has-explicit-lines" : ""}`}
         title={nodeName(node)}
       >
         {nodeName(node)}
@@ -479,7 +512,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
         >
           {renderCheckbox(node)}
           {renderListPreview(node)}
-          {nameContent(node, "media-bin-name-copy")}
+          {nameContent(node, "media-bin-name-copy", twoLineRows ? 2 : 1)}
         </span>
         {columns.map((column) => renderCell(node, column))}
         <span aria-hidden="true" />
@@ -591,7 +624,9 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
             </span>
           )}
         </span>
-        <span className="media-bin-card-meta">{nameContent(node, "media-bin-card-name")}</span>
+        <span className="media-bin-card-meta">
+          {nameContent(node, "media-bin-card-name", cardNameLines)}
+        </span>
       </div>
     );
   }

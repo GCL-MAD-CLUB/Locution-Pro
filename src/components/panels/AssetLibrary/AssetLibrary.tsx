@@ -48,6 +48,7 @@ import {
   type AssetLibraryKeyCommand,
 } from "./assetLibraryKeyboard";
 import { resolveAssetMedia } from "./assetLibraryMedia";
+import { useSlowClickRename } from "./useSlowClickRename";
 import {
   assetEntryKey,
   assetFolderKey,
@@ -142,14 +143,15 @@ export function AssetLibrary() {
     [library, location.folderId],
   );
 
-  // As in a file manager's navigation pane, the tree always reveals the current folder.
+  // As in a file manager's navigation pane, the tree reveals a folder when navigation enters
+  // it, but opening a library root does not expand that root by itself.
   const { expandKeys } = view;
   useEffect(() => {
     expandKeys([
-      assetLocationKey({ root: location.root, folderId: null }),
+      ...(location.folderId ? [assetLocationKey({ root: location.root, folderId: null })] : []),
       ...path.slice(0, -1).map((folder) => assetFolderKey(folder.id)),
     ]);
-  }, [expandKeys, location.root, path]);
+  }, [expandKeys, location.root, location.folderId, path]);
 
   const mediaByEntryId = useMemo(
     () =>
@@ -337,12 +339,15 @@ export function AssetLibrary() {
 
   // --- Pointer selection -------------------------------------------------------------
 
+  const slowClickRename = useSlowClickRename(startRename);
+
   function handleNodePointerDown(event: ReactPointerEvent<HTMLElement>, node: AssetLibraryNode) {
     const selected = view.selectedKeys.has(node.key);
     if (event.button === 2) {
       if (!selected) selectOnly(node.key);
       return;
     }
+    slowClickRename.armOnPointerDown(event, node.key, selected && view.selectedKeys.size === 1);
     if (event.button !== 0) return;
     startNodeDrag(event, node);
     if (event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -360,6 +365,7 @@ export function AssetLibrary() {
       view.select(keys, node.key, node.key);
     } else {
       selectOnly(node.key);
+      slowClickRename.scheduleOnClick(event, node.key);
     }
   }
 
@@ -640,6 +646,8 @@ export function AssetLibrary() {
       className="media-bin-panel asset-library"
       tabIndex={-1}
       aria-label="素材库"
+      onPointerDownCapture={slowClickRename.cancel}
+      onKeyDownCapture={slowClickRename.cancel}
       onKeyDown={handleKeyDown}
     >
       <AssetLibraryAddressBar
@@ -659,26 +667,22 @@ export function AssetLibrary() {
         onGoForward={view.goForward}
         onNavigateUp={navigateUp}
         onInvalidPath={(text) => messagePublished(`素材库中找不到“${text}”。请检查拼写并重试。`)}
+        search={
+          <label className="media-bin-search asset-library-search">
+            <Search aria-hidden="true" />
+            <input
+              ref={searchRef}
+              value={view.query}
+              placeholder={`在“${path.at(-1)?.name ?? rootLabel(location.root)}”中搜索`}
+              aria-label="搜索素材"
+              onChange={(event) => view.setQuery(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") view.setQuery("");
+              }}
+            />
+          </label>
+        }
       />
-
-      <div className="media-bin-search-row">
-        <label className="media-bin-search">
-          <Search aria-hidden="true" />
-          <input
-            ref={searchRef}
-            value={view.query}
-            placeholder={`在“${path.at(-1)?.name ?? rootLabel(location.root)}”中搜索`}
-            aria-label="搜索素材"
-            onChange={(event) => view.setQuery(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") view.setQuery("");
-            }}
-          />
-        </label>
-        <span>
-          {selectedNodes.length} 项已选择，共 {nodes.length} 项
-        </span>
-      </div>
 
       <AssetLibraryCommandBar model={commandModel} actions={commandActions} />
 
@@ -759,10 +763,9 @@ export function AssetLibrary() {
       <AssetLibraryFooter
         size={view.size}
         listMode={layout.mode === "list"}
-        canDelete={selectedNodes.length > 0}
+        itemCount={nodes.length}
+        selectedCount={selectedNodes.length}
         onSizeChange={view.setSize}
-        onCreateFolder={() => createFolder()}
-        onDelete={() => removeNodes(selection)}
       />
 
       {menu && (

@@ -16,7 +16,8 @@ interface AssetLibraryFolderMenuItemsProps {
 
 /**
  * The folders of one library as an indented outline, so "添加到素材库" names where the items
- * go. The library itself comes first for its top level.
+ * go. The library itself comes first as "此项目：分镜"; its first-level folders line up with
+ * it and deeper ones indent.
  */
 export function AssetLibraryFolderMenuItems({
   library,
@@ -39,9 +40,9 @@ export function AssetLibraryFolderMenuItems({
   );
   return (
     <>
-      {item(null, assetLibraryRootLabels[root], 0)}
+      {item(null, `此项目：${assetLibraryRootLabels[root]}`, 0)}
       {assetLibraryFolderOutline(library, root).map(({ folder, depth }) =>
-        item(folder.id, folder.name, depth),
+        item(folder.id, `素材库：${folder.name}`, depth - 1),
       )}
     </>
   );

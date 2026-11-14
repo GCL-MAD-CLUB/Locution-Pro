@@ -1,4 +1,4 @@
-import { Captions, ChevronRight, Film } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import {
   useEffect,
   type CSSProperties,
@@ -24,6 +24,7 @@ import {
   assetLibraryTreeDropPrefix as treeDropPrefix,
 } from "../../../common/utils/assetLibraryDropTarget";
 import { assetLocationKey } from "../assetLibraryNodes";
+import { AssetLibraryProjectIcon, assetLibraryRootIcons } from "./AssetLibraryTreeIcons";
 
 interface AssetLibraryNavigationProps {
   library: ProjectAssetLibraryState;
@@ -37,10 +38,9 @@ interface AssetLibraryNavigationProps {
   onContextMenu: (event: ReactMouseEvent<HTMLElement>, location: AssetLibraryLocation) => void;
 }
 
-const rootIcons: Record<AssetLibraryRoot, { className: string; Icon: typeof Captions }> = {
-  subtitles: { className: "subtitle", Icon: Captions },
-  storyboards: { className: "video", Icon: Film },
-};
+/** The "此项目" row above both libraries, collapsed under this key like a folder. */
+const projectKey = "project";
+const projectLabel = "此项目";
 
 /** How long a drag must hover over a collapsed folder before it opens, as in a file manager. */
 const dragExpandDelayMs = 700;
@@ -59,17 +59,11 @@ function parentKey(root: AssetLibraryRoot, folderId: string | null) {
 
 export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
   const { library, location, collapsedKeys, dropTargetKey } = props;
-  // Both maps use location keys so lookups match at every depth, not just under the roots.
+  // Location keys make lookups match at every depth, not just under the roots.
   const childrenByParent = new Map<string, AssetLibraryFolder[]>();
-  const countByParent = new Map<string, number>();
   for (const folder of library.folders) {
     const key = parentKey(folder.root, folder.parent_id);
     childrenByParent.set(key, [...(childrenByParent.get(key) ?? []), folder]);
-    countByParent.set(key, (countByParent.get(key) ?? 0) + 1);
-  }
-  for (const entry of library.entries) {
-    const key = parentKey(entry.root, entry.folder_id);
-    countByParent.set(key, (countByParent.get(key) ?? 0) + 1);
   }
   const sortedChildren = (key: string) =>
     sortedAssetLibraryNodes(childrenByParent.get(key) ?? [], [], props.sort).folders;
@@ -99,7 +93,9 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
         children.forEach((folder) => walk({ root: folder.root, folderId: folder.id }, target));
       }
     };
-    assetLibraryRoots.forEach((root) => walk({ root, folderId: null }, null));
+    if (!collapsedKeys.has(projectKey)) {
+      assetLibraryRoots.forEach((root) => walk({ root, folderId: null }, null));
+    }
     return rows;
   }
 
@@ -162,27 +158,12 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
           }${dropTargetKey === treeDropPrefix + key ? " folder-drop-target" : ""}`}
           style={{ "--asset-tree-depth": depth } as CSSProperties}
           onClick={() => props.onNavigate(target)}
-          onDoubleClick={() => expandable && props.onToggleCollapsed(key)}
           onContextMenu={(event) => props.onContextMenu(event, target)}
           {...assetLibraryDropTargetProps(target, treeDropPrefix + key)}
         >
           <span className="media-bin-title-cell media-bin-folder-title-cell">
             {expandable ? (
-              <button
-                type="button"
-                className={`media-bin-folder-toggle asset-library-tree-toggle${
-                  expanded ? " expanded" : ""
-                }`}
-                tabIndex={-1}
-                aria-label={expanded ? `折叠${label}` : `展开${label}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  props.onToggleCollapsed(key);
-                }}
-                onDoubleClick={(event) => event.stopPropagation()}
-              >
-                <ChevronRight aria-hidden="true" />
-              </button>
+              renderToggle(key, label, expanded)
             ) : (
               <span className="asset-library-tree-toggle" aria-hidden="true" />
             )}
@@ -191,7 +172,6 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
               {label}
             </span>
           </span>
-          <span className="asset-library-tree-count">{countByParent.get(key) ?? 0}</span>
         </div>
         {expanded && (
           <ul role="group">
@@ -211,6 +191,27 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
     );
   }
 
+  function renderToggle(key: string, label: string, expanded: boolean) {
+    return (
+      <button
+        type="button"
+        className={`media-bin-folder-toggle asset-library-tree-toggle${expanded ? " expanded" : ""}`}
+        tabIndex={-1}
+        aria-label={expanded ? `折叠${label}` : `展开${label}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          props.onToggleCollapsed(key);
+        }}
+        onDoubleClick={(event) => event.stopPropagation()}
+      >
+        <ChevronRight aria-hidden="true" />
+      </button>
+    );
+  }
+
+  // The project groups the two libraries, as "此电脑" groups drives; it only opens and closes.
+  const projectExpanded = !collapsedKeys.has(projectKey);
+
   return (
     <nav className="asset-library-navigation" aria-label="素材库文件夹">
       <div className="media-bin-table-scroll">
@@ -221,17 +222,38 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
           aria-label="文件夹"
           onKeyDown={handleKeyDown}
         >
-          {assetLibraryRoots.map((root) => {
-            const { className, Icon } = rootIcons[root];
-            return renderItem(
-              { root, folderId: null },
-              assetLibraryRootLabels[root],
-              <span className={`media-bin-kind-icon ${className}`}>
-                <Icon aria-hidden="true" />
-              </span>,
-              0,
-            );
-          })}
+          {/* Only the arrow toggles the group; clicking this row does not. */}
+          <li role="treeitem" aria-selected={false} aria-expanded={projectExpanded}>
+            <div
+              className="media-bin-row media-bin-folder-row asset-library-tree-row"
+              style={{ "--asset-tree-depth": 0 } as CSSProperties}
+            >
+              <span className="media-bin-title-cell media-bin-folder-title-cell">
+                {renderToggle(projectKey, projectLabel, projectExpanded)}
+                <span className="media-bin-kind-icon folder">
+                  <AssetLibraryProjectIcon />
+                </span>
+                <span className="media-bin-name-copy" title={projectLabel}>
+                  {projectLabel}
+                </span>
+              </span>
+            </div>
+            {projectExpanded && (
+              <ul role="group">
+                {assetLibraryRoots.map((root) => {
+                  const Icon = assetLibraryRootIcons[root];
+                  return renderItem(
+                    { root, folderId: null },
+                    assetLibraryRootLabels[root],
+                    <span className="media-bin-kind-icon folder">
+                      <Icon />
+                    </span>,
+                    1,
+                  );
+                })}
+              </ul>
+            )}
+          </li>
         </ul>
       </div>
     </nav>

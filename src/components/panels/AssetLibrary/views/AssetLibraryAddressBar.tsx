@@ -1,6 +1,7 @@
-import { Captions, ChevronLeft, ChevronRight, CornerLeftUp, Film } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight } from "lucide-react";
 import {
   useState,
+  type ReactNode,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -19,6 +20,7 @@ import type { AssetLibraryFolder, ProjectAssetLibraryState } from "../../../../t
 import { PopupMenu, PopupMenuItem, useCloseOnOutsidePointer } from "../../../common/PopupMenu";
 import { assetLibraryDropTargetProps } from "../../../common/utils/assetLibraryDropTarget";
 import { assetLocationKey } from "../assetLibraryNodes";
+import { assetLibraryRootIcons } from "./AssetLibraryTreeIcons";
 
 type AddressMenu =
   | { kind: "roots"; x: number; y: number }
@@ -39,6 +41,8 @@ export interface AssetLibraryAddressBarProps {
   onGoForward: (steps: number) => void;
   onNavigateUp: () => void;
   onInvalidPath: (text: string) => void;
+  /** The search field, which ends the row as in a file manager. */
+  search: ReactNode;
 }
 
 /** Drop-target keys for crumbs, kept apart from tree and item keys. */
@@ -87,7 +91,7 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
     capturePointerdown: true,
     ignorePopupMenuTargets: true,
   });
-  const RootIcon = location.root === "subtitles" ? Captions : Film;
+  const RootIcon = assetLibraryRootIcons[location.root];
   const pathIds = new Set(path.map((folder) => folder.id));
 
   function childFolders(parent: AssetLibraryLocation) {
@@ -230,52 +234,6 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
 
   return (
     <div className="asset-library-location-row">
-      <RootIcon aria-hidden="true" />
-      {props.editing ? (
-        <AddressInput
-          initialValue={assetLibraryPathText(library, location)}
-          onSubmit={submitPath}
-          onCancel={() => props.onEditingChange(false)}
-        />
-      ) : (
-        <nav
-          className="asset-library-breadcrumb"
-          aria-label="当前位置"
-          title="单击空白处输入路径"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) props.onEditingChange(true);
-          }}
-        >
-          {chevron("切换顶层文件夹", { kind: "roots", x: 0, y: 0 }, menu?.kind === "roots")}
-          {crumb(rootLocation, assetLibraryRootLabels[location.root], path.length === 0)}
-          {path.map((folder, index) => {
-            const parent: AssetLibraryLocation = {
-              root: folder.root,
-              folderId: folder.parent_id,
-            };
-            return (
-              <span key={folder.id} className="asset-library-breadcrumb-part">
-                {chevron(
-                  "显示子文件夹",
-                  { kind: "children", location: parent, x: 0, y: 0 },
-                  isChildMenu(parent),
-                )}
-                {crumb(
-                  { root: folder.root, folderId: folder.id },
-                  folder.name,
-                  index === path.length - 1,
-                )}
-              </span>
-            );
-          })}
-          {hasChildren &&
-            chevron(
-              "显示子文件夹",
-              { kind: "children", location, x: 0, y: 0 },
-              isChildMenu(location),
-            )}
-        </nav>
-      )}
       <div className="asset-library-history" aria-label="位置历史">
         <button
           type="button"
@@ -285,16 +243,7 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
           onClick={() => props.onGoBack(1)}
           onContextMenu={(event) => openMenuBelow(event, { kind: "back", x: 0, y: 0 })}
         >
-          <ChevronLeft aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          title="上一级 (Alt+↑)"
-          aria-label="上一级"
-          disabled={!location.folderId}
-          onClick={props.onNavigateUp}
-        >
-          <CornerLeftUp aria-hidden="true" />
+          <ArrowLeft aria-hidden="true" />
         </button>
         <button
           type="button"
@@ -304,9 +253,69 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
           onClick={() => props.onGoForward(1)}
           onContextMenu={(event) => openMenuBelow(event, { kind: "forward", x: 0, y: 0 })}
         >
-          <ChevronRight aria-hidden="true" />
+          <ArrowRight aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          title="上一级 (Alt+↑)"
+          aria-label="上一级"
+          disabled={!location.folderId}
+          onClick={props.onNavigateUp}
+        >
+          <ArrowUp aria-hidden="true" />
         </button>
       </div>
+      <div className="asset-library-address">
+        <span className="media-bin-kind-icon folder">
+          <RootIcon />
+        </span>
+        {props.editing ? (
+          <AddressInput
+            initialValue={assetLibraryPathText(library, location)}
+            onSubmit={submitPath}
+            onCancel={() => props.onEditingChange(false)}
+          />
+        ) : (
+          <nav
+            className="asset-library-breadcrumb"
+            aria-label="当前位置"
+            title="单击空白处输入路径"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) props.onEditingChange(true);
+            }}
+          >
+            {chevron("切换顶层文件夹", { kind: "roots", x: 0, y: 0 }, menu?.kind === "roots")}
+            {crumb(rootLocation, assetLibraryRootLabels[location.root], path.length === 0)}
+            {path.map((folder, index) => {
+              const parent: AssetLibraryLocation = {
+                root: folder.root,
+                folderId: folder.parent_id,
+              };
+              return (
+                <span key={folder.id} className="asset-library-breadcrumb-part">
+                  {chevron(
+                    "显示子文件夹",
+                    { kind: "children", location: parent, x: 0, y: 0 },
+                    isChildMenu(parent),
+                  )}
+                  {crumb(
+                    { root: folder.root, folderId: folder.id },
+                    folder.name,
+                    index === path.length - 1,
+                  )}
+                </span>
+              );
+            })}
+            {hasChildren &&
+              chevron(
+                "显示子文件夹",
+                { kind: "children", location, x: 0, y: 0 },
+                isChildMenu(location),
+              )}
+          </nav>
+        )}
+      </div>
+      {props.search}
       {renderMenu()}
     </div>
   );

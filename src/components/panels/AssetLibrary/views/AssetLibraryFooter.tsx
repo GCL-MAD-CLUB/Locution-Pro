@@ -1,13 +1,12 @@
-import { FolderPlus, Grid2X2, List, Trash2 } from "lucide-react";
+import { Grid2X2, List } from "lucide-react";
 import { assetLibraryViewPresets } from "../../../../core/editor/assetLibrary";
 
 export interface AssetLibraryFooterProps {
   size: number;
   listMode: boolean;
-  canDelete: boolean;
+  itemCount: number;
+  selectedCount: number;
   onSizeChange: (size: number) => void;
-  onCreateFolder: () => void;
-  onDelete: () => void;
 }
 
 /** As in the Windows status bar, the view buttons switch to the details or large-icon preset. */
@@ -15,14 +14,13 @@ function presetSize(id: "details" | "large") {
   return assetLibraryViewPresets.find((preset) => preset.id === id)!.size;
 }
 
-/** List and icon view buttons with the size slider, then folder and delete actions. */
+/** List and icon view buttons with the size slider, then the item counts of the status bar. */
 export function AssetLibraryFooter({
   size,
   listMode,
-  canDelete,
+  itemCount,
+  selectedCount,
   onSizeChange,
-  onCreateFolder,
-  onDelete,
 }: AssetLibraryFooterProps) {
   return (
     <footer className="media-bin-footer">
@@ -61,24 +59,9 @@ export function AssetLibraryFooter({
           onChange={(event) => onSizeChange(Number(event.currentTarget.value))}
         />
       </div>
-      <div className="media-bin-action-tools">
-        <button
-          type="button"
-          title="新建文件夹 (Ctrl+Shift+N)"
-          aria-label="新建文件夹"
-          onClick={onCreateFolder}
-        >
-          <FolderPlus aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          title="删除 (Delete)"
-          aria-label="删除"
-          disabled={!canDelete}
-          onClick={onDelete}
-        >
-          <Trash2 aria-hidden="true" />
-        </button>
+      <div className="asset-library-status" aria-live="polite">
+        {selectedCount > 0 && <span>选中 {selectedCount} 个项目</span>}
+        <span>{itemCount} 个项目</span>
       </div>
     </footer>
   );

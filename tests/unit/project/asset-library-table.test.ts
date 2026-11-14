@@ -28,8 +28,8 @@ test("list columns follow the library's field order", () => {
       .assetLibraryColumnsForRoot(root)
       .map((column) => column.id)
       .join(" ");
-  assert.equal(ids("storyboards"), "name location marks keywords source inPoint duration created");
-  assert.equal(ids("subtitles"), "name location marks subtitle source inPoint duration created");
+  assert.equal(ids("storyboards"), "name location source marks keywords inPoint duration created");
+  assert.equal(ids("subtitles"), "name location subtitle source marks inPoint duration created");
 });
 
 test("both libraries show the added time column by default", () => {
@@ -37,8 +37,8 @@ test("both libraries show the added time column by default", () => {
     const shown = columns
       .assetLibraryColumnsForRoot(root)
       .filter((column) => columns.defaultAssetLibraryVisibleColumns.has(column.id))
-      .map((column) => column.label);
-    assert.ok(shown.includes("添加时间"), root);
+      .map((column) => column.id);
+    assert.ok(shown.includes("created"), root);
   }
 });
 
@@ -115,7 +115,7 @@ function invoke(handle: Element, eventName: string, clientX: number) {
 
 test("dragging a boundary grows the preceding visible column and hidden columns are skipped", () => {
   const { handles, changes } = headerFixture(["source", "duration", "marks"]);
-  const expected = ["name", "marks", "source", "duration"] as const;
+  const expected = ["name", "source", "marks", "duration"] as const;
   assert.equal(handles.length, expected.length);
   handles.forEach((handle, index) => {
     invoke(handle, "onPointerDown", 100);

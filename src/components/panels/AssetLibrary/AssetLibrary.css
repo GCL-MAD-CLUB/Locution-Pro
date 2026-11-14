@@ -6,26 +6,44 @@
  * and asset-specific details live here. */
 
 .media-bin-panel.asset-library {
-  grid-template-rows: 32px 36px 30px minmax(0, 1fr) 32px;
+  grid-template-rows: 36px 30px minmax(0, 1fr) 32px;
   outline: none;
 }
 
-/* Location row, matching .media-bin-project-row */
+/* Location row laid out as a file manager's: history arrows, the address field, then search */
 
 .asset-library-location-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 32px;
+  gap: 8px;
+  height: 36px;
   min-width: 0;
-  padding: 0 12px;
+  padding: 6px 12px;
   font-size: 12px;
 }
 
-.asset-library-location-row > svg {
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
+/* The address field looks like the search field; a click on its blank space starts typing. */
+.asset-library-address {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  min-width: 0;
+  padding: 0 4px 0 8px;
+  background: var(--color-surface-input-inset);
+  border: 1px solid var(--color-border-input);
+  border-radius: 4px;
+}
+
+.asset-library-address > .media-bin-kind-icon {
+  --media-list-icon-size: 16px;
+}
+
+.media-bin-search.asset-library-search {
+  flex: 0 1 240px;
+  width: auto;
+  min-width: 120px;
 }
 
 .asset-library-breadcrumb {
@@ -104,18 +122,18 @@
   transform: rotate(90deg);
 }
 
-/* Typed paths reuse the media bin search field, without its leading icon. */
-.asset-library-location-row > .asset-library-address-input {
+/* Typed paths fill the address field, which already draws the input frame. */
+.asset-library-address > .asset-library-address-input {
   flex: 1 1 auto;
   min-width: 0;
-  height: 24px;
-  min-height: 24px;
-  padding: 0 8px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
   color: var(--color-text-emphasis);
   font-size: 12px;
-  background: var(--color-surface-input-inset);
-  border: 1px solid var(--color-border-input);
-  border-radius: 4px;
+  background: var(--color-transparent);
+  border: 0;
+  outline: none;
 }
 
 /* History buttons use the media bin footer button treatment. */
@@ -124,7 +142,6 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 5px;
-  margin-left: auto;
 }
 
 .asset-library-history button {
@@ -334,10 +351,17 @@ body.is-resizing-asset-library-pane * {
   padding-left: 8px;
 }
 
+/* Row names start after the 16:9 kind slot, so indent the label by the same slot width plus
+ * the icon-to-name gap and line it up with the first column's text. Both values follow the
+ * shared size control, as they do in rows; the cap keeps the label visible when the name
+ * column is dragged narrow. */
 .asset-library-items-frame .asset-library-title-header > .media-bin-column-sort-button {
   flex: 1 1 auto;
   min-width: 0;
-  padding-left: 0;
+  padding-left: min(
+    calc(var(--media-list-icon-size, 16px) * 16 / 9 + var(--media-list-title-icon-gap, 6px)),
+    calc(100% - 52px)
+  );
 }
 
 /* Item check boxes, styled like the media bin's boolean cells */
@@ -444,6 +468,13 @@ body.is-resizing-asset-library-pane * {
   box-shadow: inset 0 0 0 1px var(--color-selection-muted-outline);
 }
 
+/* The shared marquee rule switches to a crosshair; the library keeps the default arrow.
+ * The extra class keeps this override ahead of every panel's copy of that rule. */
+body.is-marquee-selecting .asset-library,
+body.is-marquee-selecting .asset-library * {
+  cursor: default !important;
+}
+
 /* Folder tree: media bin rows indented per depth, with the media bin folder toggle */
 
 .asset-library-tree,
@@ -463,7 +494,7 @@ body.is-resizing-asset-library-pane * {
 
 .asset-library-navigation .media-bin-row.asset-library-tree-row {
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .asset-library-navigation .asset-library-tree-row > .media-bin-title-cell {
@@ -481,11 +512,6 @@ body.is-resizing-asset-library-pane * {
   position: static;
   flex: 0 0 14px;
   width: 14px;
-}
-
-.asset-library-tree-count {
-  color: var(--color-text-placeholder);
-  font-variant-numeric: tabular-nums;
 }
 
 /* Icon cards: the media bin card plus annotation overlays */
@@ -826,7 +852,36 @@ body.is-resizing-asset-library-pane * {
 
 .asset-library-navigation .asset-library-tree-row > .media-bin-title-cell {
   gap: 6px;
-  padding-left: calc(8px + var(--asset-tree-depth, 0) * 10px);
+  padding-left: calc(8px + var(--asset-tree-depth, 0) * 6px);
+}
+
+/* Names and expand chevrons use the highlight color; the chevron is slightly bolder. */
+.asset-library-navigation .asset-library-tree-row,
+.asset-library-navigation .asset-library-tree-row .media-bin-folder-toggle {
+  color: var(--color-text-highlight);
+}
+
+.asset-library-navigation .asset-library-tree-row .media-bin-folder-toggle svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.75;
+}
+
+/* Status bar counts, as in a file manager: "| 选中 2 个项目 | 24 个项目" */
+.asset-library-status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.asset-library-status > span::before {
+  margin: 0 8px;
+  color: var(--color-text-placeholder);
+  content: "|";
 }
 
 .asset-library-items-frame .media-bin-column-header {
@@ -882,6 +937,29 @@ body.is-resizing-asset-library-pane * {
   overflow-wrap: anywhere;
   line-height: 16px;
   white-space: normal;
+}
+
+/* The rename field takes the label's place and line height; its height is set on open. */
+.asset-library-items-frame .media-bin-title-editor.asset-library-rename {
+  display: block;
+  min-height: 16px;
+  max-height: 64px;
+  overflow: hidden auto;
+  white-space: pre;
+  resize: none;
+  scrollbar-width: none;
+}
+
+.asset-library-items-frame .media-bin-title-editor.asset-library-rename.is-wrapping {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* Cards stack the name under the preview, so the field spans the card's width. */
+.asset-library-card .media-bin-title-editor.asset-library-rename {
+  width: 100%;
+  margin-right: 0;
+  font-size: 12px;
 }
 
 /* Existing line breaks take precedence over wrapping a long original line. */

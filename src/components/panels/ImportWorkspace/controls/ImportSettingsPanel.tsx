@@ -52,6 +52,14 @@ export function ImportSettingsPanel({
               />
               添加到新媒体箱
             </label>
+            <label className="import-checkbox-label">
+              <input
+                type="checkbox"
+                checked={settings.openInTranscode}
+                onChange={(event) => update({ openInTranscode: event.currentTarget.checked })}
+              />
+              在转码页面打开导入素材
+            </label>
             <label className="import-field">
               名称
               <input

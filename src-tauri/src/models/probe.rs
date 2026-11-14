@@ -29,6 +29,7 @@ pub(crate) struct ProbeStream {
     pub(crate) width: Option<i64>,
     pub(crate) height: Option<i64>,
     pub(crate) channels: Option<i64>,
+    pub(crate) color_transfer: Option<String>,
     #[serde(default)]
     pub(crate) tags: HashMap<String, String>,
     #[serde(default)]

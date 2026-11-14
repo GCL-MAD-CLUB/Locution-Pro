@@ -85,7 +85,7 @@ interface ExportFieldProps {
   children: ReactNode;
 }
 
-function ExportField({ label, stacked = false, children }: ExportFieldProps) {
+export function ExportField({ label, stacked = false, children }: ExportFieldProps) {
   return (
     <div className={`export-settings-field ${stacked ? "export-settings-field-stacked" : ""}`}>
       <span className="export-settings-field-label">{label}</span>
@@ -108,7 +108,7 @@ interface ExportSettingsGroupProps {
   children: ReactNode;
 }
 
-function ExportSettingsGroup({
+export function ExportSettingsGroup({
   title,
   open,
   onToggle,

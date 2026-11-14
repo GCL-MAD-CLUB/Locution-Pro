@@ -9,6 +9,10 @@ export interface ApplicationEventMap {
   "export.requested": { source: ExportSource };
   "export.configure-selection.requested": Record<string, never>;
   "export.quick-selection.requested": Record<string, never>;
+  /** Adds media files to the transcode queue and shows the transcode workspace. */
+  "transcode.enqueue.requested": { paths: string[] };
+  /** Finished outputs that belong in the project's `encoder` media bin. */
+  "transcode.output.completed": { paths: string[] };
   "edit.copy.requested": Record<string, never>;
   "edit.paste.requested": Record<string, never>;
   "edit.clear.requested": Record<string, never>;

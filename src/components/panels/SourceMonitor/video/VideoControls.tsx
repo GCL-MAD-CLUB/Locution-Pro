@@ -42,9 +42,12 @@ interface VideoControlsProps {
   timelineSpanFrames: number;
   minTimelineSpanFrames: number;
   isPlaying: boolean;
-  previewMode: PreviewMode;
-  previewModeOptions: readonly PreviewMode[];
-  previewModeLabels: Record<PreviewMode, string>;
+  /** Hides the viewer zoom menu, for timelines that drive something other than this monitor. */
+  showZoom?: boolean;
+  previewMode?: PreviewMode;
+  /** No options hides the preview-mode menu. */
+  previewModeOptions?: readonly PreviewMode[];
+  previewModeLabels?: Record<PreviewMode, string>;
   storyboardActions?: {
     canAddCut: boolean;
     canExportFrame: boolean;
@@ -57,8 +60,9 @@ interface VideoControlsProps {
   onTimelineStartFrameChange: (startFrame: number) => void;
   onTimelineSpanFramesChange: (spanFrames: number) => void;
   onStepFrame: (direction: -1 | 1) => void;
-  onTogglePlayback: () => void;
-  onPreviewModeChange: (value: PreviewMode) => void;
+  /** Omitted for still previews, which hides the play button. */
+  onTogglePlayback?: () => void;
+  onPreviewModeChange?: (value: PreviewMode) => void;
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -73,6 +77,50 @@ function wheelDeltaPx(event: WheelEvent) {
   return Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
 }
 
+/**
+ * The viewer zoom menu. It reads the monitor's panel state, so it lives in
+ * its own component that only monitors render.
+ */
+function MonitorZoomSelect() {
+  const zoomLevel = useSourceMonitorState((state) => state.zoomLevel);
+  const setZoomLevel = useSourceMonitorState((state) => state.setZoomLevel);
+  const setZoomPan = useSourceMonitorState((state) => state.setZoomPan);
+
+  function changeZoomLevel(value: string) {
+    setZoomPan({ x: 0, y: 0 });
+    if (value === "fit") {
+      setZoomLevel("fit");
+      return;
+    }
+    setZoomLevel(Number(value));
+  }
+
+  const zoomOptions = ["fit", ...baseZoomPercentOptions] as MonitorZoomLevel[];
+  const zoomValue = zoomLevel === "fit" ? "fit" : String(zoomLevel);
+  const zoomLabel = zoomLevel === "fit" ? "适合" : `${zoomLevel}%`;
+  const zoomItems: Array<SelectDropdownItem<string>> = zoomOptions.map((value) => ({
+    type: "option",
+    value: String(value),
+    label: value === "fit" ? "适合" : `${value}%`,
+  }));
+  const fitZoomItemIndex = zoomItems.findIndex(
+    (item) => item.type === "option" && item.value === "fit",
+  );
+  if (fitZoomItemIndex >= 0) {
+    zoomItems.splice(fitZoomItemIndex + 1, 0, { type: "separator" });
+  }
+  return (
+    <SelectDropdown
+      className="monitor-select"
+      menuClassName="monitor-select-menu"
+      value={zoomValue}
+      selectedLabel={zoomLabel}
+      items={zoomItems}
+      onChange={changeZoomLevel}
+    />
+  );
+}
+
 export function VideoControls({
   mediaKey,
   hasMedia,
@@ -83,8 +131,9 @@ export function VideoControls({
   timelineSpanFrames,
   minTimelineSpanFrames,
   isPlaying,
-  previewMode,
-  previewModeOptions,
+  showZoom = true,
+  previewMode = "source",
+  previewModeOptions = [],
   previewModeLabels,
   storyboardActions,
   onSeekFrame,
@@ -96,9 +145,6 @@ export function VideoControls({
   onTogglePlayback,
   onPreviewModeChange,
 }: VideoControlsProps) {
-  const zoomLevel = useSourceMonitorState((state) => state.zoomLevel);
-  const setZoomLevel = useSourceMonitorState((state) => state.setZoomLevel);
-  const setZoomPan = useSourceMonitorState((state) => state.setZoomPan);
   const rowRef = useRef<HTMLDivElement | null>(null);
   const timeEditorRef = useRef<HTMLSpanElement | null>(null);
   const timecodeScrubRef = useRef<TimecodeScrubState | null>(null);
@@ -392,41 +438,18 @@ export function VideoControls({
     requestAnimationFrame(selectTimeEditorText);
   }
 
-  function changeZoomLevel(value: string) {
-    setZoomPan({ x: 0, y: 0 });
-    if (value === "fit") {
-      setZoomLevel("fit");
-      return;
-    }
-    setZoomLevel(Number(value));
-  }
-
-  const zoomOptions = ["fit", ...baseZoomPercentOptions] as MonitorZoomLevel[];
-  const zoomValue = zoomLevel === "fit" ? "fit" : String(zoomLevel);
-  const zoomLabel = zoomLevel === "fit" ? "适合" : `${zoomLevel}%`;
-  const zoomItems: Array<SelectDropdownItem<string>> = zoomOptions.map((value) => ({
-    type: "option",
-    value: String(value),
-    label: value === "fit" ? "适合" : `${value}%`,
-  }));
-  const fitZoomItemIndex = zoomItems.findIndex(
-    (item) => item.type === "option" && item.value === "fit",
-  );
-  if (fitZoomItemIndex >= 0) {
-    zoomItems.splice(fitZoomItemIndex + 1, 0, { type: "separator" });
-  }
   const previewModeItems: Array<SelectDropdownItem<PreviewMode>> = previewModeOptions.map(
     (value) => ({
       type: "option",
       value,
-      label: previewModeLabels[value],
+      label: previewModeLabels?.[value] ?? value,
     }),
   );
 
   return (
     <div
       ref={rowRef}
-      className={`source-control-row ${hasMedia ? "" : "empty-state"} ${storyboardActions ? "with-storyboard-actions" : ""}`}
+      className={`source-control-row ${hasMedia ? "" : "empty-state"} ${storyboardActions ? "with-storyboard-actions" : ""} ${showZoom || previewModeOptions.length > 0 ? "" : "without-menus"}`}
       style={monitorTimeStyle}
     >
       {editingTime && hasMedia ? (
@@ -459,16 +482,7 @@ export function VideoControls({
           {monitorTimeText}
         </button>
       )}
-      {hasMedia && (
-        <SelectDropdown
-          className="monitor-select"
-          menuClassName="monitor-select-menu"
-          value={zoomValue}
-          selectedLabel={zoomLabel}
-          items={zoomItems}
-          onChange={changeZoomLevel}
-        />
-      )}
+      {hasMedia && showZoom && <MonitorZoomSelect />}
       <div className="transport-controls">
         {storyboardActions && (
           <button
@@ -489,9 +503,15 @@ export function VideoControls({
         <button onClick={() => onStepFrame(-1)} title="上一帧" disabled={!hasMedia}>
           <span className="transport-icon step-left" />
         </button>
-        <button onClick={onTogglePlayback} title={isPlaying ? "暂停" : "播放"} disabled={!hasMedia}>
-          <span className={`transport-icon ${isPlaying ? "stop" : "play"}`} />
-        </button>
+        {onTogglePlayback && (
+          <button
+            onClick={onTogglePlayback}
+            title={isPlaying ? "暂停" : "播放"}
+            disabled={!hasMedia}
+          >
+            <span className={`transport-icon ${isPlaying ? "stop" : "play"}`} />
+          </button>
+        )}
         <button onClick={() => onStepFrame(1)} title="下一帧" disabled={!hasMedia}>
           <span className="transport-icon step-right" />
         </button>
@@ -519,7 +539,7 @@ export function VideoControls({
           </button>
         )}
       </div>
-      {hasMedia && (
+      {hasMedia && previewModeOptions.length > 0 && onPreviewModeChange && (
         <SelectDropdown
           className="monitor-select"
           menuClassName="monitor-select-menu"

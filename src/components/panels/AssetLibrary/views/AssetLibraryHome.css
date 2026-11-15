@@ -1,6 +1,6 @@
 /* The home: quick-access tiles, then recently used or favorite materials, as in a file manager. */
 
-.asset-library-home {
+.asset-library-home.media-bin-table-scroll {
   /* Empty sections center in the visible area and shrink their art with its height. */
   container: asset-library-home / size;
   display: flex;

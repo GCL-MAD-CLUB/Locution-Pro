@@ -179,7 +179,7 @@ export function AssetLibraryHome(props: AssetLibraryHomeProps) {
     // Framed like the item views beside the navigation pane.
     <div className="asset-library-items-frame">
       <div
-        className="asset-library-items asset-library-home"
+        className="media-bin-table-scroll asset-library-items asset-library-home"
         onPointerDown={(event) => {
           if (event.button === 0) props.onClearSelection();
         }}

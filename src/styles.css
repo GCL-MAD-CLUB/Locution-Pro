@@ -519,6 +519,7 @@
   --color-media-proxy-badge-background: var(--palette-media-proxy-badge-background);
   --color-media-subtitle: var(--palette-media-subtitle);
   --color-media-type-badge-background: var(--palette-media-type-badge-background);
+  --color-media-type-badge-icon: var(--palette-accent-monitor);
   --color-media-video: var(--palette-media-video);
   --color-media-video-audio: var(--palette-media-video-audio);
   --color-media-video-icon: var(--palette-media-video-icon);
@@ -532,6 +533,12 @@
   --color-annotation-flag-mark: var(--palette-surface-canvas);
   --color-annotation-flag-inactive-pole: var(--color-border-column-resizer);
   --color-annotation-flag-pole: var(--palette-annotation-flag-pole);
+  /* Thumbnail annotations and spray bottles keep dark surfaces in every appearance. */
+  --color-annotation-overlay-border: var(--palette-border-frame);
+  --color-annotation-overlay-flag-fill: var(--palette-contrast-inverse);
+  --color-annotation-overlay-flag-mark: var(--palette-surface-canvas);
+  --color-annotation-overlay-flag-pole: var(--palette-annotation-flag-pole);
+  --color-annotation-overlay-rating: var(--palette-annotation-rating);
   --color-annotation-hover: var(--palette-annotation-hover);
   --color-annotation-inactive: var(--palette-annotation-inactive);
   --color-annotation-mark: var(--color-contrast-inverse);
@@ -638,6 +645,7 @@
   /* Shared SVG templates, resolved by initializeThemeImages before mounting. */
   --image-checkbox-check: "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M1.5 6.5 5 10 10.5 2.5' fill='none' stroke='var(--color-icon-cutout)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/></svg>";
   --image-flag-excluded: "<svg xmlns='http://www.w3.org/2000/svg' width='6' height='4' viewBox='0 0 6 4'><path d='M.5.5l5 3m0-3l-5 3' fill='none' stroke='var(--color-annotation-flag-mark)' stroke-width='1'/></svg>";
+  --image-flag-overlay-excluded: "<svg xmlns='http://www.w3.org/2000/svg' width='6' height='4' viewBox='0 0 6 4'><path d='M.5.5l5 3m0-3l-5 3' fill='none' stroke='var(--color-annotation-overlay-flag-mark)' stroke-width='1'/></svg>";
 
   /* Shape, sizing, and effects */
   --radius-xs: 2px;
@@ -948,6 +956,7 @@
   --color-media-proxy-badge-background: var(--palette-media-proxy-badge-background);
   --color-media-subtitle: var(--palette-media-subtitle);
   --color-media-type-badge-background: var(--palette-media-type-badge-background);
+  --color-media-type-badge-icon: var(--palette-contrast-dark-accent-monitor);
   --color-media-video: var(--palette-media-video);
   --color-media-video-audio: var(--palette-media-video-audio);
   --color-media-video-icon: var(--palette-media-video-icon);
@@ -959,6 +968,11 @@
   --color-annotation-flag-mark: var(--palette-surface-canvas);
   --color-annotation-flag-inactive-pole: var(--palette-border-column-resizer);
   --color-annotation-flag-pole: var(--palette-annotation-flag-pole);
+  --color-annotation-overlay-border: var(--palette-media-folder-preview-background);
+  --color-annotation-overlay-flag-fill: var(--palette-contrast-inverse);
+  --color-annotation-overlay-flag-mark: var(--palette-surface-canvas);
+  --color-annotation-overlay-flag-pole: var(--palette-annotation-flag-pole);
+  --color-annotation-overlay-rating: var(--palette-media-folder-drop-text);
   --color-annotation-hover: var(--palette-home-text);
   --color-annotation-inactive: var(--palette-contrast-dark-annotation-inactive);
   --color-annotation-mark: var(--palette-contrast-inverse);
@@ -1278,6 +1292,7 @@
   --color-media-proxy-badge-background: var(--palette-media-proxy-badge-background);
   --color-media-subtitle: var(--palette-media-subtitle);
   --color-media-type-badge-background: var(--palette-media-type-badge-background);
+  --color-media-type-badge-icon: var(--palette-contrast-dark-accent-monitor);
   --color-media-video: var(--palette-media-video);
   --color-media-video-audio: var(--palette-media-video-audio);
   --color-media-video-icon: var(--palette-light-media-video-icon);
@@ -1285,10 +1300,15 @@
   --color-annotation-active-hover: var(--palette-dark-menu-hover-background);
   --color-annotation-confirm-hover-background: var(--palette-annotation-active);
   --color-annotation-confirm-hover-text: var(--palette-surface-soft);
-  --color-annotation-flag-fill: var(--palette-contrast-inverse);
-  --color-annotation-flag-mark: var(--palette-surface-canvas);
+  --color-annotation-flag-fill: var(--palette-surface-hover-default);
+  --color-annotation-flag-mark: var(--palette-contrast-inverse);
   --color-annotation-flag-inactive-pole: var(--palette-import-path-separator);
-  --color-annotation-flag-pole: var(--palette-annotation-flag-pole);
+  --color-annotation-flag-pole: var(--palette-light-text-description);
+  --color-annotation-overlay-border: var(--palette-border-frame);
+  --color-annotation-overlay-flag-fill: var(--palette-contrast-inverse);
+  --color-annotation-overlay-flag-mark: var(--palette-surface-canvas);
+  --color-annotation-overlay-flag-pole: var(--palette-annotation-flag-pole);
+  --color-annotation-overlay-rating: var(--palette-annotation-rating);
   --color-annotation-hover: var(--palette-dark-surface-row-selected);
   --color-annotation-inactive: var(--palette-import-submit-disabled-text);
   --color-annotation-mark: var(--palette-contrast-inverse);
@@ -1405,6 +1425,21 @@ input[type="number"]::-webkit-outer-spin-button {
 
 * {
   box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* App chrome never starts native text selection; editors retain normal selection. */
+:where(
+  input,
+  textarea,
+  [contenteditable=""],
+  [contenteditable="true"],
+  [contenteditable="plaintext-only"]
+),
+:where([contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]) * {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 html,
@@ -1914,7 +1949,6 @@ select {
   color: var(--color-text-muted);
   font-size: 12px;
   overflow-wrap: anywhere;
-  user-select: text;
 }
 
 .error-dialog-icon {

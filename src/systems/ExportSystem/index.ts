@@ -21,6 +21,7 @@ export {
 } from "./exportWorkspaceState";
 export type { ExportWorkspaceState, ExportWorkspaceStatus } from "./exportWorkspaceState";
 export {
+  buildAssetLibraryExportSource,
   buildMediaBinExportSource,
   buildStoryboardExportSource,
   buildSubtitleExportSource,
@@ -28,6 +29,7 @@ export {
   refreshExportSourceAudioBindings,
 } from "./exportResolvers";
 export type {
+  AssetLibraryExportInput,
   MediaBinExportInput,
   StoryboardExportInput,
   SubtitleExportInput,

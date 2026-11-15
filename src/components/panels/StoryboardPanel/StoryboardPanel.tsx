@@ -67,6 +67,13 @@ import {
 import { frameToTimeUs, normalizeFrameRate } from "../../../core/editor/timeline";
 import { storyboardShotDefaultTitle } from "../../../core/editor/storyboard";
 import {
+  assetLibraryMediaFromSource,
+  createAssetLibraryId,
+  storyboardAssetName,
+  withAssetLibraryCaptures,
+  type AssetLibraryCapture,
+} from "../../../core/editor/assetLibrary";
+import {
   storyboardGridHitIndices,
   storyboardGridScrollOffset,
   type StoryboardGridLayout,
@@ -106,6 +113,7 @@ import {
   PopupMenuSubmenu,
   useCloseOnOutsidePointer,
 } from "../../common/PopupMenu";
+import { AssetLibraryFolderMenuItems } from "../../common/AssetLibraryFolderMenu";
 import "./StoryboardPanel.css";
 import {
   StoryboardColorLabelButtons,
@@ -113,6 +121,7 @@ import {
   storyboardShotColorFilterLabels,
   storyboardShotColorLabels,
 } from "./annotations/StoryboardColorLabelButtons";
+import { StoryboardFlagIcon } from "./annotations/StoryboardFlagIcon";
 import { StoryboardIconView } from "./views/StoryboardIconView";
 import { StoryboardGraphView } from "./views/StoryboardGraphView";
 import { StoryboardKeywordPanel } from "./annotations/StoryboardKeywordPanel";
@@ -128,6 +137,11 @@ import {
   storyboardMatchesQuickFilter,
 } from "./annotations/storyboardKeywords";
 import { StoryboardListView } from "./views/StoryboardListView";
+import {
+  setExternalAssetLibraryDropTarget,
+  trackExternalAssetLibraryDrop,
+} from "../../common/utils/assetLibraryDropTarget";
+import { textEntrySelector } from "../../common/utils/assetLibraryItemDrag";
 import {
   formatStoryboardKeywords,
   useStoryboardPanelState,
@@ -346,6 +360,7 @@ interface StoryboardContextMenuState {
   flagSubmenuOpen: boolean;
   ratingSubmenuOpen: boolean;
   colorSubmenuOpen: boolean;
+  librarySubmenuOpen: boolean;
   stackSubmenuOpen: boolean;
   exportSubmenuOpen: boolean;
 }
@@ -810,9 +825,9 @@ function storyboardSprayBottleMarkSvg(
   if (mode === "flag" && flag !== "none") {
     const excludedMark =
       flag === "excluded"
-        ? '<path d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6" stroke="var(--color-annotation-flag-mark)" stroke-width=".75"/>'
+        ? '<path d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6" stroke="var(--color-annotation-overlay-flag-mark)" stroke-width=".75"/>'
         : "";
-    return `<path d="M7.2 11v7" stroke="var(--color-annotation-flag-pole)" stroke-width=".9"/><rect x="8" y="11.7" width="4.4" height="3.6" fill="var(--color-annotation-mark)"/>${excludedMark}`;
+    return `<path d="M7.2 11v7" stroke="var(--color-annotation-overlay-flag-pole)" stroke-width=".9"/><rect x="8" y="11.7" width="4.4" height="3.6" fill="var(--color-annotation-overlay-flag-fill)"/>${excludedMark}`;
   }
   if (mode === "rating") {
     return `<text x="10" y="17.8" fill="var(--color-annotation-mark)" font-family="Arial,sans-serif" font-size="7.5" font-weight="700" text-anchor="middle">${rating}</text>`;
@@ -898,12 +913,22 @@ function StoryboardSprayBottleIcon({
       )}
       {mode === "flag" && flag !== "none" && (
         <>
-          <path d="M7.2 11v7" stroke="var(--color-annotation-flag-pole)" strokeWidth="0.9" />
-          <rect x="8" y="11.7" width="4.4" height="3.6" fill="var(--color-annotation-mark)" />
+          <path
+            d="M7.2 11v7"
+            stroke="var(--color-annotation-overlay-flag-pole)"
+            strokeWidth="0.9"
+          />
+          <rect
+            x="8"
+            y="11.7"
+            width="4.4"
+            height="3.6"
+            fill="var(--color-annotation-overlay-flag-fill)"
+          />
           {flag === "excluded" && (
             <path
               d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6"
-              stroke="var(--color-annotation-flag-mark)"
+              stroke="var(--color-annotation-overlay-flag-mark)"
               strokeWidth="0.75"
             />
           )}
@@ -922,80 +947,6 @@ function StoryboardSprayBottleIcon({
           {rating}
         </text>
       )}
-    </svg>
-  );
-}
-
-function StoryboardFlagIcon({ flag }: { flag: StoryboardShotFlag }) {
-  if (flag === "retained") {
-    return (
-      <svg
-        className="storyboard-flag-icon is-retained"
-        viewBox="12 5 39 43"
-        width="78"
-        height="86"
-        fill="none"
-        aria-hidden="true"
-      >
-        <g className="storyboard-flag-strokes" strokeWidth="2">
-          <path d="M 36 9 L 47.5 20.5 L 31.5 36.5" strokeLinejoin="miter" />
-          <path d="M 31.5 36.5 L 40 45" />
-          <path d="M 36 9 L 25.46 19.49" strokeLinecap="round" />
-          <path d="M 23.34 28.35 L 31.5 36.5" strokeLinecap="round" />
-          <path
-            d="M 15.40 24.49 L 17.99 27.03 L 22.55 22.42"
-            strokeWidth="1.9"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </g>
-        <path
-          className="storyboard-flag-fill"
-          d="M 36 11.875 L 45.125 21 L 32 34.125 L 22.875 25 Z"
-        />
-      </svg>
-    );
-  }
-
-  if (flag === "none") {
-    return (
-      <svg
-        className="storyboard-flag-icon is-none"
-        viewBox="57 5 33 43"
-        width="66"
-        height="86"
-        fill="none"
-        aria-hidden="true"
-      >
-        <g
-          className="storyboard-flag-strokes"
-          strokeWidth="2"
-          strokeDasharray="2.2 3.457"
-          strokeDashoffset="1.1"
-        >
-          <path d="M 59.5 24.5 L 75.5 8.5 L 87.5 20.5 L 71.5 36.5 Z" />
-          <path d="M 71.5 36.5 L 80.6 45.6" />
-        </g>
-      </svg>
-    );
-  }
-
-  return (
-    <svg
-      className="storyboard-flag-icon is-excluded"
-      viewBox="94 5 36 43"
-      width="72"
-      height="86"
-      fill="none"
-      aria-hidden="true"
-    >
-      <g className="storyboard-flag-strokes" strokeWidth="2">
-        <path d="M 96.79 21.81 L 103.21 28.19 M 103.21 21.81 L 96.79 28.19" />
-        <path d="M 116 9 L 127.5 20.5 L 111.5 36.5" strokeLinejoin="miter" />
-        <path d="M 111.5 36.5 L 120 45" />
-        <path d="M 116 9 L 105.44 19.54" strokeLinecap="round" />
-        <path d="M 105.24 30.19 L 111.5 36.5" strokeLinecap="round" />
-      </g>
     </svg>
   );
 }
@@ -1186,7 +1137,9 @@ export function StoryboardPanel() {
     detachedVideoIds,
     storyboards,
     exportState,
+    assetLibrary,
     messagePublished,
+    assetLibraryUpdated,
   } = useProjectPort(
     [
       "mediaItems",
@@ -1196,8 +1149,9 @@ export function StoryboardPanel() {
       "detachedVideoIds",
       "storyboards",
       "exportState",
+      "assetLibrary",
     ],
-    ["messagePublished"],
+    ["messagePublished", "assetLibraryUpdated"],
   );
   const {
     query,
@@ -1899,6 +1853,57 @@ export function StoryboardPanel() {
     [selectedAnnotationShotIds],
   );
   const keywordPanelShotIds = contextMenuShotIds;
+
+  // Library entries are snapshots: the cut points, title and annotations are copied and
+  // keywords are stored by name, so later storyboard edits never reach the library.
+  function addShotsToAssetLibrary(shotIds: readonly string[], folderId: string | null = null) {
+    const shotsById = new Map(shots.map((shot) => [shot.id, shot]));
+    const keywordNames = new Map(keywordNodes.map((node) => [node.id, node.name]));
+    const captures = shotIds.flatMap((shotId): AssetLibraryCapture[] => {
+      const shot = shotsById.get(shotId);
+      const source = shot ? sourceForShot(shot) : undefined;
+      if (!shot || !source) return [];
+      const annotation = shotAnnotations[shotId];
+      return [
+        {
+          media: assetLibraryMediaFromSource(
+            source.videoId,
+            source.project.asset,
+            source.frameRate,
+          ),
+          startUs: shot.start_us,
+          endUs: shot.end_us,
+          name: storyboardAssetName(annotation?.title, source.name, shot.sequence),
+          text: "",
+          annotation: {
+            rating: annotation?.rating ?? 0,
+            retained: annotation?.retained ?? false,
+            excluded: annotation?.excluded ?? false,
+            color_label: annotation?.colorLabel ?? null,
+            custom_label: annotation?.customLabel ?? null,
+            title: annotation?.title ?? null,
+            keywords: (annotation?.keywordIds ?? []).flatMap((id) => {
+              const name = keywordNames.get(id);
+              return name ? [name] : [];
+            }),
+          },
+        },
+      ];
+    });
+    if (captures.length === 0) return;
+    captures.sort((left, right) => left.startUs - right.startUs);
+    assetLibraryUpdated("添加到素材库", (library) =>
+      withAssetLibraryCaptures(
+        library,
+        "storyboards",
+        captures,
+        createAssetLibraryId,
+        Date.now(),
+        folderId,
+      ),
+    );
+    messagePublished(`已添加 ${captures.length} 个镜头到素材库。`);
+  }
   const contextMenuRatings = contextMenuShotIds.map(
     (shotId) => shotAnnotations[shotId]?.rating ?? 0,
   );
@@ -1991,6 +1996,7 @@ export function StoryboardPanel() {
     (contextMenu.flagSubmenuOpen ||
       contextMenu.ratingSubmenuOpen ||
       contextMenu.colorSubmenuOpen ||
+      contextMenu.librarySubmenuOpen ||
       contextMenu.stackSubmenuOpen ||
       contextMenu.exportSubmenuOpen),
   );
@@ -2194,6 +2200,16 @@ export function StoryboardPanel() {
   useEffect(() => {
     setFooterSortMenu(null);
     setFooterSprayMenu(null);
+    // Graph nodes have no annotation columns, so expose these controls on entry.
+    // Only react to view changes so the footer menu can still hide them afterwards.
+    if (viewMode === "graph") {
+      setFooterAreaVisibility((current) => ({
+        ...current,
+        flag: true,
+        rating: true,
+        colorLabel: true,
+      }));
+    }
   }, [viewMode]);
 
   useEffect(() => {
@@ -2674,15 +2690,21 @@ export function StoryboardPanel() {
   }
 
   function shotKeywordDragTargetFromPoint(clientX: number, clientY: number) {
+    // Shots also drop into the storyboard library of the asset library panel.
+    const libraryLocation = trackExternalAssetLibraryDrop(clientX, clientY, "storyboards");
+    if (libraryLocation) {
+      return { allowed: true, keywordId: null, libraryLocation };
+    }
     const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
     if (!element || !panelRef.current?.contains(element)) {
-      return { allowed: false, keywordId: null };
+      return { allowed: false, keywordId: null, libraryLocation: null };
     }
     const keywordRow = element.closest<HTMLElement>("[data-storyboard-keyword-drop-id]");
     if (keywordRow) {
       return {
         allowed: true,
         keywordId: keywordRow.dataset.storyboardKeywordDropId ?? null,
+        libraryLocation: null,
       };
     }
     return {
@@ -2690,14 +2712,24 @@ export function StoryboardPanel() {
         element.closest("[data-storyboard-shot-drag-surface], [data-storyboard-keyword-drop-list]"),
       ),
       keywordId: null,
+      libraryLocation: null,
     };
   }
 
-  function startShotKeywordDrag(event: ReactPointerEvent<HTMLButtonElement>, shot: StoryboardShot) {
-    if (event.button !== 0 || !event.isPrimary || sprayActive) {
+  function startShotKeywordDrag(event: ReactPointerEvent<HTMLElement>, shot: StoryboardShot) {
+    if (
+      event.button !== 0 ||
+      !event.isPrimary ||
+      sprayActive ||
+      (event.target as HTMLElement).closest(textEntrySelector)
+    ) {
       return;
     }
-    const frameButton = event.currentTarget;
+    // List rows start the drag anywhere on the row; the frame still sets the preview shape.
+    const frameButton =
+      event.currentTarget.closest<HTMLElement>(".shot-frame-button") ??
+      event.currentTarget.querySelector<HTMLElement>(".shot-frame-button") ??
+      event.currentTarget;
     const thumbnail = frameButton.querySelector<HTMLImageElement>("img.shot-frame");
     const frameBounds = frameButton.getBoundingClientRect();
     const sourceWidth = thumbnail?.naturalWidth || frameBounds.width;
@@ -2779,6 +2811,7 @@ export function StoryboardPanel() {
         "is-dragging-storyboard-shot",
         "is-storyboard-shot-drag-allowed",
       );
+      setExternalAssetLibraryDropTarget(null);
       setShotKeywordDragPreview(null);
       if (shotKeywordDragCleanupRef.current === cleanup) {
         shotKeywordDragCleanupRef.current = null;
@@ -2793,6 +2826,8 @@ export function StoryboardPanel() {
         const target = shotKeywordDragTargetFromPoint(finishEvent.clientX, finishEvent.clientY);
         if (!cancelled && target.keywordId) {
           setShotKeywordActivation(dragShotIds, target.keywordId, true);
+        } else if (!cancelled && target.libraryLocation) {
+          addShotsToAssetLibrary(Array.from(dragShotIds), target.libraryLocation.folderId);
         }
         window.setTimeout(() => {
           suppressShotClickRef.current = false;
@@ -3314,6 +3349,7 @@ export function StoryboardPanel() {
       flagSubmenuOpen: false,
       ratingSubmenuOpen: false,
       colorSubmenuOpen: false,
+      librarySubmenuOpen: false,
       stackSubmenuOpen: false,
       exportSubmenuOpen: false,
     });
@@ -4689,6 +4725,38 @@ export function StoryboardPanel() {
             </PopupMenuItem>
             <PopupMenuSeparator />
             <PopupMenuSubmenu
+              label="添加到素材库"
+              open={contextMenu.librarySubmenuOpen}
+              disabled={contextMenuShotIds.length === 0}
+              enableMnemonics
+              menuClassName="storyboard-context-menu"
+              onOpenChange={(open) =>
+                setContextMenu((current) =>
+                  current
+                    ? {
+                        ...current,
+                        librarySubmenuOpen: open,
+                        flagSubmenuOpen: open ? false : current.flagSubmenuOpen,
+                        ratingSubmenuOpen: open ? false : current.ratingSubmenuOpen,
+                        colorSubmenuOpen: open ? false : current.colorSubmenuOpen,
+                        stackSubmenuOpen: open ? false : current.stackSubmenuOpen,
+                        exportSubmenuOpen: open ? false : current.exportSubmenuOpen,
+                      }
+                    : current,
+                )
+              }
+            >
+              <AssetLibraryFolderMenuItems
+                library={assetLibrary}
+                root="storyboards"
+                onSelect={(folderId) => {
+                  setContextMenu(null);
+                  addShotsToAssetLibrary(contextMenuShotIds, folderId);
+                }}
+              />
+            </PopupMenuSubmenu>
+            <PopupMenuSeparator />
+            <PopupMenuSubmenu
               label="设置旗标(F)"
               mnemonic="F"
               open={contextMenu.flagSubmenuOpen}
@@ -4703,6 +4771,7 @@ export function StoryboardPanel() {
                         flagSubmenuOpen: open,
                         ratingSubmenuOpen: open ? false : current.ratingSubmenuOpen,
                         colorSubmenuOpen: open ? false : current.colorSubmenuOpen,
+                        librarySubmenuOpen: open ? false : current.librarySubmenuOpen,
                         stackSubmenuOpen: open ? false : current.stackSubmenuOpen,
                       }
                     : current,
@@ -4734,6 +4803,7 @@ export function StoryboardPanel() {
                         ratingSubmenuOpen: open,
                         flagSubmenuOpen: open ? false : current.flagSubmenuOpen,
                         colorSubmenuOpen: open ? false : current.colorSubmenuOpen,
+                        librarySubmenuOpen: open ? false : current.librarySubmenuOpen,
                         stackSubmenuOpen: open ? false : current.stackSubmenuOpen,
                       }
                     : current,
@@ -4805,6 +4875,7 @@ export function StoryboardPanel() {
                         ...current,
                         exportSubmenuOpen: open ? false : current.exportSubmenuOpen,
                         colorSubmenuOpen: open,
+                        librarySubmenuOpen: open ? false : current.librarySubmenuOpen,
                         flagSubmenuOpen: open ? false : current.flagSubmenuOpen,
                         ratingSubmenuOpen: open ? false : current.ratingSubmenuOpen,
                         stackSubmenuOpen: open ? false : current.stackSubmenuOpen,
@@ -4868,6 +4939,7 @@ export function StoryboardPanel() {
                         flagSubmenuOpen: open ? false : current.flagSubmenuOpen,
                         ratingSubmenuOpen: open ? false : current.ratingSubmenuOpen,
                         colorSubmenuOpen: open ? false : current.colorSubmenuOpen,
+                        librarySubmenuOpen: open ? false : current.librarySubmenuOpen,
                       }
                     : current,
                 )
@@ -4975,6 +5047,7 @@ export function StoryboardPanel() {
                         flagSubmenuOpen: open ? false : current.flagSubmenuOpen,
                         ratingSubmenuOpen: open ? false : current.ratingSubmenuOpen,
                         colorSubmenuOpen: open ? false : current.colorSubmenuOpen,
+                        librarySubmenuOpen: open ? false : current.librarySubmenuOpen,
                         stackSubmenuOpen: open ? false : current.stackSubmenuOpen,
                       }
                     : current,

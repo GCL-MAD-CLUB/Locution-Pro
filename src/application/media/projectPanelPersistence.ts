@@ -9,14 +9,19 @@ import {
   useProjectPort,
 } from "../../systems/ProjectSystem";
 
-/** One writer per panel, with hydration before saving and a final flush on project switch. */
+/**
+ * One writer per panel, with hydration before saving and a final flush on project switch.
+ * `sharedId` replaces the panel id for state that every instance of a panel shares.
+ */
 export function usePersistedProjectPanelState<State>(
   snapshot: State | null,
   onRestore: (saved: State | null, projectId: string) => void,
   enabled = true,
+  sharedId?: string,
 ) {
   const { projectId } = useProjectPort(["projectId"], []);
-  const panelId = usePanelInstanceId();
+  const instanceId = usePanelInstanceId();
+  const panelId = sharedId ?? instanceId;
   const native = isTauriRuntime();
   const [loaded, setLoaded] = useState(() => !native || projectStatesLoaded());
   const [restoredKey, setRestoredKey] = useState<string | null>(null);

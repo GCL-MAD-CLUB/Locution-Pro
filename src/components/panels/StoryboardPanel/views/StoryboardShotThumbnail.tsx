@@ -238,7 +238,8 @@ interface ShotFrameButtonProps {
   thumbnailTimeUs?: number;
   previewOnly?: boolean;
   onSelect: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-  onStartKeywordDrag: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  /** Absent where the surrounding list row starts the drag. */
+  onStartKeywordDrag?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
 }
 
 export function ShotFrameButton({
@@ -399,7 +400,8 @@ export interface StoryboardShotThumbnailProps {
   semanticFrame?: number;
   thumbnailTimeUs?: number;
   onSelectFrame: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-  onStartKeywordDrag: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  /** Absent where the surrounding list row starts the drag. */
+  onStartKeywordDrag?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onToggleStack: () => void;
   onSetRating: (rating: number) => void;
   onSetFlag: (flag: StoryboardShotFlag) => void;

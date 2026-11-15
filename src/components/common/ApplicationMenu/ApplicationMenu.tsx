@@ -79,6 +79,7 @@ export interface ApplicationMenuModel {
     project: ApplicationMenuWindowGroup;
     subtitles: ApplicationMenuWindowItem;
     storyboard: ApplicationMenuWindowItem;
+    assetLibrary: ApplicationMenuWindowItem;
     history: ApplicationMenuWindowItem;
   };
   help: {
@@ -514,6 +515,14 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
               onSelect={select(windowMenu.storyboard.execute)}
             >
               {windowMenu.storyboard.label}
+            </PopupMenuItem>
+            <PopupMenuItem
+              checked={windowMenu.assetLibrary.checked}
+              disabled={!windowMenu.assetLibrary.enabled}
+              title={windowMenu.assetLibrary.title}
+              onSelect={select(windowMenu.assetLibrary.execute)}
+            >
+              {windowMenu.assetLibrary.label}
             </PopupMenuItem>
             <PopupMenuItem
               checked={windowMenu.history.checked}

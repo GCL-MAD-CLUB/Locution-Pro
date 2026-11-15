@@ -95,6 +95,7 @@ interface TestMenuModel {
     project: { enabled: boolean; items: MenuWindowItem[] };
     subtitles: MenuWindowItem;
     storyboard: MenuWindowItem;
+    assetLibrary: MenuWindowItem;
     history: MenuWindowItem;
   };
   help: {
@@ -182,6 +183,7 @@ function createModel(calls: string[], enabled = true): ApplicationMenuModel {
       project: { enabled: true, items: [{ id: "p1", ...toggle("p1", "　项目 1", false) }] },
       subtitles: toggle("subtitles", "字幕", false),
       storyboard: toggle("storyboard", "分镜", true),
+      assetLibrary: toggle("asset-library", "素材库", false),
       history: toggle("history", "历史记录", false),
     },
     help: {

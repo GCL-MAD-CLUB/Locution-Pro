@@ -137,7 +137,6 @@
   border-radius: var(--radius-lg);
   scrollbar-color: var(--color-surface-active) var(--color-transparent);
   scrollbar-width: thin;
-  user-select: text;
 }
 
 .update-dialog-notes h1,
@@ -291,5 +290,4 @@
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  user-select: text;
 }

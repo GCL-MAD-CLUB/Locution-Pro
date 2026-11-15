@@ -98,7 +98,6 @@
   background: var(--color-surface-canvas);
   border: 1px solid var(--color-border-frame);
   border-radius: 5px;
-  box-shadow: inset 0 0 0 1px var(--color-border-frame-inset);
 }
 
 .media-bin-table-scroll {
@@ -821,12 +820,12 @@ body.is-resizing-media-column {
 
 .media-bin-card-type-badge.video,
 .media-bin-card-type-badge.subtitle {
-  color: var(--color-accent-monitor);
+  color: var(--color-media-type-badge-icon);
 }
 
 .media-bin-card-type-badge.audio {
   box-sizing: border-box;
-  color: var(--color-accent-monitor);
+  color: var(--color-media-type-badge-icon);
   border: 1.4px solid currentColor;
   border-radius: 3px;
 }

@@ -206,6 +206,7 @@ mod tests {
             },
             subtitles: HashMap::new(),
             storyboards: HashMap::new(),
+            asset_library: Default::default(),
         }
     }
 

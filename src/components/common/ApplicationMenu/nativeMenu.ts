@@ -177,6 +177,7 @@ export function buildNativeMenu(model: ApplicationMenuModel, editingText: boolea
       },
       check("window.subtitles", windowMenu.subtitles),
       check("window.storyboard", windowMenu.storyboard),
+      check("window.assetLibrary", windowMenu.assetLibrary),
       check("window.history", windowMenu.history),
       separator,
       { kind: "predefined", action: "bringAllToFront", label: "前置全部窗口" },

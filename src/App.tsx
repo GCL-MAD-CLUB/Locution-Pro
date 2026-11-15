@@ -38,6 +38,7 @@ import {
   type PanelManagerInitialState,
 } from "./components/common/DockLayout";
 import { ExportWorkspace } from "./components/panels/ExportWorkspace";
+import { assetLibraryPanelType } from "./components/panels/AssetLibrary";
 import { HistoryPanelServicesProvider, historyPanelType } from "./components/panels/HistoryPanel";
 import { exportWorkspaceStore, useExportWorkspaceState } from "./systems/ExportSystem";
 import { ImportWorkspace } from "./components/panels/ImportWorkspace";
@@ -1715,6 +1716,13 @@ function AppContent() {
         checked: Boolean(panelInstances.storyboard),
         enabled: true,
         execute: () => showSingletonPanel("storyboard", storyboardPanelType, {}, "middle"),
+      },
+      assetLibrary: {
+        id: "asset-library",
+        label: "素材库",
+        checked: Boolean(panelInstances["asset-library"]),
+        enabled: true,
+        execute: () => showSingletonPanel("asset-library", assetLibraryPanelType, {}, "leftBottom"),
       },
       history: {
         id: "history",

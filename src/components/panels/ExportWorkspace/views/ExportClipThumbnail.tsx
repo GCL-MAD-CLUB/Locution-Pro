@@ -1,4 +1,4 @@
-import { Film } from "lucide-react";
+import { Film, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   timelineThumbnails,
@@ -8,10 +8,12 @@ import type { ExportClip } from "../../../../systems/ExportSystem";
 
 interface ExportClipThumbnailProps {
   clip: ExportClip;
+  /** Shown over the frame's corner, like a media card. */
+  durationText: string;
   onPlay: () => void;
 }
 
-export function ExportClipThumbnail({ clip, onPlay }: ExportClipThumbnailProps) {
+export function ExportClipThumbnail({ clip, durationText, onPlay }: ExportClipThumbnailProps) {
   const [src, setSrc] = useState<string | null>(null);
 
   useEffect(() => {
@@ -57,8 +59,12 @@ export function ExportClipThumbnail({ clip, onPlay }: ExportClipThumbnailProps) 
       {src ? (
         <img src={src} alt="" draggable={false} />
       ) : (
-        <Film className="export-clip-thumbnail-placeholder" size={20} />
+        <Film className="export-clip-thumbnail-placeholder" size={18} />
       )}
+      <span className="export-clip-thumbnail-play" aria-hidden="true">
+        <Play size={11} />
+      </span>
+      <span className="export-clip-thumbnail-duration">{durationText}</span>
     </button>
   );
 }

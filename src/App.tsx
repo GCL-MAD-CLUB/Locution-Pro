@@ -45,6 +45,7 @@ import {
   type PanelManagerInitialState,
 } from "./components/common/DockLayout";
 import { ExportWorkspace } from "./components/panels/ExportWorkspace";
+import { sendExportToTranscode } from "./application/sendExportToTranscode";
 import { HistoryPanelServicesProvider, historyPanelType } from "./components/panels/HistoryPanel";
 import { exportWorkspaceStore, useExportWorkspaceState } from "./systems/ExportSystem";
 import { ImportWorkspace } from "./components/panels/ImportWorkspace";
@@ -1443,6 +1444,19 @@ function AppContent() {
       .getState()
       .setProjectDirectory(projectFilePath ? parentDirectory(projectFilePath) : "");
   }, [projectFilePath]);
+
+  useBroadcastEvent(identity, "transcode.export.requested", async ({ payload }) => {
+    const plan = await sendExportToTranscode(payload.source, payload.settings);
+    setActiveWorkspace("transcode");
+    setProjectHomeMode(null);
+    messagePublished(
+      `已将 ${plan.clipCount} 个片段发送到转码队列。` +
+        (plan.audioChangedCount > 0
+          ? `其中 ${plan.audioChangedCount} 个片段绑定了其他音频，转码时使用源文件的第一条音轨。`
+          : ""),
+    );
+    return "handled" as const;
+  });
 
   useBroadcastEvent(identity, "transcode.enqueue.requested", async ({ payload }) => {
     const added = enqueueTranscodeSources(payload.paths);

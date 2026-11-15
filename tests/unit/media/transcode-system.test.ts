@@ -295,3 +295,190 @@ test("the panel layout is saved and restored with the transcode config", () => {
   store.getState().restore(snapshot);
   assert.deepEqual(JSON.parse(JSON.stringify(store.getState().panelLayout)), layout);
 });
+
+type SendModule = typeof import("../../../src/application/sendExportToTranscode.ts");
+type ExportClip = import("../../../src/systems/ExportSystem/exportTypes.ts").ExportClip;
+
+function loadSendToTranscode() {
+  const system = loadSystem();
+  const exportTypes = load<typeof import("../../../src/systems/ExportSystem/exportTypes.ts")>(
+    "../../../src/systems/ExportSystem/exportTypes.ts",
+    {},
+  );
+  const rename = load<typeof import("../../../src/systems/ExportSystem/exportRename.ts")>(
+    "../../../src/systems/ExportSystem/exportRename.ts",
+    {
+      "../../core/editor/time": { formatMonitorTime: () => "00:00:00:00" },
+      "./exportTypes": exportTypes,
+    },
+  );
+  const exportSystem = {
+    ...exportTypes,
+    computeExportFileNames: rename.computeExportFileNames,
+    normalizeExportSettings: (settings: unknown) => settings,
+    composeExportOutputDir: () => "",
+    resolveExportDestinationDir: async () => "",
+  };
+  const transcodeSystem = {
+    ...system.types,
+    ...system.catalog,
+    transcodeQueueStore: system.queue.transcodeQueueStore,
+    enqueueTranscodeJobs: system.queue.transcodeQueueStore.getState().addJobs,
+  };
+  const send = load<SendModule>(
+    "../../../src/application/sendExportToTranscode.ts",
+    { "../systems/ExportSystem": exportSystem, "../systems/TranscodeSystem": transcodeSystem },
+    globals,
+  );
+  return { send, queue: system.queue };
+}
+
+function exportSettings(
+  patch: Partial<import("../../../src/systems/ExportSystem/exportTypes.ts").ExportSettings> = {},
+) {
+  return {
+    mode: "individual",
+    container: "mp4_h264",
+    resolution: "match_source",
+    customWidth: 1920,
+    customHeight: 1080,
+    frameRate: null,
+    quality: "high",
+    encoderSpeed: "balanced",
+    hardwareAcceleration: "auto",
+    includeVideo: true,
+    includeAudio: true,
+    audioCodec: "aac",
+    audioSampleRateHz: null,
+    audioChannels: "stereo",
+    audioBitrateKbps: 192,
+    importIntoProject: false,
+    useProxy: false,
+    destination: "specified",
+    useSubfolder: false,
+    subfolderName: "",
+    outputDir: "/out",
+    outputStem: "clip",
+    renameRule: "label",
+    customName: "",
+    startNumber: 1,
+    extensionCase: "lower",
+    outputName: "",
+    existingFileMode: "ask",
+    ...patch,
+  } as const;
+}
+
+function clip(id: string, sourcePath: string, startUs: number, endUs: number): ExportClip {
+  return {
+    id,
+    videoId: `video-${sourcePath}`,
+    sourcePath,
+    label: `片段${id}`,
+    sourceName: sourcePath,
+    startUs,
+    endUs,
+    hasVideo: true,
+    hasAudio: true,
+    audioSources: [{ sourcePath, audioTrackIndex: 0, primary: true }],
+    durationUs: 60_000_000,
+    videoStreamIndex: 0,
+    proxyPath: null,
+  };
+}
+
+test("export settings carry over to transcode settings", () => {
+  const { send } = loadSendToTranscode();
+  const h264 = send.transcodeSettingsFromExport(
+    exportSettings({ quality: "very_high", encoderSpeed: "quality", frameRate: 25 }),
+    capabilities,
+  );
+  assert.equal(h264.container, "mp4");
+  assert.equal(h264.video.codec, "libx264");
+  assert.equal(h264.video.rateControl, "quality");
+  assert.equal(h264.video.quality, 17);
+  assert.equal(h264.video.speedPreset, "slow");
+  assert.equal(h264.video.frameRate, "25");
+  assert.equal(h264.audio.bitrateKbps, 192);
+  assert.equal(h264.audio.channels, 2);
+  assert.equal(h264.exportSubtitles, false);
+
+  const vp9 = send.transcodeSettingsFromExport(
+    exportSettings({ container: "webm_vp9", quality: "low", resolution: "custom" }),
+    capabilities,
+  );
+  assert.equal(vp9.video.codec, "libvpx-vp9");
+  assert.equal(vp9.video.quality, 40);
+  assert.equal(vp9.video.width, 1920);
+  assert.equal(vp9.video.height, 1080);
+
+  const prores = send.transcodeSettingsFromExport(
+    exportSettings({ container: "mov_prores", quality: "medium" }),
+    capabilities,
+  );
+  assert.equal(prores.video.codec, "prores_ks");
+  assert.equal(prores.video.profile, "2");
+
+  const mp3 = send.transcodeSettingsFromExport(
+    exportSettings({ container: "mp3_audio", audioCodec: "mp3" }),
+    capabilities,
+  );
+  assert.equal(mp3.exportVideo, false);
+  assert.equal(mp3.audio.codec, "libmp3lame");
+});
+
+test("clips go to the queue as one source per file with an output and range per clip", () => {
+  const { send, queue } = loadSendToTranscode();
+  const clips = [
+    clip("1", "/media/a.mkv", 1_000_000, 4_000_000),
+    clip("2", "/media/a.mkv", 10_000_000, 0),
+    clip("3", "/media/b.mp4", 0, 2_000_000),
+  ];
+  clips[2].audioSources.push({
+    sourcePath: "/media/music.wav",
+    audioTrackIndex: 0,
+    primary: false,
+  });
+  const plan = send.planExportToTranscode(clips, exportSettings(), "/out", capabilities);
+  assert.equal(plan.jobs.length, 2);
+  assert.equal(plan.audioChangedCount, 1);
+  const [a, b] = plan.jobs;
+  assert.equal(a.path, "/media/a.mkv");
+  assert.deepEqual(
+    JSON.parse(
+      JSON.stringify(
+        a.outputs.map((output) => [
+          output.outputName,
+          output.settings.rangeStartUs,
+          output.settings.rangeEndUs,
+        ]),
+      ),
+    ),
+    [
+      ["片段1", 1_000_000, 4_000_000],
+      ["片段2", 10_000_000, null],
+    ],
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(b.outputs[0].destination)), {
+    kind: "folder",
+    directory: "/out",
+  });
+  assert.equal(b.outputs[0].settings.rangeStartUs, null);
+
+  // A file already in the queue is queued again with the clips' own outputs.
+  const store = queue.transcodeQueueStore;
+  store.getState().addSources(["/media/a.mkv"]);
+  const added = store.getState().addJobs(plan.jobs);
+  assert.equal(added.length, 2);
+  assert.equal(store.getState().sources.length, 3);
+  assert.equal(added[0].outputs[1].outputName, "片段2");
+  assert.equal(store.getState().selectedIds.length, 3);
+});
+
+test("merging several clips cannot be sent to the transcode queue", () => {
+  const { send } = loadSendToTranscode();
+  assert.equal(send.exportToTranscodeBlocker(0, exportSettings()), "请先勾选要发送的片段");
+  assert.match(send.exportToTranscodeBlocker(2, exportSettings({ mode: "merge" }))!, /无法合并/);
+  assert.equal(send.exportToTranscodeBlocker(1, exportSettings({ mode: "merge" })), null);
+  assert.equal(send.exportToTranscodeBlocker(2, exportSettings()), null);
+});

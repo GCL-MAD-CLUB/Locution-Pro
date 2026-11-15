@@ -19,8 +19,9 @@ export {
   useTranscodeQueueState,
   watchOutputDirectory,
 } from "./transcodeQueueState";
-export type { TranscodeQueueState } from "./transcodeQueueState";
+export type { TranscodeJob, TranscodeJobOutput, TranscodeQueueState } from "./transcodeQueueState";
 export {
+  enqueueTranscodeJobs,
   enqueueTranscodeSources,
   ensureTranscodeReady,
   loadTranscodeCodecDetails,

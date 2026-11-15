@@ -32,7 +32,14 @@ export type {
   StoryboardExportInput,
   SubtitleExportInput,
 } from "./exportResolvers";
-export { enqueueExportTask, enqueueQuickExport, runExportTask, runQuickExport } from "./exportTask";
+export {
+  composeExportOutputDir,
+  enqueueExportTask,
+  enqueueQuickExport,
+  normalizeExportSettings,
+  runExportTask,
+  runQuickExport,
+} from "./exportTask";
 export type { ExportTaskOutcome, ExportTaskSubmission, RunExportTaskOptions } from "./exportTask";
 export { exportQueueStore, useExportQueueState } from "./exportQueueState";
 export type { ExportQueueState } from "./exportQueueState";

@@ -120,3 +120,21 @@ test("导出预检查尚未完成时保持当前页面且禁用重复提交", as
   await native.release("export_clips");
   await expect(app.getByText("已导出 1 个片段。", { exact: true })).toBeVisible();
 });
+
+test("发送到转码把片段按导出设置加入转码队列并切到转码页", async ({ app, native }) => {
+  await prepareExport(app);
+  await app
+    .locator(".export-action-bar")
+    .getByRole("button", { name: "发送到转码", exact: true })
+    .click();
+  await expect(
+    app
+      .getByRole("navigation", { name: "工作区", exact: true })
+      .getByRole("button", { name: "转码", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(app.getByText("已将 1 个片段发送到转码队列。", { exact: true })).toBeVisible();
+  const queue = app.locator(".transcode-queue");
+  await expect(queue.getByText("clip.MP4").first()).toBeVisible();
+  await expect(queue.getByText("导出设置 · H.264").first()).toBeVisible();
+  expect(await native.calls("export_clips")).toHaveLength(0);
+});

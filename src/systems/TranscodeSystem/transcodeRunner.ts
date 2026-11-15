@@ -14,6 +14,7 @@ import {
   findTranscodePreset,
   transcodeConfigSnapshot,
   transcodeQueueStore,
+  type TranscodeJob,
 } from "./transcodeQueueState";
 import type {
   TranscodeCapabilities,
@@ -107,6 +108,14 @@ function probeTranscodeSource(source: TranscodeSource) {
       .setSourceInfo(source.id, outcome.status === "success" ? outcome.value : null);
   };
   probeChain = probeChain.then(probe, probe);
+}
+
+/** Adds prepared jobs to the queue and reads their streams. */
+export function enqueueTranscodeJobs(jobs: TranscodeJob[]) {
+  void ensureTranscodeReady();
+  const added = transcodeQueueStore.getState().addJobs(jobs);
+  for (const source of added) probeTranscodeSource(source);
+  return added;
 }
 
 /** Adds files to the queue with the last-used preset and reads their streams. */

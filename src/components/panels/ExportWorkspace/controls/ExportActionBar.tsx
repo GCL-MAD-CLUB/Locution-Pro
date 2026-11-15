@@ -1,6 +1,9 @@
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, Send } from "lucide-react";
 import { useState } from "react";
+import { exportToTranscodeBlocker } from "../../../../application/sendExportToTranscode";
 import { captureOperationError } from "../../../../errors";
+import { publishEvent } from "../../../../runtime/events/react";
+import { useStableIdentity } from "../../../../runtime/state/react";
 import {
   enqueueExportTask,
   exportWorkspaceStore,
@@ -28,7 +31,19 @@ export function ExportActionBar({ onExportStarted }: ExportActionBarProps) {
     ["exportSettingsRecorded", "messagePublished"],
   );
 
+  const identity = useStableIdentity("export-action-bar");
   const selectedClips = (source?.clips ?? []).filter((clip) => selectedClipIds.has(clip.id));
+  const transcodeBlocker = exportToTranscodeBlocker(selectedClips.length, settings);
+
+  function handleSendToTranscode() {
+    if (!source || transcodeBlocker) return;
+    void publishEvent(
+      "transcode.export.requested",
+      { source: { ...source, clips: selectedClips }, settings: { ...settings } },
+      identity,
+    );
+  }
+
   const canExport =
     !preparing &&
     selectedClips.length > 0 &&
@@ -101,6 +116,16 @@ export function ExportActionBar({ onExportStarted }: ExportActionBarProps) {
   return (
     <footer className="export-action-bar">
       <div className="export-action-row">
+        <button
+          type="button"
+          className="toolbar-button"
+          onClick={handleSendToTranscode}
+          disabled={transcodeBlocker !== null}
+          title={transcodeBlocker ?? "把勾选的片段按当前设置加入转码队列，在转码页面统一编码"}
+        >
+          <Send size={14} />
+          发送到转码
+        </button>
         <button
           type="button"
           className="accent-button"

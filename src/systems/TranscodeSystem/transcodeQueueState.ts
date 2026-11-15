@@ -26,6 +26,21 @@ export interface AddTranscodeSourcesOptions {
   watchFolderId?: string | null;
 }
 
+/** One output of a queued job, already set up by its sender. */
+export interface TranscodeJobOutput {
+  settings: TranscodeSettings;
+  presetName: string;
+  /** File name without its extension. */
+  outputName: string;
+  destination: TranscodeDestination | null;
+}
+
+/** A source with outputs made elsewhere, such as clips sent from the export page. */
+export interface TranscodeJob {
+  path: string;
+  outputs: TranscodeJobOutput[];
+}
+
 export interface TranscodeQueueState {
   sources: TranscodeSource[];
   /** Selected source and output ids. */
@@ -49,6 +64,8 @@ export interface TranscodeQueueState {
   panelLayout: unknown;
 
   addSources: (paths: string[], options?: AddTranscodeSourcesOptions) => TranscodeSource[];
+  /** Queues prepared jobs; unlike `addSources`, a file already queued is added again. */
+  addJobs: (jobs: TranscodeJob[]) => TranscodeSource[];
   setSourceInfo: (sourceId: string, info: TranscodeSourceInfo | null) => void;
   select: (ids: string[]) => void;
   removeSelected: () => void;
@@ -360,6 +377,29 @@ export const transcodeQueueStore = createStore<TranscodeQueueState>()((set, get)
         sources: [...state.sources, ...added],
         selectedIds: added.map((source) => source.outputs[0].id),
       });
+    }
+    return added;
+  },
+
+  addJobs: (jobs) => {
+    const added: TranscodeSource[] = jobs
+      .filter((job) => job.path && job.outputs.length > 0)
+      .map((job) => ({
+        id: newId("transcode-source"),
+        path: job.path,
+        info: null,
+        infoStatus: "pending",
+        watchFolderId: null,
+        outputs: job.outputs.map((item) => ({
+          ...newOutput(job.path, null, item.presetName, item.settings, item.destination),
+          outputName: item.outputName,
+        })),
+      }));
+    if (added.length > 0) {
+      set((state) => ({
+        sources: [...state.sources, ...added],
+        selectedIds: added.flatMap((source) => source.outputs.map((output) => output.id)),
+      }));
     }
     return added;
   },

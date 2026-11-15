@@ -99,6 +99,7 @@ interface TestMenuModel {
     history: MenuWindowItem;
     transcode: { enabled: boolean; items: MenuWindowItem[] };
   };
+  beta: { transcode: MenuWindowItem };
   help: {
     aboutLocutionPro: MenuCommand;
     checkForUpdates: MenuCommand;
@@ -191,6 +192,7 @@ function createModel(calls: string[], enabled = true): ApplicationMenuModel {
         items: [{ id: "transcode-queue", ...toggle("transcode-queue", "队列", true) }],
       },
     },
+    beta: { transcode: toggle("beta-transcode", "Transcode (restart required)", false) },
     help: {
       aboutLocutionPro: command("about"),
       checkForUpdates: command("checkForUpdates"),
@@ -224,6 +226,7 @@ test("the menu bar follows the macOS layout with system roles", () => {
       ["submenu", "文件", undefined],
       ["submenu", "编辑", undefined],
       ["submenu", "窗口", "window"],
+      ["submenu", "Beta版", undefined],
       ["submenu", "帮助", "help"],
     ],
   );
@@ -279,4 +282,22 @@ test("text editing items stay enabled while a text field has focus", () => {
   assert.equal(enabled(editing, "edit.duplicate"), false);
   assert.equal(editing.commands.get("edit.copy")!.editAction, "copy");
   assert.equal(editing.commands.get("edit.copy")!.enabled, false);
+});
+
+test("the Beta toggle stays available while transcode window commands are hidden", () => {
+  const calls: string[] = [];
+  const model = createModel(calls);
+  model.window.transcode = { enabled: false, items: [] };
+  const menu = buildNativeMenu(model, false);
+  assert.equal(
+    find(menu.entries, (entry) => entry.id?.startsWith("window.transcode.") === true),
+    undefined,
+  );
+  assert.equal(menu.commands.has("window.transcode.transcode-queue"), false);
+  const toggle = find(menu.entries, (entry) => entry.id === "beta.transcode")!;
+  assert.equal(toggle.kind, "check");
+  assert.equal(toggle.checked, false);
+  assert.equal(toggle.enabled, true);
+  menu.commands.get("beta.transcode")!.execute();
+  assert.deepEqual(calls, ["beta-transcode"]);
 });

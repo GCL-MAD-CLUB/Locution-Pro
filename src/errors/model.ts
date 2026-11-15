@@ -2,6 +2,7 @@
 export type OperationKey =
   | "app.event"
   | "app.menu"
+  | "app.restart"
   | "dragDrop.listen"
   | "dragDrop.region"
   | "export.reveal"

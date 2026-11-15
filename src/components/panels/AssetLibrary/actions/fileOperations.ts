@@ -147,7 +147,7 @@ export function assetLibraryFileOperations(context: AssetLibraryFileOperationCon
         view.replaceLocation({ root: location.root, folderId: survivor?.id ?? null });
       }
       view.select([], null, null);
-      if (removed > 0) messagePublished(`已从素材库删除 ${removed} 项，可通过撤销恢复。`);
+      if (removed > 0) messagePublished(`已从素材库删除 ${removed} 项。`);
     },
 
     renameNode(node: AssetLibraryNode, name: string) {

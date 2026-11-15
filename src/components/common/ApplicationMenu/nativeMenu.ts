@@ -25,7 +25,7 @@ export interface NativeMenu {
  * only receives a key equivalent the page left unhandled (in text fields).
  */
 export function buildNativeMenu(model: ApplicationMenuModel, editingText: boolean): NativeMenu {
-  const { file, edit, window: windowMenu, help } = model;
+  const { file, edit, window: windowMenu, beta, help } = model;
   const commands = new Map<string, NativeMenuCommand>();
 
   function item(
@@ -179,14 +179,18 @@ export function buildNativeMenu(model: ApplicationMenuModel, editingText: boolea
       check("window.storyboard", windowMenu.storyboard),
       check("window.assetLibrary", windowMenu.assetLibrary),
       check("window.history", windowMenu.history),
-      {
-        kind: "submenu",
-        label: "转码",
-        enabled: windowMenu.transcode.enabled,
-        items: windowMenu.transcode.items.map((entry) =>
-          check(`window.transcode.${entry.id}`, entry),
-        ),
-      },
+      ...(windowMenu.transcode.items.length > 0
+        ? ([
+            {
+              kind: "submenu",
+              label: "转码",
+              enabled: windowMenu.transcode.enabled,
+              items: windowMenu.transcode.items.map((entry) =>
+                check(`window.transcode.${entry.id}`, entry),
+              ),
+            },
+          ] satisfies NativeMenuEntry[])
+        : []),
       separator,
       { kind: "predefined", action: "bringAllToFront", label: "前置全部窗口" },
     ],
@@ -204,7 +208,19 @@ export function buildNativeMenu(model: ApplicationMenuModel, editingText: boolea
   };
 
   return {
-    entries: [applicationMenu, fileMenu, editMenu, windowMenuEntry, helpMenu],
+    entries: [
+      applicationMenu,
+      fileMenu,
+      editMenu,
+      windowMenuEntry,
+      {
+        kind: "submenu",
+        label: "Beta版",
+        enabled: true,
+        items: [check("beta.transcode", beta.transcode)],
+      },
+      helpMenu,
+    ],
     commands,
   };
 }

@@ -3,6 +3,7 @@ import { test as base, expect, type Page } from "@playwright/test";
 import { installNative, mediaEntries } from "./native";
 
 type Fixtures = {
+  betaTranscode: boolean;
   _diagnostics: void;
   native: {
     calls: (command: string) => Promise<any[]>;
@@ -14,8 +15,9 @@ type Fixtures = {
 };
 
 export const test = base.extend<Fixtures>({
-  native: async ({ page }, use, testInfo) => {
-    await page.addInitScript(installNative, { entries: mediaEntries });
+  betaTranscode: [false, { option: true }],
+  native: async ({ page, betaTranscode }, use, testInfo) => {
+    await page.addInitScript(installNative, { entries: mediaEntries, betaTranscode });
     await use({
       calls: (command) =>
         page.evaluate(

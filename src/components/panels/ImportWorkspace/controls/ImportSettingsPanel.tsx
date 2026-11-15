@@ -1,5 +1,6 @@
 ﻿import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { usePreferencesPort } from "../../../../systems/PreferencesSystem";
 import { open } from "@tauri-apps/plugin-dialog";
 import { runOperation } from "../../../../errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
@@ -17,6 +18,7 @@ export function ImportSettingsPanel({
   disabled: boolean;
   projectDirectory: string;
 }) {
+  const { betaTranscodeEnabled } = usePreferencesPort(["betaTranscodeEnabled"], []);
   const [organizeOpen, setOrganizeOpen] = useState(true);
   const [copyOpen, setCopyOpen] = useState(true);
   const [autoBindOpen, setAutoBindOpen] = useState(true);
@@ -52,14 +54,16 @@ export function ImportSettingsPanel({
               />
               添加到新媒体箱
             </label>
-            <label className="import-checkbox-label">
-              <input
-                type="checkbox"
-                checked={settings.openInTranscode}
-                onChange={(event) => update({ openInTranscode: event.currentTarget.checked })}
-              />
-              在转码页面打开导入素材
-            </label>
+            {betaTranscodeEnabled && (
+              <label className="import-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={settings.openInTranscode}
+                  onChange={(event) => update({ openInTranscode: event.currentTarget.checked })}
+                />
+                在转码页面打开导入素材
+              </label>
+            )}
             <label className="import-field">
               名称
               <input

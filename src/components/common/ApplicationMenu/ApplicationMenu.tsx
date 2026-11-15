@@ -84,6 +84,7 @@ export interface ApplicationMenuModel {
     /** Panels of the transcode page. */
     transcode: ApplicationMenuWindowGroup;
   };
+  beta: { transcode: ApplicationMenuWindowItem };
   help: {
     locutionProHelp: ApplicationMenuCommand;
     showLogFiles: ApplicationMenuCommand;
@@ -97,10 +98,11 @@ interface ApplicationMenuProps {
 }
 
 export function ApplicationMenu({ model }: ApplicationMenuProps) {
-  const { file, edit, window: windowMenu, help } = model;
+  const { file, edit, window: windowMenu, beta, help } = model;
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [editMenuOpen, setEditMenuOpen] = useState(false);
   const [windowMenuOpen, setWindowMenuOpen] = useState(false);
+  const [betaMenuOpen, setBetaMenuOpen] = useState(false);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [recentProjectMenuOpen, setRecentProjectMenuOpen] = useState(false);
   const [recentImportMenuOpen, setRecentImportMenuOpen] = useState(false);
@@ -110,7 +112,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
   const menuRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (!fileMenuOpen && !editMenuOpen && !windowMenuOpen && !helpMenuOpen) {
+    if (!fileMenuOpen && !editMenuOpen && !windowMenuOpen && !betaMenuOpen && !helpMenuOpen) {
       return;
     }
 
@@ -120,6 +122,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
         setEditMenuOpen(false);
         setWindowMenuOpen(false);
         setHelpMenuOpen(false);
+        setBetaMenuOpen(false);
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -128,6 +131,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
         setEditMenuOpen(false);
         setWindowMenuOpen(false);
         setHelpMenuOpen(false);
+        setBetaMenuOpen(false);
       }
     };
     window.addEventListener("pointerdown", closeMenu);
@@ -136,7 +140,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
       window.removeEventListener("pointerdown", closeMenu);
       window.removeEventListener("keydown", closeOnEscape);
     };
-  }, [editMenuOpen, fileMenuOpen, helpMenuOpen, windowMenuOpen]);
+  }, [editMenuOpen, fileMenuOpen, helpMenuOpen, windowMenuOpen, betaMenuOpen]);
 
   useEffect(() => {
     if (!fileMenuOpen) {
@@ -161,6 +165,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
     setEditMenuOpen(false);
     setWindowMenuOpen(false);
     setHelpMenuOpen(false);
+    setBetaMenuOpen(false);
     await handler();
   };
 
@@ -177,6 +182,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
             setEditMenuOpen(false);
             setWindowMenuOpen(false);
             setHelpMenuOpen(false);
+            setBetaMenuOpen(false);
           }}
         >
           文件(F)
@@ -365,6 +371,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
             setFileMenuOpen(false);
             setWindowMenuOpen(false);
             setHelpMenuOpen(false);
+            setBetaMenuOpen(false);
           }}
         >
           编辑(E)
@@ -471,6 +478,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
             setFileMenuOpen(false);
             setEditMenuOpen(false);
             setHelpMenuOpen(false);
+            setBetaMenuOpen(false);
           }}
         >
           窗口(W)
@@ -536,25 +544,56 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
             >
               {windowMenu.history.label}
             </PopupMenuItem>
-            <PopupMenuSubmenu
-              label="转码"
-              open={transcodeWindowMenuOpen}
-              disabled={!windowMenu.transcode.enabled}
-              menuClassName="application-menu-popup"
-              onOpenChange={setTranscodeWindowMenuOpen}
+            {windowMenu.transcode.items.length > 0 && (
+              <PopupMenuSubmenu
+                label="转码"
+                open={transcodeWindowMenuOpen}
+                disabled={!windowMenu.transcode.enabled}
+                menuClassName="application-menu-popup"
+                onOpenChange={setTranscodeWindowMenuOpen}
+              >
+                {windowMenu.transcode.items.map((item) => (
+                  <PopupMenuItem
+                    key={item.id}
+                    checked={item.checked}
+                    disabled={!item.enabled}
+                    title={item.title}
+                    onSelect={select(item.execute)}
+                  >
+                    {item.label}
+                  </PopupMenuItem>
+                ))}
+              </PopupMenuSubmenu>
+            )}
+          </PopupMenu>
+        )}
+      </div>
+      <div className="application-menu-root">
+        <button
+          type="button"
+          className={`application-menu-trigger${betaMenuOpen ? " active" : ""}`}
+          aria-haspopup="menu"
+          aria-expanded={betaMenuOpen}
+          accessKey="b"
+          onClick={() => {
+            setBetaMenuOpen((open) => !open);
+            setFileMenuOpen(false);
+            setEditMenuOpen(false);
+            setWindowMenuOpen(false);
+            setHelpMenuOpen(false);
+          }}
+        >
+          Beta版(B)
+        </button>
+        {betaMenuOpen && (
+          <PopupMenu className="application-menu-popup" enableMnemonics>
+            <PopupMenuItem
+              checked={beta.transcode.checked}
+              disabled={!beta.transcode.enabled}
+              onSelect={select(beta.transcode.execute)}
             >
-              {windowMenu.transcode.items.map((item) => (
-                <PopupMenuItem
-                  key={item.id}
-                  checked={item.checked}
-                  disabled={!item.enabled}
-                  title={item.title}
-                  onSelect={select(item.execute)}
-                >
-                  {item.label}
-                </PopupMenuItem>
-              ))}
-            </PopupMenuSubmenu>
+              {beta.transcode.label}
+            </PopupMenuItem>
           </PopupMenu>
         )}
       </div>
@@ -566,6 +605,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
           aria-expanded={helpMenuOpen}
           onClick={() => {
             setHelpMenuOpen((open) => !open);
+            setBetaMenuOpen(false);
             setFileMenuOpen(false);
             setEditMenuOpen(false);
             setWindowMenuOpen(false);

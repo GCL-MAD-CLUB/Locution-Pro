@@ -121,20 +121,103 @@ test("导出预检查尚未完成时保持当前页面且禁用重复提交", as
   await expect(app.getByText("已导出 1 个片段。", { exact: true })).toBeVisible();
 });
 
-test("发送到转码把片段按导出设置加入转码队列并切到转码页", async ({ app, native }) => {
+test("转码默认隐藏，Beta 开关保存后仍需重启才能使用", async ({ app, native }) => {
   await prepareExport(app);
-  await app
-    .locator(".export-action-bar")
-    .getByRole("button", { name: "发送到转码", exact: true })
-    .click();
-  await expect(
-    app
-      .getByRole("navigation", { name: "工作区", exact: true })
-      .getByRole("button", { name: "转码", exact: true }),
-  ).toHaveAttribute("aria-current", "page");
-  await expect(app.getByText("已将 1 个片段发送到转码队列。", { exact: true })).toBeVisible();
-  const queue = app.locator(".transcode-queue");
-  await expect(queue.getByText("clip.MP4").first()).toBeVisible();
-  await expect(queue.getByText("导出设置 · H.264").first()).toBeVisible();
-  expect(await native.calls("export_clips")).toHaveLength(0);
+  const workspace = app.getByRole("navigation", { name: "工作区", exact: true });
+  await expect(workspace.getByRole("button", { name: "转码", exact: true })).toHaveCount(0);
+  await expect(app.getByRole("button", { name: "发送到转码", exact: true })).toHaveCount(0);
+  await app.getByRole("button", { name: "Beta版(B)", exact: true }).click();
+  const toggle = app.getByRole("menuitemcheckbox", { name: "重启以使用转码（Beta）", exact: true });
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+  await expect.poll(async () => (await native.calls("update_preferences")).length).toBe(1);
+  const [saved] = await native.calls("update_preferences");
+  expect(saved.args.preferences.beta_transcode_enabled).toBe(true);
+  const restart = app.getByRole("dialog", { name: "重启软件", exact: true });
+  await expect(restart.getByRole("button", { name: "保存后重启", exact: true })).toBeVisible();
+  await restart.getByRole("button", { name: "稍后", exact: true }).click();
+  await app.getByRole("button", { name: "Beta版(B)", exact: true }).click();
+  await expect(toggle).toBeChecked();
+  await expect(workspace.getByRole("button", { name: "转码", exact: true })).toHaveCount(0);
+  await expect(app.getByRole("button", { name: "发送到转码", exact: true })).toHaveCount(0);
+});
+
+test.describe("Beta 转码", () => {
+  test.use({ betaTranscode: true });
+  test("取消勾选已启用的转码也提示重启，稍后仍可使用", async ({ app, native }) => {
+    await app.getByRole("button", { name: "Beta版(B)", exact: true }).click();
+    const toggle = app.getByRole("menuitemcheckbox", { name: "使用转码（Beta）", exact: true });
+    await toggle.click();
+    const restart = app.getByRole("dialog", { name: "重启软件", exact: true });
+    await expect(
+      restart.getByRole("heading", { name: "关闭转码（Beta）", exact: true }),
+    ).toBeVisible();
+    await expect(restart.getByRole("button", { name: "立即重启", exact: true })).toBeVisible();
+    const [saved] = await native.calls("update_preferences");
+    expect(saved.args.preferences.beta_transcode_enabled).toBe(false);
+    await restart.getByRole("button", { name: "稍后", exact: true }).click();
+    expect(await native.calls("restart_application")).toHaveLength(0);
+    await expect(
+      app
+        .getByRole("navigation", { name: "工作区", exact: true })
+        .getByRole("button", { name: "转码", exact: true }),
+    ).toBeVisible();
+    await app.getByRole("button", { name: "Beta版(B)", exact: true }).click();
+    await expect(toggle).not.toBeChecked();
+  });
+  test("发送到转码把片段按导出设置加入转码队列并切到转码页", async ({ app, native }) => {
+    await app.getByRole("button", { name: "Beta版(B)", exact: true }).click();
+    await expect(
+      app.getByRole("menuitemcheckbox", { name: "使用转码（Beta）", exact: true }),
+    ).toBeChecked();
+    await app.keyboard.press("Escape");
+    await prepareExport(app);
+    await app
+      .locator(".export-action-bar")
+      .getByRole("button", { name: "发送到转码", exact: true })
+      .click();
+    await expect(
+      app
+        .getByRole("navigation", { name: "工作区", exact: true })
+        .getByRole("button", { name: "转码", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(app.getByText("已将 1 个片段发送到转码队列。", { exact: true })).toBeVisible();
+    const queue = app.locator(".transcode-queue");
+    await expect(queue.getByText("clip.MP4").first()).toBeVisible();
+    await expect(queue.getByText("导出设置 · H.264").first()).toBeVisible();
+    expect(await native.calls("export_clips")).toHaveLength(0);
+  });
+});
+
+test("没有项目更改时可以立即重启以启用 Beta 转码", async ({ app, native }) => {
+  await app.getByRole("button", { name: "Beta版(B)", exact: true }).click();
+  await app.getByRole("menuitemcheckbox", { name: "重启以使用转码（Beta）", exact: true }).click();
+  const restart = app.getByRole("dialog", { name: "重启软件", exact: true });
+  await restart.getByRole("button", { name: "立即重启", exact: true }).click();
+  await expect.poll(async () => (await native.calls("restart_application")).length).toBe(1);
+  expect(await native.calls("save_project_file")).toHaveLength(0);
+});
+
+test("有未保存更改时先完成保存才重启", async ({ app, native }) => {
+  await prepareExport(app);
+  await native.hold("save_project_file");
+  await app.getByRole("button", { name: "Beta版(B)", exact: true }).click();
+  await app.getByRole("menuitemcheckbox", { name: "重启以使用转码（Beta）", exact: true }).click();
+  const restart = app.getByRole("dialog", { name: "重启软件", exact: true });
+  await restart.getByRole("button", { name: "保存后重启", exact: true }).click();
+  await expect.poll(async () => (await native.calls("save_project_file")).length).toBe(1);
+  expect(await native.calls("restart_application")).toHaveLength(0);
+  await native.release("save_project_file");
+  await expect.poll(async () => (await native.calls("restart_application")).length).toBe(1);
+});
+
+test("保存项目失败时不重启", async ({ app, native }) => {
+  await prepareExport(app);
+  await native.fail("save_project_file", "Cannot save project");
+  await app.getByRole("button", { name: "Beta版(B)", exact: true }).click();
+  await app.getByRole("menuitemcheckbox", { name: "重启以使用转码（Beta）", exact: true }).click();
+  const restart = app.getByRole("dialog", { name: "重启软件", exact: true });
+  await restart.getByRole("button", { name: "保存后重启", exact: true }).click();
+  await expect(app.getByRole("dialog", { name: /^无法保存项目/ })).toBeVisible();
+  expect(await native.calls("restart_application")).toHaveLength(0);
 });

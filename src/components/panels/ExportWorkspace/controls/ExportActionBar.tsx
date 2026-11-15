@@ -15,12 +15,15 @@ import {
   useProjectPort,
 } from "../../../../systems/ProjectSystem";
 
+import { usePreferencesPort } from "../../../../systems/PreferencesSystem";
+
 interface ExportActionBarProps {
   onExportStarted: () => void;
 }
 
 export function ExportActionBar({ onExportStarted }: ExportActionBarProps) {
   const [preparing, setPreparing] = useState(false);
+  const { betaTranscodeEnabled } = usePreferencesPort(["betaTranscodeEnabled"], []);
   const source = useExportWorkspaceState((state) => state.source);
   const selectedClipIds = useExportWorkspaceState((state) => state.selectedClipIds);
   const settings = useExportWorkspaceState((state) => state.settings);
@@ -36,7 +39,7 @@ export function ExportActionBar({ onExportStarted }: ExportActionBarProps) {
   const transcodeBlocker = exportToTranscodeBlocker(selectedClips.length, settings);
 
   function handleSendToTranscode() {
-    if (!source || transcodeBlocker) return;
+    if (!betaTranscodeEnabled || !source || transcodeBlocker) return;
     void publishEvent(
       "transcode.export.requested",
       { source: { ...source, clips: selectedClips }, settings: { ...settings } },
@@ -116,16 +119,18 @@ export function ExportActionBar({ onExportStarted }: ExportActionBarProps) {
   return (
     <footer className="export-action-bar">
       <div className="export-action-row">
-        <button
-          type="button"
-          className="toolbar-button"
-          onClick={handleSendToTranscode}
-          disabled={transcodeBlocker !== null}
-          title={transcodeBlocker ?? "把勾选的片段按当前设置加入转码队列，在转码页面统一编码"}
-        >
-          <Send size={14} />
-          发送到转码
-        </button>
+        {betaTranscodeEnabled && (
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={handleSendToTranscode}
+            disabled={transcodeBlocker !== null}
+            title={transcodeBlocker ?? "把勾选的片段按当前设置加入转码队列，在转码页面统一编码"}
+          >
+            <Send size={14} />
+            发送到转码
+          </button>
+        )}
         <button
           type="button"
           className="accent-button"

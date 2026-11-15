@@ -14,11 +14,6 @@ import {
   assetLibraryProjectPlace,
   assetLibraryViewLayout,
   isAssetLibraryLocation,
-  withAssetLibraryColorLabel,
-  withAssetLibraryFlag,
-  withAssetLibraryRating,
-  withAssetLibraryRatingDelta,
-  type AssetLibraryFlag,
   type AssetLibraryLocation,
   type AssetLibraryPlace,
   type AssetLibrarySelection,
@@ -28,12 +23,13 @@ import { publishEvent } from "../../../runtime/events/react";
 import { useStableIdentity } from "../../../runtime/state/react";
 import { usePanelActive, usePanelInstanceId } from "../../../runtime/systems/PanelState";
 import { useProjectPort } from "../../../systems/ProjectSystem";
-import type { AssetLibraryColorLabel, AssetLibraryEntry } from "../../../types";
+import type { AssetLibraryEntry } from "../../../types";
 import { usePanelManagerState } from "../../common/DockLayout";
 import { isPopupMenuEventTarget, useCloseOnOutsidePointer } from "../../common/PopupMenu";
 import { annotationShortcutAction } from "../../common/utils/annotationShortcuts";
 import { useExternalAssetLibraryDropTarget } from "../../common/utils/assetLibraryDropTarget";
 import "./AssetLibrary.css";
+import { assetLibraryAnnotationActions } from "./assetLibraryAnnotationActions";
 import { assetLibraryCommands } from "./assetLibraryCommands";
 import { assetLibraryDragDrop, type AssetLibraryDragPreview } from "./assetLibraryDragDrop";
 import { assetLibraryFileOperations } from "./assetLibraryFileOperations";
@@ -48,6 +44,7 @@ import { assetLibraryFilterActive } from "../../../core/editor/assetLibraryFilte
 import { assetLibraryColumnScope } from "./assetLibraryColumns";
 import { assetLibraryHomeActions } from "./assetLibraryHomeActions";
 import { useAssetLibraryHome } from "./assetLibraryHomeState";
+import { assetLibraryExportSelection, useAssetLibraryExport } from "./useAssetLibraryExport";
 import { useAssetLibraryNodes } from "./useAssetLibraryNodes";
 import { assetLibrarySelectionActions } from "./assetLibrarySelection";
 import { useSlowClickRename } from "./useSlowClickRename";
@@ -177,6 +174,14 @@ export function AssetLibrary() {
   const selectedNodes = nodes.filter((node) => view.selectedKeys.has(node.key));
   const selection = assetLibrarySelectionFromKeys(selectedNodes.map((node) => node.key));
   const selectedEntryIds = selection.entryIds;
+  const exporting = useAssetLibraryExport({
+    identity,
+    active: isEditAuthority,
+    library,
+    showHidden,
+    mediaByEntryId,
+    selectedNodes,
+  });
 
   // Drop selection keys whose nodes are no longer visible (deleted, moved, filtered).
   const { select } = view;
@@ -216,19 +221,7 @@ export function AssetLibrary() {
     view.setDetailsVisible(true);
   }
 
-  function updateSelectedEntries(
-    label: string,
-    recipe: (entry: AssetLibraryEntry) => AssetLibraryEntry,
-  ) {
-    if (selectedEntryIds.length > 0) commands.updateEntries(label, selectedEntryIds, recipe);
-  }
-
-  const setFlag = (flag: AssetLibraryFlag) =>
-    updateSelectedEntries("设置旗标", (entry) => withAssetLibraryFlag(entry, flag));
-  const setRating = (rating: number) =>
-    updateSelectedEntries("设置星级", (entry) => withAssetLibraryRating(entry, rating));
-  const setColorLabel = (colorLabel: AssetLibraryColorLabel | null) =>
-    updateSelectedEntries("设置色标", (entry) => withAssetLibraryColorLabel(entry, colorLabel));
+  const annotations = assetLibraryAnnotationActions(commands, selectedEntryIds);
 
   function previewEntry(entry: AssetLibraryEntry) {
     const media = mediaByEntryId.get(entry.id);
@@ -241,7 +234,7 @@ export function AssetLibrary() {
     void publishEvent("media.video.opened", { videoId: media.videoId }, identity);
     void publishEvent(
       "playback.seek.requested",
-      { videoId: media.videoId, timeUs: entry.start_us, focusEndUs: entry.end_us },
+      { videoId: media.videoId, timeUs: entry.start_us, focusEndUs: entry.end_us, play: true },
       identity,
     );
     messagePublished(`已在源监视器中预览“${entry.name}”。`);
@@ -443,14 +436,7 @@ export function AssetLibrary() {
       isEditAuthority && !event.repeat ? annotationShortcutAction(event.nativeEvent) : null;
     if (!action || selectedEntryIds.length === 0) return;
     event.preventDefault();
-    if (action.kind === "flag") setFlag(action.value);
-    else if (action.kind === "rating") setRating(action.value);
-    else if (action.kind === "colorLabel") setColorLabel(action.value);
-    else {
-      updateSelectedEntries("调整星级", (entry) =>
-        withAssetLibraryRatingDelta(entry, action.value),
-      );
-    }
+    annotations.applyShortcut(action);
   }
 
   // --- Context menu --------------------------------------------------------------------
@@ -481,6 +467,7 @@ export function AssetLibrary() {
   const singleMenuNode = !menuTreeLocation && selectedNodes.length === 1 ? selectedNodes[0]! : null;
   const menuEntryIds = menuTreeLocation ? [] : selectedEntryIds;
   const menuPinIds = homeActions.pinIds(selectedNodes, menuTreeLocation);
+  const menuExport = assetLibraryExportSelection(selectedNodes, menuTreeLocation);
   const menuModel: AssetLibraryContextMenuModel = {
     canOpen: Boolean(singleMenuNode) || Boolean(menuTreeLocation),
     openLabel: singleMenuNode?.kind === "entry" ? "预览" : "打开",
@@ -501,6 +488,8 @@ export function AssetLibrary() {
       ? Boolean(menuTreeLocation.folderId)
       : !showHome && Boolean(singleMenuNode && singleMenuNode.kind !== "library"),
     canDelete: assetLibrarySelectionSize(menuSelection) > 0,
+    canExport: menu !== null && exporting.canExport(menuExport),
+    hasLastExportSettings: exporting.hasLastSettings,
     canSelectAll: nodes.length > 0,
     hasEntries: !menuTreeLocation && selectedEntryIds.length > 0,
     hasItems: assetLibrarySelectionSize(menuSelection) > 0,
@@ -541,14 +530,16 @@ export function AssetLibrary() {
       view.setRenamingKey(key);
     },
     remove: () => removeNodes(menuSelection),
+    exportItems: () => exporting.configure(menuExport),
+    quickExport: () => void exporting.quick(menuExport),
     selectAll,
     showProperties: () => {
       if (menuTreeLocation) view.navigate(menuTreeLocation);
       showProperties();
     },
-    setFlag,
-    setRating,
-    setColorLabel,
+    setFlag: annotations.setFlag,
+    setRating: annotations.setRating,
+    setColorLabel: annotations.setColorLabel,
     setSort: view.setSort,
     setGroup: view.setGroup,
     setSize: view.setSize,

@@ -752,14 +752,17 @@ body.is-marquee-selecting .asset-library * {
   height: 22px;
   place-items: center;
   padding: 0;
-  color: var(--color-text-emphasis);
+  color: var(--color-text-on-emphasis);
   background: var(--color-media-type-badge-background);
   border-radius: 50%;
 }
 
 .asset-library-preview-play:hover:not(:disabled) {
-  color: var(--color-accent-monitor);
-  background: var(--color-media-type-badge-background);
+  background: color-mix(
+    in srgb,
+    var(--color-media-type-badge-background) 85%,
+    var(--color-contrast-inverse)
+  );
 }
 
 .asset-library-preview-play svg {

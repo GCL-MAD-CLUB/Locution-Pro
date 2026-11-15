@@ -47,6 +47,9 @@ export interface AssetLibraryContextMenuModel {
   canDuplicate: boolean;
   canRename: boolean;
   canDelete: boolean;
+  /** Whether the items hold materials whose media can export. */
+  canExport: boolean;
+  hasLastExportSettings: boolean;
   canSelectAll: boolean;
   hasEntries: boolean;
   /** Whether the menu acts on items; a menu on blank space or a library root does not. */
@@ -72,6 +75,8 @@ export interface AssetLibraryContextMenuActions {
   duplicate: () => void;
   rename: () => void;
   remove: () => void;
+  exportItems: () => void;
+  quickExport: () => void;
   selectAll: () => void;
   showProperties: () => void;
   setFlag: (flag: AssetLibraryFlag) => void;
@@ -84,7 +89,7 @@ export interface AssetLibraryContextMenuActions {
   setShowHidden: (visible: boolean) => void;
 }
 
-type Submenu = "flag" | "rating" | "color" | "sort" | "group" | "view" | null;
+type Submenu = "export" | "flag" | "rating" | "color" | "sort" | "group" | "view" | null;
 
 /** The menu's sort keys; the other columns sort from their headers. */
 const sortLabels: Partial<Record<AssetLibrarySortKey, string>> = {
@@ -288,6 +293,25 @@ export function AssetLibraryContextMenu({
           全选
         </PopupMenuItem>
       )}
+      <PopupMenuSeparator />
+      <PopupMenuSubmenu
+        label="导出"
+        open={submenu === "export"}
+        disabled={!model.canExport}
+        enableMnemonics
+        onOpenChange={toggle("export")}
+      >
+        <PopupMenuItem mnemonic="E" onSelect={run(actions.exportItems)}>
+          导出(E)...
+        </PopupMenuItem>
+        <PopupMenuItem
+          mnemonic="W"
+          disabled={!model.hasLastExportSettings}
+          onSelect={run(actions.quickExport)}
+        >
+          使用上次设置导出(W)
+        </PopupMenuItem>
+      </PopupMenuSubmenu>
       {model.hasEntries && (
         <>
           <PopupMenuSeparator />

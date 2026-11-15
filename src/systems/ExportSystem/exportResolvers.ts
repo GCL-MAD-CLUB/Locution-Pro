@@ -1,7 +1,13 @@
 ﻿import { parseFrameRate } from "../../core/editor/timeline";
 import { expandedStoryboardKeywordText } from "../../components/panels/StoryboardPanel/annotations/storyboardKeywords";
 import { storyboardShotDefaultTitle } from "../../core/editor/storyboard";
-import type { MediaBinItem, MediaStream, MediaDocument, StoryboardState } from "../../types";
+import type {
+  AssetLibraryEntry,
+  MediaBinItem,
+  MediaStream,
+  MediaDocument,
+  StoryboardState,
+} from "../../types";
 import {
   isMediaItemEnabled,
   isMediaItemOffline,
@@ -344,6 +350,65 @@ export function buildMediaBinExportSource({
   return {
     kind: "media-bin",
     title: `${clips.length} 个视频`,
+    clips,
+    assetId: clips[0].thumbnail?.assetId,
+  };
+}
+
+export interface AssetLibraryExportInput {
+  /** Materials to export, each with the project video it currently plays from. */
+  items: ReadonlyArray<{ entry: AssetLibraryEntry; videoId: string }>;
+  mediaItems: MediaBinItem[];
+  projects: Record<string, MediaDocument>;
+  detachedVideoIds: Set<string>;
+}
+
+/**
+ * Builds an export source from asset-library materials. Each clip keeps the material's own
+ * name, range and keywords; a selection of one library exports like that library's panel,
+ * and a mixed one gets the 素材 naming rules.
+ */
+export function buildAssetLibraryExportSource({
+  items,
+  mediaItems,
+  projects,
+  detachedVideoIds,
+}: AssetLibraryExportInput): ExportSource | null {
+  const clips = items.flatMap(({ entry, videoId }) => {
+    const project = activeVideoProject(mediaItems, projects, videoId);
+    if (!project) return [];
+    const audio = exportAudioContext(videoId, project, projects, mediaItems, detachedVideoIds);
+    return [
+      clipFromProject(
+        `asset:${entry.id}`,
+        videoId,
+        project,
+        entry.name,
+        entry.start_us,
+        entry.end_us,
+        videoMediaBinName(mediaItems, videoId, project),
+        audio.sources,
+        audio.stream,
+        {
+          kind: entry.root === "storyboards" ? "storyboard" : "subtitle",
+          assetId: project.asset.id,
+          timeUs: entry.start_us,
+          fingerprint: project.asset.fingerprint,
+        },
+        entry.root === "storyboards" ? entry.annotation.keywords.join(",") : undefined,
+      ),
+    ];
+  });
+  if (clips.length === 0) {
+    return null;
+  }
+  const roots = new Set(items.map(({ entry }) => entry.root));
+  const kind =
+    roots.size > 1 ? "asset-library" : roots.has("storyboards") ? "storyboard" : "subtitle";
+  const noun = { "asset-library": "素材", storyboard: "分镜片段", subtitle: "字幕片段" }[kind];
+  return {
+    kind,
+    title: `${clips.length} 个${noun}`,
     clips,
     assetId: clips[0].thumbnail?.assetId,
   };

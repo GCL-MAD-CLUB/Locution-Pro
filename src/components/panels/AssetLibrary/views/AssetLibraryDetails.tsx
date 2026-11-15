@@ -517,8 +517,8 @@ function EntryProperties({
           type="button"
           className="asset-library-preview-play"
           disabled={!media}
-          title={media ? "在源监视器中预览" : "媒体离线，无法预览"}
-          aria-label="在源监视器中预览"
+          title={media ? "在源监视器中播放此片段" : "媒体离线，无法预览"}
+          aria-label="在源监视器中播放此片段"
           onClick={() => onPreview(entry)}
         >
           <Play aria-hidden="true" />

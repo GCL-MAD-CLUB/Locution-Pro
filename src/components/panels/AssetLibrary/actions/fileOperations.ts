@@ -9,18 +9,18 @@ import {
   type AssetLibraryLocation,
   type AssetLibraryPlace,
   type AssetLibrarySelection,
-} from "../../../core/editor/assetLibrary";
-import { assetLibraryHomeLabel } from "../../../core/editor/assetLibraryHome";
-import type { AssetLibraryFolder, ProjectAssetLibraryState } from "../../../types";
-import type { AssetLibraryCommands } from "./assetLibraryCommands";
+} from "../../../../core/editor/assetLibrary";
+import { assetLibraryHomeLabel } from "../../../../core/editor/assetLibraryHome";
+import type { AssetLibraryFolder, ProjectAssetLibraryState } from "../../../../types";
+import type { AssetLibraryCommands } from "./commands";
 import {
   assetEntryKey,
   assetFolderKey,
   assetLibrarySelectionSize,
   assetLocationKey,
   type AssetLibraryNode,
-} from "./assetLibraryNodes";
-import { readAssetLibraryClipboard, setAssetLibraryClipboard } from "./assetLibraryState";
+} from "../model/nodes";
+import { readAssetLibraryClipboard, setAssetLibraryClipboard } from "../state/panelState";
 
 export interface AssetLibraryFileOperationContext {
   library: ProjectAssetLibraryState;

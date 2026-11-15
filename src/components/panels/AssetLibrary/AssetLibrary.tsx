@@ -29,25 +29,26 @@ import { isPopupMenuEventTarget, useCloseOnOutsidePointer } from "../../common/P
 import { annotationShortcutAction } from "../../common/utils/annotationShortcuts";
 import { useExternalAssetLibraryDropTarget } from "../../common/utils/assetLibraryDropTarget";
 import "./AssetLibrary.css";
-import { assetLibraryAnnotationActions } from "./assetLibraryAnnotationActions";
-import { assetLibraryCommands } from "./assetLibraryCommands";
-import { assetLibraryDragDrop, type AssetLibraryDragPreview } from "./assetLibraryDragDrop";
-import { assetLibraryFileOperations } from "./assetLibraryFileOperations";
+import { assetLibraryAnnotationActions, assetLibraryCommands } from "./actions/commands";
+import { assetLibraryDragDrop, type AssetLibraryDragPreview } from "./actions/dragDrop";
+import { assetLibraryFileOperations } from "./actions/fileOperations";
 import {
   assetLibraryButtonKeys,
   assetLibraryKeyCommand,
+  assetLibrarySelectionActions,
   isAssetLibraryEditableTarget,
   type AssetLibraryKeyCommand,
-} from "./assetLibraryKeyboard";
+} from "./actions/selection";
 import { assetLibrarySelectionHidden } from "../../../core/editor/assetLibraryVisibility";
 import { assetLibraryFilterActive } from "../../../core/editor/assetLibraryFilter";
-import { assetLibraryColumnScope } from "./assetLibraryColumns";
-import { assetLibraryHomeActions } from "./assetLibraryHomeActions";
-import { useAssetLibraryHome } from "./assetLibraryHomeState";
-import { assetLibraryExportSelection, useAssetLibraryExport } from "./useAssetLibraryExport";
-import { useAssetLibraryNodes } from "./useAssetLibraryNodes";
-import { assetLibrarySelectionActions } from "./assetLibrarySelection";
-import { useSlowClickRename } from "./useSlowClickRename";
+import { assetLibraryColumnScope } from "./model/columns";
+import { assetLibraryHomeActions, useAssetLibraryHome } from "./state/home";
+import {
+  assetLibraryExportSelection,
+  useAssetLibraryExport,
+} from "./actions/useAssetLibraryExport";
+import { useAssetLibraryNodes } from "./model/useAssetLibraryNodes";
+import { useSlowClickRename } from "./actions/useSlowClickRename";
 import {
   assetEntryKey,
   assetFolderKey,
@@ -58,8 +59,8 @@ import {
   assetNodeParentText,
   assetNodeTarget,
   type AssetLibraryNode,
-} from "./assetLibraryNodes";
-import { useAssetLibraryClipboard, useAssetLibraryState } from "./assetLibraryState";
+} from "./model/nodes";
+import { useAssetLibraryClipboard, useAssetLibraryState } from "./state/panelState";
 import { AssetLibraryAddressBar } from "./views/AssetLibraryAddressBar";
 import {
   AssetLibraryCommandBar,
@@ -73,7 +74,7 @@ import {
   type AssetLibraryContextMenuState,
 } from "./views/AssetLibraryContextMenu";
 import { AssetLibraryDetails } from "./views/AssetLibraryDetails";
-import { AssetLibraryDragPreview as DragPreview } from "./views/AssetLibraryDragPreview";
+import { AssetLibraryDragPreview as DragPreview } from "./views/AssetLibraryPreview";
 import { AssetLibraryFooter } from "./views/AssetLibraryFooter";
 import { AssetLibraryHome } from "./views/AssetLibraryHome";
 import { AssetLibraryItems } from "./views/AssetLibraryItems";

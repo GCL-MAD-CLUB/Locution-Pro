@@ -3,18 +3,18 @@ import test from "node:test";
 import { createModuleLoader } from "../support/module-loader.ts";
 
 type KeyboardModule =
-  typeof import("../../../src/components/panels/AssetLibrary/assetLibraryKeyboard.ts");
+  typeof import("../../../src/components/panels/AssetLibrary/actions/selection.ts");
 type KeyInput =
-  import("../../../src/components/panels/AssetLibrary/assetLibraryKeyboard.ts").AssetLibraryKeyInput;
+  import("../../../src/components/panels/AssetLibrary/actions/selection.ts").AssetLibraryKeyInput;
 type KeyContext =
-  import("../../../src/components/panels/AssetLibrary/assetLibraryKeyboard.ts").AssetLibraryKeyContext;
+  import("../../../src/components/panels/AssetLibrary/actions/selection.ts").AssetLibraryKeyContext;
 
 const load = createModuleLoader(import.meta.url);
 const timeline = load("../../../src/core/editor/timeline.ts");
 const library = load("../../../src/core/editor/assetLibrary.ts", { "./timeline": timeline });
 const keyboard = load<KeyboardModule>(
-  "../../../src/components/panels/AssetLibrary/assetLibraryKeyboard.ts",
-  { "../../../core/editor/assetLibrary": library },
+  "../../../src/components/panels/AssetLibrary/actions/selection.ts",
+  { "../../../../core/editor/assetLibrary": library },
 );
 
 const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;

@@ -3,9 +3,9 @@ import test from "node:test";
 import { createModuleLoader } from "../support/module-loader.ts";
 
 const load = createModuleLoader(import.meta.url);
-const columns = load<
-  typeof import("../../../src/components/panels/AssetLibrary/assetLibraryColumns.ts")
->("../../../src/components/panels/AssetLibrary/assetLibraryColumns.ts");
+const columns = load<typeof import("../../../src/components/panels/AssetLibrary/model/columns.ts")>(
+  "../../../src/components/panels/AssetLibrary/model/columns.ts",
+);
 
 test("subtitle and storyboard libraries expose their own fields and column menus", () => {
   const subtitles = columns.assetLibraryColumnsForRoot("subtitles").map((column) => column.id);
@@ -76,7 +76,7 @@ function headerFixture(ids: string[]) {
       },
       "react-dom": {},
       "../../../common/PopupMenu": { useCloseOnOutsidePointer: () => {} },
-      "../assetLibraryColumns": columns,
+      "../model/columns": columns,
     },
     { document: { body: { classList: { add() {}, remove() {} } } } },
   );

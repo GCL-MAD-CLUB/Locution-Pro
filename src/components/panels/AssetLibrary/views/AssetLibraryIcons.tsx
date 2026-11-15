@@ -1,5 +1,8 @@
 import type { SVGProps } from "react";
 import type { AssetLibraryRoot } from "../../../../types";
+import { Captions, Film } from "lucide-react";
+import { OfflineFileIcon } from "../../MediaBin/views/MediaBinFolderIcon";
+import type { AssetLibraryNode } from "../model/nodes";
 
 // Flat glyphs drawn on the media bin folder icon's grid: the same 165 × 142 view box, the
 // same 84 × 64 footprint and fill, so they size and read like the folders beside them.
@@ -79,6 +82,7 @@ export const assetLibraryRootIcons: Record<AssetLibraryRoot, typeof AssetLibrary
 // The media bin folder, with its library's motif cut out of the body so a folder shows
 // what it holds.
 const folderTab = "M40 44v-2a4 4 0 0 1 4-4h24l6 6z";
+
 const folderBody = "M40 48h78a6 6 0 0 1 6 6v42a6 6 0 0 1-6 6H46a6 6 0 0 1-6-6V48z";
 
 /** A folder with two lines of caption text along its foot. */
@@ -110,3 +114,42 @@ export const assetLibraryFolderIcons: Record<
   subtitles: AssetLibrarySubtitlesFolderIcon,
   storyboards: AssetLibraryStoryboardsFolderIcon,
 };
+
+/** The media bin's kind glyphs, drawn in one fixed-size box so every row lines up. */
+export function AssetLibraryKindIcon({ node }: { node: AssetLibraryNode }) {
+  if (node.kind === "library") {
+    const Icon = assetLibraryRootIcons[node.root];
+    return (
+      <span className="media-bin-kind-icon folder">
+        <Icon />
+      </span>
+    );
+  }
+  if (node.kind === "folder") {
+    const Icon = assetLibraryFolderIcons[node.folder.root];
+    return (
+      <span className="media-bin-kind-icon folder">
+        <Icon />
+      </span>
+    );
+  }
+  if (!node.media) {
+    return (
+      <span className="media-bin-kind-icon">
+        <OfflineFileIcon
+          className="media-bin-offline-icon"
+          role="img"
+          aria-hidden={false}
+          aria-label="媒体离线"
+        />
+      </span>
+    );
+  }
+  const subtitle = node.entry.root === "subtitles";
+  const Icon = subtitle ? Captions : Film;
+  return (
+    <span className={`media-bin-kind-icon ${subtitle ? "subtitle" : "video"}`}>
+      <Icon aria-hidden="true" />
+    </span>
+  );
+}

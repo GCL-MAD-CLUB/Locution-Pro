@@ -8,8 +8,7 @@ import type {
 } from "../../../src/types.ts";
 
 type PlaceModule = typeof import("../../../src/core/editor/assetLibraryPlace.ts");
-type ColumnsModule =
-  typeof import("../../../src/components/panels/AssetLibrary/assetLibraryColumns.ts");
+type ColumnsModule = typeof import("../../../src/components/panels/AssetLibrary/model/columns.ts");
 
 const load = createModuleLoader(import.meta.url);
 const timeline = load<typeof import("../../../src/core/editor/timeline.ts")>(
@@ -27,9 +26,7 @@ const place = load<PlaceModule>("../../../src/core/editor/assetLibraryPlace.ts",
   "./assetLibrary": assetLibrary,
   "./assetLibraryHome": home,
 });
-const columns = load<ColumnsModule>(
-  "../../../src/components/panels/AssetLibrary/assetLibraryColumns.ts",
-);
+const columns = load<ColumnsModule>("../../../src/components/panels/AssetLibrary/model/columns.ts");
 
 function folder(
   id: string,

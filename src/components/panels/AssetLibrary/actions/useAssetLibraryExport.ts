@@ -1,20 +1,19 @@
-import type { AssetLibraryLocation } from "../../../core/editor/assetLibrary";
+import type { AssetLibraryLocation } from "../../../../core/editor/assetLibrary";
 import {
   assetLibraryExportEntries,
   type AssetLibraryExportSelection,
-} from "../../../core/editor/assetLibraryExport";
-import { useExportCapability } from "../../../runtime/capabilities/ExportCapability";
-import type { SystemIdentity } from "../../../runtime/systems/identity";
+} from "../../../../core/editor/assetLibraryExport";
+import { useExportCapability } from "../../../../runtime/capabilities/ExportCapability";
+import type { SystemIdentity } from "../../../../runtime/systems/identity";
 import {
   buildAssetLibraryExportSource,
   enqueueQuickExport,
   requestExport,
   type ExportSource,
-} from "../../../systems/ExportSystem";
-import { useProjectPort } from "../../../systems/ProjectSystem";
-import type { ProjectAssetLibraryState } from "../../../types";
-import type { ResolvedAssetMedia } from "./assetLibraryMedia";
-import type { AssetLibraryNode } from "./assetLibraryNodes";
+} from "../../../../systems/ExportSystem";
+import { useProjectPort } from "../../../../systems/ProjectSystem";
+import type { ProjectAssetLibraryState } from "../../../../types";
+import type { AssetLibraryNode, ResolvedAssetMedia } from "../model/nodes";
 
 interface AssetLibraryExportOptions {
   identity: SystemIdentity;

@@ -11,22 +11,22 @@ import {
   sortedAssetLibraryNodes,
   type AssetLibraryPlace,
   type AssetLibrarySort,
-} from "../../../core/editor/assetLibrary";
+} from "../../../../core/editor/assetLibrary";
 import {
   assetLibraryEntryMatchesFilter,
   assetLibraryFilterActive,
   type AssetLibraryFilter,
-} from "../../../core/editor/assetLibraryFilter";
+} from "../../../../core/editor/assetLibraryFilter";
 import {
   groupedAssetLibraryItems,
   type AssetLibraryGrouping,
-} from "../../../core/editor/assetLibraryGroup";
+} from "../../../../core/editor/assetLibraryGroup";
 import {
   assetLibraryPinnedPlaces,
   type AssetLibraryHome,
   type AssetLibraryHomeTab,
-} from "../../../core/editor/assetLibraryHome";
-import { withoutHiddenAssetLibraryNodes } from "../../../core/editor/assetLibraryVisibility";
+} from "../../../../core/editor/assetLibraryHome";
+import { withoutHiddenAssetLibraryNodes } from "../../../../core/editor/assetLibraryVisibility";
 import type {
   AssetLibraryEntry,
   AssetLibraryFolder,
@@ -34,15 +34,15 @@ import type {
   MediaBinItem,
   MediaDocument,
   ProjectAssetLibraryState,
-} from "../../../types";
-import { resolveAssetMedia } from "./assetLibraryMedia";
+} from "../../../../types";
 import {
   assetEntryKey,
   assetFolderKey,
   assetLocationKey,
   assetNodeGroupItem,
+  resolveAssetMedia,
   type AssetLibraryNode,
-} from "./assetLibraryNodes";
+} from "./nodes";
 
 /** A group of listed items; a collapsed group's items are left out of the navigable nodes. */
 export interface AssetLibraryNodeGroup {

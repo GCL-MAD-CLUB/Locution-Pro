@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { assetLibraryPaneWidths, type AssetLibraryPane } from "../assetLibraryState";
+import { assetLibraryPaneWidths, type AssetLibraryPane } from "../state/panelState";
 
 /** Divider between framed panes; only the handle being dragged keeps its line visible. */
 export function AssetLibraryResizeHandle({

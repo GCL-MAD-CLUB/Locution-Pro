@@ -33,18 +33,12 @@ import {
   StoryboardSidebarHeading,
   StoryboardSidebarSection,
 } from "../../StoryboardPanel/StoryboardSidebarSection";
-import type { ResolvedAssetMedia } from "../assetLibraryMedia";
+import type { AssetLibraryContainer, ResolvedAssetMedia } from "../model/nodes";
 import { assetLibraryColorLabelNames, assetLibraryFlagNames } from "./AssetLibraryBadges";
-import { AssetLibraryThumbnail } from "./AssetLibraryThumbnail";
+import { AssetLibraryThumbnail } from "./AssetLibraryPreview";
 import { useVerticalOverflow } from "./useVerticalOverflow";
 
 export type AssetLibraryEntryRecipe = (entry: AssetLibraryEntry) => AssetLibraryEntry;
-
-/** The place described when no item is selected: a folder, a library, or the project. */
-export type AssetLibraryContainer =
-  | { kind: "folder"; folder: AssetLibraryFolder; childCount: number }
-  | { kind: "root"; root: AssetLibraryRoot }
-  | { kind: "project" };
 
 interface AssetLibraryDetailsProps {
   library: ProjectAssetLibraryState;

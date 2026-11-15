@@ -11,6 +11,7 @@ import {
  * matches the system double-click time, so the first click of a double-click never renames.
  */
 const renameDelayMs = 500;
+
 /** Pointer travel that turns the press into a drag rather than a click. */
 const clickSlopPx = 4;
 

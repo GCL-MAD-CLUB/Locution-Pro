@@ -20,7 +20,7 @@ import {
   type AssetLibraryColumnId,
   type AssetLibraryColumnScope,
   type AssetLibraryColumnWidths,
-} from "../assetLibraryColumns";
+} from "../model/columns";
 
 interface ColumnResize {
   id: AssetLibraryColumnId;

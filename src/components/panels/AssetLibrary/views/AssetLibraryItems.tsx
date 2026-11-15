@@ -25,19 +25,21 @@ import {
   assetLibraryColumnsForRoot,
   type AssetLibraryColumn,
   type AssetLibraryColumnId,
+  type AssetLibraryColumnScope,
   type AssetLibraryColumnWidths,
-} from "../assetLibraryColumns";
+} from "../model/columns";
 import { assetLibraryDropTargetProps } from "../../../common/utils/assetLibraryDropTarget";
-import { assetNodeTarget, type AssetLibraryNode } from "../assetLibraryNodes";
-import type { AssetLibraryColumnScope } from "../assetLibraryColumns";
-import type { AssetLibraryNodeGroup } from "../useAssetLibraryNodes";
-import { assetLibraryFolderIcons, assetLibraryRootIcons } from "./AssetLibraryTreeIcons";
+import { assetNodeTarget, type AssetLibraryNode } from "../model/nodes";
+import type { AssetLibraryNodeGroup } from "../model/useAssetLibraryNodes";
+import {
+  assetLibraryFolderIcons,
+  AssetLibraryKindIcon as KindIcon,
+  assetLibraryRootIcons,
+} from "./AssetLibraryIcons";
 import { AssetLibraryMarks, AssetLibraryThumbnailMarks } from "./AssetLibraryBadges";
 import { OfflineFileIcon } from "../../MediaBin/views/MediaBinFolderIcon";
-import { AssetLibraryHoverFrame } from "./AssetLibraryHoverFrame";
-import { AssetLibraryKindIcon as KindIcon } from "./AssetLibraryKindIcon";
+import { AssetLibraryHoverFrame, AssetLibraryThumbnail } from "./AssetLibraryPreview";
 import { AssetLibraryListHeader } from "./AssetLibraryListHeader";
-import { AssetLibraryThumbnail } from "./AssetLibraryThumbnail";
 
 /** Matches `.media-bin-grid`: 14px padding and a 12px gap. */
 const gridPadding = 14;

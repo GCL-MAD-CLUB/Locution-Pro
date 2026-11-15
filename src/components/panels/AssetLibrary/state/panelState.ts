@@ -1,6 +1,6 @@
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
-import { createPanelState } from "../../../runtime/systems/PanelState";
+import { createPanelState } from "../../../../runtime/systems/PanelState";
 import {
   assetLibraryHomePlace,
   sameAssetLibraryLocation,
@@ -8,16 +8,16 @@ import {
   type AssetLibraryClipboard,
   type AssetLibraryPlace,
   type AssetLibrarySort,
-} from "../../../core/editor/assetLibrary";
+} from "../../../../core/editor/assetLibrary";
 import {
   emptyAssetLibraryFilter,
   type AssetLibraryFilter,
-} from "../../../core/editor/assetLibraryFilter";
+} from "../../../../core/editor/assetLibraryFilter";
 import {
   noAssetLibraryGrouping,
   type AssetLibraryGrouping,
-} from "../../../core/editor/assetLibraryGroup";
-import type { AssetLibraryHomeTab } from "../../../core/editor/assetLibraryHome";
+} from "../../../../core/editor/assetLibraryGroup";
+import type { AssetLibraryHomeTab } from "../../../../core/editor/assetLibraryHome";
 import {
   assetLibraryColumnScope,
   clampAssetLibraryColumnWidth,
@@ -26,7 +26,7 @@ import {
   type AssetLibraryColumnId,
   type AssetLibraryColumnScope,
   type AssetLibraryColumnWidths,
-} from "./assetLibraryColumns";
+} from "../model/columns";
 
 export const assetLibraryPaneWidths = {
   navigation: { initial: 200, minimum: 140, maximum: 420 },

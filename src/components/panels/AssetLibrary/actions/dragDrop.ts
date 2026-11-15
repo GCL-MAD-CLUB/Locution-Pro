@@ -5,15 +5,15 @@ import {
   sameAssetLibraryLocation,
   type AssetLibraryLocation,
   type AssetLibraryPlace,
-} from "../../../core/editor/assetLibrary";
-import type { AssetLibraryRoot, ProjectAssetLibraryState } from "../../../types";
-import { maximumDragStackLayers } from "../../common/DragStackPreview";
+} from "../../../../core/editor/assetLibrary";
+import type { AssetLibraryRoot, ProjectAssetLibraryState } from "../../../../types";
+import { maximumDragStackLayers } from "../../../common/DragStackPreview";
 import {
   assetLibraryDropTargetAt,
   assetLibraryTreeDropPrefix,
-} from "../../common/utils/assetLibraryDropTarget";
-import type { AssetLibraryCommands } from "./assetLibraryCommands";
-import { assetLibrarySelectionFromKeys, type AssetLibraryNode } from "./assetLibraryNodes";
+} from "../../../common/utils/assetLibraryDropTarget";
+import type { AssetLibraryCommands } from "./commands";
+import { assetLibrarySelectionFromKeys, type AssetLibraryNode } from "../model/nodes";
 
 /** Pointer travel before a press on an item becomes a drag, matching the storyboard. */
 const dragThresholdPx = 4;
@@ -30,6 +30,7 @@ export interface AssetLibraryDragPreview {
 
 // The storyboard panel's shot drag classes: a no-drop cursor by default, grabbing over a target.
 const draggingClass = "is-dragging-storyboard-shot";
+
 const allowedClass = "is-storyboard-shot-drag-allowed";
 
 /** Ends a drag without the release also counting as a click on whatever is under it. */

@@ -22,10 +22,10 @@ import type {
   AssetLibraryHomeTab,
 } from "../../../../core/editor/assetLibraryHome";
 import type { ProjectAssetLibraryState } from "../../../../types";
-import { assetNodeParentText, type AssetLibraryNode } from "../assetLibraryNodes";
+import { assetNodeParentText, type AssetLibraryNode } from "../model/nodes";
 import "./AssetLibraryHome.css";
-import { AssetLibraryThumbnail } from "./AssetLibraryThumbnail";
-import { assetLibraryFolderIcons, assetLibraryRootIcons } from "./AssetLibraryTreeIcons";
+import { AssetLibraryThumbnail } from "./AssetLibraryPreview";
+import { assetLibraryFolderIcons, assetLibraryRootIcons } from "./AssetLibraryIcons";
 
 /** Section ids, kept with the properties pane's in the panel's collapsed sections. */
 export const assetLibraryHomeSections = { quickAccess: "home:quick-access", files: "home:files" };

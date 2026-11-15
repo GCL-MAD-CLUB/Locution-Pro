@@ -7,12 +7,12 @@ import {
   type ReactElement,
 } from "react";
 import {
+  assetLibraryHomePlace,
+  assetLibraryProjectLabel,
+  assetLibraryProjectPlace,
   assetLibraryRootLabels,
   assetLibraryRoots,
   sortedAssetLibraryNodes,
-  assetLibraryProjectLabel,
-  assetLibraryProjectPlace,
-  assetLibraryHomePlace,
   type AssetLibraryLocation,
   type AssetLibraryPlace,
   type AssetLibrarySort,
@@ -30,13 +30,13 @@ import {
   assetLibraryDropTargetProps,
   assetLibraryTreeDropPrefix as treeDropPrefix,
 } from "../../../common/utils/assetLibraryDropTarget";
-import { assetLocationKey } from "../assetLibraryNodes";
+import { assetLocationKey } from "../model/nodes";
 import {
+  assetLibraryFolderIcons,
   AssetLibraryHomeIcon,
   AssetLibraryProjectIcon,
-  assetLibraryFolderIcons,
   assetLibraryRootIcons,
-} from "./AssetLibraryTreeIcons";
+} from "./AssetLibraryIcons";
 
 interface AssetLibraryNavigationProps {
   library: ProjectAssetLibraryState;

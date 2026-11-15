@@ -1,9 +1,9 @@
 import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight, Search } from "lucide-react";
 import {
   useState,
-  type RefObject,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -27,12 +27,12 @@ import { assetLibraryHomeLabel } from "../../../../core/editor/assetLibraryHome"
 import type { AssetLibraryFolder, ProjectAssetLibraryState } from "../../../../types";
 import { PopupMenu, PopupMenuItem, useCloseOnOutsidePointer } from "../../../common/PopupMenu";
 import { assetLibraryDropTargetProps } from "../../../common/utils/assetLibraryDropTarget";
-import { assetLocationKey } from "../assetLibraryNodes";
+import { assetLocationKey } from "../model/nodes";
 import {
   AssetLibraryHomeIcon,
   AssetLibraryProjectIcon,
   assetLibraryRootIcons,
-} from "./AssetLibraryTreeIcons";
+} from "./AssetLibraryIcons";
 
 type AddressMenu =
   | { kind: "roots"; x: number; y: number }

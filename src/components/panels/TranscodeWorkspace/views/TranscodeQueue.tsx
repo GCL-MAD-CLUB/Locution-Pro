@@ -1,5 +1,6 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { Copy, Film, ListPlus, Play, Plus, RotateCcw, Square, Trash2 } from "lucide-react";
+import { Copy, ListPlus, Play, Plus, RotateCcw, Square, Trash2 } from "lucide-react";
+import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
 import { useState, type DragEvent, type MouseEvent } from "react";
 import { runOperation } from "../../../../errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
@@ -312,7 +313,7 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
                 )
               }
             >
-              <Film />
+              <VideoGlyph />
               <span className="transcode-queue-source-name">{fileName(source.path)}</span>
               {source.infoStatus === "failed" && (
                 <span className="transcode-warning">无法读取</span>

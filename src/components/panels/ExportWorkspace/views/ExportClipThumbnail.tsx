@@ -1,4 +1,5 @@
-import { Film, Play } from "lucide-react";
+import { Play } from "lucide-react";
+import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
 import { useEffect, useState } from "react";
 import {
   timelineThumbnails,
@@ -59,7 +60,7 @@ export function ExportClipThumbnail({ clip, durationText, onPlay }: ExportClipTh
       {src ? (
         <img src={src} alt="" draggable={false} />
       ) : (
-        <Film className="export-clip-thumbnail-placeholder" size={18} />
+        <VideoGlyph className="export-clip-thumbnail-placeholder" size={18} />
       )}
       <span className="export-clip-thumbnail-play" aria-hidden="true">
         <Play size={11} />

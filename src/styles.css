@@ -166,10 +166,15 @@
   --palette-media-proxy-badge: #36c99a;
   --palette-media-proxy-badge-background: rgb(0 0 0 / 62%);
   --palette-media-subtitle: #893a04;
+  --palette-media-subtitle-icon: #ff9f4a;
   --palette-media-type-badge-background: rgba(17, 17, 17, 0.8);
   --palette-media-video: #3e0aae;
   --palette-media-video-audio: #004b67;
   --palette-media-video-icon: #c285ff;
+  --palette-asset-library-home-icon: #6fa8ff;
+  --palette-asset-library-project-icon: #f27ba0;
+  --palette-asset-library-subtitles-folder-icon: #b8a390;
+  --palette-asset-library-storyboards-folder-icon: #a69bb8;
   --palette-annotation-active: #cccccc;
   --palette-annotation-active-hover: #b4b4b4;
   --palette-annotation-confirm-hover-background: #3b3b3b;
@@ -264,11 +269,16 @@
   --palette-light-import-drop-target: #e3edf8;
   --palette-light-import-drop-target-hover: #cedff2;
   --palette-light-media-audio-icon: #137b59;
+  --palette-light-media-subtitle-icon: #b35a12;
   --palette-light-media-disabled: #bc3428;
   --palette-light-media-enabled: #16804e;
   --palette-light-media-folder-preview-background: #e4e4e4;
   --palette-light-media-link-success: #246e4a;
   --palette-light-media-video-icon: #7841b3;
+  --palette-light-asset-library-home-icon: #2f6fd0;
+  --palette-light-asset-library-project-icon: #c2416f;
+  --palette-light-asset-library-subtitles-folder-icon: #8c7663;
+  --palette-light-asset-library-storyboards-folder-icon: #7a6f8f;
   --palette-light-spray-button-hover-overlay: rgb(100 100 100 / 20%);
   --palette-light-storyboard-duration: rgb(40 40 40 / 90%);
   --palette-light-storyboard-excluded-border: #af6666;
@@ -512,12 +522,21 @@
   --color-media-folder-drop-border: var(--palette-media-folder-drop-border);
   --color-media-folder-drop-text: var(--palette-media-folder-drop-text);
   --color-media-folder-icon: var(--color-text-default);
+  --color-asset-library-home-icon: var(--palette-asset-library-home-icon);
+  --color-asset-library-project-icon: var(--palette-asset-library-project-icon);
+  --color-asset-library-subtitles-icon: var(--palette-media-subtitle-icon);
+  --color-asset-library-storyboards-icon: var(--palette-media-video-icon);
+  --color-asset-library-subtitles-folder-icon: var(--palette-asset-library-subtitles-folder-icon);
+  --color-asset-library-storyboards-folder-icon: var(
+    --palette-asset-library-storyboards-folder-icon
+  );
   --color-media-folder-preview-background: var(--palette-media-folder-preview-background);
   --color-media-label-outline: var(--color-dock-drop-target);
   --color-media-link-success: var(--palette-media-link-success);
   --color-media-proxy-badge: var(--palette-media-proxy-badge);
   --color-media-proxy-badge-background: var(--palette-media-proxy-badge-background);
   --color-media-subtitle: var(--palette-media-subtitle);
+  --color-media-subtitle-icon: var(--palette-media-subtitle-icon);
   --color-media-type-badge-background: var(--palette-media-type-badge-background);
   --color-media-type-badge-icon: var(--palette-accent-monitor);
   --color-media-video: var(--palette-media-video);
@@ -947,6 +966,14 @@
   --color-media-folder-drop-border: var(--palette-media-folder-drop-border);
   --color-media-folder-drop-text: var(--palette-media-folder-drop-text);
   --color-media-folder-icon: var(--palette-text-default);
+  --color-asset-library-home-icon: var(--palette-asset-library-home-icon);
+  --color-asset-library-project-icon: var(--palette-asset-library-project-icon);
+  --color-asset-library-subtitles-icon: var(--palette-media-subtitle-icon);
+  --color-asset-library-storyboards-icon: var(--palette-media-video-icon);
+  --color-asset-library-subtitles-folder-icon: var(--palette-asset-library-subtitles-folder-icon);
+  --color-asset-library-storyboards-folder-icon: var(
+    --palette-asset-library-storyboards-folder-icon
+  );
   --color-media-folder-preview-background: var(
     --palette-dark-workspace-media-folder-preview-background
   );
@@ -955,6 +982,7 @@
   --color-media-proxy-badge: var(--palette-media-proxy-badge);
   --color-media-proxy-badge-background: var(--palette-media-proxy-badge-background);
   --color-media-subtitle: var(--palette-media-subtitle);
+  --color-media-subtitle-icon: var(--palette-media-subtitle-icon);
   --color-media-type-badge-background: var(--palette-media-type-badge-background);
   --color-media-type-badge-icon: var(--palette-contrast-dark-accent-monitor);
   --color-media-video: var(--palette-media-video);
@@ -1285,12 +1313,23 @@
   --color-media-folder-drop-border: var(--palette-light-text-description);
   --color-media-folder-drop-text: var(--palette-surface-soft);
   --color-media-folder-icon: var(--palette-dark-annotation-confirm-hover-background);
+  --color-asset-library-home-icon: var(--palette-light-asset-library-home-icon);
+  --color-asset-library-project-icon: var(--palette-light-asset-library-project-icon);
+  --color-asset-library-subtitles-icon: var(--palette-light-media-subtitle-icon);
+  --color-asset-library-storyboards-icon: var(--palette-light-media-video-icon);
+  --color-asset-library-subtitles-folder-icon: var(
+    --palette-light-asset-library-subtitles-folder-icon
+  );
+  --color-asset-library-storyboards-folder-icon: var(
+    --palette-light-asset-library-storyboards-folder-icon
+  );
   --color-media-folder-preview-background: var(--palette-light-media-folder-preview-background);
   --color-media-label-outline: var(--palette-update-code-background);
   --color-media-link-success: var(--palette-light-media-link-success);
   --color-media-proxy-badge: var(--palette-media-proxy-badge);
   --color-media-proxy-badge-background: var(--palette-media-proxy-badge-background);
   --color-media-subtitle: var(--palette-media-subtitle);
+  --color-media-subtitle-icon: var(--palette-light-media-subtitle-icon);
   --color-media-type-badge-background: var(--palette-media-type-badge-background);
   --color-media-type-badge-icon: var(--palette-contrast-dark-accent-monitor);
   --color-media-video: var(--palette-media-video);

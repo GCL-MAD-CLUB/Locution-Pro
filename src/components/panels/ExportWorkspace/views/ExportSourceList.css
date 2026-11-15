@@ -1,0 +1,235 @@
+/* ---- 左区：导出片段勾选面板 ---- */
+
+.export-clips-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.export-source-toolbar {
+  display: flex;
+  flex: 0 0 32px;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0 12px 0 14px;
+  color: var(--color-text);
+  font-size: 12px;
+  border-bottom: 1px solid var(--color-border-divider);
+  user-select: none;
+}
+
+.export-source-summary,
+.export-source-duration {
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.export-source-summary {
+  flex: 1 1 auto;
+}
+
+.export-source-duration {
+  flex: 0 1 auto;
+}
+
+.export-source-summary strong,
+.export-source-duration strong {
+  color: var(--color-text-emphasis);
+  font-weight: 500;
+}
+
+.export-clip-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-color: var(--color-border-overlay-default) var(--color-surface-canvas);
+  scrollbar-gutter: stable;
+}
+
+.export-clip-list::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.export-clip-list::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+}
+
+/* Flat rows with dividers, like the subtitle and media lists. */
+.export-clip-row {
+  /* The thumbnail is exactly as tall as the three text lines beside it. */
+  --export-clip-line-height: 16px;
+  --export-clip-line-gap: 2px;
+  --export-clip-text-height: calc(
+    var(--export-clip-line-height) * 3 + var(--export-clip-line-gap) * 2
+  );
+  position: relative;
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 14px calc(var(--export-clip-text-height) * 16 / 9) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 14px;
+  color: var(--color-text-table-row);
+  border-bottom: 1px solid var(--color-border-divider);
+  cursor: default;
+  user-select: none;
+}
+
+.export-clip-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.export-clip-row.is-previewing,
+.export-clip-row.is-previewing:hover {
+  background: var(--color-surface-row-selected);
+}
+
+/* The previewed clip carries the same accent bar as the current subtitle row. */
+.export-clip-row.is-previewing::before {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 4px;
+  width: 3px;
+  background: var(--color-selection-active);
+  border-radius: 2px;
+  content: "";
+  pointer-events: none;
+}
+
+/* Clips left out of the export recede; their checkbox stays solid. */
+.export-clip-row:not(.is-selected) .export-clip-thumbnail,
+.export-clip-row:not(.is-selected) .export-clip-info {
+  opacity: var(--opacity-control-disabled);
+}
+
+.export-clip-checkbox-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.export-clip-thumbnail {
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--export-clip-text-height);
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-surface-input);
+  border: 1px solid var(--color-border-panel);
+  cursor: pointer;
+}
+
+.export-clip-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.export-clip-thumbnail-placeholder {
+  color: var(--color-text);
+  opacity: 0.5;
+}
+
+.export-clip-thumbnail-duration {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  padding: 0 3px;
+  color: var(--color-text-on-emphasis);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
+  background: var(--color-media-type-badge-background);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.export-clip-thumbnail-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  color: var(--color-text-on-emphasis);
+  background: var(--color-media-type-badge-background);
+  border-radius: 50%;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+
+.export-clip-thumbnail-play svg {
+  margin-left: 2px;
+  fill: currentColor;
+}
+
+.export-clip-thumbnail:hover .export-clip-thumbnail-play,
+.export-clip-thumbnail:focus-visible .export-clip-thumbnail-play {
+  opacity: 1;
+}
+
+.export-clip-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--export-clip-line-gap);
+  min-width: 0;
+}
+
+.export-clip-label,
+.export-clip-label-secondary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-clip-label {
+  color: var(--color-text-emphasis);
+  font-size: 12px;
+  line-height: var(--export-clip-line-height);
+}
+
+.export-clip-label-secondary {
+  color: var(--color-text-table-row);
+  font-size: 12px;
+  line-height: var(--export-clip-line-height);
+}
+
+.export-clip-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--color-text-table-row);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--export-clip-line-height);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.export-clip-meta-separator {
+  flex: 0 0 1px;
+  align-self: center;
+  height: 10px;
+  background: var(--color-export-meta-separator);
+}

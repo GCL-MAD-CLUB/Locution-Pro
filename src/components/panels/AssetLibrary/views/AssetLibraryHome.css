@@ -15,12 +15,12 @@
   user-select: none;
 }
 
-/* A narrow pane clips the home on the right instead of squeezing it. */
+/* Sections follow the pane's width; only the headings keep their size and clip on the right. */
 .asset-library-home > .asset-library-home-section {
   display: flex;
   flex: none;
   flex-direction: column;
-  min-width: 480px;
+  min-width: 0;
 }
 
 /* The last section takes the remaining height, so its empty state centers in it. */
@@ -225,7 +225,8 @@
 
 .asset-library-home-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  /* As many columns as fit, down to a single one that narrows with the pane. */
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
   gap: 4px;
   padding-left: 28px;
 }
@@ -295,6 +296,19 @@
   align-items: center;
   gap: 12px;
   padding: 0 8px;
+}
+
+/* A narrow pane drops the date column so the names keep their room. */
+@container asset-library-home (max-width: 360px) {
+  .asset-library-home-list-header,
+  .asset-library-home-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asset-library-home-list-header > :last-child,
+  .asset-library-home-row-date {
+    display: none;
+  }
 }
 
 .asset-library-home-list-header {

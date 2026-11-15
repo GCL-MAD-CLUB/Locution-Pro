@@ -1,6 +1,8 @@
-﻿import { formatDuration } from "../../../../core/editor/time";
+﻿import { useLayoutEffect, useRef } from "react";
+import { formatDuration } from "../../../../core/editor/time";
 import type { ExportClip, ExportSource } from "../../../../systems/ExportSystem";
 import { ExportClipThumbnail } from "./ExportClipThumbnail";
+import "./ExportSourceList.css";
 
 interface ExportSourceListProps {
   source: ExportSource;
@@ -18,6 +20,35 @@ function clipDurationUs(clip: ExportClip) {
   return Math.max(0, clip.durationUs);
 }
 
+/** The first label line leads; any further lines (a translation, keywords) follow quieter. */
+function clipLabelLines(label: string) {
+  const [primary = "", ...rest] = label.split("\n").filter((line) => line.trim() !== "");
+  return { primary, secondary: rest.join(" ") };
+}
+
+function SelectAllCheckbox({
+  checked,
+  mixed,
+  onChange,
+}: {
+  checked: boolean;
+  mixed: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const ref = useRef<HTMLInputElement | null>(null);
+  useLayoutEffect(() => {
+    if (ref.current) ref.current.indeterminate = mixed;
+  }, [mixed]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      onChange={(event) => onChange(event.target.checked)}
+    />
+  );
+}
+
 export function ExportSourceList({
   source,
   selectedClipIds,
@@ -26,25 +57,26 @@ export function ExportSourceList({
   onSetAllSelected,
   onPreviewClip,
 }: ExportSourceListProps) {
-  const allSelected =
-    source.clips.length > 0 && source.clips.every((clip) => selectedClipIds.has(clip.id));
   const selectedClips = source.clips.filter((clip) => selectedClipIds.has(clip.id));
+  const allSelected = source.clips.length > 0 && selectedClips.length === source.clips.length;
   const totalDurationUs = selectedClips.reduce((sum, clip) => sum + clipDurationUs(clip), 0);
 
   return (
     <section className="export-clips-panel">
       <div className="export-source-toolbar">
         <label className="export-check-label">
-          <input
-            type="checkbox"
+          <SelectAllCheckbox
             checked={allSelected}
-            onChange={(event) => onSetAllSelected(event.target.checked)}
+            mixed={!allSelected && selectedClips.length > 0}
+            onChange={onSetAllSelected}
           />
           <span>全选</span>
         </label>
         <span className="export-source-summary">
-          已选 {selectedClips.length} / {source.clips.length} 个 总时长{" "}
-          {formatDuration(totalDurationUs)}
+          已选 <strong>{selectedClips.length}</strong> / {source.clips.length}
+        </span>
+        <span className="export-source-duration">
+          总时长 <strong>{formatDuration(totalDurationUs)}</strong>
         </span>
       </div>
 
@@ -52,6 +84,7 @@ export function ExportSourceList({
         {source.clips.map((clip) => {
           const selected = selectedClipIds.has(clip.id);
           const previewing = previewClipId === clip.id;
+          const { primary, secondary } = clipLabelLines(clip.label);
           return (
             <div
               key={clip.id}
@@ -65,17 +98,31 @@ export function ExportSourceList({
                 className="export-clip-checkbox-cell"
                 onClick={(event) => event.stopPropagation()}
               >
-                <input type="checkbox" checked={selected} onChange={() => onToggleClip(clip.id)} />
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  aria-label={`导出 ${primary}`}
+                  onChange={() => onToggleClip(clip.id)}
+                />
               </span>
-              <ExportClipThumbnail clip={clip} onPlay={() => onPreviewClip(clip.id, true)} />
+              <ExportClipThumbnail
+                clip={clip}
+                durationText={formatDuration(clipDurationUs(clip))}
+                onPlay={() => onPreviewClip(clip.id, true)}
+              />
               <span className="export-clip-info">
-                <span className="export-clip-label">{clip.label}</span>
+                <span className="export-clip-label">{primary}</span>
+                {secondary ? (
+                  <span className="export-clip-label-secondary">{secondary}</span>
+                ) : null}
                 <span className="export-clip-meta">
-                  {clip.endUs > 0
-                    ? `${formatDuration(clip.startUs)} → ${formatDuration(clip.endUs)}`
-                    : formatDuration(clip.startUs)}
-                  <span className="export-clip-meta-separator">·</span>
-                  {formatDuration(clipDurationUs(clip))}
+                  <span>{formatDuration(clip.startUs)}</span>
+                  {clip.endUs > 0 ? (
+                    <>
+                      <span className="export-clip-meta-separator" aria-hidden="true" />
+                      <span>{formatDuration(clip.endUs)}</span>
+                    </>
+                  ) : null}
                 </span>
               </span>
             </div>

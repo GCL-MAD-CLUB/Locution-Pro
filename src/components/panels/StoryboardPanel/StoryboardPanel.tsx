@@ -825,9 +825,9 @@ function storyboardSprayBottleMarkSvg(
   if (mode === "flag" && flag !== "none") {
     const excludedMark =
       flag === "excluded"
-        ? '<path d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6" stroke="var(--color-annotation-flag-mark)" stroke-width=".75"/>'
+        ? '<path d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6" stroke="var(--color-annotation-overlay-flag-mark)" stroke-width=".75"/>'
         : "";
-    return `<path d="M7.2 11v7" stroke="var(--color-annotation-flag-pole)" stroke-width=".9"/><rect x="8" y="11.7" width="4.4" height="3.6" fill="var(--color-annotation-mark)"/>${excludedMark}`;
+    return `<path d="M7.2 11v7" stroke="var(--color-annotation-overlay-flag-pole)" stroke-width=".9"/><rect x="8" y="11.7" width="4.4" height="3.6" fill="var(--color-annotation-overlay-flag-fill)"/>${excludedMark}`;
   }
   if (mode === "rating") {
     return `<text x="10" y="17.8" fill="var(--color-annotation-mark)" font-family="Arial,sans-serif" font-size="7.5" font-weight="700" text-anchor="middle">${rating}</text>`;
@@ -913,12 +913,22 @@ function StoryboardSprayBottleIcon({
       )}
       {mode === "flag" && flag !== "none" && (
         <>
-          <path d="M7.2 11v7" stroke="var(--color-annotation-flag-pole)" strokeWidth="0.9" />
-          <rect x="8" y="11.7" width="4.4" height="3.6" fill="var(--color-annotation-mark)" />
+          <path
+            d="M7.2 11v7"
+            stroke="var(--color-annotation-overlay-flag-pole)"
+            strokeWidth="0.9"
+          />
+          <rect
+            x="8"
+            y="11.7"
+            width="4.4"
+            height="3.6"
+            fill="var(--color-annotation-overlay-flag-fill)"
+          />
           {flag === "excluded" && (
             <path
               d="M8.4 12.2l3.5 2.6m0-2.6-3.5 2.6"
-              stroke="var(--color-annotation-flag-mark)"
+              stroke="var(--color-annotation-overlay-flag-mark)"
               strokeWidth="0.75"
             />
           )}
@@ -2190,6 +2200,16 @@ export function StoryboardPanel() {
   useEffect(() => {
     setFooterSortMenu(null);
     setFooterSprayMenu(null);
+    // Graph nodes have no annotation columns, so expose these controls on entry.
+    // Only react to view changes so the footer menu can still hide them afterwards.
+    if (viewMode === "graph") {
+      setFooterAreaVisibility((current) => ({
+        ...current,
+        flag: true,
+        rating: true,
+        colorLabel: true,
+      }));
+    }
   }, [viewMode]);
 
   useEffect(() => {

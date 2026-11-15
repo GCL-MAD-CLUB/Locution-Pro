@@ -271,7 +271,6 @@
   background: var(--color-surface-canvas);
   border: 1px solid var(--color-border-frame);
   border-radius: 5px;
-  box-shadow: inset 0 0 0 1px var(--color-border-frame-inset);
 }
 
 .asset-library-items-frame {
@@ -279,9 +278,7 @@
 }
 
 .asset-library-items-frame.is-drop-target {
-  box-shadow:
-    inset 0 0 0 1px var(--color-border-frame-inset),
-    inset 0 0 0 2px var(--color-media-folder-drop-border);
+  border-color: var(--color-media-folder-drop-border);
 }
 
 /* Font metrics come from .storyboard-panel, which the properties pane sits outside of. */
@@ -539,9 +536,14 @@ body.is-marquee-selecting .asset-library * {
   inset: 0;
 }
 
-/* Thumbnail annotations, matching the storyboard graph preview metadata strip */
+/* Thumbnail annotations keep their dark surface, border and foreground in every theme. */
 
 .asset-library-thumbnail-metadata {
+  --color-annotation-flag-fill: var(--color-annotation-overlay-flag-fill);
+  --color-annotation-flag-pole: var(--color-annotation-overlay-flag-pole);
+  --color-annotation-rating: var(--color-annotation-overlay-rating);
+  --image-flag-excluded: var(--image-flag-overlay-excluded);
+
   position: absolute;
   top: 3px;
   left: 3px;
@@ -552,7 +554,7 @@ body.is-marquee-selecting .asset-library * {
   gap: 3px;
   height: 14px;
   padding: 1px 3px;
-  border: 1px solid var(--color-border-frame);
+  border: 1px solid var(--color-annotation-overlay-border);
   border-radius: 1px;
   background: color-mix(in srgb, var(--color-surface-thumbnail) 88%, var(--color-transparent));
   pointer-events: none;

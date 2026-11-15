@@ -592,7 +592,6 @@ body.is-resizing-storyboard-keyword-panel * {
   background: var(--color-surface-canvas);
   border: 1px solid var(--color-border-frame);
   border-radius: 5px;
-  box-shadow: inset 1px 0px 0 0 var(--color-border-frame-inset);
   scrollbar-color: var(--color-transparent) var(--color-surface-canvas);
   scrollbar-gutter: stable;
   user-select: none;
@@ -1568,9 +1567,7 @@ body.is-resizing-storyboard-keyword-panel * {
   background: var(--color-keyword-drag-background);
   border: 1px solid var(--color-border-frame);
   border-radius: 3px;
-  box-shadow:
-    0 5px 16px var(--color-keyword-drag-shadow),
-    inset 0 0 0 1px var(--color-border-frame-inset);
+  box-shadow: 0 5px 16px var(--color-keyword-drag-shadow);
   transform: translate(-50%, -50%);
   user-select: none;
 }
@@ -1717,7 +1714,6 @@ body.is-resizing-storyboard-keyword-panel * {
   background: var(--color-surface-canvas);
   border: 1px solid var(--color-border-frame);
   border-radius: 5px;
-  box-shadow: inset 0 0 0 1px var(--color-border-frame-inset);
   --storyboard-fixed-thumbnail-width: 120px;
   --storyboard-status-gutter-width: 16px;
   --storyboard-fixed-left-width: var(--storyboard-fixed-thumbnail-width);
@@ -1753,7 +1749,6 @@ body.is-resizing-storyboard-keyword-panel * {
   background: var(--color-surface-canvas);
   border: 1px solid var(--color-border-frame);
   border-radius: 5px;
-  box-shadow: inset 0 0 0 1px var(--color-border-frame-inset);
 }
 
 .storyboard-icon-view::-webkit-scrollbar {
@@ -1967,6 +1962,15 @@ body.is-resizing-storyboard-keyword-panel * {
 
 .storyboard-icon-card:hover .storyboard-stack-badge.is-expanded .storyboard-stack-badge-position {
   display: inline;
+}
+
+/* Expanded stack members keep dark thumbnail cells, including in the light theme. */
+.storyboard-icon-card.is-expanded-stack-member:not(.is-selected) .shot-thumbnail-cell,
+.shot-row.is-expanded-stack-member:not(.is-selected) .shot-thumbnail-cell {
+  --color-annotation-flag-fill: var(--color-annotation-overlay-flag-fill);
+  --color-annotation-flag-pole: var(--color-annotation-overlay-flag-pole);
+  --color-annotation-rating: var(--color-annotation-overlay-rating);
+  --image-flag-excluded: var(--image-flag-overlay-excluded);
 }
 
 .storyboard-icon-card.is-expanded-stack-member:not(.is-selected) .shot-thumbnail-cell {

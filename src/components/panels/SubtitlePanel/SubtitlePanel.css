@@ -427,7 +427,6 @@
   background: var(--color-surface-canvas);
   border: 1px solid var(--color-border-frame);
   border-radius: 5px;
-  box-shadow: inset 0 0 0 1px var(--color-border-frame-inset);
   --subtitle-fixed-thumbnail-width: 120px;
   --subtitle-status-gutter-width: 16px;
   --subtitle-fixed-left-width: var(--subtitle-fixed-thumbnail-width);

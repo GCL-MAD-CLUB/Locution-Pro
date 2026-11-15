@@ -1992,6 +1992,20 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
                 </PopupMenuSubmenu>
                 <PopupMenuSeparator />
                 <PopupMenuItem
+                  disabled={selectedOnlineItems.length === 0}
+                  onSelect={() => {
+                    setContextMenu(null);
+                    void publishEvent(
+                      "transcode.enqueue.requested",
+                      { paths: [...new Set(selectedOnlineItems.map((item) => item.path))] },
+                      identity,
+                    );
+                  }}
+                >
+                  添加到转码队列
+                </PopupMenuItem>
+                <PopupMenuSeparator />
+                <PopupMenuItem
                   disabled={isReadOnly || !canDetectSelectedVideos}
                   onSelect={() => {
                     setContextMenu(null);

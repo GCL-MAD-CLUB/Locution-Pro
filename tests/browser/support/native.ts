@@ -83,7 +83,14 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
     failures: {} as Record<string, string>,
     held: {} as Record<string, boolean>,
     pending: [] as Array<{ command: string; args: any; resolve: (value: any) => void }>,
-    config: { favorites: [], lastDirectory: "C:/media", settings: {} } as any,
+    // Stored settings opt out of the transcode hand-off so edit flows stay on 编辑;
+    // transcode tests delete the flag to exercise the default.
+    config: {
+      favorites: [],
+      lastDirectory: "C:/media",
+      settings: { openInTranscode: false },
+    } as any,
+    transcodeConfig: null as any,
     savedWorkspace: null as any,
     savedProjectId: "",
     updateStartup: {
@@ -229,6 +236,97 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
           has_video: /\.(mp4|mov)$/i.test(path),
           has_audio: /\.wav$/i.test(path),
         }));
+      case "load_transcode_config":
+        return structuredClone(state.transcodeConfig);
+      case "save_transcode_config":
+        state.transcodeConfig = structuredClone(args.config);
+        return null;
+      case "transcode_capabilities": {
+        const entry = (name: string, codec?: string) => ({
+          name,
+          description: codec ? `${name} (codec ${codec})` : name,
+        });
+        return {
+          version: "8.0.1",
+          muxers: [
+            "mp4",
+            "matroska",
+            "mov",
+            "webm",
+            "avi",
+            "mp3",
+            "wav",
+            "srt",
+            "ass",
+            "webvtt",
+          ].map((name) => entry(name)),
+          videoEncoders: [
+            entry("libx264", "h264"),
+            entry("libx265", "hevc"),
+            entry("prores_ks", "prores"),
+            entry("libvpx-vp9", "vp9"),
+            entry("mpeg4", "mpeg4"),
+          ],
+          audioEncoders: [
+            entry("aac", "aac"),
+            entry("libmp3lame", "mp3"),
+            entry("libopus", "opus"),
+            entry("pcm_s16le", "pcm_s16le"),
+          ],
+          subtitleEncoders: [
+            entry("subrip", "subrip"),
+            entry("srt", "subrip"),
+            entry("ass", "ass"),
+            entry("ssa", "ass"),
+            entry("webvtt", "webvtt"),
+            entry("mov_text", "mov_text"),
+          ],
+          filters: ["subtitles", "lut3d", "overlay", "drawtext", "loudnorm", "bwdif", "limiter"],
+        };
+      }
+      case "transcode_codec_details":
+        return {
+          name: args.name,
+          extensions: [],
+          defaultVideoCodec: null,
+          defaultAudioCodec: null,
+          defaultSubtitleCodec: null,
+          pixelFormats: ["yuv420p", "yuv422p", "yuv420p10le"],
+          sampleRates: [],
+          channelLayouts: [],
+        };
+      case "probe_transcode_source":
+        return {
+          durationUs: 10_000_000,
+          video: [
+            {
+              index: 0,
+              codec: "h264",
+              language: null,
+              title: null,
+              width: 1920,
+              height: 1080,
+              frameRate: "24/1",
+              sampleRate: null,
+              channels: null,
+              bitmap: false,
+              colorTransfer: null,
+            },
+          ],
+          audio: [],
+          subtitles: [],
+        };
+      case "transcode_preview_frames":
+        return {
+          sourcePath: "C:/cache/preview/source.png",
+          outputPath: args.request.settings.exportVideo ? "C:/cache/preview/output.png" : null,
+        };
+      case "transcode_media":
+        return {
+          outputPath: `${args.job.outputDir}/${args.job.outputName}.${args.job.settings.extension}`,
+          sidecarPaths: [],
+        };
+      case "import_media":
       case "register_import_media": {
         const id = `asset-${++mediaSequence}`;
         const file_name = args.path.split(/[\\/]/).pop();

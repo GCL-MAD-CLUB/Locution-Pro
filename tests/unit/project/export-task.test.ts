@@ -223,8 +223,11 @@ function actionBarHarness() {
     {
       "react/jsx-runtime": { jsx, jsxs: jsx },
       react: { useState: () => [false, () => {}] },
-      "lucide-react": { FolderOpen: () => null },
+      "lucide-react": { FolderOpen: () => null, Send: () => null },
+      "../../../../application/sendExportToTranscode": { exportToTranscodeBlocker: () => null },
       "../../../../errors": {},
+      "../../../../runtime/events/react": { publishEvent: async () => "handled" },
+      "../../../../runtime/state/react": { useStableIdentity: () => ({}) },
       "../../../../systems/ExportSystem": {
         useExportWorkspaceState: (selector: (workspace: typeof state) => unknown) =>
           selector(state),
@@ -244,7 +247,9 @@ function actionBarHarness() {
   const view = ExportActionBar({
     onExportStarted: () => calls.push("edit"),
   }) as RenderedNode;
-  view.props.children!.props.children!.props.onClick!();
+  // The row holds 发送到转码 and then 导出.
+  const buttons = view.props.children!.props.children as unknown as RenderedNode[];
+  buttons[1].props.onClick!();
   return {
     start,
     completion,

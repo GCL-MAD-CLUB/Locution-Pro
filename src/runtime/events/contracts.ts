@@ -1,4 +1,4 @@
-import type { ExportSource } from "../../systems/ExportSystem/exportTypes";
+import type { ExportSettings, ExportSource } from "../../systems/ExportSystem/exportTypes";
 
 export interface ApplicationEventMap {
   "media.import.requested": { paths?: string[]; folderId?: string };
@@ -9,6 +9,12 @@ export interface ApplicationEventMap {
   "export.requested": { source: ExportSource };
   "export.configure-selection.requested": Record<string, never>;
   "export.quick-selection.requested": Record<string, never>;
+  /** Adds media files to the transcode queue and shows the transcode workspace. */
+  "transcode.enqueue.requested": { paths: string[] };
+  /** Sends export-page clips to the transcode queue with matching settings, one output per clip. */
+  "transcode.export.requested": { source: ExportSource; settings: ExportSettings };
+  /** Finished outputs that belong in the project's `encoder` media bin. */
+  "transcode.output.completed": { paths: string[] };
   "edit.copy.requested": Record<string, never>;
   "edit.paste.requested": Record<string, never>;
   "edit.clear.requested": Record<string, never>;

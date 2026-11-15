@@ -18,6 +18,7 @@ export {
   resolvedMediaAudioSources,
   subtitleTrackContext,
   subtitleTrackCues,
+  useMediaDocumentAtPath,
   useProjectPort,
   visibleSubtitleTracks,
 } from "./ProjectState";

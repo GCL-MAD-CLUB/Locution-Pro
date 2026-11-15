@@ -29,8 +29,25 @@ export function useMediaCoverDeferred(assetId: string) {
   return useSyncExternalStore(subscribe, () => pending.has(assetId));
 }
 
+/** Notice the backend raises for media that carries no subtitle stream. */
+export const subtitleStreamNotFoundCode = "SUBTITLE_STREAM_NOT_FOUND";
+
+interface MediaAnalysisOptions {
+  /** Notice codes the caller does not want shown, such as a missing subtitle stream. */
+  quietWarnings?: readonly string[];
+}
+
+function withoutQuietWarnings(result: ImportResult, quiet: readonly string[]): ImportResult {
+  if (quiet.length === 0) return result;
+  return { ...result, warnings: result.warnings.filter((notice) => !quiet.includes(notice.code)) };
+}
+
 /** This queue lives outside the import workspace and survives its unmount. */
-export function scheduleMediaAnalysis(results: ImportResult[], startAfter = Promise.resolve()) {
+export function scheduleMediaAnalysis(
+  results: ImportResult[],
+  startAfter = Promise.resolve(),
+  { quietWarnings = [] }: MediaAnalysisOptions = {},
+) {
   const jobs = results.filter((result) => !pending.has(result.project.asset.id));
   if (!jobs.length) return;
   const projectId = getProjectExportContext().projectId;
@@ -92,7 +109,7 @@ export function scheduleMediaAnalysis(results: ImportResult[], startAfter = Prom
               taskId,
             });
             if (!cancelled) {
-              applyAnalyzedMediaResult(result, projectId);
+              applyAnalyzedMediaResult(withoutQuietWarnings(result, quietWarnings), projectId);
             }
           } catch (error) {
             if (!cancelled) {

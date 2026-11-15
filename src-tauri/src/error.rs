@@ -181,6 +181,11 @@ define_error_codes! {
     ExportOutputRequired => ("EXPORT_OUTPUT_REQUIRED", Validation, false),
     ExportDimensionsInvalid => ("EXPORT_DIMENSIONS_INVALID", Validation, false),
     ExportWriteFailed => ("EXPORT_WRITE_FAILED", Io, true),
+    TranscodeSettingsInvalid => ("TRANSCODE_SETTINGS_INVALID", Validation, false),
+    TranscodeOutputRequired => ("TRANSCODE_OUTPUT_REQUIRED", Validation, false),
+    TranscodeWriteFailed => ("TRANSCODE_WRITE_FAILED", Io, true),
+    TranscodeConfigReadFailed => ("TRANSCODE_CONFIG_READ_FAILED", Io, true),
+    TranscodeConfigWriteFailed => ("TRANSCODE_CONFIG_WRITE_FAILED", Io, true),
 }
 
 #[derive(Debug, Clone, Serialize)]

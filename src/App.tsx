@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Loader2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useStore } from "zustand";
 import {
   appPanelRegistry,
   initialAppPanelState,
@@ -11,6 +12,12 @@ import {
   withAppPanelDefaults,
 } from "./application/appPanelRegistry";
 import { finishWindowClose, windowCloseAction } from "./application/windowClose";
+import { subtitleStreamNotFoundCode } from "./application/media/mediaAnalysisTask";
+import {
+  showTranscodePanel,
+  transcodePanelStore,
+  transcodePanels,
+} from "./application/transcodePanelRegistry";
 import { publishEvent, useBroadcastEvent } from "./runtime/events/react";
 import { readAppStorage } from "./runtime/storage";
 import { useProjections } from "./runtime/state/StateHub";
@@ -38,10 +45,18 @@ import {
   type PanelManagerInitialState,
 } from "./components/common/DockLayout";
 import { ExportWorkspace } from "./components/panels/ExportWorkspace";
+import { sendExportToTranscode } from "./application/sendExportToTranscode";
 import { assetLibraryPanelType } from "./components/panels/AssetLibrary";
 import { HistoryPanelServicesProvider, historyPanelType } from "./components/panels/HistoryPanel";
 import { exportWorkspaceStore, useExportWorkspaceState } from "./systems/ExportSystem";
 import { ImportWorkspace } from "./components/panels/ImportWorkspace";
+import { TranscodeWorkspace } from "./components/panels/TranscodeWorkspace";
+import {
+  encoderBinName,
+  enqueueTranscodeSources,
+  parentDirectory,
+  transcodeQueueStore,
+} from "./systems/TranscodeSystem";
 import { mediaBinPanelType, type MediaBinPanelParams } from "./components/panels/MediaBin";
 import { ProjectDiscardDialog, ProjectSaveDialog } from "./components/common/ProjectSaveDialog";
 import { ExportConflictDialog } from "./components/common/ExportConflictDialog";
@@ -82,6 +97,7 @@ import {
 import { normalizeError } from "./errors/runtime";
 import {
   captureProjectAutoSave,
+  defaultMediaBinFolderColor,
   getProjectWorkspaceSnapshot,
   loadProjectStates,
   mediaDisplayName,
@@ -305,6 +321,7 @@ const appWorkspaces = [
   { id: "import", label: "导入" },
   { id: "edit", label: "编辑" },
   { id: "export", label: "导出" },
+  { id: "transcode", label: "转码" },
 ] as const;
 
 type AppWorkspace = (typeof appWorkspaces)[number]["id"];
@@ -318,6 +335,7 @@ function AppContent() {
   const focusedPanelId = usePanelManagerState((state) => state.focusedPanelId);
   const panelInstances = usePanelManagerState((state) => state.instances);
   const openPanel = usePanelManagerState((state) => state.openPanel);
+  const transcodePanelInstances = useStore(transcodePanelStore, (state) => state.instances);
   const closePanel = usePanelManagerState((state) => state.closePanel);
   const [projectHomeMode, setProjectHomeMode] = useState<"startup" | "manual" | null>("startup");
   const [preferencesCategory, setPreferencesCategory] = useState<PreferencesCategory | null>(null);
@@ -364,6 +382,7 @@ function AppContent() {
     mediaProjectsAdded,
     mediaItemsAdded,
     mediaItemsMovedToFolder,
+    mediaFolderAdded,
     messagePublished,
     warningsReplaced,
     warningsAppended,
@@ -394,6 +413,7 @@ function AppContent() {
       "mediaProjectsAdded",
       "mediaItemsAdded",
       "mediaItemsMovedToFolder",
+      "mediaFolderAdded",
       "messagePublished",
       "warningsReplaced",
       "warningsAppended",
@@ -1279,7 +1299,11 @@ function AppContent() {
     );
   }
 
-  async function importMedia(pathsToImport?: string[], folderId: string | null = null) {
+  async function importMedia(
+    pathsToImport?: string[],
+    folderId: string | null = null,
+    { quietWarnings = [] }: { quietWarnings?: readonly string[] } = {},
+  ) {
     if (isMediaBinReadOnly || isBusy) {
       return;
     }
@@ -1330,7 +1354,11 @@ function AppContent() {
             folderId,
           );
         }
-        warningsAppended(results.flatMap((result) => result.warnings));
+        warningsAppended(
+          results
+            .flatMap((result) => result.warnings)
+            .filter((notice) => !quietWarnings.includes(notice.code)),
+        );
         rememberImportedMedia(results.map((result) => result.project.asset.path));
       },
     });
@@ -1407,6 +1435,62 @@ function AppContent() {
 
   useBroadcastEvent(identity, "media.import.requested", async ({ payload }) => {
     await importMedia(payload.paths, payload.folderId ?? null);
+    return "handled" as const;
+  });
+
+  // The transcode queue runs in the background, so it always needs to know
+  // where the project lives to resolve the encoder bin folder.
+  useEffect(() => {
+    transcodeQueueStore
+      .getState()
+      .setProjectDirectory(projectFilePath ? parentDirectory(projectFilePath) : "");
+  }, [projectFilePath]);
+
+  useBroadcastEvent(identity, "transcode.export.requested", async ({ payload }) => {
+    const plan = await sendExportToTranscode(payload.source, payload.settings);
+    setActiveWorkspace("transcode");
+    setProjectHomeMode(null);
+    messagePublished(
+      `已将 ${plan.clipCount} 个片段发送到转码队列。` +
+        (plan.audioChangedCount > 0
+          ? `其中 ${plan.audioChangedCount} 个片段绑定了其他音频，转码时使用源文件的第一条音轨。`
+          : ""),
+    );
+    return "handled" as const;
+  });
+
+  useBroadcastEvent(identity, "transcode.enqueue.requested", async ({ payload }) => {
+    const added = enqueueTranscodeSources(payload.paths);
+    setActiveWorkspace("transcode");
+    setProjectHomeMode(null);
+    messagePublished(
+      added.length > 0 ? `已将 ${added.length} 个媒体添加到转码队列。` : "所选媒体已在转码队列中。",
+    );
+    return "handled" as const;
+  });
+
+  /** Files finished outputs into the project's root `encoder` media bin. */
+  useBroadcastEvent(identity, "transcode.output.completed", async ({ payload }) => {
+    if (payload.paths.length === 0 || isMediaBinReadOnly) {
+      return "handled" as const;
+    }
+    let folder = mediaFolders.find(
+      (candidate) =>
+        !candidate.parent_id &&
+        candidate.name.toLocaleLowerCase() === encoderBinName.toLocaleLowerCase(),
+    );
+    if (!folder) {
+      folder = {
+        id: `media-bin:${crypto.randomUUID()}`,
+        name: encoderBinName,
+        parent_id: null,
+        color: defaultMediaBinFolderColor(),
+        hidden: false,
+      };
+      mediaFolderAdded(folder);
+    }
+    // Encoder outputs often carry no subtitles; that is not worth a notice here.
+    await importMedia(payload.paths, folder.id, { quietWarnings: [subtitleStreamNotFoundCode] });
     return "handled" as const;
   });
 
@@ -1538,6 +1622,7 @@ function AppContent() {
       />
     ),
     edit: <DockLayout />,
+    transcode: <TranscodeWorkspace />,
     export: (
       <ExportWorkspace
         onExportStarted={() =>
@@ -1730,6 +1815,20 @@ function AppContent() {
         checked: Boolean(panelInstances.history),
         enabled: true,
         execute: () => showSingletonPanel("history", historyPanelType, {}, "middle"),
+      },
+      transcode: {
+        enabled: true,
+        items: transcodePanels.map((panel) => ({
+          id: panel.id,
+          label: panel.label,
+          checked: Boolean(transcodePanelInstances[panel.id]),
+          enabled: true,
+          execute: () => {
+            setActiveWorkspace("transcode");
+            setProjectHomeMode(null);
+            showTranscodePanel(panel.id);
+          },
+        })),
       },
     },
     help: {

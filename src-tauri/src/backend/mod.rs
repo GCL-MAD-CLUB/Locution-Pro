@@ -57,6 +57,7 @@ mod storyboard_semantic;
 mod subtitles;
 mod tasks;
 mod thumbnail;
+mod transcode;
 mod update;
 mod workspace;
 
@@ -82,5 +83,6 @@ pub(crate) use storyboard_semantic::*;
 pub(crate) use subtitles::*;
 pub(crate) use tasks::*;
 pub(crate) use thumbnail::*;
+pub(crate) use transcode::*;
 pub(crate) use update::*;
 pub(crate) use workspace::*;

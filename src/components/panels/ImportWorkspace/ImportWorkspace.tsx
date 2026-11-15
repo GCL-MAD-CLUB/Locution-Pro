@@ -1,9 +1,14 @@
 ﻿import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { scheduleMediaAnalysis } from "../../../application/media/mediaAnalysisTask";
+import {
+  scheduleMediaAnalysis,
+  subtitleStreamNotFoundCode,
+} from "../../../application/media/mediaAnalysisTask";
 import { scheduleMediaAutoBinding } from "../../../application/media/mediaAutoBindTask";
 import { defaultMediaBinFolderColor, useProjectPort } from "../../../systems/ProjectSystem";
 import { isTauriRuntime } from "../../../platform/tauri/runtime";
+import { publishEvent } from "../../../runtime/events/react";
+import { enqueueTranscodeSources } from "../../../systems/TranscodeSystem";
 import { ImportSidebar } from "./controls/ImportSidebar";
 import { ImportToolbar } from "./controls/ImportToolbar";
 import { ImportFileView } from "./browser/ImportFileView";
@@ -143,14 +148,33 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
               },
             })
           : Promise.resolve();
-        scheduleMediaAnalysis(results, autoBinding);
+        // Media opened for transcoding is not imported for dialogue browsing,
+        // so a file without subtitles is expected rather than worth a notice.
+        scheduleMediaAnalysis(results, autoBinding, {
+          quietWarnings: settings.openInTranscode ? [subtitleStreamNotFoundCode] : [],
+        });
       }
       const remaining = selection.files.filter((entry) => !completed.has(entry.path));
       selection.retainFiles(remaining);
       const message = `已导入 ${completed.size} 个媒体${remaining.length ? `，${remaining.length} 个未完成，可重试` : ""}。`;
       setStatus(message);
       messagePublished(message);
-      if (completed.size && !remaining.length) onImportCompleted?.();
+      const transcodePaths = [
+        ...results.map((result) => result.project.asset.path),
+        ...subtitles.map((item) => item.path),
+      ];
+      if (settings.openInTranscode && transcodePaths.length && !remaining.length) {
+        // The app shell queues the media and shows the transcode page.
+        void publishEvent(
+          "transcode.enqueue.requested",
+          { paths: transcodePaths },
+          { system: "import-workspace" },
+        );
+      } else {
+        if (settings.openInTranscode && transcodePaths.length)
+          enqueueTranscodeSources(transcodePaths);
+        if (completed.size && !remaining.length) onImportCompleted?.();
+      }
     } finally {
       importing.current = false;
       setBusy(false);

@@ -345,6 +345,10 @@ export default defineConfig({
             link: "/workflows/create-proxy",
           },
           {
+            text: "转码媒体文件",
+            link: "/workflows/transcode-media",
+          },
+          {
             text: "导出所选片段或成片",
             link: "/workflows/export-video",
           },

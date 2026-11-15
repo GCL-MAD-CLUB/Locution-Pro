@@ -37,6 +37,8 @@ export interface ImportSettings {
   autoBindType: "all" | "audio" | "subtitle";
   autoBindPreset: "direct" | "virtual-copy";
   autoBindPreference: "smart" | "name";
+  /** Also queue imported media for transcoding and show the transcode page. */
+  openInTranscode: boolean;
 }
 const extensions: Record<ImportMediaKind, string[]> = {
   video: ["mkv", "mp4", "mov", "webm", "avi", "ts", "m2ts", "mts", "mpeg", "mpg", "m4v"],

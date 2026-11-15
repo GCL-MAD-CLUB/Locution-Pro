@@ -29,8 +29,8 @@ import {
 } from "../model/columns";
 
 export const assetLibraryPaneWidths = {
-  navigation: { initial: 200, minimum: 140, maximum: 420 },
-  details: { initial: 280, minimum: 220, maximum: 520 },
+  navigation: { initial: 180, minimum: 140, maximum: 420 },
+  details: { initial: 240, minimum: 220, maximum: 520 },
 } as const;
 
 export type AssetLibraryPane = keyof typeof assetLibraryPaneWidths;
@@ -137,7 +137,7 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   collapsedGroups: new Set<string>(),
   homeTab: "recent",
   navigationVisible: true,
-  detailsVisible: true,
+  detailsVisible: false,
   collapsedKeys: new Set<string>(),
   paneWidths: {
     navigation: assetLibraryPaneWidths.navigation.initial,

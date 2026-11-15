@@ -229,6 +229,7 @@ pub(crate) fn normalize_preferences(preferences: Preferences) -> AppResult<Prefe
         appearance: preferences.appearance,
         show_home_on_startup: preferences.show_home_on_startup,
         auto_remux_matroska: preferences.auto_remux_matroska,
+        beta_transcode_enabled: preferences.beta_transcode_enabled,
         auto_save_enabled: preferences.auto_save_enabled,
         auto_save_current_project: preferences.auto_save_current_project,
         auto_save_dir,
@@ -452,6 +453,7 @@ mod tests {
             appearance: crate::models::Appearance::Light,
             show_home_on_startup: false,
             auto_remux_matroska: false,
+            beta_transcode_enabled: true,
             auto_save_enabled: false,
             auto_save_current_project: false,
             auto_save_dir: cache_root
@@ -466,6 +468,7 @@ mod tests {
             serde_json::from_str(&serde_json::to_string(&preferences).unwrap()).unwrap();
         assert!(!restored.show_home_on_startup);
         assert!(!restored.auto_remux_matroska);
+        assert!(restored.beta_transcode_enabled);
         assert_eq!(restored.appearance, crate::models::Appearance::Light);
         assert!(!restored.auto_save_enabled);
         assert!(!restored.auto_save_current_project);

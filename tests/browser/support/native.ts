@@ -23,7 +23,13 @@ export const mediaEntries: ImportEntry[] = (
 
 // This runs before application imports. Only the native IPC boundary is replaced.
 // Unknown commands are recorded AND rejected so swallowed application errors cannot pass.
-export function installNative({ entries }: { entries: typeof mediaEntries }) {
+export function installNative({
+  entries,
+  betaTranscode = false,
+}: {
+  entries: typeof mediaEntries;
+  betaTranscode?: boolean;
+}) {
   const w = window as any;
   // The media transport/decoder is outside these UI workflows. Do not feed fake
   // bytes to a real decoder (which would trigger the application's proxy flow).
@@ -118,6 +124,7 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
       auto_save_interval_minutes: 5,
       auto_save_max_snapshots: 20,
       auto_remux_matroska: true,
+      beta_transcode_enabled: betaTranscode,
     },
   };
   w.__nativeTest = state;
@@ -126,6 +133,7 @@ export function installNative({ entries }: { entries: typeof mediaEntries }) {
       case "plugin:event|listen":
         return ++sequence;
       case "plugin:event|unlisten":
+      case "restart_application":
       case "set_media_import_drop_region":
       case "record_frontend_incident":
       case "plugin:window|set_title":

@@ -24,6 +24,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { usePreferencesPort } from "../../../systems/PreferencesSystem";
 import { useEditCapability } from "../../../runtime/capabilities/EditCapability";
 import { useExportCapability } from "../../../runtime/capabilities/ExportCapability";
 import { useMediaSelectionCapability } from "../../../runtime/capabilities/MediaSelectionCapability";
@@ -222,6 +223,7 @@ function isImportedMediaFile(item: MediaBinItem) {
 }
 
 export function MediaBin({ rootFolderId = null }: MediaBinProps) {
+  const { betaTranscodeEnabled } = usePreferencesPort(["betaTranscodeEnabled"], []);
   const panelInstanceId = usePanelInstanceId();
   const panelActive = usePanelActive();
   const focusedPanelId = usePanelManagerState((state) => state.focusedPanelId);
@@ -1990,20 +1992,24 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
                     重新连接完整分辨率媒体...
                   </PopupMenuItem>
                 </PopupMenuSubmenu>
-                <PopupMenuSeparator />
-                <PopupMenuItem
-                  disabled={selectedOnlineItems.length === 0}
-                  onSelect={() => {
-                    setContextMenu(null);
-                    void publishEvent(
-                      "transcode.enqueue.requested",
-                      { paths: [...new Set(selectedOnlineItems.map((item) => item.path))] },
-                      identity,
-                    );
-                  }}
-                >
-                  添加到转码队列
-                </PopupMenuItem>
+                {betaTranscodeEnabled && (
+                  <>
+                    <PopupMenuSeparator />
+                    <PopupMenuItem
+                      disabled={selectedOnlineItems.length === 0}
+                      onSelect={() => {
+                        setContextMenu(null);
+                        void publishEvent(
+                          "transcode.enqueue.requested",
+                          { paths: [...new Set(selectedOnlineItems.map((item) => item.path))] },
+                          identity,
+                        );
+                      }}
+                    >
+                      添加到转码队列
+                    </PopupMenuItem>
+                  </>
+                )}
                 <PopupMenuSeparator />
                 <PopupMenuItem
                   disabled={isReadOnly || !canDetectSelectedVideos}

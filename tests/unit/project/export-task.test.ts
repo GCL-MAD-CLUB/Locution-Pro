@@ -203,11 +203,12 @@ interface RenderedNode {
   };
 }
 
-function actionBarHarness() {
+function actionBarHarness(betaTranscodeEnabled = false) {
   const start = deferred<boolean>();
   const completion = deferred<unknown>();
   const calls: string[] = [];
   const messages: string[] = [];
+  const published: string[] = [];
   let projectId: string | null = null;
   const source = { clips: [{ id: "a" }] };
   const state = {
@@ -226,8 +227,16 @@ function actionBarHarness() {
       "lucide-react": { FolderOpen: () => null, Send: () => null },
       "../../../../application/sendExportToTranscode": { exportToTranscodeBlocker: () => null },
       "../../../../errors": {},
-      "../../../../runtime/events/react": { publishEvent: async () => "handled" },
+      "../../../../runtime/events/react": {
+        publishEvent: async (event: string) => {
+          published.push(event);
+          return "handled";
+        },
+      },
       "../../../../runtime/state/react": { useStableIdentity: () => ({}) },
+      "../../../../systems/PreferencesSystem": {
+        usePreferencesPort: () => ({ betaTranscodeEnabled }),
+      },
       "../../../../systems/ExportSystem": {
         useExportWorkspaceState: (selector: (workspace: typeof state) => unknown) =>
           selector(state),
@@ -256,11 +265,20 @@ function actionBarHarness() {
     calls,
     messages,
     state,
+    published,
+    transcodeButton: buttons[0],
     switchProject: () => {
       projectId = "other";
     },
   };
 }
+
+test("sending an export to transcode is available only when Beta is active", () => {
+  assert.equal(actionBarHarness().transcodeButton, false);
+  const enabled = actionBarHarness(true);
+  enabled.transcodeButton.props.onClick!();
+  assert.deepEqual(enabled.published, ["transcode.export.requested"]);
+});
 
 for (const started of [true, false]) {
   test(`export workspace navigates only when started resolves true (${started})`, async () => {

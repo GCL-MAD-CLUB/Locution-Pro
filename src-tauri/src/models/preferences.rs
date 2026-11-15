@@ -34,6 +34,8 @@ pub(crate) struct Preferences {
     /// preview cannot play it, instead of asking for a re-encoded proxy.
     #[serde(default = "default_enabled")]
     pub(crate) auto_remux_matroska: bool,
+    #[serde(default)]
+    pub(crate) beta_transcode_enabled: bool,
 }
 
 const fn default_enabled() -> bool {
@@ -65,6 +67,7 @@ impl Default for Preferences {
             auto_save_interval_minutes: default_auto_save_interval_minutes(),
             auto_save_max_snapshots: default_auto_save_max_snapshots(),
             auto_remux_matroska: true,
+            beta_transcode_enabled: false,
         }
     }
 }
@@ -100,5 +103,22 @@ mod tests {
         let mut value = serde_json::to_value(Preferences::default()).unwrap();
         value["appearance"] = serde_json::json!("unknown");
         assert!(serde_json::from_value::<Preferences>(value).is_err());
+    }
+
+    #[test]
+    fn beta_transcode_defaults_off_for_existing_preferences_and_round_trips() {
+        let legacy = r#"{"cache_dir":"cache","ffmpeg_path":"ffmpeg","ffprobe_path":"ffprobe"}"#;
+        let preferences: Preferences = serde_json::from_str(legacy).unwrap();
+        assert!(!preferences.beta_transcode_enabled);
+        assert!(!Preferences::default().beta_transcode_enabled);
+        for enabled in [false, true] {
+            let preferences = Preferences {
+                beta_transcode_enabled: enabled,
+                ..Preferences::default()
+            };
+            let restored: Preferences =
+                serde_json::from_str(&serde_json::to_string(&preferences).unwrap()).unwrap();
+            assert_eq!(restored.beta_transcode_enabled, enabled);
+        }
     }
 }

@@ -13,6 +13,8 @@ interface PreferencesCommands {
 interface PreferencesSystemState {
   preferences: Preferences;
   loaded: boolean;
+  /** Captured at startup; preference updates take effect after restarting. */
+  betaTranscodeEnabled: boolean;
   commands: PreferencesCommands;
 }
 
@@ -31,12 +33,14 @@ export function defaultPreferences(): Preferences {
     auto_save_interval_minutes: 5,
     auto_save_max_snapshots: 20,
     auto_remux_matroska: true,
+    beta_transcode_enabled: false,
   };
 }
 
 const preferencesState = createStore<PreferencesSystemState>()((set) => ({
   preferences: defaultPreferences(),
   loaded: false,
+  betaTranscodeEnabled: false,
   commands: {
     loadPreferences: async () => {
       // The startup diagnostic and the saved document are independent reads.
@@ -49,7 +53,13 @@ const preferencesState = createStore<PreferencesSystemState>()((set) => ({
       await startupError;
       const outcome = await loaded;
       if (outcome.status === "success") {
-        set({ preferences: outcome.value, loaded: true });
+        set((state) => ({
+          preferences: outcome.value,
+          loaded: true,
+          betaTranscodeEnabled: state.loaded
+            ? state.betaTranscodeEnabled
+            : outcome.value.beta_transcode_enabled === true,
+        }));
       }
     },
     updatePreferences: async (preferences) => {
@@ -67,8 +77,8 @@ const preferencesState = createStore<PreferencesSystemState>()((set) => ({
 }));
 
 export function readPreferencesState() {
-  const { preferences, loaded } = preferencesState.getState();
-  return { preferences, loaded };
+  const { preferences, loaded, betaTranscodeEnabled } = preferencesState.getState();
+  return { preferences, loaded, betaTranscodeEnabled };
 }
 
 export function loadPreferences() {

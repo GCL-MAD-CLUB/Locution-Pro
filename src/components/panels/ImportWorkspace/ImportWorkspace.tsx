@@ -1,5 +1,6 @@
 ﻿import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { usePreferencesPort } from "../../../systems/PreferencesSystem";
 import {
   scheduleMediaAnalysis,
   subtitleStreamNotFoundCode,
@@ -34,6 +35,8 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
   const anchor = useRef("");
   const [status, setStatus] = useState("");
   const settings = browser.settings;
+  const { betaTranscodeEnabled } = usePreferencesPort(["betaTranscodeEnabled"], []);
+  const openInTranscode = betaTranscodeEnabled && settings.openInTranscode;
   const {
     mediaItems,
     mediaFolders,
@@ -151,7 +154,7 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
         // Media opened for transcoding is not imported for dialogue browsing,
         // so a file without subtitles is expected rather than worth a notice.
         scheduleMediaAnalysis(results, autoBinding, {
-          quietWarnings: settings.openInTranscode ? [subtitleStreamNotFoundCode] : [],
+          quietWarnings: openInTranscode ? [subtitleStreamNotFoundCode] : [],
         });
       }
       const remaining = selection.files.filter((entry) => !completed.has(entry.path));
@@ -163,7 +166,7 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
         ...results.map((result) => result.project.asset.path),
         ...subtitles.map((item) => item.path),
       ];
-      if (settings.openInTranscode && transcodePaths.length && !remaining.length) {
+      if (openInTranscode && transcodePaths.length && !remaining.length) {
         // The app shell queues the media and shows the transcode page.
         void publishEvent(
           "transcode.enqueue.requested",
@@ -171,8 +174,7 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
           { system: "import-workspace" },
         );
       } else {
-        if (settings.openInTranscode && transcodePaths.length)
-          enqueueTranscodeSources(transcodePaths);
+        if (openInTranscode && transcodePaths.length) enqueueTranscodeSources(transcodePaths);
         if (completed.size && !remaining.length) onImportCompleted?.();
       }
     } finally {

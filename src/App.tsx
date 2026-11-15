@@ -66,6 +66,7 @@ import {
   type PreferencesCategory,
 } from "./components/common/PreferencesDialog";
 import { AboutDialog } from "./components/common/AboutDialog";
+import { BetaRestartDialog } from "./components/common/BetaRestartDialog/BetaRestartDialog";
 import { UpdateDialog, type UpdateDialogState } from "./components/common/UpdateDialog";
 import { ProxyCreationDialog } from "./components/common/ProxyCreationDialog";
 import { ProjectHome } from "./components/common/ProjectHome";
@@ -426,7 +427,15 @@ function AppContent() {
     preferences,
     loaded: preferencesLoaded,
     loadPreferences,
-  } = usePreferencesPort(["preferences", "loaded"], ["loadPreferences"]);
+    updatePreferences,
+    betaTranscodeEnabled,
+  } = usePreferencesPort(
+    ["preferences", "loaded", "betaTranscodeEnabled"],
+    ["loadPreferences", "updatePreferences"],
+  );
+  const [savingBeta, setSavingBeta] = useState(false);
+  const [betaRestartOpen, setBetaRestartOpen] = useState(false);
+  const [restartingBeta, setRestartingBeta] = useState(false);
   const startupPreferenceApplied = useRef(false);
   const autoSaveIntervalMinutes = preferences.auto_save_interval_minutes;
   useLayoutEffect(() => {
@@ -459,7 +468,10 @@ function AppContent() {
   autoSaveProjectNameRef.current = autoSaveProjectName;
   const { tasks: runningTasks } = useTaskProgressStatus();
   const isBusy =
-    runningTasks.some((task) => task.blocking) || historyNavigating || updateInstalling;
+    runningTasks.some((task) => task.blocking) ||
+    historyNavigating ||
+    updateInstalling ||
+    restartingBeta;
   const hasProject = Boolean(projectFilePath || mediaItems.length > 0 || mediaFolders.length > 0);
   const canUndo =
     activeWorkspace === "export"
@@ -1183,6 +1195,29 @@ function AppContent() {
     await saveProjectWithOutcome();
   }
 
+  async function restartForBeta() {
+    if (restartingBeta || runningTasks.length > 0 || isBusy) return;
+    setRestartingBeta(true);
+    try {
+      const outcome = await runOperation("app.restart", () =>
+        saveBeforeUpdate({
+          needsSave: projectDirty,
+          settle: async () => (await projectWrites.settle()) && hasProject,
+          save: saveProjectWithOutcome,
+          snapshot: () => JSON.stringify(getProjectWorkspaceSnapshot()),
+          install: async () => {
+            await invokeCommand("restart_application");
+          },
+        }),
+      );
+      if (outcome.status === "success" && outcome.value === "changed") {
+        messagePublished("保存期间项目发生变化，请确认并再次保存后重启。");
+      }
+    } finally {
+      setRestartingBeta(false);
+    }
+  }
+
   function cancelPendingClose() {
     if (!closeSavePending) {
       setPendingCloseTarget(null);
@@ -1447,6 +1482,7 @@ function AppContent() {
   }, [projectFilePath]);
 
   useBroadcastEvent(identity, "transcode.export.requested", async ({ payload }) => {
+    if (!betaTranscodeEnabled) return "handled" as const;
     const plan = await sendExportToTranscode(payload.source, payload.settings);
     setActiveWorkspace("transcode");
     setProjectHomeMode(null);
@@ -1460,6 +1496,7 @@ function AppContent() {
   });
 
   useBroadcastEvent(identity, "transcode.enqueue.requested", async ({ payload }) => {
+    if (!betaTranscodeEnabled) return "handled" as const;
     const added = enqueueTranscodeSources(payload.paths);
     setActiveWorkspace("transcode");
     setProjectHomeMode(null);
@@ -1622,7 +1659,7 @@ function AppContent() {
       />
     ),
     edit: <DockLayout />,
-    transcode: <TranscodeWorkspace />,
+    transcode: betaTranscodeEnabled ? <TranscodeWorkspace /> : null,
     export: (
       <ExportWorkspace
         onExportStarted={() =>
@@ -1817,18 +1854,43 @@ function AppContent() {
         execute: () => showSingletonPanel("history", historyPanelType, {}, "middle"),
       },
       transcode: {
-        enabled: true,
-        items: transcodePanels.map((panel) => ({
+        enabled: betaTranscodeEnabled,
+        items: (betaTranscodeEnabled ? transcodePanels : []).map((panel) => ({
           id: panel.id,
           label: panel.label,
           checked: Boolean(transcodePanelInstances[panel.id]),
           enabled: true,
           execute: () => {
+            if (!betaTranscodeEnabled) return;
             setActiveWorkspace("transcode");
             setProjectHomeMode(null);
             showTranscodePanel(panel.id);
           },
         })),
+      },
+    },
+    beta: {
+      transcode: {
+        id: "transcode",
+        label: betaTranscodeEnabled ? "使用转码（Beta）" : "重启以使用转码（Beta）",
+        checked: preferences.beta_transcode_enabled === true,
+        enabled: preferencesLoaded && !savingBeta,
+        execute: async () => {
+          if (!preferencesLoaded || savingBeta) return;
+          setSavingBeta(true);
+          try {
+            const saved = await updatePreferences({
+              ...preferences,
+              beta_transcode_enabled: !preferences.beta_transcode_enabled,
+            });
+            if (saved) {
+              messagePublished("Beta 功能设置已保存，请重启软件后生效。");
+              if (saved.beta_transcode_enabled !== betaTranscodeEnabled) setBetaRestartOpen(true);
+            }
+          } finally {
+            setSavingBeta(false);
+          }
+        },
       },
     },
     help: {
@@ -1863,14 +1925,31 @@ function AppContent() {
           projectFilePath={projectFilePath}
           hasProjectMedia={Boolean(project)}
           isProjectDirty={projectDirty}
-          workspaces={appWorkspaces}
+          workspaces={appWorkspaces.filter(
+            (workspace) => workspace.id !== "transcode" || betaTranscodeEnabled,
+          )}
           activeWorkspace={activeWorkspace}
           isWorkspaceSwitchingDisabled={isBusy}
           onHome={() => setProjectHomeMode("manual")}
-          onWorkspaceChange={setActiveWorkspace}
+          onWorkspaceChange={(workspace) => {
+            if (workspace !== "transcode" || betaTranscodeEnabled) setActiveWorkspace(workspace);
+          }}
         />
 
         {workspaceContent[activeWorkspace]}
+
+        {betaRestartOpen && (
+          <BetaRestartDialog
+            enabling={preferences.beta_transcode_enabled}
+            needsSave={projectDirty}
+            restarting={restartingBeta}
+            blocked={runningTasks.length > 0 || isBusy}
+            onRestart={() => void restartForBeta()}
+            onLater={() => {
+              if (!restartingBeta) setBetaRestartOpen(false);
+            }}
+          />
+        )}
 
         <footer className="statusbar">
           <span className={runningTasks.length > 0 ? "busy-status" : ""}>

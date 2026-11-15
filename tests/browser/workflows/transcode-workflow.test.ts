@@ -1,6 +1,8 @@
 import { test, expect, openImport } from "../support/fixtures";
 import type { Page } from "@playwright/test";
 
+test.use({ betaTranscode: true });
+
 function workspaceButton(page: Page, name: string) {
   return page
     .getByRole("navigation", { name: "工作区", exact: true })

@@ -79,6 +79,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_preferences,
+            restart_application,
             take_preferences_startup_error,
             take_launch_project_path,
             update_preferences,

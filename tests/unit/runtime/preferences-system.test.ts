@@ -10,7 +10,11 @@ const loadModule = createModuleLoader(import.meta.url);
 interface PreferencesModule {
   defaultPreferences(): Preferences;
   loadPreferences(): Promise<void>;
-  readPreferencesState(): { preferences: Preferences; loaded: boolean };
+  readPreferencesState(): {
+    preferences: Preferences;
+    loaded: boolean;
+    betaTranscodeEnabled: boolean;
+  };
   updatePreferences(preferences: Preferences): Promise<Preferences | null>;
 }
 
@@ -53,6 +57,7 @@ function savedPreferences(patch: Partial<Preferences> = {}): Preferences {
     auto_save_interval_minutes: 11,
     auto_save_max_snapshots: 4,
     auto_remux_matroska: false,
+    beta_transcode_enabled: false,
     ...patch,
   };
 }
@@ -118,3 +123,30 @@ test("updating stores the persisted document and a failure keeps the previous on
   assert.equal(system.readPreferencesState().preferences.cache_dir, "normalized-cache");
   assert.equal(system.readPreferencesState().loaded, true);
 });
+
+for (const initiallyEnabled of [false, true]) {
+  test(`Beta transcode stays ${initiallyEnabled ? "enabled" : "disabled"} until the next startup`, async () => {
+    let saved = savedPreferences({ beta_transcode_enabled: initiallyEnabled });
+    const invoke = async (command: string, args?: Record<string, unknown>) => {
+      if (command === "take_preferences_startup_error") return null;
+      if (command === "update_preferences") saved = args!.preferences as Preferences;
+      return saved;
+    };
+    const system = preferencesModule(invoke);
+    assert.equal(system.readPreferencesState().betaTranscodeEnabled, false);
+    await system.loadPreferences();
+    assert.equal(system.readPreferencesState().betaTranscodeEnabled, initiallyEnabled);
+    await system.updatePreferences({ ...saved, beta_transcode_enabled: !initiallyEnabled });
+    assert.equal(
+      system.readPreferencesState().preferences.beta_transcode_enabled,
+      !initiallyEnabled,
+    );
+    assert.equal(system.readPreferencesState().betaTranscodeEnabled, initiallyEnabled);
+    // A later preferences refresh must not apply a pending Beta change either.
+    await system.loadPreferences();
+    assert.equal(system.readPreferencesState().betaTranscodeEnabled, initiallyEnabled);
+    const restarted = preferencesModule(invoke);
+    await restarted.loadPreferences();
+    assert.equal(restarted.readPreferencesState().betaTranscodeEnabled, !initiallyEnabled);
+  });
+}

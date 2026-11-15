@@ -1,0 +1,43 @@
+.beta-restart-dialog {
+  width: min(440px, calc(100vw - 48px));
+}
+
+.beta-restart-dialog-body {
+  padding: 30px;
+}
+
+.beta-restart-dialog-title {
+  margin: 0;
+  color: var(--color-text);
+  font-family: var(--font-song);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.beta-restart-dialog-divider {
+  height: 1px;
+  margin: 10px 0;
+  background: var(--color-surface-active);
+}
+
+.beta-restart-dialog-message,
+.beta-restart-dialog-detail {
+  margin: 0;
+  font-family: var(--font-song);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.beta-restart-dialog-message {
+  color: var(--color-text);
+}
+
+.beta-restart-dialog-detail {
+  margin-top: 8px;
+  color: var(--color-text-status);
+}
+
+.beta-restart-dialog .modal-dialog-actions {
+  padding: 0 30px 24px;
+}

@@ -1,6 +1,12 @@
 use super::super::*;
 
 #[tauri::command]
+pub(crate) fn restart_application(app: tauri::AppHandle) -> CommandResult<()> {
+    app.request_restart();
+    Ok(())
+}
+
+#[tauri::command]
 pub(crate) fn get_preferences(state: tauri::State<'_, AppState>) -> CommandResult<Preferences> {
     state
         .preferences

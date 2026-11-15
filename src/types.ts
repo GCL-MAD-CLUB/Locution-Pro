@@ -406,4 +406,5 @@ export interface Preferences {
   auto_save_interval_minutes: number;
   auto_save_max_snapshots: number;
   auto_remux_matroska: boolean;
+  beta_transcode_enabled: boolean;
 }

@@ -72,6 +72,8 @@ interface MediaBinTableProps {
   onSetItemsHidden: (itemIds: string[], hidden: boolean) => void;
   onSetFoldersHidden: (folderIds: string[], hidden: boolean) => void;
   onPreviewVideo: (videoId: string) => void;
+  /** Adds the dragged media to the transcode queue when dropped on it. */
+  onSendToTranscode: (itemIds: string[]) => void;
   onBindItems: (itemIds: string[], videoId: string) => void | Promise<void>;
   onImportPaths: (paths: string[]) => void;
 }
@@ -568,6 +570,7 @@ export function MediaBinTable({
   onSetItemsHidden,
   onSetFoldersHidden,
   onPreviewVideo,
+  onSendToTranscode,
   onBindItems,
   onImportPaths,
 }: MediaBinTableProps) {
@@ -1371,6 +1374,8 @@ export function MediaBinTable({
           : (element?.closest<HTMLElement>("[data-media-bind-video-id]") ?? null);
       const sourceTarget =
         element?.closest<HTMLElement>("[data-source-monitor-drop-target]") ?? null;
+      const transcodeTarget =
+        element?.closest<HTMLElement>("[data-transcode-queue-drop-target]") ?? null;
       const folderTarget = isReadOnly
         ? null
         : (element?.closest<HTMLElement>("[data-media-folder-id]") ?? null);
@@ -1378,7 +1383,16 @@ export function MediaBinTable({
         videoId: bindingTarget?.dataset.mediaBindVideoId ?? null,
         folderId: folderTarget?.dataset.mediaFolderId ?? null,
         sourceTarget,
+        transcodeTarget,
       };
+    };
+    // The queue lives in another panel, so its highlight is set on the element.
+    let highlightedQueue: HTMLElement | null = null;
+    const highlightQueue = (queue: HTMLElement | null) => {
+      if (queue === highlightedQueue) return;
+      highlightedQueue?.classList.remove("is-media-drop-target");
+      queue?.classList.add("is-media-drop-target");
+      highlightedQueue = queue;
     };
 
     const onMove = (moveEvent: globalThis.PointerEvent) => {
@@ -1393,6 +1407,7 @@ export function MediaBinTable({
       const target = targetFromPoint(moveEvent.clientX, moveEvent.clientY);
       setDropTargetVideoId(target.videoId);
       setDropTargetFolderId(target.folderId);
+      highlightQueue(target.transcodeTarget);
       setPointerDragPreview({
         item,
         project: mediaItemProject(item, projects, mediaItems),
@@ -1406,6 +1421,7 @@ export function MediaBinTable({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onCancel);
       document.body.classList.remove("is-dragging-media-title");
+      highlightQueue(null);
       setDropTargetVideoId(null);
       setDropTargetFolderId(null);
       setPointerDragPreview(null);
@@ -1421,7 +1437,9 @@ export function MediaBinTable({
       }
       if (dragging && !cancelled) {
         const target = targetFromPoint(finishEvent.clientX, finishEvent.clientY);
-        if (target.sourceTarget && item.kind === "video" && isMediaItemEnabled(item)) {
+        if (target.transcodeTarget) {
+          onSendToTranscode(itemIds);
+        } else if (target.sourceTarget && item.kind === "video" && isMediaItemEnabled(item)) {
           onPreviewVideo(item.id);
         } else if (target.folderId) {
           onMoveEntriesToFolder(itemIds, folderIds, target.folderId);

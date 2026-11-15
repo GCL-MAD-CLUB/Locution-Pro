@@ -241,6 +241,11 @@
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
+.transcode-queue-table.is-media-drop-target {
+  background: var(--color-selection-muted);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
 .transcode-link {
   justify-self: start;
   max-width: 100%;

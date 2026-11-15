@@ -172,3 +172,40 @@ test("导出设置可预览源与输出画面，并可按实际编码画质对�
     )
     .toBe(true);
 });
+
+test("二级菜单在指针停留时展开，移到其他项后收起", async ({ app }) => {
+  await importIntoTranscode(app);
+  await app.getByRole("button", { name: "窗口(W)", exact: true }).click();
+  const watchFolders = app.getByRole("menuitemcheckbox", { name: "监视文件夹", exact: true });
+  await app.getByRole("menuitem", { name: "转码", exact: true }).hover();
+  await expect(watchFolders).toBeVisible();
+  // A click on the hovered submenu keeps it open instead of toggling it shut.
+  await app.getByRole("menuitem", { name: "转码", exact: true }).click();
+  await expect(watchFolders).toBeVisible();
+  await app.getByRole("menuitemcheckbox", { name: "历史记录", exact: true }).hover();
+  await expect(watchFolders).toHaveCount(0);
+});
+
+test("从媒体箱把素材拖到转码队列即加入队列", async ({ app }) => {
+  await importIntoTranscode(app);
+  const grid = queue(app);
+  await grid.getByText("clip.MP4", { exact: true }).click();
+  await grid.press("Delete");
+  await expect(grid.getByText("clip.MP4", { exact: true })).toHaveCount(0);
+
+  const title = app
+    .getByRole("table", { name: "媒体列表", exact: true })
+    .getByText("clip.MP4", { exact: true })
+    .first();
+  const from = (await title.boundingBox())!;
+  const to = (await grid.boundingBox())!;
+  await app.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await app.mouse.down();
+  await app.mouse.move(from.x + from.width / 2 + 20, from.y + from.height / 2, { steps: 4 });
+  await app.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 });
+  await expect(grid).toHaveClass(/is-media-drop-target/);
+  await app.mouse.up();
+  await expect(grid).not.toHaveClass(/is-media-drop-target/);
+  await expect(grid.getByText("clip.MP4", { exact: true })).toBeVisible();
+  await expect(app.getByText("已将 1 个媒体添加到转码队列。", { exact: true })).toBeVisible();
+});

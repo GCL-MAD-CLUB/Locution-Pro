@@ -523,6 +523,11 @@ export function PopupMenuSelectionItem({
   );
 }
 
+/** Delay before a hovered submenu opens, so passing over it does not flash it open. */
+const submenuOpenDelayMs = 120;
+/** Delay before a submenu closes, so a diagonal path to it can cross a sibling item. */
+const submenuCloseDelayMs = 300;
+
 interface PopupMenuSubmenuProps {
   label: ReactNode;
   title?: string;
@@ -552,6 +557,38 @@ export function PopupMenuSubmenu({
 }: PopupMenuSubmenuProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const hoverTimer = useRef<number | null>(null);
+  const openRef = useRef(open);
+  openRef.current = open;
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
+
+  const clearHoverTimer = useCallback(() => {
+    if (hoverTimer.current !== null) {
+      window.clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+  }, []);
+
+  // Like native menus, a submenu opens while the pointer rests on it and
+  // closes once the pointer has left both it and its items. React delivers
+  // enter/leave along the component tree, so the portal menu counts as inside.
+  const hoverTo = useCallback(
+    (next: boolean) => {
+      clearHoverTimer();
+      if (openRef.current === next) return;
+      hoverTimer.current = window.setTimeout(
+        () => {
+          hoverTimer.current = null;
+          if (openRef.current !== next) onOpenChangeRef.current(next);
+        },
+        next ? submenuOpenDelayMs : submenuCloseDelayMs,
+      );
+    },
+    [clearHoverTimer],
+  );
+
+  useEffect(() => clearHoverTimer, [clearHoverTimer]);
 
   const updateAnchor = useCallback(() => {
     const next = hostRef.current?.getBoundingClientRect() ?? null;
@@ -582,7 +619,16 @@ export function PopupMenuSubmenu({
   }, [open, updateAnchor]);
 
   return (
-    <div ref={hostRef} className="popup-menu-submenu">
+    <div
+      ref={hostRef}
+      className="popup-menu-submenu"
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse" && !disabled) hoverTo(true);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") hoverTo(false);
+      }}
+    >
       <PopupMenuItem
         submenu
         title={title}
@@ -590,7 +636,12 @@ export function PopupMenuSubmenu({
         indicator={indicator}
         disabled={disabled}
         mnemonic={mnemonic}
-        onSelect={() => onOpenChange(!open)}
+        onSelect={() => {
+          // A click opens a submenu the pointer has not opened yet; it never
+          // closes one that hover just opened.
+          clearHoverTimer();
+          onOpenChange(true);
+        }}
       >
         {label}
       </PopupMenuItem>

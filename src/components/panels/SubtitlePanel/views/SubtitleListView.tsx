@@ -71,6 +71,7 @@ interface SubtitleListViewProps {
     cue: SubtitleCue,
     focusRange?: boolean,
   ) => void;
+  onStartCueDrag: (event: ReactPointerEvent<HTMLElement>, cue: SubtitleCue) => void;
   onDoubleClickCue: (event: ReactMouseEvent<HTMLElement>, cue: SubtitleCue) => void;
   onOpenAnnotationMenu: (
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -105,6 +106,7 @@ export function SubtitleListView({
   onPointerDown,
   onContextMenu,
   onSelectCue,
+  onStartCueDrag,
   onDoubleClickCue,
   onOpenAnnotationMenu,
   cueLabel,
@@ -270,6 +272,7 @@ export function SubtitleListView({
                     onSelectCue(event, cue);
                   }}
                   onDoubleClick={(event) => onDoubleClickCue(event, cue)}
+                  onPointerDown={(event) => onStartCueDrag(event, cue)}
                 >
                   <div className="cue-thumbnail-cell" role="cell">
                     <SubtitleCueThumbnail

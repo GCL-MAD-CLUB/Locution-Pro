@@ -352,6 +352,11 @@ test("即时预览重新生成 SVG 并通知喷涂工具，取消恢复后的图
     const image = () =>
       decodeURIComponent(document.documentElement.style.getPropertyValue("--image-checkbox-check"));
     const original = image();
+    const overlay = () =>
+      decodeURIComponent(
+        document.documentElement.style.getPropertyValue("--image-flag-overlay-excluded"),
+      );
+    const originalOverlay = overlay();
     const snapshots = [];
     for (const appearance of ["dark", "light", "darkest"]) {
       theme.applyAppearance(appearance);
@@ -360,20 +365,28 @@ test("即时预览重新生成 SVG 并通知喷涂工具，取消恢复后的图
         flag: decodeURIComponent(
           document.documentElement.style.getPropertyValue("--image-flag-excluded"),
         ),
+        flagMark: getComputedStyle(document.documentElement)
+          .getPropertyValue("--color-annotation-flag-mark")
+          .trim(),
+        overlay: overlay(),
         cursor: decodeURIComponent(cursors.sprayEraserCursor()),
       });
     }
     unsubscribe();
     theme.applyAppearance("dark");
-    return { original, snapshots, notifications };
+    return { original, originalOverlay, snapshots, notifications };
   });
   expect(result.notifications).toEqual(["dark", "light", "darkest"]);
   expect(result.snapshots[0].image).not.toBe(result.original);
   expect(result.snapshots[1].image).not.toBe(result.original);
   expect(result.snapshots[2].image).toBe(result.original);
+  expect(result.snapshots[0].flag).not.toBe(result.snapshots[1].flag);
+  expect(result.snapshots[2].flag).toBe(result.snapshots[0].flag);
   for (const snapshot of result.snapshots) {
     expect(snapshot.image).not.toContain("var(");
-    expect(snapshot.flag).toContain("stroke='#1d1d1d'");
+    expect(snapshot.flag).toContain(`stroke='${snapshot.flagMark}'`);
+    expect(snapshot.overlay).toBe(result.originalOverlay);
+    expect(snapshot.overlay).not.toContain("var(");
     expect(snapshot.cursor).not.toContain("var(");
   }
 });

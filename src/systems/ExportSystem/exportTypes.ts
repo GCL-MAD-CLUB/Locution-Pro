@@ -1,6 +1,7 @@
 import type { UserNotice } from "../../types";
 
-export type ExportSourceKind = "storyboard" | "subtitle" | "media-bin";
+/** "asset-library" is a library selection that mixes subtitle and storyboard materials. */
+export type ExportSourceKind = "storyboard" | "subtitle" | "media-bin" | "asset-library";
 
 export type ExportClipThumbnailKind = "storyboard" | "subtitle" | "video";
 

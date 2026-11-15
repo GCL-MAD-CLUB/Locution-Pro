@@ -135,10 +135,6 @@
   font-weight: 700;
 }
 
-.about-dialog-legal {
-  user-select: text;
-}
-
 .about-dialog-legal pre {
   margin: 12px 0 20px;
   font: inherit;

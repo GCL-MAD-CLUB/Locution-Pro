@@ -29,7 +29,7 @@ const ruleParts: Record<ExportRenameRule, [RenamePart, RenamePart?]> = {
 /**
  * Rename-rule options for the 重命名为 dropdown. Merge mode produces a single
  * file with no per-clip identity, so it gets a reduced set; individual mode
- * depends on the source kind (字幕/分镜/媒体库).
+ * depends on the source kind (字幕/分镜/素材/媒体库).
  */
 export function exportRenameRuleOptions(
   mode: ExportMode,
@@ -66,6 +66,18 @@ export function exportRenameRuleOptions(
         ["filename_time", "文件名-时间范围"],
         ["custom", "自定名称"],
         ["custom_label", "自定名称-分镜"],
+        ["custom_time", "自定名称-时间范围"],
+      ];
+    case "asset-library":
+      return [
+        ["label", "素材"],
+        ["time", "时间范围"],
+        ["time_label", "时间范围-素材"],
+        ["filename", "文件名"],
+        ["filename_label", "文件名-素材"],
+        ["filename_time", "文件名-时间范围"],
+        ["custom", "自定名称"],
+        ["custom_label", "自定名称-素材"],
         ["custom_time", "自定名称-时间范围"],
       ];
     case "media-bin":

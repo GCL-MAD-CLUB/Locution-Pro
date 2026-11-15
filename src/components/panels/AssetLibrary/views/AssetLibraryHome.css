@@ -1,0 +1,408 @@
+/* The home: quick-access tiles, then recently used or favorite materials, as in a file manager. */
+
+.asset-library-home.media-bin-table-scroll {
+  /* Empty sections center in the visible area and shrink their art with its height. */
+  container: asset-library-home / size;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 16px;
+  overflow: hidden auto;
+  color: var(--color-text-table-row);
+  font-size: 12px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* A narrow pane clips the home on the right instead of squeezing it. */
+.asset-library-home > .asset-library-home-section {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 480px;
+}
+
+/* The last section takes the remaining height, so its empty state centers in it. */
+.asset-library-home > .asset-library-home-section:last-child {
+  flex: 1 0 auto;
+}
+
+.asset-library-home-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+}
+
+.asset-library-home-toggle {
+  display: grid;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  place-items: center;
+  color: var(--color-text-table-header);
+  background: var(--color-transparent);
+  border: 0;
+  border-radius: 4px;
+}
+
+.asset-library-home-toggle:hover {
+  color: var(--color-text-control-hover);
+  background: var(--color-footer-control-hover-background);
+}
+
+.asset-library-home-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.asset-library-home-title {
+  color: var(--color-text-default);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.asset-library-home-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.asset-library-home-tabs button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 12px;
+  color: var(--color-text-table-row);
+  background: var(--color-footer-control-hover-background);
+  border: 0;
+  border-radius: 13px;
+  font-size: 12px;
+}
+
+.asset-library-home-tabs button:hover,
+.asset-library-home-tabs button.is-active {
+  color: var(--color-text-control-hover);
+}
+
+.asset-library-home-tabs button.is-active {
+  background: var(--color-surface-row-selected);
+  box-shadow: inset 0 0 0 1px var(--color-border-selection);
+}
+
+.asset-library-home-tabs svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+/* Empty sections: a small card stack around the section's symbol, a title and a hint. */
+.asset-library-home-placeholder {
+  --asset-home-art-zoom: 1;
+
+  display: flex;
+  box-sizing: border-box;
+  /* As wide as the visible area, not the clipped section, so it centers where it is seen. */
+  width: min(100%, 100cqi);
+  flex: 1 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 16px 16px 24px;
+  color: var(--color-text-table-header);
+  text-align: center;
+  white-space: normal;
+}
+
+.asset-library-home-placeholder.is-compact {
+  --asset-home-art-zoom: 0.75;
+
+  flex: none;
+  padding: 8px 16px 16px;
+}
+
+.asset-library-home-placeholder > strong {
+  margin-top: 14px;
+  color: var(--color-text-default);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.asset-library-home-placeholder-art {
+  position: relative;
+  flex: none;
+  width: 112px;
+  height: 72px;
+  zoom: var(--asset-home-art-zoom);
+}
+
+/* Short panes shrink the art first, then leave it out so the text stays readable. */
+@container asset-library-home (max-height: 420px) {
+  .asset-library-home-placeholder {
+    --asset-home-art-zoom: 0.75;
+  }
+
+  .asset-library-home-placeholder.is-compact {
+    --asset-home-art-zoom: 0.6;
+  }
+}
+
+@container asset-library-home (max-height: 320px) {
+  .asset-library-home-placeholder {
+    --asset-home-art-zoom: 0.55;
+
+    padding-block: 8px 12px;
+  }
+
+  .asset-library-home-placeholder.is-compact {
+    --asset-home-art-zoom: 0.45;
+  }
+
+  .asset-library-home-placeholder > strong {
+    margin-top: 8px;
+  }
+}
+
+@container asset-library-home (max-height: 220px) {
+  .asset-library-home-placeholder-art {
+    display: none;
+  }
+
+  .asset-library-home-placeholder > strong {
+    margin-top: 0;
+  }
+}
+
+.asset-library-home-placeholder-card {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 64px;
+  height: 52px;
+  margin-left: -32px;
+  background: var(--color-surface-elevated-default);
+  border: 1px solid var(--color-border-overlay-default);
+  border-radius: 8px;
+}
+
+.asset-library-home-placeholder-card.is-back-left {
+  transform: translateX(-26px) rotate(-10deg);
+  opacity: 0.55;
+}
+
+.asset-library-home-placeholder-card.is-back-right {
+  transform: translateX(26px) rotate(10deg);
+  opacity: 0.55;
+}
+
+.asset-library-home-placeholder-card.is-front {
+  top: 2px;
+  display: grid;
+  width: 72px;
+  height: 64px;
+  margin-left: -36px;
+  place-items: center;
+}
+
+.asset-library-home-placeholder-badge {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: var(--color-text-action);
+  background: var(--color-selection-muted);
+  border-radius: 8px;
+}
+
+.asset-library-home-placeholder-badge svg {
+  width: 18px;
+  height: 18px;
+}
+
+.asset-library-home-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 4px;
+  padding-left: 28px;
+}
+
+.asset-library-home-tile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--color-transparent);
+  border-radius: 4px;
+}
+
+.asset-library-home-tile-icon {
+  display: grid;
+  flex: none;
+  width: 48px;
+  height: 42px;
+  place-items: center;
+}
+
+.asset-library-home-tile-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.asset-library-home-tile-copy,
+.asset-library-home-row-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.asset-library-home-name,
+.asset-library-home-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-library-home-name {
+  color: var(--color-text-default);
+}
+
+.asset-library-home-detail {
+  color: var(--color-text-table-header);
+}
+
+.asset-library-home-pin {
+  width: 11px;
+  height: 11px;
+  color: var(--color-text-table-header);
+}
+
+.asset-library-home-list {
+  display: flex;
+  flex-direction: column;
+  padding-left: 28px;
+}
+
+.asset-library-home-list-header,
+.asset-library-home-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px;
+}
+
+.asset-library-home-list-header {
+  height: 28px;
+  color: var(--color-text-table-header);
+}
+
+.asset-library-home-row {
+  min-height: 48px;
+  border: 1px solid var(--color-transparent);
+  border-radius: 4px;
+}
+
+.asset-library-home-row-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.asset-library-home-row-copy {
+  flex: 1;
+}
+
+.asset-library-home-row-date {
+  color: var(--color-text-table-header);
+  white-space: nowrap;
+}
+
+.asset-library-home-row-action {
+  display: grid;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  visibility: hidden;
+  color: var(--color-text-table-header);
+  background: var(--color-transparent);
+  border: 0;
+  border-radius: 4px;
+}
+
+.asset-library-home-row:hover .asset-library-home-row-action,
+.asset-library-home-row.selected .asset-library-home-row-action {
+  visibility: visible;
+}
+
+.asset-library-home-row-action:hover {
+  color: var(--color-text-control-hover);
+  background: var(--color-footer-control-hover-background);
+}
+
+.asset-library-home-row-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.asset-library-home-tile:hover,
+.asset-library-home-row:hover {
+  background: var(--color-surface-row-hover);
+}
+
+.asset-library-home-tile.selected,
+.asset-library-home-row.selected {
+  background: var(--color-surface-row-selected);
+}
+
+.asset-library-home-tile.is-focused,
+.asset-library-home-row.is-focused {
+  border-color: var(--color-border-selection);
+}
+
+.asset-library-home-tile.is-cut > *,
+.asset-library-home-row.is-cut > *,
+.asset-library-home-tile.is-hidden > *,
+.asset-library-home-row.is-hidden > * {
+  opacity: var(--opacity-control-disabled);
+}
+
+/* The navigation pane lists the home and pinned folders above the project. */
+.asset-library-tree > .asset-library-tree-separator {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--color-border-divider);
+}
+
+.asset-library-tree-pin {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin-left: auto;
+  padding-right: 6px;
+  box-sizing: content-box;
+  color: var(--color-text-table-header);
+}
+
+.asset-library-home-thumbnail {
+  flex: none;
+  width: 50px;
+  height: 28px;
+}
+
+.asset-library-home-thumbnail > .asset-library-thumbnail {
+  border-radius: 3px;
+}
+
+/* The home has no item size, so the footer's view tools give way while keeping their space. */
+.media-bin-view-tools.is-unavailable {
+  visibility: hidden;
+}

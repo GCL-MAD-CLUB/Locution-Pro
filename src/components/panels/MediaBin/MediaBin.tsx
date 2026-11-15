@@ -75,7 +75,12 @@ import { SelectDropdown, selectDropdownItems } from "../../common/SelectDropdown
 import { useTaskProgressStatus } from "../../../systems/TaskSystem";
 import "./MediaBin.css";
 import { MediaBinTable, type MediaBinTableRow } from "./views/MediaBinTable";
-import { activeMediaDragItemIds, markMediaDragHandled } from "./mediaDrag";
+import {
+  activeMediaDragItemIds,
+  markMediaDragHandled,
+  mediaDragType,
+  readMediaDragItemIds,
+} from "./mediaDrag";
 import {
   setMediaBinClipboardItemCount,
   useMediaBinClipboardItemCount,
@@ -84,7 +89,6 @@ import {
 import { mediaBinPanelType } from "./panelTypes";
 import { usePanelManagerState } from "../../common/DockLayout";
 
-const mediaDragType = "application/x-locution-pro-media";
 interface MediaBinClipboard {
   folders: MediaBinFolder[];
   items: MediaBinItem[];
@@ -185,32 +189,6 @@ function MediaBinLockIcon() {
       />
     </svg>
   );
-}
-
-function readDraggedMediaIds(event: DragEvent) {
-  const serialized = event.dataTransfer.getData(mediaDragType);
-  if (serialized) {
-    try {
-      const parsed = JSON.parse(serialized);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((itemId): itemId is string => typeof itemId === "string");
-      }
-    } catch {
-      // Fall through to the text/plain representation used by some WebViews.
-    }
-  }
-  const plainText = event.dataTransfer.getData("text/plain").trim();
-  if (!plainText) {
-    return activeMediaDragItemIds();
-  }
-  try {
-    const parsed = JSON.parse(plainText);
-    return Array.isArray(parsed)
-      ? parsed.filter((itemId): itemId is string => typeof itemId === "string")
-      : [];
-  } catch {
-    return [plainText];
-  }
 }
 
 function isImportedMediaFile(item: MediaBinItem) {
@@ -890,7 +868,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     if (isReadOnly || !rootFolderAvailable) {
       return;
     }
-    const itemIds = readDraggedMediaIds(event);
+    const itemIds = readMediaDragItemIds(event.dataTransfer);
     if (itemIds.length === 0) {
       return;
     }
@@ -1468,6 +1446,21 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
               }
             }}
             onPreviewVideo={previewVideo}
+            onSendToTranscode={(itemIds) => {
+              const ids = new Set(itemIds);
+              const paths = [
+                ...new Set(
+                  mediaItems
+                    .filter((item) => ids.has(item.id) && !isMediaItemOffline(item))
+                    .map((item) => item.path),
+                ),
+              ];
+              if (paths.length === 0) {
+                messagePublished("拖入的媒体已脱机，无法加入转码队列。");
+                return;
+              }
+              void publishEvent("transcode.enqueue.requested", { paths }, identity);
+            }}
             onBindItems={bindItemsToVideo}
             onImportPaths={(paths) =>
               void publishEvent(

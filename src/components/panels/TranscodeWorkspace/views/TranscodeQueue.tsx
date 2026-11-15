@@ -271,6 +271,8 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
       )}
       <div
         className="transcode-queue-table"
+        // Media dragged from the media bin is added here (see MediaBinTable).
+        data-transcode-queue-drop-target=""
         role="grid"
         aria-label="转码队列"
         aria-multiselectable="true"
@@ -290,7 +292,7 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
         </div>
         {sources.length === 0 && (
           <p className="transcode-empty">
-            要将项目添加到队列，请单击“添加源”按钮，在左侧媒体箱中右键选择“添加到转码队列”，或在导入时勾选“在转码页面打开导入素材”。要开始编码，请单击“启动队列”按钮。
+            要将项目添加到队列，请单击“添加源”按钮，从媒体箱把素材拖到这里或右键选择“添加到转码队列”，或在导入时勾选“在转码页面打开导入素材”。要开始编码，请单击“启动队列”按钮。
           </p>
         )}
         {sources.map((source) => (

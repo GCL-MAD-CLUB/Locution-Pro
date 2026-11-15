@@ -39,7 +39,7 @@ export const initialAppPanelState: PanelManagerInitialState = {
       type: "split",
       id: "initial-columns",
       axis: "x",
-      ratio: 1 / 3,
+      ratio: 0.38,
       first: {
         type: "split",
         id: "initial-left-rows",

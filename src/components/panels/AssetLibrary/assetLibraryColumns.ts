@@ -25,11 +25,11 @@ export interface AssetLibraryColumn {
 
 export const assetLibraryColumns: readonly AssetLibraryColumn[] = [
   { id: "name", label: "名称", sortKey: "name", width: 240, minimum: 80, maximum: 1200 },
-  { id: "location", label: "位置", sortKey: null, width: 160, minimum: 48, maximum: 480 },
-  { id: "source", label: "来源", sortKey: null, width: 200, minimum: 60, maximum: 480 },
+  { id: "location", label: "位置", sortKey: "location", width: 160, minimum: 48, maximum: 480 },
+  { id: "source", label: "来源", sortKey: "source", width: 200, minimum: 60, maximum: 480 },
   { id: "marks", label: "标签", sortKey: "rating", width: 112, minimum: 40, maximum: 320 },
-  { id: "subtitle", label: "字幕", sortKey: null, width: 300, minimum: 60, maximum: 1200 },
-  { id: "keywords", label: "关键字", sortKey: null, width: 136, minimum: 48, maximum: 420 },
+  { id: "subtitle", label: "字幕", sortKey: "subtitle", width: 300, minimum: 60, maximum: 1200 },
+  { id: "keywords", label: "关键字", sortKey: "keywords", width: 136, minimum: 48, maximum: 420 },
   { id: "inPoint", label: "媒体入点", sortKey: "start", width: 112, minimum: 48, maximum: 200 },
   {
     id: "duration",
@@ -47,7 +47,7 @@ export const assetLibraryColumns: readonly AssetLibraryColumn[] = [
     minimum: 60,
     maximum: 240,
   },
-  { id: "hidden", label: "隐藏", sortKey: null, width: 48, minimum: 40, maximum: 80 },
+  { id: "hidden", label: "隐藏", sortKey: "hidden", width: 48, minimum: 40, maximum: 80 },
 ];
 
 /** A library, or the project, which mixes both libraries and so shows every column. */

@@ -17,7 +17,6 @@ import {
   assetLibraryRootLabels,
   assetLibraryViewLayout,
   isAssetLibraryProjectPlace,
-  sameAssetLibraryLocation,
   withAssetLibraryColorLabel,
   withAssetLibraryFlag,
   withAssetLibraryRating,
@@ -608,15 +607,11 @@ export function AssetLibrary() {
 
   const locationLabel = query
     ? (node: AssetLibraryNode) => {
+        // The full path of the containing folder, such as 字幕:\文件夹1\文件夹2.
         const parent = assetNodeParent(node);
-        if (isAssetLibraryProjectPlace(parent) || sameAssetLibraryLocation(parent, location)) {
-          return null;
-        }
-        const names = assetLibraryFolderPath(library, parent.folderId)
-          .slice(path.length)
-          .map((folder) => folder.name);
-        // A search across the project also names the library each item is in.
-        return (atProject ? [assetLibraryRootLabels[parent.root], ...names] : names).join(" / ");
+        if (isAssetLibraryProjectPlace(parent)) return null;
+        const names = assetLibraryFolderPath(library, parent.folderId).map((folder) => folder.name);
+        return [`${assetLibraryRootLabels[parent.root]}:`, ...names].join("\\");
       }
     : undefined;
 

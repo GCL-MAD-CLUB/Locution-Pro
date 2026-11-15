@@ -160,8 +160,8 @@ function groupSlot(item: AssetLibraryGroupItem, key: AssetLibraryGroupKey, now: 
   if (key === "kind") {
     if (!entry) return { label: "文件夹", rank: 0 };
     return entry.root === "subtitles"
-      ? { label: "字幕素材", rank: 1 }
-      : { label: "分镜素材", rank: 2 };
+      ? { label: "字幕", rank: 1 }
+      : { label: "分镜", rank: 2 };
   }
   if (!entry) return unspecified;
   switch (key) {

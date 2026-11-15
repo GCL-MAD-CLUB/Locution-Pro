@@ -63,7 +63,17 @@ export interface AssetLibraryClipboard {
   topEntryIds: string[];
 }
 
-export type AssetLibrarySortKey = "name" | "created" | "start" | "duration" | "rating";
+export type AssetLibrarySortKey =
+  | "name"
+  | "created"
+  | "start"
+  | "duration"
+  | "rating"
+  | "location"
+  | "source"
+  | "subtitle"
+  | "keywords"
+  | "hidden";
 
 export interface AssetLibrarySort {
   key: AssetLibrarySortKey;
@@ -799,6 +809,8 @@ const nameCollator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "b
 
 function entrySortValue(entry: AssetLibraryEntry, key: AssetLibrarySortKey) {
   switch (key) {
+    case "hidden":
+      return Number(entry.hidden);
     case "created":
       return entry.created_at;
     case "duration":
@@ -819,29 +831,76 @@ function compareSourceThenStart(left: AssetLibraryEntry, right: AssetLibraryEntr
   );
 }
 
-/** Folders always precede entries, as in a file manager; both follow the chosen order. */
+/** Text keys compare as names do; an empty value sorts after every filled one. */
+function entrySortText(entry: AssetLibraryEntry, key: AssetLibrarySortKey) {
+  switch (key) {
+    case "source":
+      return entry.media.file_name;
+    case "subtitle":
+      return entry.text.trim();
+    case "keywords":
+      return entry.annotation.keywords.join("、");
+    default:
+      return null;
+  }
+}
+
+function compareText(left: string, right: string) {
+  if (!left || !right) return Number(!left) - Number(!right);
+  return nameCollator.compare(left, right);
+}
+
+/** Text of the folder an item sits in, for sorting by location. */
+export type AssetLibraryLocationText = (root: AssetLibraryRoot, folderId: string | null) => string;
+
+/**
+ * Folders always precede entries, as in a file manager; both follow the chosen order. Keys
+ * that do not apply to folders, such as the source, order folders by name.
+ */
 export function sortedAssetLibraryNodes(
   folders: readonly AssetLibraryFolder[],
   entries: readonly AssetLibraryEntry[],
   sort: AssetLibrarySort,
+  locationText?: AssetLibraryLocationText,
 ) {
   const direction = sort.direction === "ascending" ? 1 : -1;
-  const sortedFolders = [...folders].sort((left, right) =>
-    sort.key === "created"
-      ? (left.created_at - right.created_at) * direction ||
-        nameCollator.compare(left.name, right.name)
-      : nameCollator.compare(left.name, right.name) * direction,
-  );
-  const sortedEntries = [...entries].sort(
-    (left, right) =>
-      (sort.key === "name"
+  const byLocation = sort.key === "location" && locationText;
+  const sortedFolders = [...folders].sort((left, right) => {
+    const primary =
+      sort.key === "created"
+        ? left.created_at - right.created_at
+        : sort.key === "hidden"
+          ? Number(left.hidden) - Number(right.hidden)
+          : byLocation
+            ? compareText(
+                locationText(left.root, left.parent_id),
+                locationText(right.root, right.parent_id),
+              )
+            : null;
+    const byName = nameCollator.compare(left.name, right.name);
+    return primary === null ? byName * direction : primary * direction || byName;
+  });
+  const sortedEntries = [...entries].sort((left, right) => {
+    const leftText = entrySortText(left, sort.key);
+    const primary =
+      sort.key === "name"
         ? nameCollator.compare(left.name, right.name)
         : sort.key === "start"
           ? compareSourceThenStart(left, right)
-          : entrySortValue(left, sort.key) - entrySortValue(right, sort.key)) * direction ||
+          : byLocation
+            ? compareText(
+                locationText(left.root, left.folder_id),
+                locationText(right.root, right.folder_id),
+              )
+            : leftText !== null
+              ? compareText(leftText, entrySortText(right, sort.key)!)
+              : entrySortValue(left, sort.key) - entrySortValue(right, sort.key);
+    return (
+      primary * direction ||
       nameCollator.compare(left.name, right.name) ||
-      left.start_us - right.start_us,
-  );
+      left.start_us - right.start_us
+    );
+  });
   return { folders: sortedFolders, entries: sortedEntries };
 }
 

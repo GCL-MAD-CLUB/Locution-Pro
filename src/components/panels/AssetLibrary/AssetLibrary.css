@@ -463,10 +463,6 @@ body.is-resizing-asset-library-pane * {
   opacity: var(--opacity-control-disabled);
 }
 
-.asset-library-location-cell {
-  color: var(--color-text-placeholder);
-}
-
 .asset-library-empty {
   display: grid;
   min-height: 100%;

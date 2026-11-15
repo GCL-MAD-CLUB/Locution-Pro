@@ -3,6 +3,7 @@ import {
   assetLibraryChildren,
   assetLibraryDescendants,
   assetLibraryEntryMatches,
+  assetLibraryFolderPath,
   assetLibraryRoots,
   isAssetLibraryProjectPlace,
   sortedAssetLibraryNodes,
@@ -21,6 +22,7 @@ import {
 import { withoutHiddenAssetLibraryNodes } from "../../../core/editor/assetLibraryVisibility";
 import type {
   AssetLibraryEntry,
+  AssetLibraryRoot,
   MediaBinItem,
   MediaDocument,
   ProjectAssetLibraryState,
@@ -102,6 +104,22 @@ export function useAssetLibraryNodes({
     return counts;
   }, [library]);
 
+  // Sorting by location compares full folder paths, as the location column shows them.
+  const locationText = useMemo(() => {
+    const cache = new Map<string, string>();
+    return (libraryRoot: AssetLibraryRoot, parentId: string | null) => {
+      const cacheKey = `${libraryRoot}:${parentId ?? ""}`;
+      let text = cache.get(cacheKey);
+      if (text === undefined) {
+        text = [libraryRoot, ...assetLibraryFolderPath(library, parentId).map((f) => f.name)].join(
+          "\\",
+        );
+        cache.set(cacheKey, text);
+      }
+      return text;
+    };
+  }, [library]);
+
   const { root, folderId } = location;
   const listed = useMemo<AssetLibraryNode[]>(() => {
     const at = { root, folderId } as AssetLibraryPlace;
@@ -135,6 +153,7 @@ export function useAssetLibraryNodes({
       query ? source.folders.filter((folder) => folderMatches(folder.name, query)) : source.folders,
       kept(source.entries),
       sort,
+      locationText,
     );
     return [
       ...sorted.folders.map((folder) => ({
@@ -150,7 +169,18 @@ export function useAssetLibraryNodes({
         media: mediaByEntryId.get(entry.id) ?? null,
       })),
     ];
-  }, [childCounts, filter, folderId, library, mediaByEntryId, query, root, showHidden, sort]);
+  }, [
+    childCounts,
+    filter,
+    folderId,
+    library,
+    locationText,
+    mediaByEntryId,
+    query,
+    root,
+    showHidden,
+    sort,
+  ]);
 
   const { nodes, groups } = useMemo(() => {
     if (!group.key) return { nodes: listed, groups: null };

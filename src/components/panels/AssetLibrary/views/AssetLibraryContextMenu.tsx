@@ -75,7 +75,8 @@ export interface AssetLibraryContextMenuActions {
 
 type Submenu = "flag" | "rating" | "color" | "sort" | "group" | "view" | null;
 
-const sortLabels: Record<AssetLibrarySortKey, string> = {
+/** The menu's sort keys; the other columns sort from their headers. */
+const sortLabels: Partial<Record<AssetLibrarySortKey, string>> = {
   name: "名称",
   created: "添加时间",
   start: "入点",

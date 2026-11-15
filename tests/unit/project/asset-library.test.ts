@@ -492,6 +492,28 @@ test("in-point sorting groups entries by source before comparing in-points", () 
   deepEqual(order("descending"), ["b-late", "b-early", "a-late", "a-early"]);
 });
 
+test("text columns and location sort, with empty values after filled ones", () => {
+  const media = (fileName: string) => ({ ...entry("m", null).media, file_name: fileName });
+  const entries = [
+    entry("x", null, { media: media("b.mp4"), text: "乙" }),
+    entry("y", null, { media: media("a.mp4"), text: "" }),
+    entry("z", null, { media: media("c.mp4"), text: "甲" }),
+  ];
+  const order = (key: "source" | "subtitle", direction: "ascending" | "descending") =>
+    library.sortedAssetLibraryNodes([], entries, { key, direction }).entries.map((item) => item.id);
+  deepEqual(order("source", "ascending"), ["y", "x", "z"]);
+  deepEqual(order("source", "descending"), ["z", "x", "y"]);
+  deepEqual(order("subtitle", "ascending"), ["z", "x", "y"]);
+  const located = [entry("deep", "f1"), entry("top", null)];
+  const where = (_root: string, folderId: string | null) => (folderId ? "字幕\a" : "字幕");
+  deepEqual(
+    library
+      .sortedAssetLibraryNodes([], located, { key: "location", direction: "ascending" }, where)
+      .entries.map((item) => item.id),
+    ["top", "deep"],
+  );
+});
+
 test("duration uses subtitle time ranges and inclusive storyboard frames", () => {
   const subtitle = entry("subtitle", null, { start_us: 80_000, end_us: 200_000 });
   assert.equal(library.assetLibraryEntryDurationUs(subtitle), 120_000);

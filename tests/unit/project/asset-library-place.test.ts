@@ -19,8 +19,13 @@ const assetLibrary = load<typeof import("../../../src/core/editor/assetLibrary.t
   "../../../src/core/editor/assetLibrary.ts",
   { "./timeline": timeline },
 );
+const home = load<typeof import("../../../src/core/editor/assetLibraryHome.ts")>(
+  "../../../src/core/editor/assetLibraryHome.ts",
+  { "./assetLibrary": assetLibrary },
+);
 const place = load<PlaceModule>("../../../src/core/editor/assetLibraryPlace.ts", {
   "./assetLibrary": assetLibrary,
+  "./assetLibraryHome": home,
 });
 const columns = load<ColumnsModule>(
   "../../../src/components/panels/AssetLibrary/assetLibraryColumns.ts",
@@ -70,6 +75,20 @@ test("typed paths may start at the project, which needs a library name next", ()
   );
   assert.equal(place.assetLibraryPlaceFromPath(library, "访谈", project), null);
   assert.equal(place.assetLibraryPlaceFromPath(library, "此项目\\访谈", inSubtitles), null);
+});
+
+test("the home is typed by name and, like the project, needs a library name next", () => {
+  const homePlace = { root: "home" as const, folderId: null };
+  assert.equal(place.assetLibraryPlacePathText(library, homePlace), "主文件夹");
+  assert.equal(
+    json(place.assetLibraryPlaceFromPath(library, " 主文件夹 ", project)),
+    json(homePlace),
+  );
+  assert.equal(
+    json(place.assetLibraryPlaceFromPath(library, "分镜\\镜头", homePlace)),
+    json({ root: "storyboards", folderId: "s" }),
+  );
+  assert.equal(place.assetLibraryPlaceFromPath(library, "访谈", homePlace), null);
 });
 
 test("the project lists every column of both libraries", () => {

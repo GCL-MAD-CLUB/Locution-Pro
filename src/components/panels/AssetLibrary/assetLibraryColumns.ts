@@ -53,6 +53,11 @@ export const assetLibraryColumns: readonly AssetLibraryColumn[] = [
 /** A library, or the project, which mixes both libraries and so shows every column. */
 export type AssetLibraryColumnScope = AssetLibraryRoot | "project";
 
+/** The home searches both libraries, as the project does, so it shares the project columns. */
+export function assetLibraryColumnScope(place: { root: AssetLibraryRoot | "project" | "home" }) {
+  return (place.root === "home" ? "project" : place.root) satisfies AssetLibraryColumnScope;
+}
+
 /** Each library defines its own fields and order. Only the table mechanics are shared. */
 const libraryColumnIds: Record<AssetLibraryColumnScope, readonly AssetLibraryColumnId[]> = {
   project: [

@@ -1,7 +1,7 @@
-import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight, Search } from "lucide-react";
 import {
   useState,
-  type ReactNode,
+  type RefObject,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -12,7 +12,8 @@ import {
   assetLibraryProjectPlace,
   assetLibraryRootLabels,
   assetLibraryRoots,
-  isAssetLibraryProjectPlace,
+  isAssetLibraryHomePlace,
+  isAssetLibraryLocation,
   sameAssetLibraryLocation,
   sortedAssetLibraryNodes,
   type AssetLibraryLocation,
@@ -22,11 +23,16 @@ import {
   assetLibraryPlaceFromPath,
   assetLibraryPlacePathText,
 } from "../../../../core/editor/assetLibraryPlace";
+import { assetLibraryHomeLabel } from "../../../../core/editor/assetLibraryHome";
 import type { AssetLibraryFolder, ProjectAssetLibraryState } from "../../../../types";
 import { PopupMenu, PopupMenuItem, useCloseOnOutsidePointer } from "../../../common/PopupMenu";
 import { assetLibraryDropTargetProps } from "../../../common/utils/assetLibraryDropTarget";
 import { assetLocationKey } from "../assetLibraryNodes";
-import { AssetLibraryProjectIcon, assetLibraryRootIcons } from "./AssetLibraryTreeIcons";
+import {
+  AssetLibraryHomeIcon,
+  AssetLibraryProjectIcon,
+  assetLibraryRootIcons,
+} from "./AssetLibraryTreeIcons";
 
 type AddressMenu =
   | { kind: "roots"; x: number; y: number }
@@ -47,8 +53,10 @@ export interface AssetLibraryAddressBarProps {
   onGoForward: (steps: number) => void;
   onNavigateUp: () => void;
   onInvalidPath: (text: string) => void;
-  /** The search field, which ends the row as in a file manager. */
-  search: ReactNode;
+  /** The search field ends the row, as in a file manager. */
+  query: string;
+  searchRef: RefObject<HTMLInputElement | null>;
+  onQueryChange: (query: string) => void;
 }
 
 /** Drop-target keys for crumbs, kept apart from tree and item keys. */
@@ -97,9 +105,23 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
     capturePointerdown: true,
     ignorePopupMenuTargets: true,
   });
-  const project = isAssetLibraryProjectPlace(location);
-  const RootIcon = project ? AssetLibraryProjectIcon : assetLibraryRootIcons[location.root];
+  // The home and the project are tops of their own; neither is inside a library.
+  const home = isAssetLibraryHomePlace(location);
+  const libraryPlace = isAssetLibraryLocation(location) ? location : null;
+  const project = !libraryPlace;
+  const RootIcon = home
+    ? AssetLibraryHomeIcon
+    : libraryPlace
+      ? assetLibraryRootIcons[libraryPlace.root]
+      : AssetLibraryProjectIcon;
   const pathIds = new Set(path.map((folder) => folder.id));
+  const placeLabel =
+    path.at(-1)?.name ??
+    (home
+      ? assetLibraryHomeLabel
+      : libraryPlace
+        ? assetLibraryRootLabels[libraryPlace.root]
+        : assetLibraryProjectLabel);
 
   function childFolders(parent: AssetLibraryLocation) {
     return sortedAssetLibraryNodes(
@@ -142,8 +164,8 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
 
   function crumb(target: AssetLibraryPlace, label: string, current: boolean) {
     const dropKey = assetLibraryCrumbDropKey(target);
-    // The project holds no items, so its crumb takes no drops.
-    const dropTarget = isAssetLibraryProjectPlace(target) ? null : target;
+    // The project and the home hold no items, so their crumbs take no drops.
+    const dropTarget = isAssetLibraryLocation(target) ? target : null;
     return (
       <button
         type="button"
@@ -162,8 +184,7 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
   }
 
   function historyItem(target: AssetLibraryPlace, index: number, onSelect: () => void) {
-    const exists =
-      isAssetLibraryProjectPlace(target) || assetLibraryLocationExists(library, target);
+    const exists = !isAssetLibraryLocation(target) || assetLibraryLocationExists(library, target);
     return (
       <PopupMenuItem
         key={`${index}:${assetLocationKey(target)}`}
@@ -240,7 +261,7 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
     return true;
   }
 
-  const hasChildren = !project && childFolders(location).length > 0;
+  const hasChildren = libraryPlace !== null && childFolders(libraryPlace).length > 0;
 
   return (
     <div className="asset-library-location-row">
@@ -294,12 +315,13 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
               if (event.target === event.currentTarget) props.onEditingChange(true);
             }}
           >
-            {crumb(assetLibraryProjectPlace, assetLibraryProjectLabel, project)}
-            {chevron("切换素材库", { kind: "roots", x: 0, y: 0 }, menu?.kind === "roots")}
-            {!project &&
+            {home && crumb(location, assetLibraryHomeLabel, true)}
+            {!home && crumb(assetLibraryProjectPlace, assetLibraryProjectLabel, project)}
+            {!home && chevron("切换素材库", { kind: "roots", x: 0, y: 0 }, menu?.kind === "roots")}
+            {libraryPlace &&
               crumb(
-                { root: location.root, folderId: null },
-                assetLibraryRootLabels[location.root],
+                { root: libraryPlace.root, folderId: null },
+                assetLibraryRootLabels[libraryPlace.root],
                 path.length === 0,
               )}
             {path.map((folder, index) => {
@@ -323,16 +345,28 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
               );
             })}
             {hasChildren &&
-              !project &&
+              libraryPlace &&
               chevron(
                 "显示子文件夹",
-                { kind: "children", location, x: 0, y: 0 },
-                isChildMenu(location),
+                { kind: "children", location: libraryPlace, x: 0, y: 0 },
+                isChildMenu(libraryPlace),
               )}
           </nav>
         )}
       </div>
-      {props.search}
+      <label className="media-bin-search asset-library-search">
+        <Search aria-hidden="true" />
+        <input
+          ref={props.searchRef}
+          value={props.query}
+          placeholder={`在“${placeLabel}”中搜索`}
+          aria-label="搜索素材"
+          onChange={(event) => props.onQueryChange(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") props.onQueryChange("");
+          }}
+        />
+      </label>
       {renderMenu()}
     </div>
   );

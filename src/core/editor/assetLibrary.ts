@@ -41,13 +41,31 @@ export const assetLibraryProjectPlace: AssetLibraryProjectPlace = {
 };
 export const assetLibraryProjectLabel = "此项目";
 
-/** Where the panel can be: the project, or a folder or top level of one library. */
-export type AssetLibraryPlace = AssetLibraryLocation | AssetLibraryProjectPlace;
+/** The home above the project: quick access, recently used and favorite materials. */
+export interface AssetLibraryHomePlace {
+  root: "home";
+  folderId: null;
+}
+
+export const assetLibraryHomePlace: AssetLibraryHomePlace = { root: "home", folderId: null };
+
+/** Where the panel can be: the home, the project, or a folder or top level of one library. */
+export type AssetLibraryPlace =
+  AssetLibraryLocation | AssetLibraryProjectPlace | AssetLibraryHomePlace;
 
 export function isAssetLibraryProjectPlace(
   place: AssetLibraryPlace,
 ): place is AssetLibraryProjectPlace {
   return place.root === "project";
+}
+
+export function isAssetLibraryHomePlace(place: AssetLibraryPlace): place is AssetLibraryHomePlace {
+  return place.root === "home";
+}
+
+/** A folder or top level of one library, as opposed to the home or the project above them. */
+export function isAssetLibraryLocation(place: AssetLibraryPlace): place is AssetLibraryLocation {
+  return place.root !== "project" && place.root !== "home";
 }
 
 export interface AssetLibrarySelection {

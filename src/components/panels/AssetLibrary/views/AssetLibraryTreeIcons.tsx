@@ -14,6 +14,19 @@ function Glyph({ d, ...props }: SVGProps<SVGSVGElement> & { d: string }) {
   );
 }
 
+/** A house with its door cut out, for the home. */
+export function AssetLibraryHomeIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Glyph
+      {...props}
+      d={[
+        "M82 34a6 6 0 0 1 4 1.6l36 31.4a6 6 0 0 1 2 4.5V96a6 6 0 0 1-6 6H46a6 6 0 0 1-6-6V71.5a6 6 0 0 1 2-4.5l36-31.4A6 6 0 0 1 82 34z",
+        "M74 102V80a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v22z",
+      ].join(" ")}
+    />
+  );
+}
+
 /** A clapperboard for the project, as a drive icon stands for "此电脑". */
 export function AssetLibraryProjectIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -61,4 +74,39 @@ export function AssetLibraryStoryboardsIcon(props: SVGProps<SVGSVGElement>) {
 export const assetLibraryRootIcons: Record<AssetLibraryRoot, typeof AssetLibrarySubtitlesIcon> = {
   subtitles: AssetLibrarySubtitlesIcon,
   storyboards: AssetLibraryStoryboardsIcon,
+};
+
+// The media bin folder, with its library's motif cut out of the body so a folder shows
+// what it holds.
+const folderTab = "M40 44v-2a4 4 0 0 1 4-4h24l6 6z";
+const folderBody = "M40 48h78a6 6 0 0 1 6 6v42a6 6 0 0 1-6 6H46a6 6 0 0 1-6-6V48z";
+
+/** A folder with two lines of caption text along its foot. */
+export function AssetLibrarySubtitlesFolderIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Glyph
+      {...props}
+      d={[
+        folderTab,
+        folderBody,
+        "M52 74h36v8H52z M94 74h18v8H94z M52 87h20v8H52z M78 87h34v8H78z",
+      ].join(" ")}
+    />
+  );
+}
+
+/** A folder with film sprocket holes along its top and foot. */
+export function AssetLibraryStoryboardsFolderIcon(props: SVGProps<SVGSVGElement>) {
+  const holes = [48, 60, 72, 84, 96, 108]
+    .flatMap((x) => [`M${x} 54h8v8h-8z`, `M${x} 88h8v8h-8z`])
+    .join(" ");
+  return <Glyph {...props} d={[folderTab, folderBody, holes].join(" ")} />;
+}
+
+export const assetLibraryFolderIcons: Record<
+  AssetLibraryRoot,
+  typeof AssetLibrarySubtitlesFolderIcon
+> = {
+  subtitles: AssetLibrarySubtitlesFolderIcon,
+  storyboards: AssetLibraryStoryboardsFolderIcon,
 };

@@ -1,13 +1,21 @@
 import {
+  assetLibraryFolderPath,
   assetLibraryRootLabels,
+  isAssetLibraryLocation,
   assetLibraryProjectPlace,
+  isAssetLibraryHomePlace,
   isAssetLibraryProjectPlace,
   type AssetLibraryLocation,
   type AssetLibraryPlace,
   type AssetLibrarySelection,
 } from "../../../core/editor/assetLibrary";
 import type { AssetLibraryGroupItem } from "../../../core/editor/assetLibraryGroup";
-import type { AssetLibraryEntry, AssetLibraryFolder, AssetLibraryRoot } from "../../../types";
+import type {
+  AssetLibraryEntry,
+  AssetLibraryFolder,
+  AssetLibraryRoot,
+  ProjectAssetLibraryState,
+} from "../../../types";
 import type { ResolvedAssetMedia } from "./assetLibraryMedia";
 import type { AssetLibraryContainer } from "./views/AssetLibraryDetails";
 
@@ -47,6 +55,14 @@ export function assetNodeParent(node: AssetLibraryNode): AssetLibraryPlace {
     : { root: node.entry.root, folderId: node.entry.folder_id };
 }
 
+/** The full path of the folder holding `node`, such as 字幕:\文件夹1\文件夹2. */
+export function assetNodeParentText(library: ProjectAssetLibraryState, node: AssetLibraryNode) {
+  const parent = assetNodeParent(node);
+  if (!isAssetLibraryLocation(parent)) return null;
+  const names = assetLibraryFolderPath(library, parent.folderId).map((folder) => folder.name);
+  return [`${assetLibraryRootLabels[parent.root]}:`, ...names].join("\\");
+}
+
 /** The place a folder or library item opens; entries do not open as places. */
 export function assetNodeTarget(node: AssetLibraryNode): AssetLibraryLocation | null {
   if (node.kind === "library") return { root: node.root, folderId: null };
@@ -81,7 +97,8 @@ export function assetNodeGroupItem(node: AssetLibraryNode): AssetLibraryGroupIte
 
 /**
  * What the properties pane describes besides entries: as in a file manager, a single selected
- * folder or library, or with nothing selected the open place (the project, a library or a folder).
+ * folder or library, or with nothing selected the open place (the project, a library or a folder);
+ * the home describes nothing until something is selected.
  */
 export function assetLibraryDetailsContainer(
   selectedNodes: readonly AssetLibraryNode[],
@@ -93,6 +110,7 @@ export function assetLibraryDetailsContainer(
   if (single?.kind === "folder") return { ...single, kind: "folder" };
   if (single?.kind === "library") return { kind: "root", root: single.root };
   if (selectedNodes.length > 0) return null;
+  if (isAssetLibraryHomePlace(place)) return null;
   if (isAssetLibraryProjectPlace(place)) return { kind: "project" };
   if (!openFolder) return { kind: "root", root: place.root };
   return { kind: "folder", folder: openFolder, childCount: childCounts.get(openFolder.id) ?? 0 };

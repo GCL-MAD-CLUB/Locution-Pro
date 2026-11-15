@@ -33,6 +33,13 @@ export interface AssetLibraryContextMenuState {
 export interface AssetLibraryContextMenuModel {
   canOpen: boolean;
   openLabel: string;
+  /** At the home, a single item can open the folder that holds it. */
+  canOpenLocation: boolean;
+  /** Folders pin to quick access; null when the menu acts on anything else. */
+  pin: "pin" | "unpin" | null;
+  /** Materials are added to favorites; null when the menu acts on anything else. */
+  favorite: "add" | "remove" | null;
+  canRemoveRecent: boolean;
   canCreateFolder: boolean;
   canCut: boolean;
   canCopy: boolean;
@@ -54,6 +61,10 @@ export interface AssetLibraryContextMenuModel {
 
 export interface AssetLibraryContextMenuActions {
   open: () => void;
+  openLocation: () => void;
+  setPinned: (pinned: boolean) => void;
+  setFavorite: (favorite: boolean) => void;
+  removeRecent: () => void;
   createFolder: () => void;
   cut: () => void;
   copy: () => void;
@@ -216,13 +227,31 @@ export function AssetLibraryContextMenu({
       onContextMenu={(event) => event.preventDefault()}
     >
       {model.canOpen && (
-        <>
-          <PopupMenuItem shortcut="Enter" onSelect={run(actions.open)}>
-            {model.openLabel}
-          </PopupMenuItem>
-          <PopupMenuSeparator />
-        </>
+        <PopupMenuItem shortcut="Enter" onSelect={run(actions.open)}>
+          {model.openLabel}
+        </PopupMenuItem>
       )}
+      {model.canOpenLocation && (
+        <PopupMenuItem onSelect={run(actions.openLocation)}>打开所在位置</PopupMenuItem>
+      )}
+      {model.pin && (
+        <PopupMenuItem onSelect={run(() => actions.setPinned(model.pin === "pin"))}>
+          {model.pin === "pin" ? "固定到快速访问" : "从快速访问取消固定"}
+        </PopupMenuItem>
+      )}
+      {model.favorite && (
+        <PopupMenuItem onSelect={run(() => actions.setFavorite(model.favorite === "add"))}>
+          {model.favorite === "add" ? "添加到收藏夹" : "从收藏夹中删除"}
+        </PopupMenuItem>
+      )}
+      {model.canRemoveRecent && (
+        <PopupMenuItem onSelect={run(actions.removeRecent)}>从最近使用中删除</PopupMenuItem>
+      )}
+      {(model.canOpen ||
+        model.canOpenLocation ||
+        model.pin ||
+        model.favorite ||
+        model.canRemoveRecent) && <PopupMenuSeparator />}
       <PopupMenuItem
         shortcut="Ctrl+Shift+N"
         disabled={!model.canCreateFolder}

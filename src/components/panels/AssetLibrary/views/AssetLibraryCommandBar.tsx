@@ -37,6 +37,8 @@ import {
 import { AssetLibraryFilterItems } from "./AssetLibraryFilterItems";
 
 export interface AssetLibraryCommandBarModel {
+  /** Only a library or folder holds new folders; the home and the project do not. */
+  canCreateFolder: boolean;
   canCut: boolean;
   canCopy: boolean;
   canPaste: boolean;
@@ -161,7 +163,11 @@ export function AssetLibraryCommandBar({
     switch (kind) {
       case "new":
         return (
-          <PopupMenuItem shortcut="Ctrl+Shift+N" onSelect={run(actions.createFolder)}>
+          <PopupMenuItem
+            shortcut="Ctrl+Shift+N"
+            disabled={!model.canCreateFolder}
+            onSelect={run(actions.createFolder)}
+          >
             文件夹
           </PopupMenuItem>
         );

@@ -5,6 +5,8 @@ import {
   assetLibraryEntryMatches,
   assetLibraryFolderPath,
   assetLibraryRoots,
+  isAssetLibraryHomePlace,
+  isAssetLibraryLocation,
   isAssetLibraryProjectPlace,
   sortedAssetLibraryNodes,
   type AssetLibraryPlace,
@@ -19,9 +21,15 @@ import {
   groupedAssetLibraryItems,
   type AssetLibraryGrouping,
 } from "../../../core/editor/assetLibraryGroup";
+import {
+  assetLibraryPinnedPlaces,
+  type AssetLibraryHome,
+  type AssetLibraryHomeTab,
+} from "../../../core/editor/assetLibraryHome";
 import { withoutHiddenAssetLibraryNodes } from "../../../core/editor/assetLibraryVisibility";
 import type {
   AssetLibraryEntry,
+  AssetLibraryFolder,
   AssetLibraryRoot,
   MediaBinItem,
   MediaDocument,
@@ -64,6 +72,8 @@ interface AssetLibraryNodesOptions {
   group: AssetLibraryGrouping;
   collapsedGroups: ReadonlySet<string>;
   showHidden: boolean;
+  home: AssetLibraryHome;
+  homeTab: AssetLibraryHomeTab;
   mediaItems: readonly MediaBinItem[];
   projects: Record<string, MediaDocument>;
 }
@@ -72,6 +82,8 @@ interface AssetLibraryNodesOptions {
  * The items listed for a place: its children, or every matching descendant while searching,
  * without hidden items unless they are shown and without materials the filter leaves out.
  * Folders come first. The project lists the two libraries, and a search there covers both.
+ * The home lists the folders and libraries pinned to quick access, then the recently used or favorite
+ * materials in their own order; a search there also covers both libraries.
  * When grouped, `nodes` follows the group order and leaves out collapsed groups, while
  * `itemCount` still counts every listed item.
  */
@@ -84,6 +96,8 @@ export function useAssetLibraryNodes({
   group,
   collapsedGroups,
   showHidden,
+  home,
+  homeTab,
   mediaItems,
   projects,
 }: AssetLibraryNodesOptions) {
@@ -130,20 +144,57 @@ export function useAssetLibraryNodes({
           (!query || assetLibraryEntryMatches(entry, query)) &&
           (!filtering || assetLibraryEntryMatchesFilter(entry, filter)),
       );
-    if (isAssetLibraryProjectPlace(at) && !query) {
-      return assetLibraryRoots.map((libraryRoot) => {
-        const top = assetLibraryChildren(library, { root: libraryRoot, folderId: null });
-        const visible = showHidden ? top : withoutHiddenAssetLibraryNodes(library, top, false);
-        const shown = { ...visible, entries: kept(visible.entries) };
-        return {
-          kind: "library" as const,
-          key: assetLocationKey({ root: libraryRoot, folderId: null }),
-          root: libraryRoot,
-          childCount: shown.folders.length + shown.entries.length,
-        };
-      });
+    const folderNodes = (folders: readonly AssetLibraryFolder[]) =>
+      folders.map((folder) => ({
+        kind: "folder" as const,
+        key: assetFolderKey(folder.id),
+        folder,
+        childCount: childCounts.get(folder.id) ?? 0,
+      }));
+    const entryNodes = (entries: readonly AssetLibraryEntry[]) =>
+      entries.map((entry) => ({
+        kind: "entry" as const,
+        key: assetEntryKey(entry.id),
+        entry,
+        media: mediaByEntryId.get(entry.id) ?? null,
+      }));
+    const libraryNode = (libraryRoot: AssetLibraryRoot) => {
+      const top = assetLibraryChildren(library, { root: libraryRoot, folderId: null });
+      const visible = showHidden ? top : withoutHiddenAssetLibraryNodes(library, top, false);
+      return {
+        kind: "library" as const,
+        key: assetLocationKey({ root: libraryRoot, folderId: null }),
+        root: libraryRoot,
+        childCount: visible.folders.length + kept(visible.entries).length,
+      };
+    };
+    if (isAssetLibraryHomePlace(at) && !query) {
+      const entriesById = new Map(library.entries.map((entry) => [entry.id, entry]));
+      const entryIds =
+        homeTab === "recent" ? home.recent.map((use) => use.entryId) : home.favoriteEntryIds;
+      const shortcuts = {
+        folders: assetLibraryPinnedPlaces(home, library.folders).flatMap(
+          (pinned) => pinned.folder ?? [],
+        ),
+        entries: entryIds.flatMap((id) => entriesById.get(id) ?? []),
+      };
+      const source = showHidden
+        ? shortcuts
+        : withoutHiddenAssetLibraryNodes(library, shortcuts, true);
+      const shownFolderIds = new Set(source.folders.map((folder) => folder.id));
+      // Pinned folders and libraries keep their pinning order.
+      const pinned = assetLibraryPinnedPlaces(home, source.folders).flatMap(
+        (place): AssetLibraryNode[] =>
+          place.folder
+            ? shownFolderIds.has(place.folder.id)
+              ? folderNodes([place.folder])
+              : []
+            : [libraryNode(place.root)],
+      );
+      return [...pinned, ...entryNodes(kept(source.entries))];
     }
-    const all = isAssetLibraryProjectPlace(at)
+    if (isAssetLibraryProjectPlace(at) && !query) return assetLibraryRoots.map(libraryNode);
+    const all = !isAssetLibraryLocation(at)
       ? library
       : query
         ? assetLibraryDescendants(library, at)
@@ -155,24 +206,13 @@ export function useAssetLibraryNodes({
       sort,
       locationText,
     );
-    return [
-      ...sorted.folders.map((folder) => ({
-        kind: "folder" as const,
-        key: assetFolderKey(folder.id),
-        folder,
-        childCount: childCounts.get(folder.id) ?? 0,
-      })),
-      ...sorted.entries.map((entry) => ({
-        kind: "entry" as const,
-        key: assetEntryKey(entry.id),
-        entry,
-        media: mediaByEntryId.get(entry.id) ?? null,
-      })),
-    ];
+    return [...folderNodes(sorted.folders), ...entryNodes(sorted.entries)];
   }, [
     childCounts,
     filter,
     folderId,
+    home,
+    homeTab,
     library,
     locationText,
     mediaByEntryId,
@@ -182,8 +222,10 @@ export function useAssetLibraryNodes({
     sort,
   ]);
 
+  // The home keeps its own order and sections, so it is never grouped unless searched.
+  const grouping = root === "home" && !query ? null : group.key;
   const { nodes, groups } = useMemo(() => {
-    if (!group.key) return { nodes: listed, groups: null };
+    if (!grouping) return { nodes: listed, groups: null };
     let start = 0;
     const grouped = groupedAssetLibraryItems(listed, assetNodeGroupItem, group, Date.now()).map(
       ({ id, label, items }): AssetLibraryNodeGroup => {
@@ -197,7 +239,7 @@ export function useAssetLibraryNodes({
       nodes: grouped.flatMap((entry) => (entry.collapsed ? [] : entry.nodes)),
       groups: grouped,
     };
-  }, [collapsedGroups, group, listed]);
+  }, [collapsedGroups, group, grouping, listed]);
 
   return { nodes, groups, itemCount: listed.length, mediaByEntryId, childCounts };
 }

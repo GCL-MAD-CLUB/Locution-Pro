@@ -1,4 +1,3 @@
-import { Search } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -12,11 +11,9 @@ import {
 import {
   assetLibraryFolderPath,
   assetLibraryLocationExists,
-  assetLibraryProjectLabel,
   assetLibraryProjectPlace,
-  assetLibraryRootLabels,
   assetLibraryViewLayout,
-  isAssetLibraryProjectPlace,
+  isAssetLibraryLocation,
   withAssetLibraryColorLabel,
   withAssetLibraryFlag,
   withAssetLibraryRating,
@@ -48,7 +45,11 @@ import {
 } from "./assetLibraryKeyboard";
 import { assetLibrarySelectionHidden } from "../../../core/editor/assetLibraryVisibility";
 import { assetLibraryFilterActive } from "../../../core/editor/assetLibraryFilter";
+import { assetLibraryColumnScope } from "./assetLibraryColumns";
+import { assetLibraryHomeActions } from "./assetLibraryHomeActions";
+import { useAssetLibraryHome } from "./assetLibraryHomeState";
 import { useAssetLibraryNodes } from "./useAssetLibraryNodes";
+import { assetLibrarySelectionActions } from "./assetLibrarySelection";
 import { useSlowClickRename } from "./useSlowClickRename";
 import {
   assetEntryKey,
@@ -57,7 +58,7 @@ import {
   assetLibrarySelectionFromKeys,
   assetLibrarySelectionSize,
   assetLocationKey,
-  assetNodeParent,
+  assetNodeParentText,
   assetNodeTarget,
   type AssetLibraryNode,
 } from "./assetLibraryNodes";
@@ -77,6 +78,7 @@ import {
 import { AssetLibraryDetails } from "./views/AssetLibraryDetails";
 import { AssetLibraryDragPreview as DragPreview } from "./views/AssetLibraryDragPreview";
 import { AssetLibraryFooter } from "./views/AssetLibraryFooter";
+import { AssetLibraryHome } from "./views/AssetLibraryHome";
 import { AssetLibraryItems } from "./views/AssetLibraryItems";
 import { AssetLibraryNavigation } from "./views/AssetLibraryNavigation";
 import { AssetLibraryResizeHandle } from "./views/AssetLibraryResizeHandle";
@@ -106,6 +108,7 @@ export function AssetLibrary() {
     ["assetLibraryUpdated", "messagePublished", "activeVideoChanged"],
   );
   const view = useAssetLibraryState((state) => state);
+  const home = useAssetLibraryHome();
   const { clipboard, cut } = useAssetLibraryClipboard();
   const commands = useMemo(() => assetLibraryCommands(assetLibraryUpdated), [assetLibraryUpdated]);
   const [columns, setColumns] = useState(1);
@@ -124,10 +127,10 @@ export function AssetLibrary() {
   // A folder that no longer exists falls back to the top of its library.
   const place = view.location;
   const location: AssetLibraryPlace =
-    isAssetLibraryProjectPlace(place) || assetLibraryLocationExists(library, place)
+    !isAssetLibraryLocation(place) || assetLibraryLocationExists(library, place)
       ? place
       : { root: place.root, folderId: null };
-  const atProject = isAssetLibraryProjectPlace(location);
+  const inLibrary = isAssetLibraryLocation(location);
   const locationValid = location === place;
   const { replaceLocation } = view;
   useEffect(() => {
@@ -135,6 +138,8 @@ export function AssetLibrary() {
   }, [location, locationValid, replaceLocation]);
 
   const query = view.query.trim();
+  // Searching the home lists results from both libraries instead of the home itself.
+  const showHome = location.root === "home" && !query;
   const layout = assetLibraryViewLayout(view.size);
   const path = useMemo(
     () => assetLibraryFolderPath(library, location.folderId),
@@ -161,9 +166,12 @@ export function AssetLibrary() {
     group: view.group,
     collapsedGroups: view.collapsedGroups,
     showHidden,
+    home,
+    homeTab: view.homeTab,
     mediaItems,
     projects,
   });
+  const homeActions = assetLibraryHomeActions({ library, home, showHidden, view });
 
   const nodeIndex = useMemo(() => new Map(nodes.map((node, index) => [node.key, index])), [nodes]);
   const selectedNodes = nodes.filter((node) => view.selectedKeys.has(node.key));
@@ -190,40 +198,19 @@ export function AssetLibrary() {
     [clipboard, cut],
   );
 
-  function rootLabel(root: AssetLibraryPlace["root"]) {
-    return root === "project" ? assetLibraryProjectLabel : assetLibraryRootLabels[root];
-  }
-
-  function selectOnly(key: string) {
-    view.select([key], key, key);
-  }
-
-  function selectRange(fromKey: string, toKey: string, additive: boolean) {
-    const from = nodeIndex.get(fromKey) ?? nodeIndex.get(toKey) ?? 0;
-    const to = nodeIndex.get(toKey) ?? 0;
-    const range = nodes.slice(Math.min(from, to), Math.max(from, to) + 1).map((node) => node.key);
-    view.select(additive ? [...view.selectedKeys, ...range] : range, toKey, fromKey);
-  }
-
-  function toggleNodeSelected(node: AssetLibraryNode) {
-    const keys = new Set(view.selectedKeys);
-    if (keys.has(node.key)) keys.delete(node.key);
-    else keys.add(node.key);
-    view.select(keys, node.key, node.key);
-  }
-
-  function selectAll() {
-    view.select(nodes.map((node) => node.key));
-  }
-
-  function toggleAllSelected() {
-    if (nodes.length > 0 && selectedNodes.length === nodes.length) view.select([], null, null);
-    else selectAll();
-  }
-
-  function invertSelection() {
-    view.select(nodes.filter((node) => !view.selectedKeys.has(node.key)).map((node) => node.key));
-  }
+  const {
+    selectOnly,
+    selectRange,
+    toggleNodeSelected,
+    selectAll,
+    toggleAllSelected,
+    invertSelection,
+  } = assetLibrarySelectionActions({
+    nodes,
+    nodeIndex,
+    selectedKeys: view.selectedKeys,
+    select: view.select,
+  });
 
   function showProperties() {
     view.setDetailsVisible(true);
@@ -249,6 +236,7 @@ export function AssetLibrary() {
       messagePublished(`“${entry.name}”的源媒体离线或已从项目移除，无法预览。`);
       return;
     }
+    homeActions.recordUse(entry.id);
     activeVideoChanged(media.videoId);
     void publishEvent("media.video.opened", { videoId: media.videoId }, identity);
     void publishEvent(
@@ -267,7 +255,7 @@ export function AssetLibrary() {
 
   /** Up goes to the parent folder, and from a library's top level to the project. */
   function navigateUp() {
-    if (isAssetLibraryProjectPlace(location)) return;
+    if (!isAssetLibraryLocation(location)) return;
     const key = assetLocationKey(location);
     const parent = path.at(-2);
     view.navigate(
@@ -291,7 +279,8 @@ export function AssetLibrary() {
 
   /** Folders and entries rename; the two libraries listed in the project do not. */
   function startRename(key: string | null) {
-    const node = key === null ? undefined : nodes[nodeIndex.get(key) ?? -1];
+    // The home has no inline editor; items rename where they are.
+    const node = key === null || showHome ? undefined : nodes[nodeIndex.get(key) ?? -1];
     if (node && node.kind !== "library") view.setRenamingKey(node.key);
   }
 
@@ -333,10 +322,7 @@ export function AssetLibrary() {
     if (event.shiftKey) {
       selectRange(view.anchorKey ?? node.key, node.key, additive);
     } else if (additive) {
-      const keys = new Set(view.selectedKeys);
-      if (keys.has(node.key)) keys.delete(node.key);
-      else keys.add(node.key);
-      view.select(keys, node.key, node.key);
+      toggleNodeSelected(node);
     } else {
       selectOnly(node.key);
       slowClickRename.scheduleOnClick(event, node.key);
@@ -440,7 +426,7 @@ export function AssetLibrary() {
     const command = assetLibraryKeyCommand(event, {
       itemCount: nodes.length,
       focusIndex,
-      iconColumns: layout.mode === "icons" ? columns : null,
+      iconColumns: layout.mode === "icons" && !showHome ? columns : null,
       groupStarts: groups?.flatMap((group) => (group.collapsed ? [] : [group.start])),
       hasSelection: view.selectedKeys.size > 0,
     });
@@ -493,17 +479,27 @@ export function AssetLibrary() {
     : selection;
   const menuTarget = menuTreeLocation ?? location;
   const singleMenuNode = !menuTreeLocation && selectedNodes.length === 1 ? selectedNodes[0]! : null;
+  const menuEntryIds = menuTreeLocation ? [] : selectedEntryIds;
+  const menuPinIds = homeActions.pinIds(selectedNodes, menuTreeLocation);
   const menuModel: AssetLibraryContextMenuModel = {
     canOpen: Boolean(singleMenuNode) || Boolean(menuTreeLocation),
     openLabel: singleMenuNode?.kind === "entry" ? "预览" : "打开",
-    canCreateFolder: !isAssetLibraryProjectPlace(menuTarget),
+    // Items listed away from their folder, at the home or in search results, can open it.
+    canOpenLocation:
+      Boolean(singleMenuNode && singleMenuNode.kind !== "library") &&
+      (!inLibrary || Boolean(query)),
+    // Folders pin and materials become favorites only when the menu acts on them alone.
+    pin: homeActions.pinState(menuPinIds),
+    favorite: menuSelection.folderIds.length ? null : homeActions.favoriteState(menuEntryIds),
+    canRemoveRecent: showHome && view.homeTab === "recent" && menuEntryIds.length > 0,
+    canCreateFolder: isAssetLibraryLocation(menuTarget),
     canCut: assetLibrarySelectionSize(menuSelection) > 0,
     canCopy: assetLibrarySelectionSize(menuSelection) > 0,
     canPaste: Boolean(clipboard) && clipboard?.root === menuTarget.root,
     canDuplicate: assetLibrarySelectionSize(menuSelection) > 0,
     canRename: menuTreeLocation
       ? Boolean(menuTreeLocation.folderId)
-      : Boolean(singleMenuNode && singleMenuNode.kind !== "library"),
+      : !showHome && Boolean(singleMenuNode && singleMenuNode.kind !== "library"),
     canDelete: assetLibrarySelectionSize(menuSelection) > 0,
     canSelectAll: nodes.length > 0,
     hasEntries: !menuTreeLocation && selectedEntryIds.length > 0,
@@ -519,6 +515,12 @@ export function AssetLibrary() {
       if (menuTreeLocation) view.navigate(menuTreeLocation);
       else if (singleMenuNode) openNode(singleMenuNode);
     },
+    openLocation: () => {
+      if (singleMenuNode) homeActions.openLocation(singleMenuNode);
+    },
+    setPinned: (pinned) => homeActions.setPinned(menuPinIds, pinned),
+    setFavorite: (favorite) => homeActions.setFavorite(menuEntryIds, favorite),
+    removeRecent: () => homeActions.removeRecent(menuEntryIds),
     createFolder: () => createFolder(menuTarget),
     cut: () => copyNodes(menuSelection, true),
     copy: () => copyNodes(menuSelection, false),
@@ -563,10 +565,11 @@ export function AssetLibrary() {
   };
   const singleSelected = selectedNodes.length === 1 ? selectedNodes[0]! : null;
   const commandModel: AssetLibraryCommandBarModel = {
+    canCreateFolder: inLibrary,
     canCut: selectedNodes.length > 0,
     canCopy: selectedNodes.length > 0,
     canPaste: Boolean(clipboard) && clipboard?.root === location.root,
-    canRename: Boolean(singleSelected && singleSelected.kind !== "library"),
+    canRename: !showHome && Boolean(singleSelected && singleSelected.kind !== "library"),
     canDelete: selectedNodes.length > 0,
     hasItems: nodes.length > 0,
     hasSelection: selectedNodes.length > 0,
@@ -606,13 +609,7 @@ export function AssetLibrary() {
   const zoom = useCallback((steps: number) => setSize(size + steps * sizeStep), [setSize, size]);
 
   const locationLabel = query
-    ? (node: AssetLibraryNode) => {
-        // The full path of the containing folder, such as 字幕:\文件夹1\文件夹2.
-        const parent = assetNodeParent(node);
-        if (isAssetLibraryProjectPlace(parent)) return null;
-        const names = assetLibraryFolderPath(library, parent.folderId).map((folder) => folder.name);
-        return [`${assetLibraryRootLabels[parent.root]}:`, ...names].join("\\");
-      }
+    ? (node: AssetLibraryNode) => assetNodeParentText(library, node)
     : undefined;
 
   const detailsContainer = assetLibraryDetailsContainer(
@@ -660,21 +657,9 @@ export function AssetLibrary() {
         onGoForward={view.goForward}
         onNavigateUp={navigateUp}
         onInvalidPath={(text) => messagePublished(`素材库中找不到“${text}”。请检查拼写并重试。`)}
-        search={
-          <label className="media-bin-search asset-library-search">
-            <Search aria-hidden="true" />
-            <input
-              ref={searchRef}
-              value={view.query}
-              placeholder={`在“${path.at(-1)?.name ?? rootLabel(location.root)}”中搜索`}
-              aria-label="搜索素材"
-              onChange={(event) => view.setQuery(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") view.setQuery("");
-              }}
-            />
-          </label>
-        }
+        query={view.query}
+        searchRef={searchRef}
+        onQueryChange={view.setQuery}
       />
 
       <AssetLibraryCommandBar model={commandModel} actions={commandActions} />
@@ -688,6 +673,7 @@ export function AssetLibrary() {
               location={location}
               collapsedKeys={view.collapsedKeys}
               showHidden={showHidden}
+              pinnedPlaces={homeActions.pinnedPlaces()}
               dropTargetKey={shownDropTargetKey}
               onNavigate={view.navigate}
               onToggleCollapsed={view.toggleCollapsed}
@@ -702,47 +688,69 @@ export function AssetLibrary() {
             />
           </>
         )}
-        <AssetLibraryItems
-          root={location.root}
-          location={atProject ? null : location}
-          nodes={nodes}
-          groups={groups}
-          onToggleGroup={view.toggleGroupCollapsed}
-          layout={layout}
-          sort={view.sort}
-          selectedKeys={view.selectedKeys}
-          focusKey={view.focusKey}
-          renamingKey={view.renamingKey}
-          cutKeys={cutKeys}
-          dropTargetKey={shownDropTargetKey}
-          thumbnailsEnabled={panelActive}
-          emptyText={
-            query || assetLibraryFilterActive(view.filter) ? "没有匹配的素材" : "此文件夹为空。"
-          }
-          locationLabel={locationLabel}
-          visibleColumns={view.visibleColumns[location.root]}
-          columnWidths={view.columnWidths[location.root]}
-          itemCheckboxes={view.itemCheckboxes}
-          onSetHidden={(node, hidden) =>
-            commands.setHidden(assetLibrarySelectionFromKeys([node.key]), hidden)
-          }
-          onSort={view.setSort}
-          onToggleColumn={view.toggleColumn}
-          onColumnWidthChange={view.setColumnWidth}
-          onResetColumnWidths={view.resetColumnWidths}
-          onToggleNodeSelected={toggleNodeSelected}
-          onToggleAllSelected={toggleAllSelected}
-          onNodePointerDown={handleNodePointerDown}
-          onNodeClick={handleNodeClick}
-          onOpenNode={openNode}
-          onMarqueeSelect={(keys) => view.select(keys)}
-          onClearSelection={() => view.select([], null, null)}
-          onRename={renameNode}
-          onCancelRename={() => view.setRenamingKey(null)}
-          onContextMenu={openContentMenu}
-          onColumnsChange={setColumns}
-          onZoom={zoom}
-        />
+        {showHome ? (
+          <AssetLibraryHome
+            library={library}
+            home={home}
+            tab={view.homeTab}
+            nodes={nodes}
+            selectedKeys={view.selectedKeys}
+            focusKey={view.focusKey}
+            cutKeys={cutKeys}
+            thumbnailsEnabled={panelActive}
+            collapsedSections={view.collapsedSections}
+            onToggleSection={view.toggleSection}
+            onTabChange={view.setHomeTab}
+            onNodePointerDown={handleNodePointerDown}
+            onNodeClick={handleNodeClick}
+            onOpenNode={openNode}
+            onOpenLocation={homeActions.openLocation}
+            onClearSelection={() => view.select([], null, null)}
+            onContextMenu={openContentMenu}
+          />
+        ) : (
+          <AssetLibraryItems
+            root={assetLibraryColumnScope(location)}
+            location={inLibrary ? location : null}
+            nodes={nodes}
+            groups={groups}
+            onToggleGroup={view.toggleGroupCollapsed}
+            layout={layout}
+            sort={view.sort}
+            selectedKeys={view.selectedKeys}
+            focusKey={view.focusKey}
+            renamingKey={view.renamingKey}
+            cutKeys={cutKeys}
+            dropTargetKey={shownDropTargetKey}
+            thumbnailsEnabled={panelActive}
+            emptyText={
+              query || assetLibraryFilterActive(view.filter) ? "没有匹配的素材" : "此文件夹为空。"
+            }
+            locationLabel={locationLabel}
+            visibleColumns={view.visibleColumns[assetLibraryColumnScope(location)]}
+            columnWidths={view.columnWidths[assetLibraryColumnScope(location)]}
+            itemCheckboxes={view.itemCheckboxes}
+            onSetHidden={(node, hidden) =>
+              commands.setHidden(assetLibrarySelectionFromKeys([node.key]), hidden)
+            }
+            onSort={view.setSort}
+            onToggleColumn={view.toggleColumn}
+            onColumnWidthChange={view.setColumnWidth}
+            onResetColumnWidths={view.resetColumnWidths}
+            onToggleNodeSelected={toggleNodeSelected}
+            onToggleAllSelected={toggleAllSelected}
+            onNodePointerDown={handleNodePointerDown}
+            onNodeClick={handleNodeClick}
+            onOpenNode={openNode}
+            onMarqueeSelect={(keys) => view.select(keys)}
+            onClearSelection={() => view.select([], null, null)}
+            onRename={renameNode}
+            onCancelRename={() => view.setRenamingKey(null)}
+            onContextMenu={openContentMenu}
+            onColumnsChange={setColumns}
+            onZoom={zoom}
+          />
+        )}
         {view.detailsVisible && (
           <>
             <AssetLibraryResizeHandle
@@ -769,6 +777,7 @@ export function AssetLibrary() {
       <AssetLibraryFooter
         size={view.size}
         listMode={layout.mode === "list"}
+        sizable={!showHome}
         itemCount={itemCount}
         selectedCount={selectedNodes.length}
         onSizeChange={view.setSize}

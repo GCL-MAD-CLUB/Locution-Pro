@@ -21,7 +21,6 @@ import {
 import { formatMonitorTime } from "../../../../core/editor/time";
 import "../../MediaBin/MediaBin.css";
 import "./AssetLibraryGroups.css";
-import { MediaBinFolderIcon, OfflineFileIcon } from "../../MediaBin/views/MediaBinFolderIcon";
 import {
   assetLibraryColumnsForRoot,
   type AssetLibraryColumn,
@@ -32,9 +31,11 @@ import { assetLibraryDropTargetProps } from "../../../common/utils/assetLibraryD
 import { assetNodeTarget, type AssetLibraryNode } from "../assetLibraryNodes";
 import type { AssetLibraryColumnScope } from "../assetLibraryColumns";
 import type { AssetLibraryNodeGroup } from "../useAssetLibraryNodes";
-import { assetLibraryRootIcons } from "./AssetLibraryTreeIcons";
+import { assetLibraryFolderIcons, assetLibraryRootIcons } from "./AssetLibraryTreeIcons";
 import { AssetLibraryMarks, AssetLibraryThumbnailMarks } from "./AssetLibraryBadges";
+import { OfflineFileIcon } from "../../MediaBin/views/MediaBinFolderIcon";
 import { AssetLibraryHoverFrame } from "./AssetLibraryHoverFrame";
+import { AssetLibraryKindIcon as KindIcon } from "./AssetLibraryKindIcon";
 import { AssetLibraryListHeader } from "./AssetLibraryListHeader";
 import { AssetLibraryThumbnail } from "./AssetLibraryThumbnail";
 
@@ -209,44 +210,6 @@ function RenameInput({
         if (event.key === "Escape") finish(false);
       }}
     />
-  );
-}
-
-/** The media bin's kind glyphs, drawn in one fixed-size box so every row lines up. */
-function KindIcon({ node }: { node: AssetLibraryNode }) {
-  if (node.kind === "library") {
-    const Icon = assetLibraryRootIcons[node.root];
-    return (
-      <span className="media-bin-kind-icon folder">
-        <Icon />
-      </span>
-    );
-  }
-  if (node.kind === "folder") {
-    return (
-      <span className="media-bin-kind-icon folder">
-        <MediaBinFolderIcon />
-      </span>
-    );
-  }
-  if (!node.media) {
-    return (
-      <span className="media-bin-kind-icon">
-        <OfflineFileIcon
-          className="media-bin-offline-icon"
-          role="img"
-          aria-hidden={false}
-          aria-label="媒体离线"
-        />
-      </span>
-    );
-  }
-  const subtitle = node.entry.root === "subtitles";
-  const Icon = subtitle ? Captions : Film;
-  return (
-    <span className={`media-bin-kind-icon ${subtitle ? "subtitle" : "video"}`}>
-      <Icon aria-hidden="true" />
-    </span>
   );
 }
 
@@ -587,7 +550,10 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
 
   function renderCardPreview(node: AssetLibraryNode, progress: number | null) {
     if (node.kind !== "entry") {
-      const Icon = node.kind === "library" ? assetLibraryRootIcons[node.root] : MediaBinFolderIcon;
+      const Icon =
+        node.kind === "library"
+          ? assetLibraryRootIcons[node.root]
+          : assetLibraryFolderIcons[node.folder.root];
       return (
         <span className="media-bin-card-preview folder">
           <Icon />

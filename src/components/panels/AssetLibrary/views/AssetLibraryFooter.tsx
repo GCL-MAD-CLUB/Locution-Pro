@@ -4,6 +4,8 @@ import { assetLibraryViewPresets } from "../../../../core/editor/assetLibrary";
 export interface AssetLibraryFooterProps {
   size: number;
   listMode: boolean;
+  /** The view buttons and size slider only apply to views whose item size can change. */
+  sizable: boolean;
   itemCount: number;
   selectedCount: number;
   onSizeChange: (size: number) => void;
@@ -18,13 +20,17 @@ function presetSize(id: "details" | "large") {
 export function AssetLibraryFooter({
   size,
   listMode,
+  sizable,
   itemCount,
   selectedCount,
   onSizeChange,
 }: AssetLibraryFooterProps) {
   return (
     <footer className="media-bin-footer">
-      <div className="media-bin-view-tools">
+      <div
+        className={`media-bin-view-tools${sizable ? "" : " is-unavailable"}`}
+        aria-hidden={!sizable || undefined}
+      >
         <button
           type="button"
           className={listMode ? "active" : ""}

@@ -114,7 +114,7 @@ test("kind, flag and color keep item order inside each group", () => {
   ];
   assert.equal(
     JSON.stringify(summary(items, groups.assetLibraryGroupingFor("kind"))),
-    JSON.stringify(["文件夹:f", "字幕素材:a,b,c"]),
+    JSON.stringify(["文件夹:f", "字幕:a,b,c"]),
   );
   assert.equal(
     JSON.stringify(summary(items, groups.assetLibraryGroupingFor("flag"))),

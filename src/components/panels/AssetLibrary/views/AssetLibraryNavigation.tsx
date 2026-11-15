@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Pin } from "lucide-react";
 import {
   useEffect,
   type CSSProperties,
@@ -12,22 +12,31 @@ import {
   sortedAssetLibraryNodes,
   assetLibraryProjectLabel,
   assetLibraryProjectPlace,
+  assetLibraryHomePlace,
   type AssetLibraryLocation,
   type AssetLibraryPlace,
   type AssetLibrarySort,
 } from "../../../../core/editor/assetLibrary";
+import {
+  assetLibraryHomeLabel,
+  type AssetLibraryPinnedPlace,
+} from "../../../../core/editor/assetLibraryHome";
 import type {
   AssetLibraryFolder,
   AssetLibraryRoot,
   ProjectAssetLibraryState,
 } from "../../../../types";
-import { MediaBinFolderIcon } from "../../MediaBin/views/MediaBinFolderIcon";
 import {
   assetLibraryDropTargetProps,
   assetLibraryTreeDropPrefix as treeDropPrefix,
 } from "../../../common/utils/assetLibraryDropTarget";
 import { assetLocationKey } from "../assetLibraryNodes";
-import { AssetLibraryProjectIcon, assetLibraryRootIcons } from "./AssetLibraryTreeIcons";
+import {
+  AssetLibraryHomeIcon,
+  AssetLibraryProjectIcon,
+  assetLibraryFolderIcons,
+  assetLibraryRootIcons,
+} from "./AssetLibraryTreeIcons";
 
 interface AssetLibraryNavigationProps {
   library: ProjectAssetLibraryState;
@@ -35,6 +44,8 @@ interface AssetLibraryNavigationProps {
   sort: AssetLibrarySort;
   collapsedKeys: ReadonlySet<string>;
   showHidden: boolean;
+  /** Folders and libraries pinned to quick access, listed under the home without children. */
+  pinnedPlaces: readonly AssetLibraryPinnedPlace[];
   dropTargetKey: string | null;
   onNavigate: (location: AssetLibraryPlace) => void;
   onToggleCollapsed: (key: string) => void;
@@ -45,6 +56,13 @@ interface AssetLibraryNavigationProps {
 /** The "此项目" row above both libraries; it opens like a folder and lists them. */
 const projectKey = assetLocationKey(assetLibraryProjectPlace);
 const projectLabel = assetLibraryProjectLabel;
+const homeKey = assetLocationKey(assetLibraryHomePlace);
+/** Pinned rows repeat folders from the tree, so their keys are kept apart. */
+const pinnedKey = (pinId: string) => `pin:${pinId}`;
+const pinnedTarget = ({ root, folder }: AssetLibraryPinnedPlace): AssetLibraryLocation => ({
+  root,
+  folderId: folder?.id ?? null,
+});
 
 /** How long a drag must hover over a collapsed folder before it opens, as in a file manager. */
 const dragExpandDelayMs = 700;
@@ -98,6 +116,22 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
         children.forEach((folder) => walk({ root: folder.root, folderId: folder.id }, target));
       }
     };
+    rows.push({
+      key: homeKey,
+      target: assetLibraryHomePlace,
+      parent: null,
+      expandable: false,
+      expanded: false,
+    });
+    for (const pinned of props.pinnedPlaces) {
+      rows.push({
+        key: pinnedKey(pinned.id),
+        target: pinnedTarget(pinned),
+        parent: null,
+        expandable: false,
+        expanded: false,
+      });
+    }
     const projectOpen = !collapsedKeys.has(projectKey);
     rows.push({
       key: projectKey,
@@ -191,17 +225,18 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
         </div>
         {expanded && (
           <ul role="group">
-            {children.map((folder) =>
-              renderItem(
+            {children.map((folder) => {
+              const FolderIcon = assetLibraryFolderIcons[folder.root];
+              return renderItem(
                 { root: folder.root, folderId: folder.id },
                 folder.name,
                 <span className="media-bin-kind-icon folder">
-                  <MediaBinFolderIcon />
+                  <FolderIcon />
                 </span>,
                 depth + 1,
                 folder.hidden,
-              ),
-            )}
+              );
+            })}
           </ul>
         )}
       </li>
@@ -229,6 +264,44 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
   // The project groups the two libraries, as "此电脑" groups drives; it only opens and closes.
   const projectExpanded = !collapsedKeys.has(projectKey);
 
+  /** The home and pinned folders are single rows: they never expand, as in a file manager. */
+  function renderShortcut(
+    key: string,
+    target: AssetLibraryPlace,
+    label: string,
+    icon: ReactElement,
+    options: { pinned?: AssetLibraryLocation; hidden?: boolean } = {},
+  ) {
+    const active = activeKey === assetLocationKey(target);
+    const { pinned } = options;
+    return (
+      <li key={key} role="treeitem" aria-selected={active}>
+        <div
+          className={`media-bin-row media-bin-folder-row asset-library-tree-row${
+            active ? " selected" : ""
+          }${dropTargetKey === treeDropPrefix + key ? " folder-drop-target" : ""}${
+            options.hidden ? " is-hidden" : ""
+          }`}
+          style={{ "--asset-tree-depth": 0 } as CSSProperties}
+          onClick={() => props.onNavigate(target)}
+          onContextMenu={(event) =>
+            pinned ? props.onContextMenu(event, pinned) : event.preventDefault()
+          }
+          {...(pinned ? assetLibraryDropTargetProps(pinned, treeDropPrefix + key) : {})}
+        >
+          <span className="media-bin-title-cell media-bin-folder-title-cell">
+            <span className="asset-library-tree-toggle" aria-hidden="true" />
+            {icon}
+            <span className="media-bin-name-copy" title={label}>
+              {label}
+            </span>
+            {pinned && <Pin className="asset-library-tree-pin" aria-label="已固定" />}
+          </span>
+        </div>
+      </li>
+    );
+  }
+
   return (
     <nav className="asset-library-navigation" aria-label="素材库文件夹">
       <div className="media-bin-table-scroll">
@@ -239,6 +312,32 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
           aria-label="文件夹"
           onKeyDown={handleKeyDown}
         >
+          {renderShortcut(
+            homeKey,
+            assetLibraryHomePlace,
+            assetLibraryHomeLabel,
+            <span className="media-bin-kind-icon folder">
+              <AssetLibraryHomeIcon />
+            </span>,
+          )}
+          <li role="separator" className="asset-library-tree-separator" />
+          {props.pinnedPlaces.map((pinned) => {
+            const { folder, root } = pinned;
+            const Icon = folder ? assetLibraryFolderIcons[root] : assetLibraryRootIcons[root];
+            const target = pinnedTarget(pinned);
+            return renderShortcut(
+              pinnedKey(pinned.id),
+              target,
+              folder?.name ?? assetLibraryRootLabels[root],
+              <span className="media-bin-kind-icon folder">
+                <Icon />
+              </span>,
+              { pinned: target, hidden: folder?.hidden },
+            );
+          })}
+          {props.pinnedPlaces.length > 0 && (
+            <li role="separator" className="asset-library-tree-separator" />
+          )}
           {/* The project opens like a folder; the arrow or a double-click expands it. */}
           <li
             role="treeitem"

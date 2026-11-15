@@ -6,10 +6,12 @@ import {
   assetLibraryProjectPlace,
   assetLibraryRootLabels,
   assetLibraryRoots,
-  isAssetLibraryProjectPlace,
+  assetLibraryHomePlace,
+  isAssetLibraryLocation,
   normalizedAssetLibraryName,
   type AssetLibraryPlace,
 } from "./assetLibrary";
+import { assetLibraryHomeLabel } from "./assetLibraryHome";
 
 const pathSeparator = "\\";
 
@@ -18,14 +20,16 @@ export function assetLibraryPlacePathText(
   library: ProjectAssetLibraryState,
   place: AssetLibraryPlace,
 ) {
-  return isAssetLibraryProjectPlace(place)
-    ? assetLibraryProjectLabel
-    : [assetLibraryProjectLabel, assetLibraryPathText(library, place)].join(pathSeparator);
+  if (place.root === "home") return assetLibraryHomeLabel;
+  return isAssetLibraryLocation(place)
+    ? [assetLibraryProjectLabel, assetLibraryPathText(library, place)].join(pathSeparator)
+    : assetLibraryProjectLabel;
 }
 
 /**
  * Resolves typed address-bar text that may start at the project. "此项目" alone is the
- * project; from the project, a path must start with a library name.
+ * project; from the project or the home, a path must start with a library name. "主文件夹"
+ * alone is the home.
  */
 export function assetLibraryPlaceFromPath(
   library: ProjectAssetLibraryState,
@@ -36,6 +40,7 @@ export function assetLibraryPlaceFromPath(
     .split(/[\\/]+/)
     .map((segment) => normalizedAssetLibraryName(segment))
     .filter(Boolean);
+  if (segments.length === 1 && segments[0] === assetLibraryHomeLabel) return assetLibraryHomePlace;
   const fromProject =
     segments[0]?.toLocaleLowerCase() === assetLibraryProjectLabel.toLocaleLowerCase();
   const rest = fromProject ? segments.slice(1) : segments;
@@ -44,10 +49,11 @@ export function assetLibraryPlaceFromPath(
   const startsAtLibrary = assetLibraryRoots.some(
     (root) => assetLibraryRootLabels[root].toLocaleLowerCase() === rest[0]!.toLocaleLowerCase(),
   );
-  if ((fromProject || isAssetLibraryProjectPlace(current)) && !startsAtLibrary) return null;
+  const inLibrary = isAssetLibraryLocation(current);
+  if ((fromProject || !inLibrary) && !startsAtLibrary) return null;
   return assetLibraryLocationFromPath(
     library,
     rest.join(pathSeparator),
-    isAssetLibraryProjectPlace(current) ? { root: assetLibraryRoots[0], folderId: null } : current,
+    inLibrary ? current : { root: assetLibraryRoots[0], folderId: null },
   );
 }

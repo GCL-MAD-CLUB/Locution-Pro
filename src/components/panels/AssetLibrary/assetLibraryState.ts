@@ -2,6 +2,7 @@ import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import { createPanelState } from "../../../runtime/systems/PanelState";
 import {
+  assetLibraryHomePlace,
   sameAssetLibraryLocation,
   steppedAssetLibraryHistory,
   type AssetLibraryClipboard,
@@ -16,7 +17,9 @@ import {
   noAssetLibraryGrouping,
   type AssetLibraryGrouping,
 } from "../../../core/editor/assetLibraryGroup";
+import type { AssetLibraryHomeTab } from "../../../core/editor/assetLibraryHome";
 import {
+  assetLibraryColumnScope,
   clampAssetLibraryColumnWidth,
   defaultAssetLibraryColumnWidths,
   defaultAssetLibraryVisibleColumns,
@@ -37,10 +40,8 @@ export function clampAssetLibraryPaneWidth(pane: AssetLibraryPane, width: number
   return Math.round(Math.min(maximum, Math.max(minimum, width)));
 }
 
-export const defaultAssetLibraryLocation: AssetLibraryPlace = {
-  root: "subtitles",
-  folderId: null,
-};
+/** The panel opens at the home, as a file manager does. */
+export const defaultAssetLibraryLocation: AssetLibraryPlace = assetLibraryHomePlace;
 
 interface AssetLibraryPanelState {
   location: AssetLibraryPlace;
@@ -58,6 +59,8 @@ interface AssetLibraryPanelState {
   group: AssetLibraryGrouping;
   /** Groups folded away in the open place; navigating or regrouping opens them again. */
   collapsedGroups: ReadonlySet<string>;
+  /** The home lists recently used or favorite materials below quick access. */
+  homeTab: AssetLibraryHomeTab;
   navigationVisible: boolean;
   detailsVisible: boolean;
   collapsedKeys: ReadonlySet<string>;
@@ -81,6 +84,7 @@ interface AssetLibraryPanelState {
   setFilter: (filter: AssetLibraryFilter) => void;
   setGroup: (group: AssetLibraryGrouping) => void;
   toggleGroupCollapsed: (group: string) => void;
+  setHomeTab: (tab: AssetLibraryHomeTab) => void;
   setNavigationVisible: (visible: boolean) => void;
   setDetailsVisible: (visible: boolean) => void;
   toggleCollapsed: (key: string) => void;
@@ -131,6 +135,7 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   filter: emptyAssetLibraryFilter,
   group: noAssetLibraryGrouping,
   collapsedGroups: new Set<string>(),
+  homeTab: "recent",
   navigationVisible: true,
   detailsVisible: true,
   collapsedKeys: new Set<string>(),
@@ -184,6 +189,8 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
   setGroup: (group) => set({ group, collapsedGroups: new Set() }),
   toggleGroupCollapsed: (group) =>
     set((state) => ({ collapsedGroups: toggled(state.collapsedGroups, group) })),
+  setHomeTab: (homeTab) =>
+    set({ homeTab, selectedKeys: new Set(), anchorKey: null, focusKey: null }),
   setNavigationVisible: (navigationVisible) => set({ navigationVisible }),
   setDetailsVisible: (detailsVisible) => set({ detailsVisible }),
   toggleCollapsed: (key) => set((state) => ({ collapsedKeys: toggled(state.collapsedKeys, key) })),
@@ -206,15 +213,18 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
     set((state) => ({
       visibleColumns: {
         ...state.visibleColumns,
-        [state.location.root]: toggled(state.visibleColumns[state.location.root], column),
+        [assetLibraryColumnScope(state.location)]: toggled(
+          state.visibleColumns[assetLibraryColumnScope(state.location)],
+          column,
+        ),
       },
     })),
   setColumnWidth: (column, width) =>
     set((state) => ({
       columnWidths: {
         ...state.columnWidths,
-        [state.location.root]: {
-          ...state.columnWidths[state.location.root],
+        [assetLibraryColumnScope(state.location)]: {
+          ...state.columnWidths[assetLibraryColumnScope(state.location)],
           [column]: clampAssetLibraryColumnWidth(column, width),
         },
       },
@@ -223,7 +233,7 @@ export const useAssetLibraryState = createPanelState<AssetLibraryPanelState>(() 
     set((state) => ({
       columnWidths: {
         ...state.columnWidths,
-        [state.location.root]: defaultAssetLibraryColumnWidths,
+        [assetLibraryColumnScope(state.location)]: defaultAssetLibraryColumnWidths,
       },
     })),
 }));

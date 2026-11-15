@@ -3,13 +3,14 @@ import {
   assetLibraryFolderDescendantIds,
   assetLibraryProjectLabel,
   assetLibraryRootLabels,
-  isAssetLibraryProjectPlace,
+  isAssetLibraryLocation,
   renamedAssetLibraryEntry,
   sameAssetLibraryLocation,
   type AssetLibraryLocation,
   type AssetLibraryPlace,
   type AssetLibrarySelection,
 } from "../../../core/editor/assetLibrary";
+import { assetLibraryHomeLabel } from "../../../core/editor/assetLibraryHome";
 import type { AssetLibraryFolder, ProjectAssetLibraryState } from "../../../types";
 import type { AssetLibraryCommands } from "./assetLibraryCommands";
 import {
@@ -50,8 +51,8 @@ export function assetLibraryFileOperations(context: AssetLibraryFileOperationCon
 
   return {
     createFolder(target: AssetLibraryPlace = location) {
-      // The project holds only the two libraries.
-      if (isAssetLibraryProjectPlace(target)) return;
+      // The project holds only the two libraries, and the home only shortcuts.
+      if (!isAssetLibraryLocation(target)) return;
       const folder = commands.createFolder(target);
       if (!folder) return;
       if (!sameAssetLibraryLocation(target, location)) view.navigate(target);
@@ -72,10 +73,9 @@ export function assetLibraryFileOperations(context: AssetLibraryFileOperationCon
     pasteInto(target: AssetLibraryPlace) {
       const { clipboard: current, cut: isCut } = readAssetLibraryClipboard();
       if (!current) return;
-      if (isAssetLibraryProjectPlace(target)) {
-        messagePublished(
-          `不能粘贴到“${assetLibraryProjectLabel}”，请先打开“${rootLabel(current.root)}”。`,
-        );
+      if (!isAssetLibraryLocation(target)) {
+        const label = target.root === "home" ? assetLibraryHomeLabel : assetLibraryProjectLabel;
+        messagePublished(`不能粘贴到“${label}”，请先打开“${rootLabel(current.root)}”。`);
         return;
       }
       if (current.root !== target.root) {

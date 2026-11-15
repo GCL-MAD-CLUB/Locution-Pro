@@ -817,7 +817,6 @@ body.is-marquee-selecting .asset-library * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  user-select: text;
   font-variant-numeric: tabular-nums;
 }
 

@@ -1425,6 +1425,21 @@ input[type="number"]::-webkit-outer-spin-button {
 
 * {
   box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* App chrome never starts native text selection; editors retain normal selection. */
+:where(
+  input,
+  textarea,
+  [contenteditable=""],
+  [contenteditable="true"],
+  [contenteditable="plaintext-only"]
+),
+:where([contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]) * {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 html,
@@ -1934,7 +1949,6 @@ select {
   color: var(--color-text-muted);
   font-size: 12px;
   overflow-wrap: anywhere;
-  user-select: text;
 }
 
 .error-dialog-icon {

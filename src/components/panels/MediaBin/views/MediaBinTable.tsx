@@ -1240,7 +1240,7 @@ export function MediaBinTable({
     }
     activateCell(entry.id, "title");
     if (selected && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-      if (!isReadOnly && event.detail === 1) {
+      if (!isReadOnly && event.detail === 1 && isMediaEntryNameTarget(event.target)) {
         scheduleTitleRename(entry);
       } else {
         cancelPendingTitleRename();

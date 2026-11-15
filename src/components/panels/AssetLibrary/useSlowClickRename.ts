@@ -20,9 +20,13 @@ interface ArmedPress {
   y: number;
 }
 
+function isNameTarget(target: EventTarget | null) {
+  return Boolean((target as Element | null)?.closest("[data-asset-name]"));
+}
+
 /**
- * Clicking the only selected item again renames it after a pause. Any further press or key
- * before then, including the second click of a double-click, cancels the rename.
+ * Clicking the only selected item's name again renames it after a pause. Any further
+ * press or key before then, including the second click of a double-click, cancels the rename.
  */
 export function useSlowClickRename(startRename: (key: string) => void) {
   const armedRef = useRef<ArmedPress | null>(null);
@@ -38,12 +42,12 @@ export function useSlowClickRename(startRename: (key: string) => void) {
 
   useEffect(() => cancel, [cancel]);
 
-  /** Arms the rename when the press lands on an item that was already the sole selection. */
+  /** Arms the rename only on the name text of the sole selected item. */
   const armOnPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>, key: string, soleSelected: boolean) => {
       cancel();
       const modified = event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
-      if (event.button !== 0 || modified || !soleSelected) return;
+      if (event.button !== 0 || modified || !soleSelected || !isNameTarget(event.target)) return;
       armedRef.current = { key, x: event.clientX, y: event.clientY };
     },
     [cancel],
@@ -53,7 +57,7 @@ export function useSlowClickRename(startRename: (key: string) => void) {
   const scheduleOnClick = useCallback((event: ReactMouseEvent<HTMLElement>, key: string) => {
     const armed = armedRef.current;
     armedRef.current = null;
-    if (!armed || armed.key !== key || event.detail > 1) return;
+    if (!armed || armed.key !== key || event.detail > 1 || !isNameTarget(event.target)) return;
     if (Math.hypot(event.clientX - armed.x, event.clientY - armed.y) >= clickSlopPx) return;
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;

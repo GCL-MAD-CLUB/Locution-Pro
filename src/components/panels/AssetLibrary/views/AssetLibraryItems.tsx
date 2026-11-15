@@ -400,7 +400,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
         className={`${className}${explicitLines ? " has-explicit-lines" : ""}`}
         title={nodeName(node)}
       >
-        {nodeName(node)}
+        <span data-asset-name>{nodeName(node)}</span>
       </span>
     );
   }

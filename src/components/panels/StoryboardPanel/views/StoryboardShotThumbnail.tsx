@@ -1,5 +1,6 @@
 ﻿import { convertFileSrc } from "@tauri-apps/api/core";
-import { Film, Star, Tags } from "lucide-react";
+import { Star, Tags } from "lucide-react";
+import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
 import {
   useEffect,
   useMemo,
@@ -219,7 +220,7 @@ export function StoryboardSemanticThumbnail({
           draggable={false}
         />
       )}
-      <Film className="shot-frame-placeholder" aria-hidden="true" />
+      <VideoGlyph className="shot-frame-placeholder" aria-hidden="true" />
     </div>
   );
 }
@@ -375,7 +376,7 @@ export function ShotFrameButton({
           }}
         />
       )}
-      <Film className="shot-frame-placeholder" aria-hidden="true" />
+      <VideoGlyph className="shot-frame-placeholder" aria-hidden="true" />
     </button>
   );
 }

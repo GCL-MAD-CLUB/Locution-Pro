@@ -1,5 +1,5 @@
-import { Captions, Film } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { SubtitleGlyph, VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
 import {
   timelineThumbnailResolutionForDisplay,
   timelineThumbnails,
@@ -110,7 +110,11 @@ export function AssetLibraryThumbnail({
     requestRef.current?.reprioritize(priority);
   }, [priority]);
 
-  const PlaceholderIcon = !media ? OfflineFileIcon : entry.root === "subtitles" ? Captions : Film;
+  const PlaceholderIcon = !media
+    ? OfflineFileIcon
+    : entry.root === "subtitles"
+      ? SubtitleGlyph
+      : VideoGlyph;
   const shown = thumbnail?.identity === identity ? thumbnail : null;
   return (
     <div ref={setElement} className="asset-library-thumbnail" data-offline={!media || undefined}>
@@ -188,9 +192,9 @@ function PlaceholderIcon({ preview }: { preview: DragPreview }) {
     return <Icon />;
   }
   return node.entry.root === "subtitles" ? (
-    <Captions aria-hidden="true" />
+    <SubtitleGlyph aria-hidden="true" />
   ) : (
-    <Film aria-hidden="true" />
+    <VideoGlyph aria-hidden="true" />
   );
 }
 

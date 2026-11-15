@@ -569,18 +569,16 @@ body.is-marquee-selecting * {
   aspect-ratio: 165 / 142;
 }
 
-.media-bin-kind-icon.video,
-.media-bin-kind-icon.subtitle {
+.media-bin-kind-icon.video {
   color: var(--color-media-video-icon);
+}
+
+.media-bin-kind-icon.subtitle {
+  color: var(--color-media-subtitle-icon);
 }
 
 .media-bin-kind-icon.audio {
   color: var(--color-media-audio-icon);
-}
-
-.media-bin-kind-icon.audio svg {
-  width: 87.5%;
-  height: 87.5%;
 }
 
 .media-bin-kind-icon svg.media-bin-offline-icon {
@@ -607,10 +605,9 @@ body.is-marquee-selecting * {
   position: absolute;
   right: -2px;
   bottom: -1px;
-  width: 75%;
-  height: 75%;
+  width: 62.5%;
+  height: 62.5%;
   color: var(--color-media-audio-icon);
-  stroke-width: 2.5;
 }
 
 .media-bin-name-copy {
@@ -764,9 +761,12 @@ body.is-resizing-media-column {
   aspect-ratio: 1;
 }
 
-.media-bin-card-preview.video,
-.media-bin-card-preview.subtitle {
+.media-bin-card-preview.video {
   color: var(--color-media-video-icon);
+}
+
+.media-bin-card-preview.subtitle {
+  color: var(--color-media-subtitle-icon);
 }
 
 .media-bin-card-preview.audio {
@@ -819,32 +819,17 @@ body.is-resizing-media-column {
 }
 
 .media-bin-card-type-badge.video,
+.media-bin-card-type-badge.audio,
 .media-bin-card-type-badge.subtitle {
   color: var(--color-media-type-badge-icon);
 }
 
-.media-bin-card-type-badge.audio {
-  box-sizing: border-box;
-  color: var(--color-media-type-badge-icon);
-  border: 1.4px solid currentColor;
-  border-radius: 3px;
-}
-
-.media-bin-card-type-badge.video svg,
-.media-bin-card-preview .media-bin-card-type-badge.video svg,
-.media-bin-card-type-badge.subtitle svg,
-.media-bin-card-preview .media-bin-card-type-badge.subtitle svg {
+.media-bin-card-type-badge svg,
+.media-bin-card-preview .media-bin-card-type-badge svg {
   width: 16px;
   height: 16px;
   margin-top: -1.05px;
   margin-left: -1.3px;
-  aspect-ratio: 1;
-}
-
-.media-bin-card-type-badge.audio svg,
-.media-bin-card-preview .media-bin-card-type-badge.audio svg {
-  width: 11px;
-  height: 11px;
   aspect-ratio: 1;
 }
 

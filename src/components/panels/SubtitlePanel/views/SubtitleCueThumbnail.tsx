@@ -1,5 +1,6 @@
 ﻿import { convertFileSrc } from "@tauri-apps/api/core";
-import { Film, Star } from "lucide-react";
+import { Star } from "lucide-react";
+import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
 import {
   useEffect,
   useMemo,
@@ -234,7 +235,7 @@ function SubtitleCueFrameButton({
           <span style={{ width: `${hoverProgress * 100}%` }} />
         </span>
       )}
-      <Film className="cue-frame-placeholder" aria-hidden="true" />
+      <VideoGlyph className="cue-frame-placeholder" aria-hidden="true" />
     </button>
   );
 }

@@ -1,4 +1,5 @@
-import { Captions, ChevronDown, ChevronRight, Film } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { SubtitleGlyph, VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
 import {
   Fragment,
   useEffect,
@@ -563,7 +564,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
       );
     }
     const subtitle = node.entry.root === "subtitles";
-    const BadgeIcon = subtitle ? Captions : Film;
+    const BadgeIcon = subtitle ? SubtitleGlyph : VideoGlyph;
     const scrubbable = Boolean(node.media);
     return (
       <span

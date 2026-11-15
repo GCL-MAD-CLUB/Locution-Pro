@@ -29,7 +29,6 @@ import {
   ArrowDownZA,
   ChevronDown,
   ChevronsUpDown,
-  Film,
   Grid2X2,
   List,
   ListFilter,
@@ -38,6 +37,7 @@ import {
   Star,
   Share2,
 } from "lucide-react";
+import { VideoGlyph } from "../../common/MediaKindIcons/MediaKindIcons";
 import {
   Fragment,
   useEffect,
@@ -3182,7 +3182,7 @@ export function StoryboardPanel() {
               (thumbnailSrc ? (
                 <img src={thumbnailSrc} alt="" draggable={false} />
               ) : (
-                <Film aria-hidden="true" />
+                <VideoGlyph aria-hidden="true" />
               ))}
           </span>
         ))}
@@ -3653,7 +3653,7 @@ export function StoryboardPanel() {
   return (
     <section ref={panelRef} className="storyboard-panel" style={panelStyle} tabIndex={-1}>
       <div className="storyboard-project-row">
-        <Film aria-hidden="true" />
+        <VideoGlyph aria-hidden="true" />
         <span>分镜</span>
         <button
           type="button"

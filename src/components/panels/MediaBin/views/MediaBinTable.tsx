@@ -1,7 +1,12 @@
 ﻿import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { mediaGridLayout } from "../../../../application/media/mediaGridLayout";
 import { mediaDisplayColor } from "../../../../runtime/theme";
-import { Captions, ChevronRight, Film, Link2, Music2, SplitSquareVertical } from "lucide-react";
+import { ChevronRight, Link2, SplitSquareVertical } from "lucide-react";
+import {
+  AudioGlyph,
+  SubtitleGlyph,
+  VideoGlyph,
+} from "../../../common/MediaKindIcons/MediaKindIcons";
 import {
   useEffect,
   useLayoutEffect,
@@ -221,34 +226,17 @@ function itemIcon(
     if (hasBoundAudio || (!isDetachedVideo && project?.asset.audio_stream_index != null)) {
       return (
         <span className="media-bin-video-audio-icon" title="有声视频">
-          <Film aria-hidden="true" />
-          <Music2 aria-hidden="true" />
+          <VideoGlyph aria-hidden="true" />
+          <AudioGlyph aria-hidden="true" />
         </span>
       );
     }
-    return <Film aria-hidden="true" />;
+    return <VideoGlyph aria-hidden="true" />;
   }
   if (item.kind === "audio") {
-    return <Music2 aria-hidden="true" />;
+    return <AudioGlyph aria-hidden="true" />;
   }
-  return <Captions aria-hidden="true" />;
-}
-
-function SubtitleBadgeIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" />
-      <path d="M7 10h10M7 14h10" fill="none" stroke="currentColor" />
-    </svg>
-  );
+  return <SubtitleGlyph aria-hidden="true" />;
 }
 
 function itemFrameRate(item: MediaBinItem, project: MediaDocument | undefined) {
@@ -1706,16 +1694,16 @@ export function MediaBinTable({
                         />
                         <span className="media-bin-card-type-badges" aria-hidden="true">
                           <span className="media-bin-card-type-badge video">
-                            <Film />
+                            <VideoGlyph />
                           </span>
                           {hasSourceAudio && (
                             <span className="media-bin-card-type-badge audio">
-                              <Music2 />
+                              <AudioGlyph />
                             </span>
                           )}
                           {hasSubtitleTrack && (
                             <span className="media-bin-card-type-badge subtitle">
-                              <SubtitleBadgeIcon />
+                              <SubtitleGlyph />
                             </span>
                           )}
                         </span>
@@ -1725,7 +1713,7 @@ export function MediaBinTable({
                         {itemIcon(item, project, isDetachedVideo)}
                         <span className="media-bin-card-type-badges" aria-hidden="true">
                           <span className={`media-bin-card-type-badge ${item.kind}`}>
-                            {item.kind === "audio" ? <Music2 /> : <SubtitleBadgeIcon />}
+                            {item.kind === "audio" ? <AudioGlyph /> : <SubtitleGlyph />}
                           </span>
                         </span>
                       </>

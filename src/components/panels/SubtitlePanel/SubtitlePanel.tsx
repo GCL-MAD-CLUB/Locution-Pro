@@ -30,12 +30,12 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowDownAZ,
   ArrowDownZA,
-  Captions,
   ChevronDown,
   ChevronsUpDown,
   ListFilter,
   Star,
 } from "lucide-react";
+import { SubtitleGlyph } from "../../common/MediaKindIcons/MediaKindIcons";
 import {
   Fragment,
   useEffect,
@@ -2493,7 +2493,7 @@ export function SubtitlePanel() {
   return (
     <section ref={panelRef} className="subtitle-panel" style={panelStyle} tabIndex={-1}>
       <div className="subtitle-project-row">
-        <Captions aria-hidden="true" />
+        <SubtitleGlyph aria-hidden="true" />
         <span>字幕</span>
         <button
           type="button"
@@ -2754,7 +2754,7 @@ export function SubtitlePanel() {
       {cueLibraryDragPreview && (
         <DragStackPreview
           {...cueLibraryDragPreview}
-          placeholder={<Captions aria-hidden="true" />}
+          placeholder={<SubtitleGlyph aria-hidden="true" />}
         />
       )}
       {marqueeSelection &&

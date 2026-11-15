@@ -1,4 +1,4 @@
-﻿import { Film } from "lucide-react";
+﻿import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
 import { formatDuration } from "../../../../core/editor/time";
 import { exportAudioChannelLabel } from "../../../../systems/ExportSystem";
 import type {
@@ -197,7 +197,7 @@ function SourceMediaSection({
     <section className="export-media-block">
       <h3 className="export-media-heading">
         来源：
-        <Film size={14} className="export-media-heading-icon" />
+        <VideoGlyph size={14} className="export-media-heading-icon" />
         <span className="export-media-heading-name" title={mediaName}>
           {mediaName}
         </span>

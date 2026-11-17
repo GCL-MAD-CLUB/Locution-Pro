@@ -44,7 +44,6 @@ interface StoryboardKeywordPanelProps {
   active: boolean;
   draggedKeywordHoverId: string | null;
   shotIds: readonly string[];
-  resetKey: string;
   onSetQuickKeyword?: (keywordLabel: string) => void;
   quickKeywordLabel?: string;
   topContent?: ReactNode;
@@ -87,7 +86,6 @@ export function StoryboardKeywordPanel({
   active,
   draggedKeywordHoverId,
   shotIds,
-  resetKey,
   onSetQuickKeyword,
   quickKeywordLabel = "",
   topContent,
@@ -162,28 +160,6 @@ export function StoryboardKeywordPanel({
   const targetShotIds = useMemo(() => Array.from(new Set(shotIds)), [shotIds]);
   const keywordParseResult = parseStoryboardKeywordInput(keywordInput);
   const mediaShotIds = useMemo(() => shots.map((shot) => shot.id), [shots]);
-
-  useEffect(() => {
-    setKeywordInput("");
-    setKeywordEditValue("");
-    setKeywordEditError(null);
-    setFilter("");
-    setCollapsedNodeIds(new Set());
-    setSelectedTreeNodeIds(new Set());
-    setSelectionAnchorId(null);
-    setKeywordDeleteRequest(null);
-    setKeywordBatchDeleteRequest(false);
-    setCreateDialogOpen(false);
-    setCreateParentOverrideId(null);
-    setNewKeywordContainerId(null);
-    setEditKeywordDialog(null);
-    setDuplicateNameRequest(null);
-    setKeywordModeMenu(null);
-    setTreeContextMenu(null);
-    setAltShortcutHintsVisible(false);
-    setShortcutKeywordIds((current) => (current.length ? [] : current));
-    shortcutKeywordIdsRef.current = [];
-  }, [resetKey]);
 
   useCloseOnOutsidePointer(Boolean(treeContextMenu), () => setTreeContextMenu(null));
   useCloseOnOutsidePointer(Boolean(keywordModeMenu), () => setKeywordModeMenu(null));

@@ -484,6 +484,8 @@ function AppContent() {
   const canCloseFocusedPanel = activeWorkspace === "edit" && Boolean(focusedPanel) && !isBusy;
   const savedUpdateProjectPathRef = useRef(projectFilePath);
   savedUpdateProjectPathRef.current = projectFilePath;
+  const projectDirtyRef = useRef(projectDirty);
+  projectDirtyRef.current = projectDirty;
   const canRestoreProject = hasProject && projectDirty && !isBusy;
   const editScope = activeWorkspace === "edit" ? focusedPanel : undefined;
   const mediaEditScopeActive = editScope?.type === mediaBinPanelType;
@@ -747,7 +749,7 @@ function AppContent() {
         const action = windowCloseAction({
           updateInstalling: updateInstallingRef.current,
           closing: closingWindowRef.current,
-          projectDirty,
+          projectDirty: projectDirtyRef.current,
         });
         // Hold the platform close until export cancellation and cleanup finish.
         // destroy() is what exits. A repeated close while that wait runs is ignored.
@@ -783,7 +785,7 @@ function AppContent() {
       disposed = true;
       unlistenCloseRequested?.();
     };
-  }, [projectDirty]);
+  }, []);
 
   function confirmDiscardChanges(message: string) {
     if (!projectDirty) {

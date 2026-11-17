@@ -3,6 +3,7 @@ import { createStore } from "zustand/vanilla";
 import { readAppStorage } from "../../runtime/storage";
 import { getProjectExportContext } from "../ProjectSystem";
 import type { ExportClip, ExportResult, ExportSettings, ExportSource } from "./exportTypes";
+import { constrainExportSettings } from "./exportSettingsConstraints";
 
 const exportDirStorageKey = "locution-pro:export-dir";
 
@@ -112,6 +113,15 @@ export function defaultExportSettings(): ExportSettings {
   };
 }
 
+function constrainedSettings(
+  settings: ExportSettings,
+  source: ExportSource | null,
+  selectedClipIds: ReadonlySet<string>,
+  previewClipId: string | null,
+) {
+  return constrainExportSettings(settings, { source, selectedClipIds, previewClipId });
+}
+
 function reconcileSettings(
   settings: ExportSettings,
   settingsProjectId: string | null,
@@ -170,20 +180,27 @@ export const exportWorkspaceStore = createStore<ExportWorkspaceState>()((set) =>
             .filter((entry) => retainedIds.has(entry.clipId)).length
         : 0;
       const reconciled = reconcileSettings(state.settings, state.settingsProjectId);
+      const selectedClipIds = nextSource
+        ? new Set(nextSource.clips.map((clip) => clip.id))
+        : new Set<string>();
+      const previewClipId = nextSource?.clips[0]?.id ?? null;
       return {
         source: nextSource,
         sourceInput: source,
         sourceProjectId: projectId,
         rangeHistory,
         rangeHistoryCursor,
-        selectedClipIds: nextSource
-          ? new Set(nextSource.clips.map((clip) => clip.id))
-          : new Set<string>(),
-        previewClipId: nextSource?.clips[0]?.id ?? null,
+        selectedClipIds,
+        previewClipId,
         previewVersion: state.previewVersion + 1,
         // The output stem is derived by the export workspace from the project/source,
         // so it is left untouched here.
-        settings: reconciled.settings,
+        settings: constrainedSettings(
+          reconciled.settings,
+          nextSource,
+          selectedClipIds,
+          previewClipId,
+        ),
         settingsProjectId: reconciled.settingsProjectId,
         results: null,
         status: "idle",
@@ -192,7 +209,16 @@ export const exportWorkspaceStore = createStore<ExportWorkspaceState>()((set) =>
   applyProjectExportSettings: () =>
     set((state) => {
       const reconciled = reconcileSettings(state.settings, state.settingsProjectId);
-      return reconciled.settings === state.settings ? state : reconciled;
+      const settings = constrainedSettings(
+        reconciled.settings,
+        state.source,
+        state.selectedClipIds,
+        state.previewClipId,
+      );
+      if (settings === state.settings && reconciled.settingsProjectId === state.settingsProjectId) {
+        return state;
+      }
+      return { settings, settingsProjectId: reconciled.settingsProjectId };
     }),
   toggleClip: (clipId) =>
     set((state) => {
@@ -202,21 +228,54 @@ export const exportWorkspaceStore = createStore<ExportWorkspaceState>()((set) =>
       } else {
         selectedClipIds.add(clipId);
       }
-      return { selectedClipIds };
+      const settings = constrainedSettings(
+        state.settings,
+        state.source,
+        selectedClipIds,
+        state.previewClipId,
+      );
+      return settings === state.settings ? { selectedClipIds } : { selectedClipIds, settings };
     }),
   setAllSelected: (selected) =>
-    set((state) => ({
-      selectedClipIds:
+    set((state) => {
+      const selectedClipIds =
         selected && state.source
           ? new Set(state.source.clips.map((clip) => clip.id))
-          : new Set<string>(),
+          : new Set<string>();
+      const settings = constrainedSettings(
+        state.settings,
+        state.source,
+        selectedClipIds,
+        state.previewClipId,
+      );
+      return settings === state.settings ? { selectedClipIds } : { selectedClipIds, settings };
+    }),
+  updateSettings: (updates) =>
+    set((state) => ({
+      settings: constrainedSettings(
+        { ...state.settings, ...updates },
+        state.source,
+        state.selectedClipIds,
+        state.previewClipId,
+      ),
     })),
-  updateSettings: (updates) => set((state) => ({ settings: { ...state.settings, ...updates } })),
   setResults: (results) => set({ results }),
   setStatus: (status) => set({ status }),
   resetResults: () => set({ results: null, status: "idle" }),
   setPreviewClip: (previewClipId) =>
-    set((state) => ({ previewClipId, previewVersion: state.previewVersion + 1 })),
+    set((state) => {
+      const settings = constrainedSettings(
+        state.settings,
+        state.source,
+        state.selectedClipIds,
+        previewClipId,
+      );
+      return {
+        previewClipId,
+        previewVersion: state.previewVersion + 1,
+        ...(settings === state.settings ? {} : { settings }),
+      };
+    }),
   updateClipRange: (clipId, startUs, endUs, groupId) =>
     set((state) => {
       if (!canEditExportClipRange(state)) return state;

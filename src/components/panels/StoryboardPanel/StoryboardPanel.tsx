@@ -6,6 +6,8 @@ import {
   useStoryboardSemanticSearch,
   useStoryboardSemanticSearchAvailable,
 } from "../../../application/media/storyboardSemanticSearch";
+import { focusedSearchHitId } from "../../../core/editor/searchFocus";
+import { semanticSortDecision } from "../../../core/editor/semanticResultSort";
 import { panelSourceTitle } from "../../../core/editor/panelSourceSelection";
 import {
   sourceScope,
@@ -1177,7 +1179,6 @@ export function StoryboardPanel() {
     viewMode,
     thumbnailSize,
     gridSize,
-    syncVideoContext,
     setQuery,
     advancedSearch,
     setAdvancedSearch,
@@ -1235,6 +1236,7 @@ export function StoryboardPanel() {
   const hadShotsRef = useRef(shots.length > 0);
   const [shotSort, setShotSort] = useState<StoryboardSort>(defaultStoryboardSort);
   const [gridShotSort, setGridShotSort] = useState<StoryboardSort>(defaultStoryboardGridSort);
+  const [appliedSemanticVersion, setAppliedSemanticVersion] = useState(0);
   const [ratingComparatorMenu, setRatingComparatorMenu] = useState<StoryboardMenuAnchor | null>(
     null,
   );
@@ -1382,24 +1384,23 @@ export function StoryboardPanel() {
     gridShotSort.columnId === "similarity" && !hasSemanticResults
       ? ordinaryGridShotSort.current
       : gridShotSort;
-  const lastSemanticSortVersion = useRef(0);
-  useEffect(() => {
-    if (hasSemanticResults && lastSemanticSortVersion.current !== semantic.resultVersion) {
-      lastSemanticSortVersion.current = semantic.resultVersion;
-      setSourceDirection("none");
-      setShotSort({ columnId: "similarity", direction: "descending" });
-      setGridShotSort({ columnId: "similarity", direction: "descending" });
+  const semanticSort = semanticSortDecision<StoryboardSort>({
+    hasSemanticResults,
+    showSimilarity,
+    resultVersion: semantic.resultVersion,
+    appliedVersion: appliedSemanticVersion,
+    sorts: [shotSort, gridShotSort],
+    ordinary: [ordinaryShotSort.current, ordinaryGridShotSort.current],
+    similarity: { columnId: "similarity", direction: "descending" },
+  });
+  if (semanticSort) {
+    setAppliedSemanticVersion(semanticSort.appliedVersion);
+    if (semanticSort.clearSourceDirection) setSourceDirection("none");
+    if (semanticSort.sorts) {
+      setShotSort(semanticSort.sorts[0]);
+      setGridShotSort(semanticSort.sorts[1]);
     }
-    if (!hasSemanticResults) lastSemanticSortVersion.current = 0;
-    if (!showSimilarity) {
-      setShotSort((current) =>
-        current.columnId === "similarity" ? ordinaryShotSort.current : current,
-      );
-      setGridShotSort((current) =>
-        current.columnId === "similarity" ? ordinaryGridShotSort.current : current,
-      );
-    }
-  }, [hasSemanticResults, semantic.resultVersion, showSimilarity]);
+  }
   const filteredShots = useMemo(
     () =>
       displayShots.filter(
@@ -1529,17 +1530,16 @@ export function StoryboardPanel() {
       searchMode,
     ],
   );
-  const [searchFocusedShotId, setSearchFocusedShotId] = useState<string | null>(null);
-  useEffect(() => {
-    if (searchMode !== "highlight" || !query.trim()) {
-      setSearchFocusedShotId(null);
-      return;
-    }
-    const focusedIndex = sortedShots.findIndex((shot) => shot.id === activeShotId);
-    if (focusedIndex >= 0 && matchingShotIndices.includes(focusedIndex)) {
-      setSearchFocusedShotId(activeShotId);
-    }
-  }, [activeShotId, matchingShotIndices, query, searchMode, sortedShots]);
+  const searchFocusedShotIdRef = useRef<string | null>(null);
+  const activeShotIndex = sortedShots.findIndex((shot) => shot.id === activeShotId);
+  const searchFocusedShotId = focusedSearchHitId({
+    highlight: searchMode === "highlight",
+    query,
+    activeId: activeShotId,
+    activeIsHit: activeShotIndex >= 0 && matchingShotIndices.includes(activeShotIndex),
+    previousHitId: searchFocusedShotIdRef.current,
+  });
+  searchFocusedShotIdRef.current = searchFocusedShotId;
   const searchHighlight = useMemo(
     () =>
       searchMode === "highlight" && query.trim()
@@ -2043,7 +2043,6 @@ export function StoryboardPanel() {
   }, [rowVirtualizer, storyboardRowHeight, viewMode]);
 
   useEffect(() => {
-    syncVideoContext(videoContext);
     sprayGestureCleanupRef.current?.();
     setSprayActive(false);
     setContextMenu(null);
@@ -2053,7 +2052,7 @@ export function StoryboardPanel() {
     setFooterSprayMenu(null);
     setFooterOptionsMenu(null);
     setGridShotSort(defaultStoryboardGridSort);
-  }, [syncVideoContext, videoContext]);
+  }, [videoContext]);
 
   useEffect(() => {
     if (!contextMenu) {
@@ -2219,12 +2218,6 @@ export function StoryboardPanel() {
     sprayGestureCleanupRef.current?.();
     setFooterSprayMenu(null);
   }, [sprayActive]);
-
-  useEffect(() => {
-    if (showOnlySelected && selectedCount === 0) {
-      setShowOnlySelected(false);
-    }
-  }, [selectedCount, setShowOnlySelected, showOnlySelected]);
 
   useEffect(() => {
     const hasShots = displayShots.length > 0;
@@ -4038,7 +4031,7 @@ export function StoryboardPanel() {
           active={isEditAuthority && keywordPanelOpen && !sprayActive}
           draggedKeywordHoverId={shotKeywordDragPreview?.hoveredKeywordId ?? null}
           shotIds={keywordPanelShotIds}
-          resetKey={videoContext}
+          key={videoContext}
           onSetQuickKeyword={setSprayKeywordInput}
           quickKeywordLabel={sprayKeywordInput}
         />

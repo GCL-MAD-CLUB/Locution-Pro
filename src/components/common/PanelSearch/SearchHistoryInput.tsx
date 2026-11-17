@@ -1,5 +1,5 @@
 import { Search } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { SelectDropdown, selectDropdownItems } from "../SelectDropdown";
 import {
   filterSearchHistory,
@@ -34,21 +34,24 @@ export function SearchHistoryInput({
   const listId = useId();
   const [draft, setDraft] = useState<string | null>(null);
   const lastEditedQuery = useRef<string | null>(null);
-  useEffect(() => {
-    if (query !== lastEditedQuery.current) setDraft(null);
-  }, [query]);
+  if (draft !== null && query !== lastEditedQuery.current) setDraft(null);
   const space = searchHistorySpace(configuration.mode);
-  const [history, setHistory] = useState<SearchHistoryEntry[]>([]);
+  const [historyKind, setHistoryKind] = useState(kind);
+  const [historySpace, setHistorySpace] = useState(space);
+  const [history, setHistory] = useState<SearchHistoryEntry[]>(() =>
+    readSearchHistory(kind, space),
+  );
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState<string | null>(null);
+  if (kind !== historyKind || space !== historySpace) {
+    setHistoryKind(kind);
+    setHistorySpace(space);
+    setHistory(readSearchHistory(kind, space));
+    setActive(null);
+  }
   const suggestions = filterSearchHistory(history, query);
   const visible = open && !disabled && suggestions.length > 0;
   const activeIndex = suggestions.findIndex((entry) => entry.text === active);
-
-  useEffect(() => {
-    setHistory(readSearchHistory(kind, space));
-    setActive(null);
-  }, [kind, space]);
 
   function select(value: string) {
     const entry = suggestions.find((entry) => entry.text === value);

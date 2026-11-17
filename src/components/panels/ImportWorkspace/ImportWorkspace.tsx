@@ -135,6 +135,28 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
             ],
             folderId,
           );
+      }
+      const remaining = selection.files.filter((entry) => !completed.has(entry.path));
+      selection.retainFiles(remaining);
+      const message = `已导入 ${completed.size} 个媒体${remaining.length ? `，${remaining.length} 个未完成，可重试` : ""}。`;
+      setStatus(message);
+      messagePublished(message);
+      const transcodePaths = [
+        ...results.map((result) => result.project.asset.path),
+        ...subtitles.map((item) => item.path),
+      ];
+      if (openInTranscode && transcodePaths.length && !remaining.length) {
+        // The app shell queues the media and shows the transcode page.
+        void publishEvent(
+          "transcode.enqueue.requested",
+          { paths: transcodePaths },
+          { system: "import-workspace" },
+        );
+      } else {
+        if (openInTranscode && transcodePaths.length) enqueueTranscodeSources(transcodePaths);
+        if (completed.size && !remaining.length) onImportCompleted?.();
+      }
+      if (completed.size) {
         const autoBinding = settings.autoBind
           ? scheduleMediaAutoBinding({
               importedItemIds: [
@@ -156,26 +178,6 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
         scheduleMediaAnalysis(results, autoBinding, {
           quietWarnings: openInTranscode ? [subtitleStreamNotFoundCode] : [],
         });
-      }
-      const remaining = selection.files.filter((entry) => !completed.has(entry.path));
-      selection.retainFiles(remaining);
-      const message = `已导入 ${completed.size} 个媒体${remaining.length ? `，${remaining.length} 个未完成，可重试` : ""}。`;
-      setStatus(message);
-      messagePublished(message);
-      const transcodePaths = [
-        ...results.map((result) => result.project.asset.path),
-        ...subtitles.map((item) => item.path),
-      ];
-      if (openInTranscode && transcodePaths.length && !remaining.length) {
-        // The app shell queues the media and shows the transcode page.
-        void publishEvent(
-          "transcode.enqueue.requested",
-          { paths: transcodePaths },
-          { system: "import-workspace" },
-        );
-      } else {
-        if (openInTranscode && transcodePaths.length) enqueueTranscodeSources(transcodePaths);
-        if (completed.size && !remaining.length) onImportCompleted?.();
       }
     } finally {
       importing.current = false;

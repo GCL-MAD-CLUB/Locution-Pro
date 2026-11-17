@@ -60,91 +60,89 @@ export function scheduleMediaAnalysis(
     pending.add(job.project.asset.id);
   });
   notify();
-  // Let the workspace switch paint, then wait for higher-priority automatic binding.
-  window.setTimeout(() => {
-    void runOperation("media.analyze", async () => {
-      await previousBatch;
-      await startAfter;
-      if (getProjectExportContext().projectId !== projectId) return;
-      const taskIds = jobs.map(() => createFfmpegTaskId("media-analysis"));
-      const running = new Set<string>();
-      let cancelled = false;
-      const task = await createTaskProgress({
-        operation: "media.analyze",
-        label: `正在分析 ${jobs.length} 项媒体...`,
-        current: 0,
-        total: jobs.length,
-        blocking: false,
-        listener: listenToFfmpegTasksProgress(taskIds),
-        on_cancel: async () => {
-          cancelled = true;
-          const outcomes = await Promise.allSettled([...running].map(cancelFfmpegTask));
-          const failure = outcomes.find(
-            (result) =>
-              result.status === "rejected" &&
-              (result.reason as { code?: string })?.code !== "TASK_NOT_RUNNING",
+  // Callers queue the workspace change before scheduling. Analysis still waits
+  // for automatic binding through startAfter; it does not wait on a timer.
+  void runOperation("media.analyze", async () => {
+    await previousBatch;
+    await startAfter;
+    if (getProjectExportContext().projectId !== projectId) return;
+    const taskIds = jobs.map(() => createFfmpegTaskId("media-analysis"));
+    const running = new Set<string>();
+    let cancelled = false;
+    const task = await createTaskProgress({
+      operation: "media.analyze",
+      label: `正在分析 ${jobs.length} 项媒体...`,
+      current: 0,
+      total: jobs.length,
+      blocking: false,
+      listener: listenToFfmpegTasksProgress(taskIds),
+      on_cancel: async () => {
+        cancelled = true;
+        const outcomes = await Promise.allSettled([...running].map(cancelFfmpegTask));
+        const failure = outcomes.find(
+          (result) =>
+            result.status === "rejected" &&
+            (result.reason as { code?: string })?.code !== "TASK_NOT_RUNNING",
+        );
+        if (failure?.status === "rejected")
+          throw clientError(
+            "UNEXPECTED_ERROR",
+            `Media analysis cancellation failed: ${String(failure.reason)}`,
           );
-          if (failure?.status === "rejected")
-            throw clientError(
-              "UNEXPECTED_ERROR",
-              `Media analysis cancellation failed: ${String(failure.reason)}`,
-            );
-        },
-      });
-      cancelled ||= task.cancelled;
-      let failure: unknown;
-      try {
-        // Limit heavy subtitle/cover work to one media at a time to keep editing responsive.
-        for (let index = 0; index < jobs.length && !cancelled; index += 1) {
-          const job = jobs[index];
-          const id = job.project.asset.id;
-          if (getProjectExportContext().projectId !== projectId) break;
-          if (!getProjectWorkspaceSnapshot().media_bin.items.some((item) => item.id === id))
-            continue;
-          const taskId = taskIds[index];
-          running.add(taskId);
-          try {
-            const result = await invokeCommand<ImportResult>("analyze_imported_media", {
-              assetId: id,
-              taskId,
-            });
-            if (!cancelled) {
-              applyAnalyzedMediaResult(withoutQuietWarnings(result, quietWarnings), projectId);
-            }
-          } catch (error) {
-            if (!cancelled) {
-              failure ??= error;
-              applyAnalyzedMediaResult(
-                {
-                  project: job.project,
-                  warnings: [
-                    {
-                      code: "MEDIA_ANALYSIS_FAILED",
-                      severity: "warning",
-                      message: `媒体分析未完成：${job.project.asset.file_name}`,
-                    },
-                  ],
-                },
-                projectId,
-              );
-            }
-          } finally {
-            running.delete(taskId);
-            pending.delete(id);
-            notify();
+      },
+    });
+    cancelled ||= task.cancelled;
+    let failure: unknown;
+    try {
+      // Limit heavy subtitle/cover work to one media at a time to keep editing responsive.
+      for (let index = 0; index < jobs.length && !cancelled; index += 1) {
+        const job = jobs[index];
+        const id = job.project.asset.id;
+        if (getProjectExportContext().projectId !== projectId) break;
+        if (!getProjectWorkspaceSnapshot().media_bin.items.some((item) => item.id === id)) continue;
+        const taskId = taskIds[index];
+        running.add(taskId);
+        try {
+          const result = await invokeCommand<ImportResult>("analyze_imported_media", {
+            assetId: id,
+            taskId,
+          });
+          if (!cancelled) {
+            applyAnalyzedMediaResult(withoutQuietWarnings(result, quietWarnings), projectId);
           }
-          task.update({ current: index + 1 });
+        } catch (error) {
+          if (!cancelled) {
+            failure ??= error;
+            applyAnalyzedMediaResult(
+              {
+                project: job.project,
+                warnings: [
+                  {
+                    code: "MEDIA_ANALYSIS_FAILED",
+                    severity: "warning",
+                    message: `媒体分析未完成：${job.project.asset.file_name}`,
+                  },
+                ],
+              },
+              projectId,
+            );
+          }
+        } finally {
+          running.delete(taskId);
+          pending.delete(id);
+          notify();
         }
-        if (failure) task.fail(failure);
-        else task.remove();
-      } finally {
-        jobs.forEach((job) => pending.delete(job.project.asset.id));
-        notify();
+        task.update({ current: index + 1 });
       }
-    }).finally(() => {
-      finishBatch();
+      if (failure) task.fail(failure);
+      else task.remove();
+    } finally {
       jobs.forEach((job) => pending.delete(job.project.asset.id));
       notify();
-    });
-  }, 0);
+    }
+  }).finally(() => {
+    finishBatch();
+    jobs.forEach((job) => pending.delete(job.project.asset.id));
+    notify();
+  });
 }

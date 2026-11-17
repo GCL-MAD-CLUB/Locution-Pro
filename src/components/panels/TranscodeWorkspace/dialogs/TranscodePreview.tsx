@@ -108,14 +108,13 @@ export function TranscodePreview({
 
   // Media info may arrive after the dialog opens; the timeline then covers the
   // whole clip and starts in the middle, since the first frame is often black.
-  const centered = useRef(durationFrames > 0);
-  useEffect(() => {
-    if (centered.current || durationFrames <= 0) return;
-    centered.current = true;
+  const [centeredOnDuration, setCenteredOnDuration] = useState(durationFrames > 0);
+  if (!centeredOnDuration && durationFrames > 0) {
+    setCenteredOnDuration(true);
     setCurrentFrame(middleFrame);
     setTimelineStartFrame(0);
     setTimelineSpanFrames(durationFrames);
-  }, [durationFrames, middleFrame]);
+  }
 
   const frame = Math.min(Math.max(currentFrame, 0), lastFrame);
   const timeUs = frameToTimeUs(frame, frameRate);

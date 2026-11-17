@@ -325,6 +325,7 @@ export function SourceMonitor() {
   const lastSeekCommandAtRef = useRef(0);
   const playbackTickRef = useRef<number | null>(null);
   const playbackModeRef = useRef<PlaybackMode>(playbackMode);
+  playbackModeRef.current = playbackMode;
   const manualPlaybackFrameRef = useRef(currentFrame);
   const manualPlaybackTickAtRef = useRef<number | null>(null);
   const kKeyHeldRef = useRef(false);
@@ -351,6 +352,7 @@ export function SourceMonitor() {
     playbackMode: PlaybackMode;
   } | null>(null);
   const currentFrameRef = useRef(currentFrame);
+  currentFrameRef.current = currentFrame;
   const activeVideoIdRef = useRef(activeVideoId);
   activeVideoIdRef.current = activeVideoId;
   // Cross-source row clicks change the active video before its media element is ready.
@@ -360,7 +362,9 @@ export function SourceMonitor() {
   >(null);
   const restoredSourceRevisionRef = useRef<number | undefined>(undefined);
   const timelineStartFrameRef = useRef(timelineStartFrame);
+  timelineStartFrameRef.current = timelineStartFrame;
   const timelineSpanFramesRef = useRef(timelineSpanFrames);
+  timelineSpanFramesRef.current = timelineSpanFrames;
   const [isVideoDragOver, setIsVideoDragOver] = useState(false);
   const [minTimelineSpanFrames, setMinTimelineSpanFrames] = useState(0);
   const [stillExportRequest, setStillExportRequest] = useState<StillExportRequest | null>(null);
@@ -737,10 +741,6 @@ export function SourceMonitor() {
   ]);
 
   useEffect(() => {
-    currentFrameRef.current = currentFrame;
-  }, [currentFrame]);
-
-  useEffect(() => {
     const pendingSeek = pendingSourceSeekRef.current;
     if (pendingSeek?.videoId !== undefined && pendingSeek.videoId !== activeVideoId) {
       pendingSourceSeekRef.current = null;
@@ -748,18 +748,6 @@ export function SourceMonitor() {
     }
     flushPendingSourceSeek();
   }, [activeVideoId, mediaKey]);
-
-  useEffect(() => {
-    playbackModeRef.current = playbackMode;
-  }, [playbackMode]);
-
-  useEffect(() => {
-    timelineStartFrameRef.current = timelineStartFrame;
-  }, [timelineStartFrame]);
-
-  useEffect(() => {
-    timelineSpanFramesRef.current = timelineSpanFrames;
-  }, [timelineSpanFrames]);
 
   useEffect(
     () => () => {

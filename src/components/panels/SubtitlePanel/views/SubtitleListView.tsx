@@ -124,12 +124,16 @@ export function SubtitleListView({
   const [editingCueId, setEditingCueId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const pendingCellEditRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    cancelPendingCellEdit();
+  const [seenResetKey, setSeenResetKey] = useState(resetKey);
+  if (seenResetKey !== resetKey) {
+    setSeenResetKey(resetKey);
+    if (pendingCellEditRef.current !== null) {
+      window.clearTimeout(pendingCellEditRef.current);
+      pendingCellEditRef.current = null;
+    }
     setEditingCueId(null);
     setActiveCell(null);
-  }, [resetKey]);
+  }
 
   useEffect(
     () => () => {

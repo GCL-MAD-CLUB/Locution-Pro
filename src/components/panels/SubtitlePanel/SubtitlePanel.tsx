@@ -4,6 +4,8 @@ import {
   useSemanticSearchAvailable,
   useSubtitleSemanticSearch,
 } from "../../../application/media/subtitleSemanticSearch";
+import { focusedSearchHitId } from "../../../core/editor/searchFocus";
+import { semanticSortDecision } from "../../../core/editor/semanticResultSort";
 import { panelSourceTitle } from "../../../core/editor/panelSourceSelection";
 import {
   sourceScope,
@@ -881,7 +883,6 @@ export function SubtitlePanel() {
     selectedCueIds,
     cueAnnotations,
     thumbnailSize,
-    syncTrackContext,
     setQuery,
     advancedSearch,
     setAdvancedSearch,
@@ -922,6 +923,7 @@ export function SubtitlePanel() {
   } | null>(null);
   const sprayGestureCleanupRef = useRef<(() => void) | null>(null);
   const [cueSort, setCueSort] = useState<SubtitleSort>(defaultSubtitleSort);
+  const [appliedSemanticVersion, setAppliedSemanticVersion] = useState(0);
   const [trackMenu, setTrackMenu] = useState<SubtitleMenuAnchor | null>(null);
   const [ratingComparatorMenu, setRatingComparatorMenu] = useState<SubtitleMenuAnchor | null>(null);
   const [footerSortMenu, setFooterSortMenu] = useState<SubtitleMenuAnchor | null>(null);
@@ -1014,20 +1016,20 @@ export function SubtitlePanel() {
   if (cueSort.columnId !== "similarity") ordinaryCueSort.current = cueSort;
   const activeCueSort =
     cueSort.columnId === "similarity" && !hasSemanticResults ? ordinaryCueSort.current : cueSort;
-  const lastSemanticSortVersion = useRef(0);
-  useEffect(() => {
-    if (hasSemanticResults && lastSemanticSortVersion.current !== semantic.resultVersion) {
-      lastSemanticSortVersion.current = semantic.resultVersion;
-      setSourceDirection("none");
-      setCueSort({ columnId: "similarity", direction: "descending" });
-    }
-    if (!hasSemanticResults) lastSemanticSortVersion.current = 0;
-    if (!showSimilarity) {
-      setCueSort((current) =>
-        current.columnId === "similarity" ? ordinaryCueSort.current : current,
-      );
-    }
-  }, [hasSemanticResults, semantic.resultVersion, showSimilarity]);
+  const semanticSort = semanticSortDecision<SubtitleSort>({
+    hasSemanticResults,
+    showSimilarity,
+    resultVersion: semantic.resultVersion,
+    appliedVersion: appliedSemanticVersion,
+    sorts: [cueSort],
+    ordinary: [ordinaryCueSort.current],
+    similarity: { columnId: "similarity", direction: "descending" },
+  });
+  if (semanticSort) {
+    setAppliedSemanticVersion(semanticSort.appliedVersion);
+    if (semanticSort.clearSourceDirection) setSourceDirection("none");
+    if (semanticSort.sorts) setCueSort(semanticSort.sorts[0]);
+  }
   const filteredCues = useMemo(
     () =>
       allCues.filter(
@@ -1088,17 +1090,16 @@ export function SubtitlePanel() {
         : [],
     [sortedCues, cueAnnotations, query, searchMode, searchRule, advancedSearch],
   );
-  const [searchFocusedCueId, setSearchFocusedCueId] = useState<string | null>(null);
-  useEffect(() => {
-    if (searchMode !== "highlight" || !query.trim()) {
-      setSearchFocusedCueId(null);
-      return;
-    }
-    const focusedIndex = sortedCues.findIndex((cue) => cue.id === activeCueId);
-    if (focusedIndex >= 0 && matchingCueIndices.includes(focusedIndex)) {
-      setSearchFocusedCueId(activeCueId);
-    }
-  }, [activeCueId, matchingCueIndices, query, searchMode, sortedCues]);
+  const searchFocusedCueIdRef = useRef<string | null>(null);
+  const activeCueIndex = sortedCues.findIndex((cue) => cue.id === activeCueId);
+  const searchFocusedCueId = focusedSearchHitId({
+    highlight: searchMode === "highlight",
+    query,
+    activeId: activeCueId,
+    activeIsHit: activeCueIndex >= 0 && matchingCueIndices.includes(activeCueIndex),
+    previousHitId: searchFocusedCueIdRef.current,
+  });
+  searchFocusedCueIdRef.current = searchFocusedCueId;
   const searchHighlight = useMemo(
     () =>
       searchMode === "highlight" && query.trim()
@@ -1463,7 +1464,6 @@ export function SubtitlePanel() {
   }, [rowVirtualizer, subtitleRowHeight]);
 
   useEffect(() => {
-    syncTrackContext(trackContext);
     sprayGestureCleanupRef.current?.();
     setSprayActive(false);
     setContextMenu(null);
@@ -1473,13 +1473,7 @@ export function SubtitlePanel() {
     setFooterSprayMenu(null);
     setFooterOptionsMenu(null);
     setCueSort(defaultSubtitleSort);
-  }, [syncTrackContext, trackContext]);
-
-  useEffect(() => {
-    if (showOnlySelected && selectedCount === 0) {
-      setShowOnlySelected(false);
-    }
-  }, [selectedCount, setShowOnlySelected, showOnlySelected]);
+  }, [trackContext]);
 
   useEffect(() => {
     if (sprayActive) {

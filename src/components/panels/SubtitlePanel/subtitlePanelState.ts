@@ -5,6 +5,7 @@ import {
 } from "../../../core/editor/textSearch";
 import { useLayoutEffect, useMemo } from "react";
 import { panelSessionForContext } from "../../../core/editor/panelSourceSelection";
+import { withoutEmptySelectionFilter } from "../../../core/editor/selectionFilter";
 import { scopedSubtitles } from "../../../core/editor/multiSource";
 import { createPanelState } from "../../../runtime/systems/PanelState";
 import {
@@ -150,12 +151,13 @@ const useSubtitlePanelUiState = createPanelState<SubtitlePanelUiState>(() => (se
             [JSON.stringify([state.workspaceId, state.trackContext])]: trackSessionFromState(state),
           }
         : state.sessions;
+      const restored =
+        sessions[JSON.stringify([nextWorkspaceId, trackContext])] ?? defaultTrackSessionState();
       return {
         trackContext,
         workspaceId: nextWorkspaceId,
         sessions,
-        ...(sessions[JSON.stringify([nextWorkspaceId, trackContext])] ??
-          defaultTrackSessionState()),
+        ...withoutEmptySelectionFilter(restored.selectedCueIds.size, restored),
       };
     }),
   setQuery: (query) => set({ query }),
@@ -181,7 +183,10 @@ const useSubtitlePanelUiState = createPanelState<SubtitlePanelUiState>(() => (se
           ? "contains"
           : searchRule,
     })),
-  setShowOnlySelected: (showOnlySelected) => set({ showOnlySelected }),
+  setShowOnlySelected: (showOnlySelected) =>
+    set((state) => ({
+      showOnlySelected: showOnlySelected && state.selectedCueIds.size > 0,
+    })),
   setMinimumRating: (minimumRating) => set({ minimumRating: normalizedRating(minimumRating) }),
   setRatingComparator: (ratingComparator) => set({ ratingComparator }),
   setFlagFilters: (flagFilters) => set({ flagFilters: Array.from(new Set(flagFilters)) }),
@@ -193,15 +198,20 @@ const useSubtitlePanelUiState = createPanelState<SubtitlePanelUiState>(() => (se
       thumbnailSize: Number.isFinite(thumbnailSize) ? Math.min(100, Math.max(0, thumbnailSize)) : 0,
     }),
   setActiveCueId: (activeCueId) => set({ activeCueId }),
-  cueSelectionCleared: () => set({ selectedCueIds: new Set<string>(), activeCueId: null }),
+  cueSelectionCleared: () =>
+    set({ selectedCueIds: new Set<string>(), activeCueId: null, showOnlySelected: false }),
   cueSelectionReplaced: (cueIds, primaryCueId) =>
-    set(() => {
+    set((state) => {
       const selectedCueIds = new Set(cueIds);
       const activeCueId =
         primaryCueId && selectedCueIds.has(primaryCueId)
           ? primaryCueId
           : (selectedCueIds.values().next().value ?? null);
-      return { selectedCueIds, activeCueId };
+      return withoutEmptySelectionFilter(selectedCueIds.size, {
+        selectedCueIds,
+        activeCueId,
+        showOnlySelected: state.showOnlySelected,
+      });
     }),
 }));
 

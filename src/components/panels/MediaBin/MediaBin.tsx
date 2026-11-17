@@ -276,7 +276,6 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
   const {
     query,
     selectedIds,
-    visibleItemCount,
     viewMode,
     listSize,
     gridSize,
@@ -284,7 +283,6 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     bindingPopoverOpen,
     bindingVideoId,
     setQuery,
-    setVisibleItemCount,
     selectOnly,
     toggleSelected,
     selectItems,
@@ -626,19 +624,15 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
         checking = false;
       }
     };
-    // Defer the first check so imports can enqueue analysis after automatic binding.
-    const initial = window.setTimeout(() => void checkAnalysis(), 1000);
+    // Import scheduling records pending analysis before this effect runs, so the
+    // first check does not need a delay to avoid a duplicate enqueue.
+    void checkAnalysis();
     const retry = window.setInterval(() => void checkAnalysis(), 60_000);
     return () => {
       disposed = true;
-      window.clearTimeout(initial);
       window.clearInterval(retry);
     };
   }, [projects, mediaItems]);
-
-  useEffect(() => {
-    setVisibleItemCount(rows.length);
-  }, [rows, setVisibleItemCount]);
 
   useEffect(() => {
     if (isReadOnly && bindingPopoverOpen) {
@@ -1071,7 +1065,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     identity,
     active: isEditAuthority,
     selectedCount: selectedIds.size,
-    visibleCount: visibleItemCount,
+    visibleCount: rows.length,
     readOnly: isReadOnly,
     pasteCount: clipboardItemCount,
     handlers: {

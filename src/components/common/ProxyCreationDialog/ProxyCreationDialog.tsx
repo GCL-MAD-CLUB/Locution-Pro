@@ -1,5 +1,5 @@
 ﻿import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   canOfferRemux,
   defaultProxyPreset,
@@ -66,19 +66,17 @@ export function ProxyCreationDialog() {
   const [preset, setPreset] = useState<ProxyPreset>(() =>
     defaultProxyPreset(project, isMacOSRuntime()),
   );
+  const [presetDialogWasOpen, setPresetDialogWasOpen] = useState(isProxyDialogOpen);
+  if (isProxyDialogOpen !== presetDialogWasOpen) {
+    setPresetDialogWasOpen(isProxyDialogOpen);
+    if (isProxyDialogOpen) setPreset(defaultProxyPreset(project, isMacOSRuntime()));
+  }
   const [watermark, setWatermark] = useState<ProxyWatermark>("none");
   const [location, setLocation] = useState<ProxyLocation>("source_proxy_folder");
   const [customLocation, setCustomLocation] = useState("");
   const projectDisplayName = mediaDisplayName(project, mediaItems, activeVideoId);
   const remuxOffered = canOfferRemux(project, isMacOSRuntime());
   const isRemux = preset === "remux";
-
-  useEffect(() => {
-    if (isProxyDialogOpen) {
-      setPreset(defaultProxyPreset(project, isMacOSRuntime()));
-    }
-    // Reset only when the dialog opens; edits while open belong to the user.
-  }, [isProxyDialogOpen]);
 
   async function chooseCustomLocation(previousLocation: ProxyLocation) {
     const outcome = await runOperation("proxy.generate", () =>

@@ -5,14 +5,24 @@ import type { ProjectExportState, ProjectStateConfig } from "../../types";
 let states: Record<string, ProjectStateConfig> = {};
 let loaded = false;
 const panelStateWrites = new Map<string, Promise<void>>();
+const loadedListeners = new Set<() => void>();
 
 export function projectStatesLoaded() {
   return loaded;
 }
 
+/** Notifies when the per-project cache finishes loading. Snapshot reads stay synchronous. */
+export function subscribeProjectStatesLoaded(listener: () => void) {
+  loadedListeners.add(listener);
+  return () => {
+    loadedListeners.delete(listener);
+  };
+}
+
 export async function loadProjectStates() {
   states = await invokeCommand<Record<string, ProjectStateConfig>>("load_project_states");
   loaded = true;
+  for (const listener of loadedListeners) listener();
   return states;
 }
 

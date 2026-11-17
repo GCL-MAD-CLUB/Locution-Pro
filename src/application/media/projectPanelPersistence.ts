@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { captureOperationError } from "../../errors";
 import { isTauriRuntime } from "../../platform/tauri/runtime";
 import { usePanelInstanceId } from "../../runtime/systems/PanelState";
@@ -6,6 +6,7 @@ import {
   persistProjectPanelState,
   projectStatesLoaded,
   readProjectPanelState,
+  subscribeProjectStatesLoaded,
   useProjectPort,
 } from "../../systems/ProjectSystem";
 
@@ -23,7 +24,12 @@ export function usePersistedProjectPanelState<State>(
   const instanceId = usePanelInstanceId();
   const panelId = sharedId ?? instanceId;
   const native = isTauriRuntime();
-  const [loaded, setLoaded] = useState(() => !native || projectStatesLoaded());
+  const statesLoaded = useSyncExternalStore(
+    subscribeProjectStatesLoaded,
+    projectStatesLoaded,
+    projectStatesLoaded,
+  );
+  const loaded = !native || statesLoaded;
   const [restoredKey, setRestoredKey] = useState<string | null>(null);
   const restoreRef = useRef(onRestore);
   restoreRef.current = onRestore;
@@ -43,14 +49,6 @@ export function usePersistedProjectPanelState<State>(
       );
     }
   }
-
-  useEffect(() => {
-    if (loaded || !enabled) return;
-    const timer = window.setInterval(() => {
-      if (projectStatesLoaded()) setLoaded(true);
-    }, 100);
-    return () => window.clearInterval(timer);
-  }, [loaded, enabled]);
 
   useLayoutEffect(() => {
     if (!key) {

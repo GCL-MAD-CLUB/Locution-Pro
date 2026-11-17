@@ -183,14 +183,18 @@ export function StoryboardListView({
   const [editValue, setEditValue] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const pendingCellEditRef = useRef<number | null>(null);
-  const stackMap = stacksByShotId(shotStacks);
-
-  useEffect(() => {
-    cancelPendingCellEdit();
+  const [seenResetKey, setSeenResetKey] = useState(resetKey);
+  if (seenResetKey !== resetKey) {
+    setSeenResetKey(resetKey);
+    if (pendingCellEditRef.current !== null) {
+      window.clearTimeout(pendingCellEditRef.current);
+      pendingCellEditRef.current = null;
+    }
     setEditingCell(null);
     setEditError(null);
     setActiveCell(null);
-  }, [resetKey]);
+  }
+  const stackMap = stacksByShotId(shotStacks);
 
   useEffect(
     () => () => {

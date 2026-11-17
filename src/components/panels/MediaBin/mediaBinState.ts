@@ -7,7 +7,6 @@ export type MediaBinViewMode = "list" | "grid";
 interface MediaBinPanelState {
   query: string;
   selectedIds: Set<string>;
-  visibleItemCount: number;
   viewMode: MediaBinViewMode;
   viewModeInitialized: boolean;
   listSize: number;
@@ -16,7 +15,6 @@ interface MediaBinPanelState {
   bindingPopoverOpen: boolean;
   bindingVideoId: string;
   setQuery: (query: string) => void;
-  setVisibleItemCount: (count: number) => void;
   selectOnly: (itemId: string) => void;
   toggleSelected: (itemId: string) => void;
   selectItems: (itemIds: string[]) => void;
@@ -33,7 +31,6 @@ interface MediaBinPanelState {
 export const useMediaBinState = createPanelState<MediaBinPanelState>(() => (set) => ({
   query: "",
   selectedIds: new Set<string>(),
-  visibleItemCount: 0,
   viewMode: "list",
   viewModeInitialized: false,
   listSize: 0,
@@ -42,7 +39,6 @@ export const useMediaBinState = createPanelState<MediaBinPanelState>(() => (set)
   bindingPopoverOpen: false,
   bindingVideoId: "",
   setQuery: (query) => set({ query }),
-  setVisibleItemCount: (visibleItemCount) => set({ visibleItemCount }),
   selectOnly: (itemId) => set({ selectedIds: new Set([itemId]) }),
   toggleSelected: (itemId) =>
     set((state) => {

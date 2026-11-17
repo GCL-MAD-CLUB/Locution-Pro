@@ -1,5 +1,5 @@
 import { ChevronDown, FolderOpen } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   SelectDropdown,
@@ -69,14 +69,6 @@ const existingFileModeItems: Array<SelectDropdownItem<ExportExistingFileMode>> =
     ["skip", "跳过"],
   ]),
 ];
-
-/** Snaps `target` to the closest value in a sorted list (used for format-switch resets). */
-function nearestValue(values: number[], target: number) {
-  return values.reduce(
-    (best, value) => (Math.abs(value - target) < Math.abs(best - target) ? value : best),
-    values[0],
-  );
-}
 
 interface ExportFieldProps {
   label: string;
@@ -185,9 +177,7 @@ export function ExportSettingsSection({
   const audioSampleRateValue =
     settings.audioSampleRateHz === null ? "source" : String(settings.audioSampleRateHz);
   const folderLabel = settings.outputDir.trim() || "未选择输出位置";
-  // 重命名规则 options depend on export mode + source kind; switching may leave the current rule out of the option set, so snap it back.
   const renameRuleOptions = exportRenameRuleOptions(settings.mode, source?.kind ?? "media-bin");
-  const renameRuleValid = renameRuleOptions.some(([value]) => value === settings.renameRule);
   const selectedClips = source?.clips.filter((clip) => selectedClipIds.has(clip.id)) ?? [];
   const sourceHasAudio = (selectedClips.length > 0 ? selectedClips : (source?.clips ?? [])).some(
     (clip) => clip.hasAudio,
@@ -219,77 +209,12 @@ export function ExportSettingsSection({
     );
   })();
 
-  useEffect(() => {
-    if (!renameRuleValid) {
-      onUpdateSettings({ renameRule: "filename" });
-    }
-  }, [renameRuleValid, onUpdateSettings]);
-
-  useEffect(() => {
-    if (!source || sourceHasAudio) {
-      return;
-    }
-    const updates: Partial<ExportSettings> = {};
-    if (settings.includeAudio) {
-      updates.includeAudio = false;
-    }
-    if (!settings.includeVideo) {
-      updates.includeVideo = true;
-    }
-    if (audioOnlyContainer) {
-      updates.container = "mp4_h264";
-      updates.audioCodec = "aac";
-    }
-    if (Object.keys(updates).length > 0) {
-      onUpdateSettings(updates);
-    }
-  }, [
-    audioOnlyContainer,
-    onUpdateSettings,
-    settings.includeAudio,
-    settings.includeVideo,
-    source,
-    sourceHasAudio,
-  ]);
   // Surround output is only offered when the source carries surround audio, and MPEG (MP2/MP3) cannot encode more than two channels.
   const channelOptions = exportAudioChannelOptions(sourceChannels).filter(
     ([value]) => audioFormat !== "mpeg" || value !== "5.1",
   );
-  const channelsValid = channelOptions.some(([value]) => value === settings.audioChannels);
-
-  useEffect(() => {
-    if (!channelsValid) {
-      onUpdateSettings({ audioChannels: "stereo" });
-    }
-  }, [channelsValid, onUpdateSettings]);
-
-  // Bitrate and sample-rate choices are format-specific; snap the selection back to the nearest valid value when it falls outside the new format's options.
   const bitrateOptions = exportAudioBitrateOptions(audioFormat, settings.audioCodec);
-  const bitrateValues = bitrateOptions.map(([value]) => Number(value));
-  const bitrateValid = bitrateValues.includes(settings.audioBitrateKbps);
-
-  useEffect(() => {
-    if (!bitrateValid) {
-      onUpdateSettings({
-        audioBitrateKbps: nearestValue(bitrateValues, settings.audioBitrateKbps),
-      });
-    }
-  }, [bitrateValid, settings.audioBitrateKbps, onUpdateSettings]);
-
   const sampleRateOptions = exportAudioSampleRateOptions(audioFormat);
-  const sampleRateValues = sampleRateOptions
-    .filter(([value]) => value !== "source")
-    .map(([value]) => Number(value));
-  const sampleRateValid =
-    settings.audioSampleRateHz === null || sampleRateValues.includes(settings.audioSampleRateHz);
-
-  useEffect(() => {
-    if (!sampleRateValid) {
-      onUpdateSettings({
-        audioSampleRateHz: nearestValue(sampleRateValues, settings.audioSampleRateHz ?? 0),
-      });
-    }
-  }, [sampleRateValid, settings.audioSampleRateHz, onUpdateSettings]);
 
   function changeContainer(container: ExportContainer) {
     if (isAudioOnlyContainer(container) && !sourceHasAudio) {

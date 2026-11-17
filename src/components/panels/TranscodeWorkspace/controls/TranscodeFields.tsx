@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { SelectDropdown, type SelectDropdownItem } from "../../../common/SelectDropdown";
 import type { TranscodeOptionItem } from "../../../../systems/TranscodeSystem";
 
@@ -71,9 +71,11 @@ export function TranscodeNumberField({
   onChange,
 }: TranscodeNumberFieldProps) {
   const [draft, setDraft] = useState(value === null ? "" : String(value));
-  useEffect(() => {
+  const [draftValue, setDraftValue] = useState(value);
+  if (value !== draftValue) {
+    setDraftValue(value);
     setDraft(value === null ? "" : String(value));
-  }, [value]);
+  }
 
   function commit() {
     const trimmed = draft.trim();

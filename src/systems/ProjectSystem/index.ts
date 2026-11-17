@@ -27,6 +27,7 @@ export {
   loadProjectStates,
   persistExportState,
   projectStatesLoaded,
+  subscribeProjectStatesLoaded,
   pruneProjectStates,
   readExportState,
   readProjectPanelState,

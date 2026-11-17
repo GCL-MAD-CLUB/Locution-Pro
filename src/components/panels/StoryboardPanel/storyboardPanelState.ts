@@ -12,6 +12,7 @@ import {
 } from "../../../core/editor/multiSource";
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { panelSessionForContext } from "../../../core/editor/panelSourceSelection";
+import { withoutEmptySelectionFilter } from "../../../core/editor/selectionFilter";
 import { createPanelState } from "../../../runtime/systems/PanelState";
 import {
   canHighlightSearchRule,
@@ -376,12 +377,13 @@ const useStoryboardPanelUiState = createPanelState<StoryboardPanelUiState>(() =>
             [JSON.stringify([state.workspaceId, state.videoContext])]: videoSessionFromState(state),
           }
         : state.sessions;
+      const restored =
+        sessions[JSON.stringify([nextWorkspaceId, videoContext])] ?? defaultVideoSessionState();
       return {
         videoContext,
         workspaceId: nextWorkspaceId,
         sessions,
-        ...(sessions[JSON.stringify([nextWorkspaceId, videoContext])] ??
-          defaultVideoSessionState()),
+        ...withoutEmptySelectionFilter(restored.selectedShotIds.size, restored),
       };
     }),
   setQuery: (query) => set({ query }),
@@ -408,7 +410,10 @@ const useStoryboardPanelUiState = createPanelState<StoryboardPanelUiState>(() =>
           ? "contains"
           : searchRule,
     })),
-  setShowOnlySelected: (showOnlySelected) => set({ showOnlySelected }),
+  setShowOnlySelected: (showOnlySelected) =>
+    set((state) => ({
+      showOnlySelected: showOnlySelected && state.selectedShotIds.size > 0,
+    })),
   setMinimumRating: (minimumRating) => set({ minimumRating: normalizedRating(minimumRating) }),
   setRatingComparator: (ratingComparator) => set({ ratingComparator }),
   setFlagFilters: (flagFilters) => set({ flagFilters: Array.from(new Set(flagFilters)) }),
@@ -433,15 +438,20 @@ const useStoryboardPanelUiState = createPanelState<StoryboardPanelUiState>(() =>
       gridSize: Number.isFinite(gridSize) ? Math.min(100, Math.max(0, gridSize)) : 0,
     }),
   setKeywordEditorMode: (keywordEditorMode) => set({ keywordEditorMode }),
-  shotSelectionCleared: () => set({ selectedShotIds: new Set<string>(), activeShotId: null }),
+  shotSelectionCleared: () =>
+    set({ selectedShotIds: new Set<string>(), activeShotId: null, showOnlySelected: false }),
   shotSelectionReplaced: (shotIds, primaryShotId) =>
-    set(() => {
+    set((state) => {
       const selectedShotIds = new Set(shotIds);
       const activeShotId =
         primaryShotId && selectedShotIds.has(primaryShotId)
           ? primaryShotId
           : (selectedShotIds.values().next().value ?? null);
-      return { selectedShotIds, activeShotId };
+      return withoutEmptySelectionFilter(selectedShotIds.size, {
+        selectedShotIds,
+        activeShotId,
+        showOnlySelected: state.showOnlySelected,
+      });
     }),
   setExpandedStackIds: (stackIds) => set({ expandedStackIds: new Set(stackIds) }),
 }));

@@ -260,14 +260,12 @@ async function runMediaAutoBinding({
 }
 
 /**
- * Runs automatic binding after the import workspace switches away. Matching is
- * isolated in a Worker. Each completed binding is published while the
- * cancellable background task is still running.
+ * Starts automatic binding. The import workspace queues its navigation first.
+ * Matching is isolated in a Worker. Each completed binding is published while
+ * the cancellable background task is still running.
  */
 export function scheduleMediaAutoBinding(options: ScheduleMediaAutoBindingOptions) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(() => {
-      void runOperation("media.bindSubtitles", () => runMediaAutoBinding(options)).finally(resolve);
-    }, 0);
-  });
+  return runOperation("media.bindSubtitles", () => runMediaAutoBinding(options)).then(
+    () => undefined,
+  );
 }

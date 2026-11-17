@@ -87,7 +87,9 @@ export function VideoDisplay({
   const setZoomLevel = useSourceMonitorState((state) => state.setZoomLevel);
   const setZoomPan = useSourceMonitorState((state) => state.setZoomPan);
   const zoomLevelRef = useRef(zoomLevel);
+  zoomLevelRef.current = zoomLevel;
   const zoomPanRef = useRef(zoomPan);
+  zoomPanRef.current = zoomPan;
   const requestedSource = videoSrc || null;
   const zoomScale = zoomLevel === "fit" ? 1 : zoomLevel / 100;
   const currentZoomPan = zoomLevel === "fit" ? { x: 0, y: 0 } : zoomPan;
@@ -276,14 +278,6 @@ export function VideoDisplay({
     const video = currentVideo(event);
     if (video === videoRef.current) handler(video);
   }
-
-  useEffect(() => {
-    zoomLevelRef.current = zoomLevel;
-  }, [zoomLevel]);
-
-  useEffect(() => {
-    zoomPanRef.current = zoomPan;
-  }, [zoomPan]);
 
   useEffect(() => {
     const stage = stageRef.current;

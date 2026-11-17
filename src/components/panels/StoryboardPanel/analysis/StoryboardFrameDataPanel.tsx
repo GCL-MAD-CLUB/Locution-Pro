@@ -1,5 +1,5 @@
 import { ChevronsUpDown } from "lucide-react";
-import { useEffect, useState, type ComponentProps } from "react";
+import { useState, type ComponentProps } from "react";
 import { createPortal } from "react-dom";
 import { PopupMenu, PopupMenuItem, useCloseOnOutsidePointer } from "../../../common/PopupMenu";
 import { StoryboardSidebarHeading } from "../StoryboardSidebarSection";
@@ -20,10 +20,7 @@ export function StoryboardFrameDataPanel({ histogramVisible, ...motionProps }: P
   const histogramSelected = mode === "histogram";
   const modeLabel = frameDataModes.find((option) => option.mode === mode)!.label;
   useCloseOnOutsidePointer(Boolean(modeMenu), () => setModeMenu(null));
-
-  useEffect(() => {
-    if (!motionProps.visible || !open) setModeMenu(null);
-  }, [motionProps.visible, open]);
+  if (modeMenu && (!motionProps.visible || !open)) setModeMenu(null);
 
   return (
     <section className={`storyboard-frame-data-panel ${open ? "" : "is-collapsed"}`.trim()}>

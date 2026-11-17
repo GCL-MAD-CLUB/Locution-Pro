@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { pathKey } from "../browser/importBrowserModel";
 import type { ImportSelectionItem } from "../browser/importFolderScan";
+import { traySelectionForItems } from "./traySelection";
 
 interface TraySelectionModifiers {
   range: boolean;
@@ -11,15 +12,9 @@ export function useImportTraySelection(items: ImportSelectionItem[]) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const anchor = useRef("");
   const itemKeys = useMemo(() => items.map((item) => pathKey(item.entry.path)), [items]);
-
-  useEffect(() => {
-    const available = new Set(itemKeys);
-    setSelected((current) => {
-      const next = new Set([...current].filter((key) => available.has(key)));
-      return next.size === current.size ? current : next;
-    });
-    if (anchor.current && !available.has(anchor.current)) anchor.current = "";
-  }, [itemKeys]);
+  const nextSelected = traySelectionForItems(selected, itemKeys);
+  if (nextSelected !== selected) setSelected(nextSelected);
+  if (anchor.current && !itemKeys.includes(anchor.current)) anchor.current = "";
 
   function select(path: string, { range, toggle }: TraySelectionModifiers) {
     const key = pathKey(path);

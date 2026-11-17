@@ -78,7 +78,9 @@ export function TimelineRuler({
 }: TimelineRulerProps) {
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const timelineStartFrameRef = useRef(timelineStartFrame);
+  timelineStartFrameRef.current = timelineStartFrame;
   const timelineSpanFramesRef = useRef(timelineSpanFrames);
+  timelineSpanFramesRef.current = timelineSpanFrames;
   const timelineDragScrollAtRef = useRef(0);
   const timelineDragCleanupRef = useRef<(() => void) | null>(null);
   const cueRangeDragCleanupRef = useRef<(() => void) | null>(null);
@@ -129,10 +131,6 @@ export function TimelineRuler({
     [durationFrames, timelineWidthPx],
   );
 
-  useEffect(() => {
-    timelineStartFrameRef.current = timelineStartFrame;
-  }, [timelineStartFrame]);
-
   useEffect(
     () => () => {
       timelineDragCleanupRef.current?.();
@@ -140,10 +138,6 @@ export function TimelineRuler({
     },
     [hasMedia, canEditCueRange],
   );
-
-  useEffect(() => {
-    timelineSpanFramesRef.current = timelineSpanFrames;
-  }, [timelineSpanFrames]);
 
   useEffect(() => {
     onMinTimelineSpanFramesChange(minSpanFrames);

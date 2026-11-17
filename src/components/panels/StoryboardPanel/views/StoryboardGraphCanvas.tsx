@@ -555,13 +555,11 @@ export function StoryboardGraphCanvas({
     [size, canvas, navigation?.layoutSize, camera],
   );
   const cameraRef = useRef(camera);
+  cameraRef.current = camera;
   useLayoutEffect(() => {
     if (phase === "ambient" && size.width > 1 && navigation?.layoutSize !== size)
       setNavigation({ graph, camera: initialCamera, layoutSize: size });
   }, [phase, size, navigation?.layoutSize, graph, initialCamera]);
-  useLayoutEffect(() => {
-    cameraRef.current = camera;
-  }, [camera]);
   useLayoutEffect(() => {
     if (phase === "ambient" && size.width > 1) loadingFrameRef.current = { camera, canvas, size };
     else if (phase === "ready" && loadingFrameRef.current) {

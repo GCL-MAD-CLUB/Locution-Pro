@@ -8,6 +8,7 @@ import { focusedSearchHitId } from "../../../core/editor/searchFocus";
 import { semanticSortDecision } from "../../../core/editor/semanticResultSort";
 import { panelSourceTitle } from "../../../core/editor/panelSourceSelection";
 import {
+  sourceDraftIdentity,
   sourceScope,
   sourceRowId,
   sourceRowParts,
@@ -15,6 +16,7 @@ import {
   nextSourceSortDirection,
   type SourceSortDirection,
 } from "../../../core/editor/multiSource";
+import { selectionFocusForVisibleIds } from "../../../core/editor/selectionFocus";
 import {
   matchesTextSearch,
   nextSearchMatchIndex,
@@ -843,7 +845,9 @@ export function SubtitlePanel() {
   );
   const multipleSources = selectedSources.length > 1;
   const multipleSubtitleSources = sources.length > 1;
-  const trackContext = sourceScope(sources.map((source) => source.context));
+  const sourceContexts = sources.map((source) => source.context);
+  const trackContext = sourceScope(sourceContexts);
+  const draftIdentity = sourceDraftIdentity(sourceContexts);
   const {
     projects,
     projectId,
@@ -1463,7 +1467,9 @@ export function SubtitlePanel() {
     rowVirtualizer.measure();
   }, [rowVirtualizer, subtitleRowHeight]);
 
-  useEffect(() => {
+  const [seenDraftIdentity, setSeenDraftIdentity] = useState(draftIdentity);
+  if (seenDraftIdentity !== draftIdentity) {
+    setSeenDraftIdentity(draftIdentity);
     sprayGestureCleanupRef.current?.();
     setSprayActive(false);
     setContextMenu(null);
@@ -1473,15 +1479,16 @@ export function SubtitlePanel() {
     setFooterSprayMenu(null);
     setFooterOptionsMenu(null);
     setCueSort(defaultSubtitleSort);
-  }, [trackContext]);
+  }
 
-  useEffect(() => {
-    if (sprayActive) {
-      return;
+  const [sprayWasActive, setSprayWasActive] = useState(sprayActive);
+  if (sprayWasActive !== sprayActive) {
+    setSprayWasActive(sprayActive);
+    if (!sprayActive) {
+      sprayGestureCleanupRef.current?.();
+      setFooterSprayMenu(null);
     }
-    sprayGestureCleanupRef.current?.();
-    setFooterSprayMenu(null);
-  }, [sprayActive]);
+  }
 
   useCloseOnOutsidePointer(
     Boolean(contextMenu) || Boolean(annotationMenu),
@@ -1514,21 +1521,17 @@ export function SubtitlePanel() {
     setFooterOptionsMenu(null);
   });
 
-  useEffect(() => {
-    const visibleSelectedIds = sortedCues
-      .map((cue) => cue.id)
-      .filter((cueId) => selectedCueIds.has(cueId));
-    if (visibleSelectedIds.length === 0) {
-      selectionAnchorRef.current = null;
-      selectionFocusRef.current = null;
-      return;
-    }
-    if (!selectionFocusRef.current || !visibleSelectedIds.includes(selectionFocusRef.current)) {
-      const fallbackId = visibleSelectedIds.at(-1)!;
-      selectionFocusRef.current = fallbackId;
-      selectionAnchorRef.current = fallbackId;
-    }
-  }, [selectedCueIds, sortedCues]);
+  const visibleSelectedIds = sortedCues
+    .map((cue) => cue.id)
+    .filter((cueId) => selectedCueIds.has(cueId));
+  const nextSelectionFocus = selectionFocusForVisibleIds(
+    visibleSelectedIds,
+    selectionFocusRef.current,
+  );
+  if (nextSelectionFocus) {
+    selectionFocusRef.current = nextSelectionFocus.focusId;
+    selectionAnchorRef.current = nextSelectionFocus.anchorId;
+  }
 
   useEffect(() => {
     const panel = panelRef.current;
@@ -2731,7 +2734,7 @@ export function SubtitlePanel() {
           videoPath={thumbnailVideoPath}
           previewVideoPath={thumbnailPreviewVideoPath}
           frameRate={frameRate}
-          resetKey={trackContext}
+          resetKey={draftIdentity}
           headerRef={tableHeaderRef}
           scrollRef={listRef}
           onScroll={syncTableHeaderScroll}

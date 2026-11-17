@@ -110,6 +110,15 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
   const [transcodeWindowMenuOpen, setTranscodeWindowMenuOpen] = useState(false);
   const [preferencesMenuOpen, setPreferencesMenuOpen] = useState(false);
   const menuRef = useRef<HTMLElement>(null);
+  if (!fileMenuOpen && (recentProjectMenuOpen || recentImportMenuOpen)) {
+    setRecentProjectMenuOpen(false);
+    setRecentImportMenuOpen(false);
+  }
+  if (!editMenuOpen && preferencesMenuOpen) setPreferencesMenuOpen(false);
+  if (!windowMenuOpen && (projectWindowMenuOpen || transcodeWindowMenuOpen)) {
+    setProjectWindowMenuOpen(false);
+    setTranscodeWindowMenuOpen(false);
+  }
 
   useEffect(() => {
     if (!fileMenuOpen && !editMenuOpen && !windowMenuOpen && !betaMenuOpen && !helpMenuOpen) {
@@ -141,24 +150,6 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [editMenuOpen, fileMenuOpen, helpMenuOpen, windowMenuOpen, betaMenuOpen]);
-
-  useEffect(() => {
-    if (!fileMenuOpen) {
-      setRecentProjectMenuOpen(false);
-      setRecentImportMenuOpen(false);
-    }
-  }, [fileMenuOpen]);
-
-  useEffect(() => {
-    if (!editMenuOpen) setPreferencesMenuOpen(false);
-  }, [editMenuOpen]);
-
-  useEffect(() => {
-    if (!windowMenuOpen) {
-      setProjectWindowMenuOpen(false);
-      setTranscodeWindowMenuOpen(false);
-    }
-  }, [windowMenuOpen]);
 
   const select = (handler: () => void | Promise<void>) => async () => {
     setFileMenuOpen(false);

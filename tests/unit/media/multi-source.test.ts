@@ -9,6 +9,8 @@ import {
   sortBySource,
   nextSourceSortDirection,
   sourceContexts,
+  sourceDraftIdentity,
+  sourceMediaIdentity,
   sourceRowId,
   sourceRowParts,
   sourceScope,
@@ -292,4 +294,17 @@ test("keyword deletion updates the project catalog and every existing reference"
   }));
   assert.deepEqual(next.b.shotAnnotations["shot-1"].keywordIds, []);
   assert.deepEqual(scopedStoryboard(next, "b").keywordNodes, []);
+});
+
+test("draft identity ignores an analysis fingerprint and stays stable across source order", () => {
+  assert.equal(sourceMediaIdentity("video:asset:fingerprint"), "video:asset");
+  assert.equal(sourceMediaIdentity("video:asset:finger:print"), "video:asset");
+  assert.equal(sourceMediaIdentity("video:asset:"), "video:asset");
+  assert.equal(sourceMediaIdentity("video:asset"), "video:asset");
+  const before = sourceDraftIdentity(["video-b:asset-b:old", "video-a:asset-a:old"]);
+  const afterFingerprint = sourceDraftIdentity(["video-a:asset-a:new", "video-b:asset-b:old"]);
+  assert.equal(before, afterFingerprint);
+  assert.equal(before, "video-a:asset-a\nvideo-b:asset-b");
+  assert.notEqual(before, sourceDraftIdentity(["video-a:asset-a:old"]));
+  assert.equal(sourceDraftIdentity([]), "");
 });

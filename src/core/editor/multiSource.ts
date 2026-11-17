@@ -17,6 +17,21 @@ export function sourceScope(contexts: readonly string[]) {
   const unique = [...new Set(contexts)].sort();
   return unique.length === 1 ? unique[0] : scopePrefix + JSON.stringify(unique);
 }
+
+/**
+ * Video and asset from a source context (`videoId:assetId:fingerprint`).
+ * Analysis rewrites the fingerprint without changing which media the draft belongs to.
+ */
+export function sourceMediaIdentity(context: string) {
+  const videoSplit = context.indexOf(":");
+  const assetSplit = videoSplit < 0 ? -1 : context.indexOf(":", videoSplit + 1);
+  return assetSplit < 0 ? context : context.slice(0, assetSplit);
+}
+
+/** Order-independent identity of the open sources, ignoring analysis fingerprints. */
+export function sourceDraftIdentity(contexts: readonly string[]) {
+  return [...new Set(contexts.map(sourceMediaIdentity))].sort().join("\n");
+}
 export function sourceContexts(scope: string): string[] {
   return scope.startsWith(scopePrefix)
     ? JSON.parse(scope.slice(scopePrefix.length))

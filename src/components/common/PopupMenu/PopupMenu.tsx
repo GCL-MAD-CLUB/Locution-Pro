@@ -14,6 +14,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { clientError } from "../../../errors";
+import { fallbackSelectionValue } from "./selectionValue";
 import type {
   CSSProperties,
   MouseEvent as ReactMouseEvent,
@@ -41,13 +42,9 @@ export function useCloseOnOutsidePointer(
   options: UseCloseOnOutsidePointerOptions = {},
 ) {
   const onCloseRef = useRef(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
+  onCloseRef.current = onClose;
   const optionsRef = useRef(options);
-  useEffect(() => {
-    optionsRef.current = options;
-  }, [options]);
+  optionsRef.current = options;
 
   useEffect(() => {
     if (!open) {
@@ -444,16 +441,15 @@ export function PopupMenuSelectionGroup({
   }
   const [selectedValue, setSelectedValue] = useState(initialValueRef.current);
   const selectedValueRef = useRef(selectedValue);
-
-  useEffect(() => {
-    const selectedItem = items.find((item) => item.value === selectedValueRef.current);
-    if (selectedItem && !selectedItem.disabled) {
-      return;
+  const [seenItemKey, setSeenItemKey] = useState(itemKey);
+  if (seenItemKey !== itemKey) {
+    setSeenItemKey(itemKey);
+    const fallbackValue = fallbackSelectionValue(items, selectedValueRef.current);
+    if (fallbackValue !== undefined && fallbackValue !== selectedValueRef.current) {
+      selectedValueRef.current = fallbackValue;
+      setSelectedValue(fallbackValue);
     }
-    const fallbackValue = items.find((item) => !item.disabled)?.value ?? items[0]?.value ?? null;
-    selectedValueRef.current = fallbackValue;
-    setSelectedValue(fallbackValue);
-  }, [itemKey, items]);
+  }
 
   const selectValue = useCallback(
     (value: string) => {

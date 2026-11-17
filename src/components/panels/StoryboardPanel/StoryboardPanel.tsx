@@ -10,6 +10,7 @@ import { focusedSearchHitId } from "../../../core/editor/searchFocus";
 import { semanticSortDecision } from "../../../core/editor/semanticResultSort";
 import { panelSourceTitle } from "../../../core/editor/panelSourceSelection";
 import {
+  sourceDraftIdentity,
   sourceScope,
   sourceRowId,
   sourceRowParts,
@@ -18,6 +19,7 @@ import {
   nextSourceSortDirection,
   type SourceSortDirection,
 } from "../../../core/editor/multiSource";
+import { selectionFocusForVisibleIds } from "../../../core/editor/selectionFocus";
 import { matchesTextSearch, nextSearchMatchIndex } from "../../../core/editor/textSearch";
 import { PanelSearch, useSearchNavigation } from "../../common/PanelSearch/PanelSearch";
 import { SourceSelectionNavigation } from "../../common/PanelSearch/SourceSelectionNavigation";
@@ -1130,7 +1132,9 @@ export function StoryboardPanel() {
     previewSource,
     selection,
   } = usePanelMediaSource("storyboard");
-  const videoContext = sourceScope(sources.map((source) => source.context));
+  const sourceContexts = sources.map((source) => source.context);
+  const videoContext = sourceScope(sourceContexts);
+  const draftIdentity = sourceDraftIdentity(sourceContexts);
   const {
     mediaItems,
     mediaFolders,
@@ -1233,7 +1237,6 @@ export function StoryboardPanel() {
   const shotKeywordDragCleanupRef = useRef<(() => void) | null>(null);
   const suppressShotClickRef = useRef(false);
   const keywordResizeCleanupRef = useRef<(() => void) | null>(null);
-  const hadShotsRef = useRef(shots.length > 0);
   const [shotSort, setShotSort] = useState<StoryboardSort>(defaultStoryboardSort);
   const [gridShotSort, setGridShotSort] = useState<StoryboardSort>(defaultStoryboardGridSort);
   const [appliedSemanticVersion, setAppliedSemanticVersion] = useState(0);
@@ -2042,7 +2045,9 @@ export function StoryboardPanel() {
     }
   }, [rowVirtualizer, storyboardRowHeight, viewMode]);
 
-  useEffect(() => {
+  const [seenDraftIdentity, setSeenDraftIdentity] = useState(draftIdentity);
+  if (seenDraftIdentity !== draftIdentity) {
+    setSeenDraftIdentity(draftIdentity);
     sprayGestureCleanupRef.current?.();
     setSprayActive(false);
     setContextMenu(null);
@@ -2052,7 +2057,7 @@ export function StoryboardPanel() {
     setFooterSprayMenu(null);
     setFooterOptionsMenu(null);
     setGridShotSort(defaultStoryboardGridSort);
-  }, [videoContext]);
+  }
 
   useEffect(() => {
     if (!contextMenu) {
@@ -2196,7 +2201,9 @@ export function StoryboardPanel() {
     };
   }, [footerOptionsMenu]);
 
-  useEffect(() => {
+  const [seenViewMode, setSeenViewMode] = useState<StoryboardViewMode | null>(null);
+  if (seenViewMode !== viewMode) {
+    setSeenViewMode(viewMode);
     setFooterSortMenu(null);
     setFooterSprayMenu(null);
     // Graph nodes have no annotation columns, so expose these controls on entry.
@@ -2209,39 +2216,35 @@ export function StoryboardPanel() {
         colorLabel: true,
       }));
     }
-  }, [viewMode]);
+  }
 
-  useEffect(() => {
-    if (sprayActive) {
-      return;
+  const [sprayWasActive, setSprayWasActive] = useState(sprayActive);
+  if (sprayWasActive !== sprayActive) {
+    setSprayWasActive(sprayActive);
+    if (!sprayActive) {
+      sprayGestureCleanupRef.current?.();
+      setFooterSprayMenu(null);
     }
-    sprayGestureCleanupRef.current?.();
-    setFooterSprayMenu(null);
-  }, [sprayActive]);
+  }
 
-  useEffect(() => {
-    const hasShots = displayShots.length > 0;
-    if (!hadShotsRef.current && hasShots) {
-      setShotSort(defaultStoryboardSort);
-    }
-    hadShotsRef.current = hasShots;
-  }, [displayShots.length]);
+  const hasShots = displayShots.length > 0;
+  const [sawShots, setSawShots] = useState(() => shots.length > 0);
+  if (sawShots !== hasShots) {
+    setSawShots(hasShots);
+    if (!sawShots && hasShots) setShotSort(defaultStoryboardSort);
+  }
 
-  useEffect(() => {
-    const visibleSelectedIds = sortedShots
-      .map((shot) => shot.id)
-      .filter((shotId) => selectedShotIds.has(shotId));
-    if (visibleSelectedIds.length === 0) {
-      selectionAnchorRef.current = null;
-      selectionFocusRef.current = null;
-      return;
-    }
-    if (!selectionFocusRef.current || !visibleSelectedIds.includes(selectionFocusRef.current)) {
-      const fallbackId = visibleSelectedIds.at(-1)!;
-      selectionFocusRef.current = fallbackId;
-      selectionAnchorRef.current = fallbackId;
-    }
-  }, [selectedShotIds, sortedShots]);
+  const visibleSelectedIds = sortedShots
+    .map((shot) => shot.id)
+    .filter((shotId) => selectedShotIds.has(shotId));
+  const nextSelectionFocus = selectionFocusForVisibleIds(
+    visibleSelectedIds,
+    selectionFocusRef.current,
+  );
+  if (nextSelectionFocus) {
+    selectionFocusRef.current = nextSelectionFocus.focusId;
+    selectionAnchorRef.current = nextSelectionFocus.anchorId;
+  }
 
   useEffect(() => {
     const panel = panelRef.current;
@@ -3919,7 +3922,7 @@ export function StoryboardPanel() {
               videoPath={thumbnailVideoPath}
               previewVideoPath={thumbnailPreviewVideoPath}
               frameRate={frameRate}
-              resetKey={videoContext}
+              resetKey={draftIdentity}
               headerRef={tableHeaderRef}
               scrollRef={listRef}
               onScroll={syncTableHeaderScroll}
@@ -4031,7 +4034,7 @@ export function StoryboardPanel() {
           active={isEditAuthority && keywordPanelOpen && !sprayActive}
           draggedKeywordHoverId={shotKeywordDragPreview?.hoveredKeywordId ?? null}
           shotIds={keywordPanelShotIds}
-          key={videoContext}
+          draftIdentity={draftIdentity}
           onSetQuickKeyword={setSprayKeywordInput}
           quickKeywordLabel={sprayKeywordInput}
         />

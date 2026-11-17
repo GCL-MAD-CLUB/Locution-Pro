@@ -109,7 +109,7 @@ export function AssetLibrary() {
   const home = useAssetLibraryHome();
   const { clipboard, cut } = useAssetLibraryClipboard();
   const commands = useMemo(() => assetLibraryCommands(assetLibraryUpdated), [assetLibraryUpdated]);
-  const [columns, setColumns] = useState(1);
+  const iconColumnsRef = useRef(1);
   const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
   const [dragPreview, setDragPreview] = useState<AssetLibraryDragPreview | null>(null);
   // Shots and subtitles dragged in from their panels light up the spot they would land in.
@@ -420,7 +420,7 @@ export function AssetLibrary() {
     const command = assetLibraryKeyCommand(event, {
       itemCount: nodes.length,
       focusIndex,
-      iconColumns: layout.mode === "icons" && !showHome ? columns : null,
+      iconColumns: layout.mode === "icons" && !showHome ? iconColumnsRef.current : null,
       groupStarts: groups?.flatMap((group) => (group.collapsed ? [] : [group.start])),
       hasSelection: view.selectedKeys.size > 0,
     });
@@ -739,7 +739,7 @@ export function AssetLibrary() {
             onRename={renameNode}
             onCancelRename={() => view.setRenamingKey(null)}
             onContextMenu={openContentMenu}
-            onColumnsChange={setColumns}
+            columnsRef={iconColumnsRef}
             onZoom={zoom}
           />
         )}

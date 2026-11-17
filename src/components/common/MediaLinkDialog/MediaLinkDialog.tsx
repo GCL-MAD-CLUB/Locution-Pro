@@ -1,5 +1,5 @@
 ﻿import { open as openDialog, type DialogFilter } from "@tauri-apps/plugin-dialog";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { invokeCommand, runOperation } from "../../../errors";
 import { createFfmpegTaskId } from "../../../platform/tauri/ffmpegProgress";
 import { formatMonitorTime } from "../../../core/editor/time";
@@ -190,8 +190,9 @@ export function MediaLinkDialog({ candidates, mode, onAttach, onCancel }: MediaL
   const [suggestedBrowserDirectory, setSuggestedBrowserDirectory] = useState("");
   const [suggestedBrowserPaths, setSuggestedBrowserPaths] = useState<string[]>([]);
   const suggestionRequestRef = useRef(0);
-
-  useEffect(() => {
+  const [seenCandidateKey, setSeenCandidateKey] = useState(candidateKey);
+  if (seenCandidateKey !== candidateKey) {
+    setSeenCandidateKey(candidateKey);
     setCurrentId(candidates[0]?.id ?? "");
     setProcessedIds(new Set());
     setSkippedIds(new Set());
@@ -201,7 +202,7 @@ export function MediaLinkDialog({ candidates, mode, onAttach, onCancel }: MediaL
     setSuggestedBrowserDirectory("");
     setSuggestedBrowserPaths([]);
     suggestionRequestRef.current += 1;
-  }, [candidateKey]);
+  }
 
   const current =
     candidates.find((candidate) => candidate.id === currentId) ??

@@ -219,11 +219,14 @@ export function SourceMonitor() {
   const focusedPanelId = usePanelManagerState((state) => state.focusedPanelId);
   const identity = useStableIdentity("source-monitor", panelInstanceId);
   const [lastFocusedAt, setLastFocusedAt] = useState(panelInstanceId === "source" ? 1 : 0);
-  useEffect(() => {
-    if (focusedPanelId === panelInstanceId) {
-      setLastFocusedAt(Date.now());
-    }
-  }, [focusedPanelId, panelInstanceId]);
+  const [seenFocusedPanelId, setSeenFocusedPanelId] = useState<string | null>(null);
+  const focusedHere = focusedPanelId === panelInstanceId;
+  if (focusedHere && seenFocusedPanelId !== focusedPanelId) {
+    setSeenFocusedPanelId(focusedPanelId);
+    setLastFocusedAt(Date.now());
+  } else if (!focusedHere && seenFocusedPanelId !== null) {
+    setSeenFocusedPanelId(null);
+  }
   const {
     project,
     projectId,
@@ -555,21 +558,25 @@ export function SourceMonitor() {
     return "handled";
   });
 
-  useLayoutEffect(() => {
-    // Source changes invalidate the snapshot; a later hover-end must not resume another source.
+  // Source changes invalidate the snapshot; a later hover-end must not resume another source.
+  const [seenHoverMediaKey, setSeenHoverMediaKey] = useState(mediaKey);
+  if (seenHoverMediaKey !== mediaKey) {
+    setSeenHoverMediaKey(mediaKey);
     hoverPreviewRestoreRef.current = null;
     setHoverPreview(null);
-  }, [mediaKey]);
+  }
+  const [clearedHoverForPlayback, setClearedHoverForPlayback] = useState(false);
+  if (isPlaying && !clearedHoverForPlayback) {
+    setClearedHoverForPlayback(true);
+    hoverPreviewRestoreRef.current = null;
+    setHoverPreview(null);
+  } else if (!isPlaying && clearedHoverForPlayback) {
+    setClearedHoverForPlayback(false);
+  }
 
   useLayoutEffect(() => {
     if (!panelActive) finishHoverPreview();
   }, [panelActive]);
-  useLayoutEffect(() => {
-    if (isPlaying) {
-      hoverPreviewRestoreRef.current = null;
-      setHoverPreview(null);
-    }
-  }, [isPlaying]);
   const videoContext = storyboardVideoContext(activeVideoId, project);
   const storyboard = storyboards[videoContext];
   const canAddCut = hasMedia && canAddStoryboardCut(storyboard, currentFrame, durationFrames);

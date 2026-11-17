@@ -14,7 +14,6 @@ import {
   formatTimecode,
   outputSummary,
   parseTimecode,
-  resolveOutputDirectory,
   resolvePresetSettings,
   sourceSummary,
   transcodeQueueStore,
@@ -187,11 +186,6 @@ export function TranscodeSettingsDialog({
   }
 
   const estimated = estimatedOutputBytes(settings, source.info);
-  const mediaBinDirectory = resolveOutputDirectory(
-    { kind: "mediaBin" },
-    source.path,
-    projectDirectory,
-  );
   const tabProps = { settings, capabilities, sourceInfo: source.info, update };
 
   return (
@@ -233,7 +227,6 @@ export function TranscodeSettingsDialog({
                 <button
                   type="button"
                   className="toolbar-button"
-                  title="保存为预设"
                   onClick={() => {
                     setSavingPreset(true);
                     setNewPresetName(presetId ? `${presetName} 副本` : "");
@@ -300,12 +293,8 @@ export function TranscodeSettingsDialog({
                 <span className="transcode-hint">.{settings.extension}</span>
               </div>
             </ExportField>
-            <ExportField label="输出位置" stacked>
-              <TranscodeDestinationField
-                destination={destination}
-                mediaBinDirectory={mediaBinDirectory}
-                onChange={setDestination}
-              />
+            <ExportField label="输出位置">
+              <TranscodeDestinationField destination={destination} onChange={setDestination} />
             </ExportField>
             <div className="export-settings-checks transcode-stream-checks">
               <TranscodeCheck

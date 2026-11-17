@@ -218,9 +218,7 @@ export function TranscodePresetBrowser() {
                     role="treeitem"
                     aria-selected={selected === preset.id}
                     className={`transcode-preset-row ${selected === preset.id ? "selected" : ""} ${usable ? "" : "is-unavailable"}`}
-                    title={
-                      usable ? "双击应用到所选输出" : "当前 FFmpeg 不支持此预设所需的格式或编码器"
-                    }
+                    title={usable ? undefined : "当前 FFmpeg 不支持此预设所需的格式或编码器"}
                     draggable={usable}
                     onDragStart={(event) => {
                       event.dataTransfer.setData(

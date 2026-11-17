@@ -8,6 +8,8 @@ type CatalogModule = typeof import("../../../src/systems/TranscodeSystem/transco
 type OutputModule = typeof import("../../../src/systems/TranscodeSystem/transcodeOutput.ts");
 type PresetsModule = typeof import("../../../src/systems/TranscodeSystem/transcodePresets.ts");
 type QueueModule = typeof import("../../../src/systems/TranscodeSystem/transcodeQueueState.ts");
+type NavigationModule =
+  typeof import("../../../src/systems/TranscodeSystem/transcodeQueueNavigation.ts");
 type Capabilities =
   import("../../../src/systems/TranscodeSystem/transcodeTypes.ts").TranscodeCapabilities;
 
@@ -160,20 +162,105 @@ test("queued outputs require a destination and keep it for the next sources", ()
   assert.equal(output.outputBlocker(first.outputs[0]), "请选择输出位置");
 
   const ids = store.getState().sources.flatMap((source) => source.outputs.map((item) => item.id));
-  store.getState().setDestination(ids, { kind: "mediaBin" });
+  store.getState().setDestination(ids, { kind: "mediaBin", folderId: null });
   assert.ok(
     store.getState().sources.every((source) => output.outputBlocker(source.outputs[0]) === null),
   );
   const [next] = store.getState().addSources(["/media/c.mp4"]);
   assert.equal(next.outputs[0].destination?.kind, "mediaBin");
   assert.equal(
-    output.resolveOutputDirectory({ kind: "mediaBin" }, "/media/c.mp4", "/projects/show"),
+    output.resolveOutputDirectory(
+      { kind: "mediaBin", folderId: null },
+      "/media/c.mp4",
+      "/projects/show",
+    ),
     "/projects/show/encoder",
   );
   assert.equal(
-    output.resolveOutputDirectory({ kind: "mediaBin" }, "/media/c.mp4", ""),
+    output.resolveOutputDirectory({ kind: "mediaBin", folderId: null }, "/media/c.mp4", ""),
     "/media/encoder",
   );
+});
+
+test("media bin destinations name any bin folder and restore older configs at the top level", () => {
+  const { queue, output } = loadSystem();
+  const folders = [
+    { id: "b", name: "转码", parent_id: "a" },
+    { id: "a", name: "素材", parent_id: null },
+    { id: "c", name: "孤立", parent_id: "gone" },
+  ];
+  assert.equal(
+    JSON.stringify(
+      output.mediaBinFolderOutline(folders).map(({ folder, depth }) => [folder.id, depth]),
+    ),
+    '[["a",0],["b",1],["c",0]]',
+  );
+  assert.equal(
+    output.destinationLabel({ kind: "mediaBin", folderId: "b" }, folders),
+    "媒体箱 / 素材 / 转码",
+  );
+  assert.equal(output.destinationLabel({ kind: "mediaBin", folderId: null }, folders), "媒体箱");
+  assert.equal(output.destinationLabel({ kind: "folder", directory: "/out" }, folders), "/out");
+  assert.equal(output.destinationLabel(null, folders), "未设置");
+
+  const store = queue.transcodeQueueStore;
+  store
+    .getState()
+    .addSources(["/media/a.mkv"], { destination: { kind: "mediaBin", folderId: "b" } });
+  const snapshot = JSON.parse(JSON.stringify(queue.transcodeConfigSnapshot(store.getState())));
+  const fresh = loadSystem().queue.transcodeQueueStore;
+  fresh.getState().restore(snapshot);
+  assert.equal(
+    JSON.stringify(fresh.getState().sources[0].outputs[0].destination),
+    JSON.stringify({ kind: "mediaBin", folderId: "b" }),
+  );
+
+  // Before bin folders could be chosen, a media bin output carried no folder.
+  delete snapshot.queue[0].outputs[0].destination.folderId;
+  const legacy = loadSystem().queue.transcodeQueueStore;
+  legacy.getState().restore(snapshot);
+  assert.equal(
+    JSON.stringify(legacy.getState().sources[0].outputs[0].destination),
+    JSON.stringify({ kind: "mediaBin", folderId: null }),
+  );
+});
+
+test("queue rows select like a file list from the keyboard and the pointer", () => {
+  const navigation = load<NavigationModule>(`${root}transcodeQueueNavigation.ts`, {}, globals);
+  const rows = ["s1", "o1", "o2", "s2", "o3"];
+  const empty = { selectedIds: [], anchorId: null, focusId: null };
+
+  const down = navigation.moveQueueCursor(rows, empty, "down");
+  assert.equal(JSON.stringify(down), '{"selectedIds":["s1"],"anchorId":"s1","focusId":"s1"}');
+  assert.equal(navigation.moveQueueCursor(rows, empty, "up").focusId, "o3");
+
+  const extended = navigation.moveQueueCursor(
+    rows,
+    navigation.moveQueueCursor(rows, down, "down", { extend: true }),
+    "down",
+    { extend: true },
+  );
+  assert.equal(JSON.stringify(extended.selectedIds), '["s1","o1","o2"]');
+  assert.equal(extended.anchorId, "s1");
+
+  const moved = navigation.moveQueueCursor(rows, extended, "end", { toggle: true });
+  assert.equal(moved.focusId, "o3");
+  assert.equal(
+    JSON.stringify(moved.selectedIds),
+    '["s1","o1","o2"]',
+    "Ctrl moves without selecting",
+  );
+  const toggled = navigation.toggleQueueFocus(moved);
+  assert.equal(JSON.stringify(toggled.selectedIds), '["s1","o1","o2","o3"]');
+
+  assert.equal(navigation.moveQueueCursor(rows, toggled, "pageUp").focusId, "s1");
+  assert.equal(navigation.moveQueueCursor(rows, toggled, "down").focusId, "o3", "stays at the end");
+
+  const clicked = navigation.clickQueueRow(rows, empty, "o1");
+  const range = navigation.clickQueueRow(rows, clicked, "s2", { extend: true });
+  assert.equal(JSON.stringify(range.selectedIds), '["o1","o2","s2"]');
+  const removed = navigation.clickQueueRow(rows, range, "o2", { toggle: true });
+  assert.equal(JSON.stringify(removed.selectedIds), '["o1","s2"]');
 });
 
 test("queue selection edits, duplicates and persists without runtime status", () => {

@@ -29,7 +29,7 @@ import { usePreferencesPort } from "../../../systems/PreferencesSystem";
 import { useEditCapability } from "../../../runtime/capabilities/EditCapability";
 import { useExportCapability } from "../../../runtime/capabilities/ExportCapability";
 import { useMediaSelectionCapability } from "../../../runtime/capabilities/MediaSelectionCapability";
-import { publishEvent } from "../../../runtime/events/react";
+import { publishEvent, useBroadcastEvent } from "../../../runtime/events/react";
 import { useStableIdentity } from "../../../runtime/state/react";
 import { usePanelActive, usePanelInstanceId } from "../../../runtime/systems/PanelState";
 import { invokeCommand, runOperation } from "../../../errors";
@@ -672,6 +672,31 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
       selectItems(nextSelection);
     }
   }, [scopedEntryIds, selectItems, selectedIds]);
+
+  // Other pages (the transcode queue) ask to show the items of finished files.
+  useBroadcastEvent(lifetime, identity, "media.reveal.requested", ({ payload }) => {
+    const paths = new Set(payload.paths);
+    const items = scopedItems.filter((item) => paths.has(item.path));
+    if (items.length === 0) return "ignored";
+    const ancestors = new Set<string>();
+    for (const item of items) {
+      let folderId = item.bin_id;
+      while (folderId && scopedFolderIds.has(folderId) && !ancestors.has(folderId)) {
+        ancestors.add(folderId);
+        folderId = mediaFolders.find((folder) => folder.id === folderId)?.parent_id ?? null;
+      }
+    }
+    setQuery("");
+    setExpandedFolderIds((current) => new Set([...current, ...ancestors]));
+    setCurrentFolderId(items[0].bin_id ?? rootFolderId);
+    selectItems(items.map((item) => item.id));
+    requestAnimationFrame(() => {
+      panelRef.current
+        ?.querySelector(`[data-media-entry-id="${CSS.escape(items[0].id)}"]`)
+        ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+    return "handled";
+  });
 
   function focusMediaBinEntry(entryId: string) {
     const folder = scopedFolders.find((candidate) => candidate.id === entryId);

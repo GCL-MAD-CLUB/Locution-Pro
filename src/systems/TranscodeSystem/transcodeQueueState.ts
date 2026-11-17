@@ -207,7 +207,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function restoreDestination(value: unknown): TranscodeDestination | null {
   if (!isRecord(value)) return null;
-  if (value.kind === "mediaBin") return { kind: "mediaBin" };
+  // Configs saved before media bin folders could be chosen have no folderId;
+  // those outputs go to the top level of the media bin.
+  if (value.kind === "mediaBin")
+    return {
+      kind: "mediaBin",
+      folderId: typeof value.folderId === "string" ? value.folderId : null,
+    };
   if (value.kind === "folder" && typeof value.directory === "string")
     return { kind: "folder", directory: value.directory };
   return null;

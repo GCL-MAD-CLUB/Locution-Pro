@@ -54,7 +54,6 @@ import { exportWorkspaceStore, useExportWorkspaceState } from "./systems/ExportS
 import { ImportWorkspace } from "./components/panels/ImportWorkspace";
 import { TranscodeWorkspace } from "./components/panels/TranscodeWorkspace";
 import {
-  encoderBinName,
   enqueueTranscodeSources,
   parentDirectory,
   transcodeQueueStore,
@@ -100,7 +99,6 @@ import {
 import { normalizeError } from "./errors/runtime";
 import {
   captureProjectAutoSave,
-  defaultMediaBinFolderColor,
   getProjectWorkspaceSnapshot,
   loadProjectStates,
   mediaDisplayName,
@@ -387,7 +385,6 @@ function AppContent() {
     mediaProjectsAdded,
     mediaItemsAdded,
     mediaItemsMovedToFolder,
-    mediaFolderAdded,
     messagePublished,
     warningsReplaced,
     warningsAppended,
@@ -418,7 +415,6 @@ function AppContent() {
       "mediaProjectsAdded",
       "mediaItemsAdded",
       "mediaItemsMovedToFolder",
-      "mediaFolderAdded",
       "messagePublished",
       "warningsReplaced",
       "warningsAppended",
@@ -1512,28 +1508,17 @@ function AppContent() {
     return "handled" as const;
   });
 
-  /** Files finished outputs into the project's root `encoder` media bin. */
+  /** Files finished outputs into the media bin folder chosen as their destination. */
   useBroadcastEvent(lifetime, identity, "transcode.output.completed", async ({ payload }) => {
     if (payload.paths.length === 0 || isMediaBinReadOnly) {
       return "handled" as const;
     }
-    let folder = mediaFolders.find(
-      (candidate) =>
-        !candidate.parent_id &&
-        candidate.name.toLocaleLowerCase() === encoderBinName.toLocaleLowerCase(),
-    );
-    if (!folder) {
-      folder = {
-        id: `media-bin:${crypto.randomUUID()}`,
-        name: encoderBinName,
-        parent_id: null,
-        color: defaultMediaBinFolderColor(),
-        hidden: false,
-      };
-      mediaFolderAdded(folder);
-    }
+    // A folder deleted while the output was encoding falls back to the top level.
+    const folderId = mediaFolders.some((folder) => folder.id === payload.folderId)
+      ? payload.folderId
+      : null;
     // Encoder outputs often carry no subtitles; that is not worth a notice here.
-    await importMedia(payload.paths, folder.id, { quietWarnings: [subtitleStreamNotFoundCode] });
+    await importMedia(payload.paths, folderId, { quietWarnings: [subtitleStreamNotFoundCode] });
     return "handled" as const;
   });
 

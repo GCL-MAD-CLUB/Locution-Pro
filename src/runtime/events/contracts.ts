@@ -13,8 +13,10 @@ export interface ApplicationEventMap {
   "transcode.enqueue.requested": { paths: string[] };
   /** Sends export-page clips to the transcode queue with matching settings, one output per clip. */
   "transcode.export.requested": { source: ExportSource; settings: ExportSettings };
-  /** Finished outputs that belong in the project's `encoder` media bin. */
-  "transcode.output.completed": { paths: string[] };
+  /** Finished outputs to import into a media bin folder (null is the top level). */
+  "transcode.output.completed": { paths: string[]; folderId: string | null };
+  /** Selects the media bin items of these files and scrolls them into view. */
+  "media.reveal.requested": { paths: string[] };
   "edit.copy.requested": Record<string, never>;
   "edit.paste.requested": Record<string, never>;
   "edit.clear.requested": Record<string, never>;

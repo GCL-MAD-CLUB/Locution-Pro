@@ -74,9 +74,7 @@ export function TranscodeVideoTab({
         />
       </ExportField>
       {copy ? (
-        <p className="transcode-note">
-          流复制直接保留源视频流，速度最快且不损失画质；缩放、效果与录制字幕需要重新编码。
-        </p>
+        <p className="transcode-note">流复制不重新编码，缩放、效果与录制字幕不可用。</p>
       ) : (
         <>
           <ExportField label="宽度">

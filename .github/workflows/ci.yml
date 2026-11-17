@@ -46,6 +46,9 @@ jobs:
       - name: Check repository layout and script syntax
         run: npm run check:layout
 
+      - name: Lint JavaScript, TypeScript, and React
+        run: npm run lint
+
       - name: Check and package site
         run: npm run site:build
 

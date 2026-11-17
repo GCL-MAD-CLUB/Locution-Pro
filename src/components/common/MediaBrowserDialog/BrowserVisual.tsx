@@ -1,7 +1,8 @@
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { useRef, useState } from "react";
 import { File, Folder } from "lucide-react";
-import { invokeCommand, runOperation } from "../../../errors";
+import { captureOperationError, invokeCommand, runOperation } from "../../../errors";
+import { createLatestPreview, previewTimeUs } from "../../../application/media/latestPreview";
 import { createFfmpegTaskId } from "../../../platform/tauri/ffmpegProgress";
 
 let active = 0;
@@ -90,10 +91,8 @@ export function BrowserVisual({
   const [progress, setProgress] = useState<number | null>(null);
   const [duration, setDuration] = useState(0);
   const hoverTimeRef = useRef<number | null>(null);
-  hoverTimeRef.current =
-    progress === null
-      ? null
-      : Math.min(Math.round(duration * progress), Math.max(0, duration - 40_000));
+  const previewRequest = useRef<{ request(timeUs: number): void } | null>(null);
+  hoverTimeRef.current = previewTimeUs(duration, progress, 40_000);
   lifetime.afterCommit(() => {
     if (progress === null || !duration || !preview || !visible) {
       setFrame("");
@@ -101,36 +100,35 @@ export function BrowserVisual({
     }
     let live = true;
     let url = "";
-    let timer = 0;
-    let previousTime = -1;
-    async function update() {
-      const timeUs = hoverTimeRef.current;
-      if (!live || timeUs === null) return;
-      if (Math.abs(timeUs - previousTime) >= 40_000 || previousTime < 0) {
-        previousTime = timeUs;
-        await queued(async () => {
+    const request = createLatestPreview(
+      (timeUs: number) =>
+        queued(async () => {
           if (!live) return;
-          const outcome = await runOperation("thumbnail.video", () =>
+          return runOperation("thumbnail.video", () =>
             invokeCommand<number[]>("media_browser_frame", { path, timeUs }),
           );
-          if (live && outcome.status === "success") {
-            const next = URL.createObjectURL(
-              new Blob([new Uint8Array(outcome.value)], { type: "image/jpeg" }),
-            );
-            const old = url;
-            url = next;
-            setFrame(next);
-            URL.revokeObjectURL(old);
-          }
-        });
-      }
-      if (live) timer = window.setTimeout(() => void update(), 70);
-    }
-    void update();
+        }),
+      (outcome) => {
+        if (outcome?.status === "success") {
+          const next = URL.createObjectURL(
+            new Blob([new Uint8Array(outcome.value)], { type: "image/jpeg" }),
+          );
+          const old = url;
+          url = next;
+          setFrame(next);
+          URL.revokeObjectURL(old);
+        }
+      },
+      (error) => captureOperationError("thumbnail.video", error),
+    );
+    previewRequest.current = request;
+    if (hoverTimeRef.current !== null) request.request(hoverTimeRef.current);
     return () => {
       live = false;
-      window.clearTimeout(timer);
+      request.dispose();
+      previewRequest.current = null;
       URL.revokeObjectURL(url);
+      setFrame("");
     };
   }, [progress !== null, duration, path, preview, visible]);
   const isVideo =
@@ -186,7 +184,11 @@ export function BrowserVisual({
       onPointerMove={(event) => {
         if (!isVideo || event.buttons) return;
         const rect = event.currentTarget.getBoundingClientRect();
-        setProgress(Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)));
+        const next = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+        const time = previewTimeUs(duration, next, 40_000);
+        if (time !== null && time !== hoverTimeRef.current) previewRequest.current?.request(time);
+        hoverTimeRef.current = time;
+        setProgress(next);
       }}
       onPointerLeave={() => setProgress(null)}
     >

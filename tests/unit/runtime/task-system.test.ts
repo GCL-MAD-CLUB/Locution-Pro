@@ -340,6 +340,31 @@ test("a failed running cancel rejects every waiter and a real retry can run", as
   handle.remove();
 });
 
+test("unknown totals show indeterminate progress without inventing a percentage", async () => {
+  const system = taskSystem();
+  const handle = await system.createTaskProgress({
+    operation: "storyboard.semanticSearch",
+    label: "Loading model",
+    current: 0,
+    total: 0,
+  });
+  function descendants(value: unknown): { props: Record<string, unknown> }[] {
+    if (Array.isArray(value)) return value.flatMap(descendants);
+    if (!value || typeof value !== "object" || !("props" in value)) return [];
+    const element = value as { props: Record<string, unknown> };
+    return [element, ...descendants(element.props.children)];
+  }
+  const elements = descendants(system.TaskProgress({ children: null }));
+  const track = elements.find((element) => element.props.role === "progressbar");
+  assert.equal(track?.props["aria-label"], "Loading model");
+  assert.equal(track?.props["aria-valuenow"], undefined);
+  assert.ok(
+    elements.some((element) => element.props.className === "topbar-progress-fill is-indeterminate"),
+  );
+  assert.ok(!elements.some((element) => String(element.props.title).includes("0%")));
+  handle.remove();
+});
+
 test("a cancel that finds the task already finished resolves every waiter", async () => {
   const system = taskSystem();
   const handle = await system.createTaskProgress(

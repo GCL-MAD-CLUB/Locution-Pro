@@ -56,6 +56,27 @@
   transition: width var(--duration-progress) linear;
 }
 
+.topbar-progress-fill.is-indeterminate {
+  width: 35%;
+  animation: task-progress-pending 1.2s linear infinite;
+}
+
+@keyframes task-progress-pending {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(286%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar-progress-fill.is-indeterminate {
+    animation: none;
+    transform: translateX(93%);
+  }
+}
+
 .topbar-progress-cancel {
   display: grid;
   flex: 0 0 var(--task-progress-height);

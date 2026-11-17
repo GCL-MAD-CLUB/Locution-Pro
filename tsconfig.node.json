@@ -7,5 +7,11 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["scripts/**/*.ts", "tests/unit/**/*.ts", "tests/integration/**/*.ts"]
+  "include": [
+    "scripts/**/*.ts",
+    "tooling/**/*.ts",
+    "eslint.config.ts",
+    "tests/unit/**/*.ts",
+    "tests/integration/**/*.ts"
+  ]
 }

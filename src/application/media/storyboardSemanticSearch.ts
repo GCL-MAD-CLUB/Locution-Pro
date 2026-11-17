@@ -106,22 +106,13 @@ export function initializeStoryboardSemanticSearch(): Promise<boolean> {
       operation: "storyboard.semanticSearch",
       label: "正在初始化语义检索...",
       current: 0,
-      total: 1,
+      total: 0,
     });
-    let timer: ReturnType<typeof setInterval> | undefined;
     try {
       if (task.cancelled) return false;
-      let percent = 0;
-      timer = setInterval(() => {
-        // Estimated loading feedback; reserve completion for the native result.
-        if (percent >= 95) return;
-        percent = percent < 70 ? Math.min(70, percent + 15) : Math.min(95, percent + 5);
-        task.update({ current: percent / 100 });
-      }, 1000);
       await invokeCommand("initialize_storyboard_semantic_search");
       return true;
     } finally {
-      if (timer !== undefined) clearInterval(timer);
       task.remove();
     }
   })().then(

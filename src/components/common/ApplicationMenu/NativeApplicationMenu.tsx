@@ -50,17 +50,20 @@ export function NativeApplicationMenu({ model }: NativeApplicationMenuProps) {
   // Read the active element once focus settles: when the window resigns key,
   // WebKit sends focusout but the field remains the document's active element.
   lifetime.afterCommit(() => {
-    let pending: number | undefined;
+    let pending = false;
+    let disposed = false;
     const update = () => {
-      window.clearTimeout(pending);
-      pending = window.setTimeout(() =>
-        setEditingText(isTextEditingElement(document.activeElement)),
-      );
+      if (pending) return;
+      pending = true;
+      queueMicrotask(() => {
+        pending = false;
+        if (!disposed) setEditingText(isTextEditingElement(document.activeElement));
+      });
     };
     document.addEventListener("focusin", update);
     document.addEventListener("focusout", update);
     return () => {
-      window.clearTimeout(pending);
+      disposed = true;
       document.removeEventListener("focusin", update);
       document.removeEventListener("focusout", update);
     };

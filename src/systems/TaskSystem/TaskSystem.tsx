@@ -415,15 +415,29 @@ export function TaskProgress({ children }: TaskProgressProps) {
       <>
         <div
           className="topbar-progress"
-          title={`${task.label} ${task.state === "queued" ? "排队中" : `${percent}%`}`}
+          title={`${task.label} ${task.state === "queued" ? "排队中" : task.total <= 0 ? "正在处理" : `${percent}%`}`}
         >
           <span>
             {task.label}
             {task.state === "queued" ? "（排队中）" : ""}
           </span>
           <div className="topbar-progress-row">
-            <div className="topbar-progress-track">
-              <div className="topbar-progress-fill" style={{ width: `${fillPercent}%` }} />
+            <div
+              className="topbar-progress-track"
+              role="progressbar"
+              aria-label={task.label}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={task.total > 0 ? percent : undefined}
+            >
+              <div
+                className={`topbar-progress-fill${task.total <= 0 && task.state === "running" ? " is-indeterminate" : ""}`}
+                style={
+                  task.total > 0 || task.state === "queued"
+                    ? { width: `${fillPercent}%` }
+                    : undefined
+                }
+              />
             </div>
             {task.on_cancel && (
               <button
@@ -466,9 +480,21 @@ export function TaskProgress({ children }: TaskProgressProps) {
               <div
                 key={task.id}
                 className="topbar-progress-track"
-                title={`${task.label} ${task.state === "queued" ? "排队中" : `${percent}%`}`}
+                title={`${task.label} ${task.state === "queued" ? "排队中" : task.total <= 0 ? "正在处理" : `${percent}%`}`}
+                role="progressbar"
+                aria-label={task.label}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={task.total > 0 ? percent : undefined}
               >
-                <div className="topbar-progress-fill" style={{ width: `${fillPercent}%` }} />
+                <div
+                  className={`topbar-progress-fill${task.total <= 0 && task.state === "running" ? " is-indeterminate" : ""}`}
+                  style={
+                    task.total > 0 || task.state === "queued"
+                      ? { width: `${fillPercent}%` }
+                      : undefined
+                  }
+                />
               </div>
             );
           })}

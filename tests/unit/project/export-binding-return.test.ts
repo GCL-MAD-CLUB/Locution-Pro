@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import ts from "typescript";
 import { runInNewContext } from "node:vm";
@@ -59,10 +60,12 @@ function loadModule(filename: string): Record<string, unknown> {
 }
 
 const workspace = loadModule(
-  "/agent/repos/Locution-Pro/src/systems/ExportSystem/exportWorkspaceState.ts",
+  fileURLToPath(
+    new URL("../../../src/systems/ExportSystem/exportWorkspaceState.ts", import.meta.url),
+  ),
 ) as typeof import("../../../src/systems/ExportSystem/exportWorkspaceState.ts");
 const resolvers = loadModule(
-  "/agent/repos/Locution-Pro/src/systems/ExportSystem/exportResolvers.ts",
+  fileURLToPath(new URL("../../../src/systems/ExportSystem/exportResolvers.ts", import.meta.url)),
 ) as typeof import("../../../src/systems/ExportSystem/exportResolvers.ts");
 
 function stream(index: number, codecType: string, channels: number | null = null): MediaStream {

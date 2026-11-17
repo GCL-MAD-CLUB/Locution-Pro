@@ -135,11 +135,14 @@ export function PanelSearch({
     setThresholdDraft(null);
   }
   useCloseOnOutsidePointer(Boolean(menu), () => setMenu(null));
-  useEffect(() => {
+  const searchDraftKey = JSON.stringify([disabled, mode, rule, scope, semantic?.available]);
+  const [seenSearchDraftKey, setSeenSearchDraftKey] = useState(searchDraftKey);
+  if (seenSearchDraftKey !== searchDraftKey) {
+    setSeenSearchDraftKey(searchDraftKey);
     setMenu(null);
     setMatchDraft(null);
     setThresholdDraft(null);
-  }, [disabled, mode, rule, scope, semantic?.available]);
+  }
 
   const navigationDisabled = disabled || mode !== "highlight" || !query.trim() || !canNavigate;
   const showMatchCount = !disabled && mode === "highlight" && matchCount > 0;

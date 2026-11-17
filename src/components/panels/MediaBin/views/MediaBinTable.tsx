@@ -1,5 +1,6 @@
 ﻿import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { mediaGridLayout } from "../../../../application/media/mediaGridLayout";
+import { selectionFocusForVisibleIds } from "../../../../core/editor/selectionFocus";
 import { mediaDisplayColor } from "../../../../runtime/theme";
 import { ChevronRight, Link2, SplitSquareVertical } from "lucide-react";
 import {
@@ -600,7 +601,11 @@ export function MediaBinTable({
     pointerId: number;
   } | null>(null);
   const suppressRowClickRef = useRef(false);
-  const hadItemsRef = useRef(hasItems);
+  const [sawItems, setSawItems] = useState(hasItems);
+  if (sawItems !== hasItems) {
+    setSawItems(hasItems);
+    if (!sawItems && hasItems) setSort(defaultMediaBinSort);
+  }
   const tableMinWidth =
     labelColumnWidth +
     booleanColumnWidth * 2 +
@@ -676,21 +681,17 @@ export function MediaBinTable({
     onSelectItems(Array.from(nextSelection));
   }
 
-  useEffect(() => {
-    const visibleSelectedIds = sortedRows
-      .map(mediaBinRowId)
-      .filter((itemId) => selectedIds.has(itemId));
-    if (visibleSelectedIds.length === 0) {
-      selectionAnchorRef.current = null;
-      selectionFocusRef.current = null;
-      return;
-    }
-    if (!selectionFocusRef.current || !visibleSelectedIds.includes(selectionFocusRef.current)) {
-      const fallbackId = visibleSelectedIds.at(-1)!;
-      selectionFocusRef.current = fallbackId;
-      selectionAnchorRef.current = fallbackId;
-    }
-  }, [selectedIds, sortedRows]);
+  const visibleSelectedIds = sortedRows
+    .map(mediaBinRowId)
+    .filter((itemId) => selectedIds.has(itemId));
+  const nextSelectionFocus = selectionFocusForVisibleIds(
+    visibleSelectedIds,
+    selectionFocusRef.current,
+  );
+  if (nextSelectionFocus) {
+    selectionFocusRef.current = nextSelectionFocus.focusId;
+    selectionAnchorRef.current = nextSelectionFocus.anchorId;
+  }
 
   useEffect(() => {
     const panel = selectionRootRef.current?.closest<HTMLElement>(".media-bin-panel");
@@ -941,13 +942,6 @@ export function MediaBinTable({
       document.body.classList.remove("system-file-drag-active");
     };
   }, [systemFileDragActive]);
-
-  useEffect(() => {
-    if (!hadItemsRef.current && hasItems) {
-      setSort(defaultMediaBinSort);
-    }
-    hadItemsRef.current = hasItems;
-  }, [hasItems]);
 
   useEffect(
     () => () => {

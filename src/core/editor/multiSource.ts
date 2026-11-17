@@ -17,6 +17,26 @@ export function sourceScope(contexts: readonly string[]) {
   const unique = [...new Set(contexts)].sort();
   return unique.length === 1 ? unique[0] : scopePrefix + JSON.stringify(unique);
 }
+
+/**
+ * Source context without the analysis fingerprint.
+ * Storyboard contexts are `videoId:assetId:fingerprint`.
+ * Subtitle contexts append the track: `videoId:assetId:fingerprint:trackId`.
+ * The track stays, so switching tracks still resets drafts. Fingerprints are
+ * a single colon-free segment.
+ */
+export function sourceMediaIdentity(context: string) {
+  const parts = context.split(":");
+  if (parts.length < 3) return context;
+  const track = parts.slice(3).join(":");
+  const media = `${parts[0]}:${parts[1]}`;
+  return track ? `${media}:${track}` : media;
+}
+
+/** Order-independent identity of the open sources, ignoring analysis fingerprints. */
+export function sourceDraftIdentity(contexts: readonly string[]) {
+  return [...new Set(contexts.map(sourceMediaIdentity))].sort().join("\n");
+}
 export function sourceContexts(scope: string): string[] {
   return scope.startsWith(scopePrefix)
     ? JSON.parse(scope.slice(scopePrefix.length))

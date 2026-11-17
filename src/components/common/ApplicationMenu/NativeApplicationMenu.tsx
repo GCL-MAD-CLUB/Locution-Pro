@@ -30,11 +30,8 @@ export function NativeApplicationMenu({ model }: NativeApplicationMenuProps) {
   );
   const menu = useMemo(() => buildNativeMenu(model, editingText), [model, editingText]);
   const commandsRef = useRef(menu.commands);
+  commandsRef.current = menu.commands;
   const description = JSON.stringify(menu.entries);
-
-  useEffect(() => {
-    commandsRef.current = menu.commands;
-  }, [menu]);
 
   // Bumped after a check item runs: AppKit already flipped its checkmark, so
   // reinstall even when the command left the model, and so the description,

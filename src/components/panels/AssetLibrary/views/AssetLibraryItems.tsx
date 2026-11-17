@@ -105,7 +105,7 @@ export interface AssetLibraryItemsProps {
   onRename: (node: AssetLibraryNode, name: string) => void;
   onCancelRename: () => void;
   onContextMenu: (event: ReactMouseEvent<HTMLElement>, node: AssetLibraryNode | null) => void;
-  onColumnsChange: (columns: number) => void;
+  columnsRef: { current: number };
   /** Ctrl+wheel steps the shared size control, switching between list and icons. */
   onZoom: (steps: number) => void;
 }
@@ -235,7 +235,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     visibleColumns,
     columnWidths,
     itemCheckboxes,
-    onColumnsChange,
+    columnsRef,
     onZoom,
   } = props;
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -247,17 +247,17 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
 
   // Unmounted cards never get pointerleave; drop scrubs for cards that left the view, and the
   // live scrub while the panel is in the background.
-  useEffect(() => {
-    const shown = new Set(nodes.map((node) => node.key));
-    setHoverScrub((current) =>
-      current && thumbnailsEnabled && shown.has(current.key) ? current : null,
+  const shownNodeKeys = new Set(nodes.map((node) => node.key));
+  if (hoverScrub && (!thumbnailsEnabled || !shownNodeKeys.has(hoverScrub.key))) {
+    setHoverScrub(null);
+  }
+  if (!Object.keys(keptScrubProgress).every((key) => shownNodeKeys.has(key))) {
+    setKeptScrubProgress(
+      Object.fromEntries(
+        Object.entries(keptScrubProgress).filter(([key]) => shownNodeKeys.has(key)),
+      ),
     );
-    setKeptScrubProgress((current) =>
-      Object.keys(current).every((key) => shown.has(key))
-        ? current
-        : Object.fromEntries(Object.entries(current).filter(([key]) => shown.has(key))),
-    );
-  }, [nodes, thumbnailsEnabled]);
+  }
   const grid =
     layout.mode === "icons"
       ? assetLibraryGridLayout(contentWidth - gridPadding * 2, layout.cardWidth, gridGap)
@@ -279,7 +279,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     return () => observer.disconnect();
   }, [nodes.length, layout.mode, layout.mode === "list" ? layout.rowHeight : layout.cardWidth]);
 
-  useEffect(() => onColumnsChange(grid.columns), [grid.columns, onColumnsChange]);
+  columnsRef.current = grid.columns;
 
   useEffect(() => {
     const element = scrollRef.current;

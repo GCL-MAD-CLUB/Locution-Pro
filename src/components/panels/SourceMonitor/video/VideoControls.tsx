@@ -150,7 +150,9 @@ export function VideoControls({
   const timecodeScrubRef = useRef<TimecodeScrubState | null>(null);
   const suppressTimeEditClickRef = useRef(false);
   const timelineStartFrameRef = useRef(timelineStartFrame);
+  timelineStartFrameRef.current = timelineStartFrame;
   const timelineSpanFramesRef = useRef(timelineSpanFrames);
+  timelineSpanFramesRef.current = timelineSpanFrames;
   const [editingTime, setEditingTime] = useState(false);
   const [timeEditSelection, setTimeEditSelection] = useState<"all" | "cursor">("cursor");
   const [timeDraft, setTimeDraft] = useState("");
@@ -161,14 +163,6 @@ export function VideoControls({
     : "00:00:00:00";
   const monitorTimeColumnCh = Math.max(11, monitorTimeText.length, monitorDurationText.length);
   const monitorTimeStyle = { "--monitor-time-ch": monitorTimeColumnCh } as CSSProperties;
-
-  useEffect(() => {
-    timelineStartFrameRef.current = timelineStartFrame;
-  }, [timelineStartFrame]);
-
-  useEffect(() => {
-    timelineSpanFramesRef.current = timelineSpanFrames;
-  }, [timelineSpanFrames]);
 
   useEffect(() => {
     const row = rowRef.current;
@@ -203,11 +197,13 @@ export function VideoControls({
     selection?.addRange(range);
   }, [editingTime, timeEditSelection]);
 
-  useEffect(() => {
+  const [seenMediaKey, setSeenMediaKey] = useState(mediaKey);
+  if (seenMediaKey !== mediaKey) {
+    setSeenMediaKey(mediaKey);
     clearTimecodeScrubTimer();
     timecodeScrubRef.current = null;
     setEditingTime(false);
-  }, [mediaKey]);
+  }
 
   useEffect(
     () => () => {

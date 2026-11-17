@@ -14,6 +14,7 @@ export type { ExportFileName } from "./exportRename";
 export {
   canEditExportClipRange,
   defaultExportSettings,
+  exportAudioBindingKey,
   exportWorkspaceStore,
   readRememberedExportDir,
   rememberExportDir,

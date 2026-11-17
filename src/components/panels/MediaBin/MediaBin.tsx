@@ -87,6 +87,7 @@ import {
   useMediaBinClipboardItemCount,
   useMediaBinState,
 } from "./mediaBinState";
+import { mediaBinFolderNavigation } from "./folderNavigation";
 import { mediaBinPanelType } from "./panelTypes";
 import { usePanelManagerState } from "../../common/DockLayout";
 
@@ -652,19 +653,18 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     }
   }, [scopedEntryIds, selectItems, selectedIds]);
 
-  useEffect(() => {
-    const validFolderTargets = new Set(scopedFolderIds).add(rootFolderId ?? "");
-    if (
-      currentFolderId !== rootFolderId &&
-      (!currentFolderId || !validFolderTargets.has(currentFolderId))
-    ) {
-      setCurrentFolderId(rootFolderId);
-    }
-    setExpandedFolderIds((current) => {
-      const next = new Set(Array.from(current).filter((folderId) => scopedFolderIds.has(folderId)));
-      return next.size === current.size ? current : next;
-    });
-  }, [currentFolderId, rootFolderId, scopedFolderIds]);
+  const folderNavigation = mediaBinFolderNavigation(
+    currentFolderId,
+    rootFolderId,
+    scopedFolderIds,
+    expandedFolderIds,
+  );
+  if (folderNavigation.currentFolderId !== currentFolderId) {
+    setCurrentFolderId(folderNavigation.currentFolderId);
+  }
+  if (folderNavigation.expandedFolderIds !== expandedFolderIds) {
+    setExpandedFolderIds(new Set(folderNavigation.expandedFolderIds));
+  }
 
   function focusMediaBinEntry(entryId: string) {
     const folder = scopedFolders.find((candidate) => candidate.id === entryId);

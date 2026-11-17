@@ -69,7 +69,9 @@ export function MonitorRange({
 }: MonitorRangeProps) {
   const rangeRef = useRef<HTMLDivElement | null>(null);
   const timelineStartFrameRef = useRef(timelineStartFrame);
+  timelineStartFrameRef.current = timelineStartFrame;
   const timelineSpanFramesRef = useRef(timelineSpanFrames);
+  timelineSpanFramesRef.current = timelineSpanFrames;
   const [rangeWidthPx, setRangeWidthPx] = useState(0);
   const [rangeMinBarWidthPx, setRangeMinBarWidthPx] = useState(0);
   const [activeRangeHandle, setActiveRangeHandle] = useState<ActiveRangeHandle>(null);
@@ -81,14 +83,6 @@ export function MonitorRange({
     "--monitor-range-left": `${indicatorLeftRatio * 100}%`,
     "--monitor-range-width": `${indicatorWidthRatio * 100}%`,
   } as CSSProperties;
-
-  useEffect(() => {
-    timelineStartFrameRef.current = timelineStartFrame;
-  }, [timelineStartFrame]);
-
-  useEffect(() => {
-    timelineSpanFramesRef.current = timelineSpanFrames;
-  }, [timelineSpanFrames]);
 
   useEffect(() => {
     const range = rangeRef.current;

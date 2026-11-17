@@ -18,6 +18,7 @@ import { isMediaItemOffline, useProjectPort } from "../../../systems/ProjectSyst
 import {
   dirname,
   readRememberedExportDir,
+  exportAudioBindingKey,
   refreshExportSourceAudioBindings,
   useExportWorkspaceState,
   type ExportClip,
@@ -116,6 +117,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
   const applyProjectExportSettings = useExportWorkspaceState(
     (state) => state.applyProjectExportSettings,
   );
+  const adoptExportSource = useExportWorkspaceState((state) => state.adoptExportSource);
   const {
     projectFilePath,
     projectId,
@@ -220,9 +222,11 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
     window.addEventListener("pointercancel", onUp);
   }
 
+  const audioBindingKey = exportAudioBindingKey(source);
   useEffect(() => {
+    adoptExportSource(source);
     applyProjectExportSettings();
-  }, [applyProjectExportSettings, projectId]);
+  }, [adoptExportSource, applyProjectExportSettings, audioBindingKey, projectId, source]);
 
   const sourceKey = source
     ? `${source.kind}:${source.assetId ?? ""}:${source.clips
@@ -253,7 +257,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
       updates.outputStem = suggestedStem(projectFilePath, source);
     }
     if (Object.keys(updates).length > 0) {
-      updateSettings(updates);
+      updateSettings(updates, source);
     }
   }, [
     projectFilePath,
@@ -277,7 +281,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
 
   function handlePreviewClip(clipId: string, play = false) {
     previewPlayRequestRef.current = play ? clipId : null;
-    setPreviewClip(clipId);
+    setPreviewClip(clipId, source);
     setPreviewRequestId((count) => count + 1);
   }
 
@@ -340,8 +344,8 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
                 source={source}
                 selectedClipIds={selectedClipIds}
                 previewClipId={previewClip?.id ?? null}
-                onToggleClip={toggleClip}
-                onSetAllSelected={setAllSelected}
+                onToggleClip={(clipId) => toggleClip(clipId, source)}
+                onSetAllSelected={(selected) => setAllSelected(selected, source)}
                 onPreviewClip={handlePreviewClip}
               />
             ) : (
@@ -363,7 +367,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
           <div className="export-zone-content">
             <ExportSettingsSection
               settings={settings}
-              onUpdateSettings={updateSettings}
+              onUpdateSettings={(updates) => updateSettings(updates, source)}
               sourceChannels={previewClip?.sourceMedia?.audioChannels ?? null}
               source={source}
               selectedClipIds={selectedClipIds}

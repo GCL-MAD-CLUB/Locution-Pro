@@ -44,6 +44,8 @@ interface StoryboardKeywordPanelProps {
   active: boolean;
   draggedKeywordHoverId: string | null;
   shotIds: readonly string[];
+  /** Video and asset identity. Fingerprint updates must not discard an in-progress draft. */
+  draftIdentity: string;
   onSetQuickKeyword?: (keywordLabel: string) => void;
   quickKeywordLabel?: string;
   topContent?: ReactNode;
@@ -78,6 +80,10 @@ function isEditableKeyboardTarget(target: EventTarget | null) {
   );
 }
 
+function keywordPortalRoot() {
+  return document.querySelector(".app-shell") ?? document.body;
+}
+
 function keywordNodeOrder(left: StoryboardKeywordNode, right: StoryboardKeywordNode) {
   return left.name.localeCompare(right.name, "zh-CN");
 }
@@ -86,6 +92,7 @@ export function StoryboardKeywordPanel({
   active,
   draggedKeywordHoverId,
   shotIds,
+  draftIdentity,
   onSetQuickKeyword,
   quickKeywordLabel = "",
   topContent,
@@ -155,8 +162,30 @@ export function StoryboardKeywordPanel({
   const keywordEditorRef = useRef<HTMLTextAreaElement | null>(null);
   const panelScrollRef = useRef<HTMLElement | null>(null);
   const cancelKeywordEditRef = useRef(false);
-  const portalContainerRef = useRef<Element | null>(null);
   const shortcutKeywordIdsRef = useRef<readonly string[]>([]);
+  const [seenDraftIdentity, setSeenDraftIdentity] = useState(draftIdentity);
+  if (seenDraftIdentity !== draftIdentity) {
+    setSeenDraftIdentity(draftIdentity);
+    setKeywordInput("");
+    setKeywordEditValue("");
+    setKeywordEditError(null);
+    setFilter("");
+    setCollapsedNodeIds(new Set());
+    setSelectedTreeNodeIds(new Set());
+    setSelectionAnchorId(null);
+    setKeywordDeleteRequest(null);
+    setKeywordBatchDeleteRequest(false);
+    setCreateDialogOpen(false);
+    setCreateParentOverrideId(null);
+    setNewKeywordContainerId(null);
+    setEditKeywordDialog(null);
+    setDuplicateNameRequest(null);
+    setKeywordModeMenu(null);
+    setTreeContextMenu(null);
+    setAltShortcutHintsVisible(false);
+    setShortcutKeywordIds((current) => (current.length ? [] : current));
+    shortcutKeywordIdsRef.current = [];
+  }
   const targetShotIds = useMemo(() => Array.from(new Set(shotIds)), [shotIds]);
   const keywordParseResult = parseStoryboardKeywordInput(keywordInput);
   const mediaShotIds = useMemo(() => shots.map((shot) => shot.id), [shots]);
@@ -197,10 +226,6 @@ export function StoryboardKeywordPanel({
       resizeObserver.disconnect();
       mutationObserver.disconnect();
     };
-  }, []);
-
-  useEffect(() => {
-    portalContainerRef.current = document.querySelector(".app-shell");
   }, []);
 
   const usageCounts = useMemo(
@@ -402,12 +427,14 @@ export function StoryboardKeywordPanel({
     [keywordEditValue],
   );
 
-  useEffect(() => {
+  const [seenKeywordText, setSeenKeywordText] = useState<string | null>(null);
+  if (seenKeywordText !== selectedKeywordText) {
+    setSeenKeywordText(selectedKeywordText);
     if (document.activeElement !== keywordEditorRef.current) {
-      setKeywordEditValue(selectedKeywordText);
-      setKeywordEditError(null);
+      if (keywordEditValue !== selectedKeywordText) setKeywordEditValue(selectedKeywordText);
+      if (keywordEditError !== null) setKeywordEditError(null);
     }
-  }, [selectedKeywordText]);
+  }
 
   useEffect(() => {
     if (keywordEditorFocused) {
@@ -1504,7 +1531,7 @@ export function StoryboardKeywordPanel({
               </div>
             )}
           </ModalDialog>,
-          portalContainerRef.current ?? document.body,
+          keywordPortalRoot(),
         )}
       {editKeywordDialog &&
         editKeywordDialogNode &&
@@ -1555,7 +1582,7 @@ export function StoryboardKeywordPanel({
               />
             </label>
           </ModalDialog>,
-          portalContainerRef.current ?? document.body,
+          keywordPortalRoot(),
         )}
       {duplicateNameRequest &&
         createPortal(
@@ -1579,7 +1606,7 @@ export function StoryboardKeywordPanel({
               名称“{duplicateNameRequest.name}”已被使用，请选择其它名称。
             </div>
           </ModalDialog>,
-          portalContainerRef.current ?? document.body,
+          keywordPortalRoot(),
         )}
       {keywordDeleteRequest &&
         createPortal(
@@ -1599,7 +1626,7 @@ export function StoryboardKeywordPanel({
               </div>
             </div>
           </ModalDialog>,
-          portalContainerRef.current ?? document.body,
+          keywordPortalRoot(),
         )}
       {keywordBatchDeleteRequest &&
         createPortal(
@@ -1621,7 +1648,7 @@ export function StoryboardKeywordPanel({
               </div>
             </div>
           </ModalDialog>,
-          portalContainerRef.current ?? document.body,
+          keywordPortalRoot(),
         )}
     </>
   );

@@ -9,6 +9,8 @@ import {
   sortBySource,
   nextSourceSortDirection,
   sourceContexts,
+  sourceDraftIdentity,
+  sourceMediaIdentity,
   sourceRowId,
   sourceRowParts,
   sourceScope,
@@ -292,4 +294,24 @@ test("keyword deletion updates the project catalog and every existing reference"
   }));
   assert.deepEqual(next.b.shotAnnotations["shot-1"].keywordIds, []);
   assert.deepEqual(scopedStoryboard(next, "b").keywordNodes, []);
+});
+
+test("draft identity ignores an analysis fingerprint and keeps a subtitle track", () => {
+  assert.equal(sourceMediaIdentity("video:asset:fingerprint"), "video:asset");
+  assert.equal(sourceMediaIdentity("video:asset:"), "video:asset");
+  assert.equal(sourceMediaIdentity("video:asset"), "video:asset");
+  assert.equal(sourceMediaIdentity("video:asset:fp:track-a"), "video:asset:track-a");
+  const trackA = "video:asset:old:track-a";
+  const trackB = "video:asset:old:track-b";
+  const trackAAfterAnalysis = "video:asset:new:track-a";
+  assert.equal(sourceDraftIdentity([trackA]), sourceDraftIdentity([trackAAfterAnalysis]));
+  assert.notEqual(sourceDraftIdentity([trackA]), sourceDraftIdentity([trackB]));
+  assert.notEqual(sourceDraftIdentity([trackA]), sourceDraftIdentity([trackA, trackB]));
+  assert.notEqual(sourceDraftIdentity([trackA, trackB]), sourceDraftIdentity([trackB]));
+  assert.equal(sourceDraftIdentity([trackB, trackA]), sourceDraftIdentity([trackA, trackB]));
+  const before = sourceDraftIdentity(["video-b:asset-b:old", "video-a:asset-a:old"]);
+  const afterFingerprint = sourceDraftIdentity(["video-a:asset-a:new", "video-b:asset-b:old"]);
+  assert.equal(before, afterFingerprint);
+  assert.equal(before, "video-a:asset-a\nvideo-b:asset-b");
+  assert.equal(sourceDraftIdentity([]), "");
 });

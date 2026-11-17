@@ -263,6 +263,22 @@ test("queue rows select like a file list from the keyboard and the pointer", () 
   assert.equal(JSON.stringify(removed.selectedIds), '["o1","s2"]');
 });
 
+test("a preset dropped on the queue applies to the row, its source or the selection", () => {
+  const navigation = load<NavigationModule>(`${root}transcodeQueueNavigation.ts`, {}, globals);
+  const sources = [
+    { id: "s1", outputs: [{ id: "o1" }, { id: "o2" }] },
+    { id: "s2", outputs: [{ id: "o3" }] },
+  ];
+  const ids = (selected: string[], row: string) =>
+    JSON.stringify(navigation.presetDropOutputIds(sources, selected, row));
+
+  assert.equal(ids([], "o2"), '["o2"]');
+  assert.equal(ids([], "s1"), '["o1","o2"]', "a source row takes all of its outputs");
+  assert.equal(ids(["o1", "o3"], "o2"), '["o2"]', "an unselected row ignores the selection");
+  assert.equal(ids(["o1", "o3"], "o3"), '["o1","o3"]', "a selected row takes the selection");
+  assert.equal(ids(["s2", "o1"], "o1"), '["o1","o3"]', "a selected source counts all outputs");
+});
+
 test("queue selection edits, duplicates and persists without runtime status", () => {
   const { queue } = loadSystem();
   const store = queue.transcodeQueueStore;

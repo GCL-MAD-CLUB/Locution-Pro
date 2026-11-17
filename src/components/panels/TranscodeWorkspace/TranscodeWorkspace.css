@@ -68,13 +68,50 @@
   background: var(--color-footer-control-hover-background);
 }
 
-.transcode-start:not(:disabled),
-.transcode-start:hover:not(:disabled) {
-  color: var(--color-accent);
+/* Applying a preset: the light outline of the dialogs' 取消 buttons, with the project's square corners. */
+.transcode-apply-button {
+  flex: none;
+  min-height: 22px;
+  padding: 0 12px;
+  color: var(--color-text-dialog);
+  font-size: 12px;
+  white-space: nowrap;
+  background: var(--color-transparent);
+  border: 2px solid var(--color-border-control-hover);
+  border-radius: var(--radius-md);
+  cursor: pointer;
 }
 
-.transcode-panel-toolbar .toolbar-button {
-  min-height: 22px;
+.transcode-apply-button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.transcode-apply-button:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-dialog-disabled);
+}
+
+/* Text buttons inside forms, like 浏览… in the preferences dialog. */
+.transcode-button {
+  flex: none;
+  min-height: 24px;
+  padding: 0 10px;
+  color: var(--color-text);
+  font-size: 12px;
+  white-space: nowrap;
+  background: var(--color-surface-input-inset);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.transcode-button:hover:not(:disabled) {
+  border-color: var(--color-border-control-hover);
+}
+
+.transcode-button:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-control-disabled);
 }
 
 .transcode-queue-count {
@@ -144,6 +181,22 @@
   min-height: 0;
   overflow: auto;
   outline: none;
+}
+
+/* The output location of the selected outputs, above the queue. */
+.transcode-queue-destination {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 6px;
+}
+
+.transcode-queue-destination-label {
+  color: var(--color-text);
+  font-size: 12px;
+  text-align: right;
 }
 
 /* The queue and presets sit in the media bin's rounded table frame. */
@@ -253,7 +306,8 @@
   height: 14px;
 }
 
-.transcode-queue-source-name {
+.transcode-queue-source-name,
+.transcode-output-path {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -271,8 +325,47 @@
   box-shadow: inset 0 0 0 1px var(--color-border-control-active);
 }
 
-.is-drop-target {
+/* Rows a dragged preset would change, outlined as one block. The rule is
+   listed after the selection and keyboard outlines so it wins over them. */
+.transcode-queue-table .is-drop-target,
+.transcode-queue-table:focus .is-drop-target {
+  background: var(--color-selection-muted);
+  box-shadow:
+    inset 1px 0 0 var(--color-accent),
+    inset -1px 0 0 var(--color-accent);
+}
+
+.transcode-queue-table .is-drop-target.is-drop-start,
+.transcode-queue-table:focus .is-drop-target.is-drop-start {
+  box-shadow:
+    inset 1px 0 0 var(--color-accent),
+    inset -1px 0 0 var(--color-accent),
+    inset 0 1px 0 var(--color-accent);
+}
+
+.transcode-queue-table .is-drop-target.is-drop-end,
+.transcode-queue-table:focus .is-drop-target.is-drop-end {
+  box-shadow:
+    inset 1px 0 0 var(--color-accent),
+    inset -1px 0 0 var(--color-accent),
+    inset 0 -1px 0 var(--color-accent);
+}
+
+.transcode-queue-table .is-drop-target.is-drop-start.is-drop-end,
+.transcode-queue-table:focus .is-drop-target.is-drop-start.is-drop-end {
   box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+/* While a preset is dragged the pointer refuses everything but queue rows. */
+body.is-dragging-transcode-preset,
+body.is-dragging-transcode-preset * {
+  cursor: not-allowed !important;
+  user-select: none !important;
+}
+
+body.is-dragging-transcode-preset.is-transcode-preset-drop-allowed,
+body.is-dragging-transcode-preset.is-transcode-preset-drop-allowed * {
+  cursor: copy !important;
 }
 
 .transcode-queue-table.is-media-drop-target {
@@ -307,7 +400,7 @@
   opacity: var(--opacity-control-disabled);
 }
 
-.transcode-destination.is-missing .transcode-destination-link-label,
+.transcode-output-path.is-missing,
 .transcode-required-note,
 .transcode-warning,
 .transcode-note.is-warning {
@@ -515,45 +608,8 @@
   padding: 6px 0 6px 86px;
 }
 
-.transcode-destination.is-field.is-missing {
+.transcode-destination.is-missing {
   border-color: var(--color-warning);
-}
-
-/* In a queue row the destination reads as a link that opens the same menu. */
-.select-dropdown.transcode-destination.is-link {
-  max-width: 100%;
-  background: none;
-  border: 0;
-}
-
-.transcode-destination.is-link .select-dropdown-trigger {
-  display: block;
-  min-height: 0;
-}
-
-.transcode-destination-link-label {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.transcode-destination.is-link .select-dropdown-trigger > .transcode-destination-link-label {
-  padding: 0;
-}
-
-.transcode-destination.is-link:not(.disabled) .select-dropdown-trigger:hover {
-  color: var(--color-text-highlight);
-  text-decoration: underline;
-}
-
-.transcode-destination.is-link.disabled,
-.transcode-destination.is-link.disabled > .select-dropdown-trigger {
-  opacity: 1;
-}
-
-.transcode-destination.is-link.disabled .select-dropdown-trigger {
-  cursor: default;
 }
 
 /* Media bin folders indent under 媒体箱 like the bin's own tree. */
@@ -580,10 +636,44 @@
   opacity: var(--opacity-control-disabled);
 }
 
+/* The export workspace's flat square checkbox. */
 .transcode-panel .export-check-label input[type="checkbox"],
 .transcode-settings-dialog .export-check-label input[type="checkbox"] {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 1em;
+  height: 1em;
+  aspect-ratio: 1;
   margin: 0;
-  accent-color: var(--color-accent);
+  padding: 0;
+  appearance: none;
+  background-color: var(--color-transparent);
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 2px solid var(--color-checkbox-border);
+  cursor: pointer;
+}
+
+.transcode-panel .export-check-label input[type="checkbox"]:hover:not(:disabled),
+.transcode-settings-dialog .export-check-label input[type="checkbox"]:hover:not(:disabled) {
+  border-color: var(--color-checkbox-hover-border);
+}
+
+.transcode-panel .export-check-label input[type="checkbox"]:checked,
+.transcode-settings-dialog .export-check-label input[type="checkbox"]:checked {
+  background-color: var(--color-checkbox-checked-background);
+  background-image: var(--image-checkbox-check);
+}
+
+.transcode-panel .export-check-label input[type="checkbox"]:checked:hover:not(:disabled),
+.transcode-settings-dialog .export-check-label input[type="checkbox"]:checked:hover:not(:disabled) {
+  background-color: var(--color-checkbox-checked-hover-background);
+  border-color: var(--color-checkbox-hover-border);
+}
+
+.transcode-panel .export-check-label input[type="checkbox"]:disabled,
+.transcode-settings-dialog .export-check-label input[type="checkbox"]:disabled {
+  cursor: not-allowed;
 }
 
 /* ---- Export settings dialog ---- */
@@ -599,18 +689,42 @@
   background: var(--color-surface-canvas);
 }
 
+/* Both splits follow the seams; the dialog sets the grid tracks inline. */
 .transcode-settings-layout.export-settings-panel {
   display: grid;
-  grid-template-columns: minmax(360px, 1.2fr) minmax(380px, 1fr);
   flex-direction: row;
 }
 
 .transcode-settings-left {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   min-width: 0;
   min-height: 0;
-  border-right: var(--resizer-size) solid var(--color-border-divider);
+}
+
+.transcode-seam {
+  background: var(--color-border-divider);
+  outline: none;
+  touch-action: none;
+}
+
+.transcode-seam.is-columns {
+  cursor: col-resize;
+}
+
+.transcode-seam.is-rows {
+  cursor: row-resize;
+}
+
+.transcode-seam:hover,
+.transcode-seam:focus-visible {
+  background: var(--color-border-resizer);
+}
+
+.transcode-subheading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .transcode-settings-main {
@@ -624,43 +738,19 @@
 
 .transcode-preview {
   display: flex;
-  flex: 0 0 52%;
   flex-direction: column;
   gap: 6px;
-  min-height: 220px;
+  min-width: 0;
+  min-height: 0;
   padding: 8px 12px;
-  border-bottom: var(--resizer-size) solid var(--color-border-divider);
 }
 
 .transcode-preview-toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
-}
-
-.transcode-segmented {
-  display: inline-flex;
-  overflow: hidden;
-  border: 1px solid var(--color-border-panel);
-  border-radius: var(--radius-sm);
-}
-
-.transcode-segmented button {
-  padding: 3px 10px;
-  color: var(--color-text);
-  font-size: 12px;
-  background: none;
-  cursor: pointer;
-}
-
-.transcode-segmented button + button {
-  border-left: 1px solid var(--color-border-panel);
-}
-
-.transcode-segmented button.active {
-  color: var(--color-text-highlight);
-  background: var(--color-surface-hover);
 }
 
 .transcode-preview-busy {
@@ -822,11 +912,6 @@
 .transcode-preview-timeline.source-controls {
   flex: 0 0 auto;
   padding-top: 0;
-}
-
-.transcode-preview-range {
-  display: inline-flex;
-  gap: 4px;
 }
 
 .transcode-settings-tabs {

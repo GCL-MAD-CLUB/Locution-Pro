@@ -1,5 +1,14 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { ChevronDown, ChevronRight, Download, Plus, Search, Trash2, Upload } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { invokeCommand, runOperation } from "../../../../errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
@@ -18,6 +27,8 @@ import {
   videoEncoderLabel,
   type TranscodePreset,
 } from "../../../../systems/TranscodeSystem";
+import { DragLabelPreview } from "../../../common/DragLabelPreview";
+import { startTranscodePresetDrag, useTranscodePresetDrag } from "../controls/transcodePresetDrag";
 
 function presetSize(preset: TranscodePreset) {
   const { video } = preset.settings;
@@ -43,6 +54,8 @@ export function TranscodePresetBrowser() {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState(new Set<string>());
   const [selected, setSelected] = useState<string | null>(null);
+  const dragPreview = useTranscodePresetDrag((state) => state.preview);
+  const dropCount = useTranscodePresetDrag((state) => state.outputIds.length);
 
   const groups = useMemo(() => {
     const search = query.trim().toLocaleLowerCase();
@@ -174,12 +187,12 @@ export function TranscodePresetBrowser() {
         </label>
         <button
           type="button"
-          className="toolbar-button"
+          className="transcode-apply-button"
           disabled={!selectedPreset?.usable || targetOutputs.length === 0}
-          title={targetOutputs.length === 0 ? "先在队列中选择输出" : "应用到所选输出"}
+          title={targetOutputs.length === 0 ? "先在队列中选择输出" : undefined}
           onClick={() => selectedPreset && apply(selectedPreset.preset)}
         >
-          应用预设
+          {targetOutputs.length > 0 ? `应用到 ${targetOutputs.length} 个输出` : "应用到所选输出"}
         </button>
       </div>
       <div className="transcode-preset-table" role="tree" aria-label="预设">
@@ -219,14 +232,7 @@ export function TranscodePresetBrowser() {
                     aria-selected={selected === preset.id}
                     className={`transcode-preset-row ${selected === preset.id ? "selected" : ""} ${usable ? "" : "is-unavailable"}`}
                     title={usable ? undefined : "当前 FFmpeg 不支持此预设所需的格式或编码器"}
-                    draggable={usable}
-                    onDragStart={(event) => {
-                      event.dataTransfer.setData(
-                        "application/x-locution-pro-transcode-preset",
-                        preset.id,
-                      );
-                      event.dataTransfer.effectAllowed = "copy";
-                    }}
+                    onPointerDown={(event) => usable && startTranscodePresetDrag(event, preset)}
                     onClick={() => setSelected(preset.id)}
                     onDoubleClick={() => usable && apply(preset)}
                   >
@@ -245,6 +251,16 @@ export function TranscodePresetBrowser() {
           );
         })}
       </div>
+      {dragPreview && (
+        <DragLabelPreview
+          x={dragPreview.x}
+          y={dragPreview.y}
+          icon={<SlidersHorizontal aria-hidden="true" />}
+          label={dragPreview.preset.name}
+          count={dropCount}
+          refused={dropCount === 0}
+        />
+      )}
     </div>
   );
 }

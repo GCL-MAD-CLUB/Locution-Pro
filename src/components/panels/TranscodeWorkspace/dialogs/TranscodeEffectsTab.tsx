@@ -59,7 +59,7 @@ function FileField({
         </span>
         <button
           type="button"
-          className="toolbar-button"
+          className="transcode-button"
           onClick={() =>
             void pickFile(title, extensions).then((picked) => picked && onChange(picked))
           }

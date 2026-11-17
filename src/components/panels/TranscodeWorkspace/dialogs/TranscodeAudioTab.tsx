@@ -42,7 +42,7 @@ export function TranscodeAudioTab({
       <div className="transcode-tab-actions">
         <button
           type="button"
-          className="toolbar-button"
+          className="transcode-button"
           disabled={copy}
           onClick={() =>
             update((draft) => {

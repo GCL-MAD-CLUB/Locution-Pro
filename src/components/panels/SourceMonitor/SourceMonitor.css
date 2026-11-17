@@ -180,6 +180,15 @@
   height: 10px;
 }
 
+.range-mark-icon {
+  display: block;
+  width: 8px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
 .transport-controls button:disabled {
   opacity: var(--opacity-media-disabled);
 }

@@ -60,10 +60,6 @@ function destinationItems(
 interface TranscodeDestinationFieldProps {
   destination: TranscodeDestination | null;
   disabled?: boolean;
-  /** "link" renders the trigger as a queue-row link instead of a form dropdown. */
-  variant?: "field" | "link";
-  /** Text of the link trigger; defaults to the destination label. */
-  linkLabel?: string;
   onChange: (destination: TranscodeDestination) => void;
 }
 
@@ -71,8 +67,6 @@ interface TranscodeDestinationFieldProps {
 export function TranscodeDestinationField({
   destination,
   disabled = false,
-  variant = "field",
-  linkLabel,
   onChange,
 }: TranscodeDestinationFieldProps) {
   const { mediaFolders } = useProjectPort(["mediaFolders"], []);
@@ -98,25 +92,21 @@ export function TranscodeDestinationField({
 
   return (
     <SelectDropdown
-      className={`transcode-destination is-${variant} ${variant === "field" ? "export-select" : ""} ${missing ? "is-missing" : ""}`}
+      className={`transcode-destination export-select ${missing ? "is-missing" : ""}`}
       menuClassName="transcode-dropdown-menu transcode-destination-menu"
       menuMinWidth={200}
       menuWidth="content"
       ariaLabel="输出位置"
       disabled={disabled}
-      title={linkLabel ?? label}
+      title={label}
       value={destinationValue(destination)}
       selectedLabel={label}
       items={destinationItems(mediaFolders, destination)}
       trigger={
-        variant === "link" ? (
-          <span className="transcode-destination-link-label">{linkLabel ?? label}</span>
-        ) : (
-          <>
-            <span>{label}</span>
-            <ChevronDown size={18} />
-          </>
-        )
+        <>
+          <span>{label}</span>
+          <ChevronDown size={18} />
+        </>
       }
       renderOptionLabel={(item) =>
         item.value.startsWith(binValuePrefix) ? (

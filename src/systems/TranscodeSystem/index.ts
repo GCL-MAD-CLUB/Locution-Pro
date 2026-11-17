@@ -32,6 +32,7 @@ export {
 export {
   clickQueueRow,
   moveQueueCursor,
+  presetDropOutputIds,
   toggleQueueFocus,
   type TranscodeQueueCursor,
   type TranscodeQueueMove,

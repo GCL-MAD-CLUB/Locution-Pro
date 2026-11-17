@@ -182,7 +182,7 @@ export function TranscodeSubtitleTab({
             <div className="transcode-inline">
               <button
                 type="button"
-                className="toolbar-button"
+                className="transcode-button"
                 onClick={() => void chooseExternal()}
               >
                 选择…
@@ -190,7 +190,7 @@ export function TranscodeSubtitleTab({
               {subtitles.externalPath && (
                 <button
                   type="button"
-                  className="toolbar-button"
+                  className="transcode-button"
                   onClick={() => update((draft) => void (draft.subtitles.externalPath = ""))}
                 >
                   清除

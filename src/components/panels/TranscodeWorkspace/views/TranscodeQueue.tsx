@@ -1,7 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { CopyPlus, ListPlus, ListX, Play, Plus, RotateCcw, Square, Trash2 } from "lucide-react";
 import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
-import { useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { runOperation } from "../../../../errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import { useEditCapability } from "../../../../runtime/capabilities/EditCapability";
@@ -14,7 +14,6 @@ import {
   destinationLabel,
   enqueueTranscodeSources,
   fileName,
-  findTranscodePreset,
   moveQueueCursor,
   outputBlocker,
   plannedOutputPath,
@@ -32,12 +31,12 @@ import {
 } from "../../../../systems/TranscodeSystem";
 import { usePanelManagerState } from "../../../common/DockLayout";
 import { TranscodeDestinationField } from "../controls/TranscodeDestinationField";
+import { useTranscodePresetDrag } from "../controls/transcodePresetDrag";
 import {
   TranscodeQueueContextMenu,
   type TranscodeQueueMenuTarget,
 } from "./TranscodeQueueContextMenu";
 
-const presetDragType = "application/x-locution-pro-transcode-preset";
 const mediaExtensions = [
   "mp4",
   "mkv",
@@ -119,6 +118,7 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
   const stopRequested = useTranscodeQueueState((state) => state.stopRequested);
   const projectDirectory = useTranscodeQueueState((state) => state.projectDirectory);
   const userPresets = useTranscodeQueueState((state) => state.userPresets);
+  const dropOutputIds = useTranscodePresetDrag((state) => state.outputIds);
   const { mediaFolders } = useProjectPort(["mediaFolders"], []);
   const panelInstanceId = usePanelInstanceId();
   const panelActive = usePanelActive();
@@ -127,7 +127,6 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
   const tableRef = useRef<HTMLDivElement | null>(null);
   const [anchorId, setAnchorId] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [menu, setMenu] = useState<TranscodeQueueMenuTarget | null>(null);
   const store = transcodeQueueStore.getState;
   const selected = new Set(selectedIds);
@@ -159,6 +158,13 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
   );
   const targetSource = focusedSource ?? firstSelectedSource ?? null;
   const editable = editableOutput();
+  // Rows a preset dropped here would change: the row under the pointer, its
+  // source's outputs, or the whole selection when the row is selected.
+  const dropRows = new Set<string>(dropOutputIds);
+  for (const source of sources) {
+    if (source.outputs.length > 0 && source.outputs.every((output) => dropRows.has(output.id)))
+      dropRows.add(source.id);
+  }
 
   useEditCapability({
     identity,
@@ -256,29 +262,17 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
     }
   }
 
-  function dropPreset(event: DragEvent, ids: string[]) {
-    const presetId = event.dataTransfer.getData(presetDragType);
-    setDropTarget(null);
-    if (!presetId) return;
-    event.preventDefault();
-    const preset = findTranscodePreset({ userPresets }, presetId);
-    if (preset) store().applyPreset(ids, preset);
-  }
-
-  function allowPresetDrop(event: DragEvent, id: string) {
-    if (event.dataTransfer.types.includes(presetDragType)) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-      setDropTarget(id);
-    }
-  }
-
   function rowClass(id: string, base: string) {
+    const index = rowIds.indexOf(id);
+    const dropping = dropRows.has(id);
     return [
       base,
       selected.has(id) ? "selected" : "",
       cursor.focusId === id ? "is-focused" : "",
-      dropTarget === id ? "is-drop-target" : "",
+      dropping ? "is-drop-target" : "",
+      // A run of target rows is outlined as one block.
+      dropping && !dropRows.has(rowIds[index - 1]) ? "is-drop-start" : "",
+      dropping && !dropRows.has(rowIds[index + 1]) ? "is-drop-end" : "",
     ].join(" ");
   }
 
@@ -292,8 +286,7 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
         ? `${destinationLabel(output.destination, mediaFolders)} / ${fileName(path)}`
         : output.destination
           ? path
-          : "未设置";
-    const targets = selected.has(output.id) ? outputIds : [output.id];
+          : "未选择输出位置（必填）";
     return (
       <div
         key={output.id}
@@ -306,9 +299,6 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
         onDoubleClick={(event) => {
           if (!locked && !(event.target as Element).closest("button")) onEditOutput(source, output);
         }}
-        onDragOver={(event) => allowPresetDrop(event, output.id)}
-        onDragLeave={() => setDropTarget(null)}
-        onDrop={(event) => dropPreset(event, [output.id])}
       >
         <span role="gridcell">
           <button
@@ -332,14 +322,12 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
             {transcodePresetLabel({ userPresets }, output.presetId, output.presetName)}
           </button>
         </span>
-        <span role="gridcell" className="transcode-output-cell">
-          <TranscodeDestinationField
-            variant="link"
-            linkLabel={location}
-            destination={output.destination}
-            disabled={locked || output.status === "done"}
-            onChange={(destination) => store().setDestination(targets, destination)}
-          />
+        <span
+          role="gridcell"
+          className={`transcode-output-path ${output.destination ? "" : "is-missing"}`}
+          title={output.destination ? path : undefined}
+        >
+          {location}
         </span>
         <span role="gridcell" className="transcode-status" title={blocker ?? undefined}>
           {output.status === "encoding"
@@ -416,16 +404,15 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
           <ListX aria-hidden="true" />
         </button>
         <span className="transcode-toolbar-spacer" />
-        {outputCount > 0 && (
-          <span className="transcode-queue-count" role="status">
-            {doneCount} / {outputCount}
-          </span>
-        )}
+        <span className="transcode-queue-count" role="status">
+          已处理 {doneCount} 项，共 {outputCount} 项
+        </span>
         {running ? (
           <button
             type="button"
-            className="transcode-icon-button transcode-stop"
-            title="停止队列"
+            className="transcode-icon-button"
+            title={stopRequested ? "正在停止…" : "停止队列"}
+            aria-label="停止队列"
             disabled={stopRequested}
             onClick={() => void stopTranscodeQueue()}
           >
@@ -434,8 +421,9 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
         ) : (
           <button
             type="button"
-            className="transcode-icon-button transcode-start"
+            className="transcode-icon-button"
             title="启动队列"
+            aria-label="启动队列"
             disabled={readyCount === 0}
             onClick={() => void startTranscodeQueue()}
           >
@@ -443,6 +431,18 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
           </button>
         )}
       </div>
+      {selectedOutputs.length > 0 && !running && (
+        <div className="transcode-queue-destination">
+          <span className="transcode-queue-destination-label">输出位置</span>
+          <TranscodeDestinationField
+            destination={selectedOutputs[0].destination}
+            disabled={selectedOutputs.every(
+              (output) => output.status === "encoding" || output.status === "done",
+            )}
+            onChange={(destination) => store().setDestination(outputIds, destination)}
+          />
+        </div>
+      )}
       <div
         ref={tableRef}
         className="transcode-queue-table"
@@ -458,7 +458,7 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
         <div className="transcode-queue-row is-heading" role="row">
           <span role="columnheader">格式</span>
           <span role="columnheader">预设</span>
-          <span role="columnheader">输出位置</span>
+          <span role="columnheader">输出文件</span>
           <span role="columnheader">状态</span>
         </div>
         {sources.length === 0 && (
@@ -474,14 +474,6 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
               title={source.path}
               onClick={(event) => clickRow(source.id, event)}
               onContextMenu={(event) => openMenu(event, source.id)}
-              onDragOver={(event) => allowPresetDrop(event, source.id)}
-              onDragLeave={() => setDropTarget(null)}
-              onDrop={(event) =>
-                dropPreset(
-                  event,
-                  source.outputs.map((output) => output.id),
-                )
-              }
             >
               <VideoGlyph />
               <span className="transcode-queue-source-name">{fileName(source.path)}</span>

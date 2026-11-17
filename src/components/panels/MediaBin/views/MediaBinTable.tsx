@@ -36,6 +36,7 @@ import { formatMonitorTime } from "../../../../core/editor/time";
 import { normalizeFrameRate } from "../../../../core/editor/timeline";
 import type { MediaBinFolder, MediaBinItem, MediaDocument } from "../../../../types";
 import type { MediaBinViewMode } from "../mediaBinState";
+import { DragLabelPreview } from "../../../common/DragLabelPreview";
 import { MediaBinVideoThumbnail } from "./MediaBinVideoThumbnail";
 import { MediaBinFolderIcon, OfflineFileIcon } from "./MediaBinFolderIcon";
 
@@ -112,6 +113,8 @@ interface PointerMediaDragPreview {
   item?: MediaBinItem;
   folder?: MediaBinFolder;
   project?: MediaDocument;
+  /** Items and folders moving together. */
+  count: number;
   x: number;
   y: number;
 }
@@ -1394,6 +1397,7 @@ export function MediaBinTable({
       setPointerDragPreview({
         item,
         project: mediaItemProject(item, projects, mediaItems),
+        count: itemIds.length + folderIds.length,
         x: moveEvent.clientX,
         y: moveEvent.clientY,
       });
@@ -1476,7 +1480,12 @@ export function MediaBinTable({
       moveEvent.preventDefault();
       const targetFolderId = folderTargetFromPoint(moveEvent.clientX, moveEvent.clientY);
       setDropTargetFolderId(targetFolderId);
-      setPointerDragPreview({ folder, x: moveEvent.clientX, y: moveEvent.clientY });
+      setPointerDragPreview({
+        folder,
+        count: folderIds.length + itemIds.length,
+        x: moveEvent.clientX,
+        y: moveEvent.clientY,
+      });
     };
     const cleanup = () => {
       window.removeEventListener("pointermove", onMove);
@@ -2243,14 +2252,13 @@ export function MediaBinTable({
           )}
         </div>
       </div>
-      {pointerDragPreview &&
-        createPortal(
-          <div
-            className="media-bin-pointer-drag-preview"
-            style={{
-              transform: `translate(${pointerDragPreview.x + 12}px, ${pointerDragPreview.y + 10}px)`,
-            }}
-          >
+      {pointerDragPreview && (
+        <DragLabelPreview
+          x={pointerDragPreview.x}
+          y={pointerDragPreview.y}
+          count={pointerDragPreview.count}
+          label={pointerDragPreview.item?.file_name ?? pointerDragPreview.folder?.name ?? ""}
+          icon={
             <span
               className={`media-bin-kind-icon ${
                 pointerDragPreview.item?.kind ?? (pointerDragPreview.folder ? "folder" : "")
@@ -2266,12 +2274,9 @@ export function MediaBinTable({
                 <MediaBinFolderIcon />
               )}
             </span>
-            <span>
-              {pointerDragPreview.item?.file_name ?? pointerDragPreview.folder?.name ?? ""}
-            </span>
-          </div>,
-          document.body,
-        )}
+          }
+        />
+      )}
       {renderMarqueeOverlay()}
     </div>,
   );

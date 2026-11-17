@@ -81,3 +81,32 @@ export function toggleQueueFocus(cursor: TranscodeQueueCursor): TranscodeQueueCu
   if (!cursor.focusId) return cursor;
   return clickQueueRow([], cursor, cursor.focusId, { toggle: true });
 }
+
+interface DropSource {
+  id: string;
+  outputs: ReadonlyArray<{ id: string }>;
+}
+
+/**
+ * The outputs a preset dropped on a queue row applies to: every output of a
+ * source row, the whole selection when the row is selected, else the row.
+ */
+export function presetDropOutputIds(
+  sources: readonly DropSource[],
+  selectedIds: readonly string[],
+  rowId: string,
+): string[] {
+  const selected = new Set(selectedIds);
+  const rowSelected = selected.has(rowId);
+  const ids: string[] = [];
+  for (const source of sources) {
+    for (const output of source.outputs) {
+      const hit =
+        output.id === rowId ||
+        source.id === rowId ||
+        (rowSelected && (selected.has(output.id) || selected.has(source.id)));
+      if (hit) ids.push(output.id);
+    }
+  }
+  return ids;
+}

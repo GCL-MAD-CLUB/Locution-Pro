@@ -1,0 +1,52 @@
+.drag-label-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: calc(var(--z-modal) + 1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 280px;
+  padding: 4px 8px;
+  color: var(--color-text);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border-overlay-strong);
+  box-shadow: var(--shadow-drawer);
+}
+
+.drag-label-preview.is-refused {
+  opacity: 0.55;
+}
+
+.drag-label-preview-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.drag-label-preview-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.drag-label-preview-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drag-label-preview-count {
+  flex: 0 0 auto;
+  min-width: 16px;
+  padding: 0 4px;
+  color: var(--color-text-highlight);
+  font-size: 11px;
+  line-height: 14px;
+  text-align: center;
+  background: var(--color-surface-canvas);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-pill);
+}

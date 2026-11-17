@@ -19,13 +19,18 @@ export function sourceScope(contexts: readonly string[]) {
 }
 
 /**
- * Video and asset from a source context (`videoId:assetId:fingerprint`).
- * Analysis rewrites the fingerprint without changing which media the draft belongs to.
+ * Source context without the analysis fingerprint.
+ * Storyboard contexts are `videoId:assetId:fingerprint`.
+ * Subtitle contexts append the track: `videoId:assetId:fingerprint:trackId`.
+ * The track stays, so switching tracks still resets drafts. Fingerprints are
+ * a single colon-free segment.
  */
 export function sourceMediaIdentity(context: string) {
-  const videoSplit = context.indexOf(":");
-  const assetSplit = videoSplit < 0 ? -1 : context.indexOf(":", videoSplit + 1);
-  return assetSplit < 0 ? context : context.slice(0, assetSplit);
+  const parts = context.split(":");
+  if (parts.length < 3) return context;
+  const track = parts.slice(3).join(":");
+  const media = `${parts[0]}:${parts[1]}`;
+  return track ? `${media}:${track}` : media;
 }
 
 /** Order-independent identity of the open sources, ignoring analysis fingerprints. */

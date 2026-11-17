@@ -61,15 +61,20 @@ export interface ExportWorkspaceState {
   previewClipId: string | null;
   previewVersion: number;
   setSource: (source: ExportSource | null) => void;
+  /**
+   * Stores the source the export UI is showing and re-constrains settings.
+   * The UI refreshes audio bindings without reselecting the export source.
+   */
+  adoptExportSource: (source: ExportSource | null) => void;
   /** Loads the open project's recorded export settings when the project changed. */
   applyProjectExportSettings: () => void;
-  toggleClip: (clipId: string) => void;
-  setAllSelected: (selected: boolean) => void;
-  updateSettings: (updates: Partial<ExportSettings>) => void;
+  toggleClip: (clipId: string, source?: ExportSource | null) => void;
+  setAllSelected: (selected: boolean, source?: ExportSource | null) => void;
+  updateSettings: (updates: Partial<ExportSettings>, source?: ExportSource | null) => void;
   setResults: (results: ExportResult | null) => void;
   setStatus: (status: ExportWorkspaceStatus) => void;
   resetResults: () => void;
-  setPreviewClip: (clipId: string | null) => void;
+  setPreviewClip: (clipId: string | null, source?: ExportSource | null) => void;
   updateClipRange: (clipId: string, startUs: number, endUs: number, groupId?: string) => void;
   undoClipRange: () => void;
   redoClipRange: () => void;
@@ -111,6 +116,25 @@ export function defaultExportSettings(): ExportSettings {
     outputName: "",
     existingFileMode: "ask",
   };
+}
+
+/** Audio fields that change when a binding is edited away from the export workspace. */
+export function exportAudioBindingKey(source: ExportSource | null) {
+  if (!source) return "";
+  return JSON.stringify(
+    source.clips.map((clip) => [
+      clip.id,
+      clip.hasAudio,
+      clip.audioSources,
+      clip.sourceMedia?.audioChannels ?? null,
+    ]),
+  );
+}
+
+function authoritativeSource(stored: ExportSource | null, source?: ExportSource | null) {
+  if (source === undefined) return stored;
+  if (exportAudioBindingKey(source) === exportAudioBindingKey(stored)) return stored;
+  return source;
 }
 
 function constrainedSettings(
@@ -206,6 +230,19 @@ export const exportWorkspaceStore = createStore<ExportWorkspaceState>()((set) =>
         status: "idle",
       };
     }),
+  adoptExportSource: (source) =>
+    set((state) => {
+      if (!source || exportAudioBindingKey(source) === exportAudioBindingKey(state.source)) {
+        return state;
+      }
+      const settings = constrainedSettings(
+        state.settings,
+        source,
+        state.selectedClipIds,
+        state.previewClipId,
+      );
+      return settings === state.settings ? { source } : { source, settings };
+    }),
   applyProjectExportSettings: () =>
     set((state) => {
       const reconciled = reconcileSettings(state.settings, state.settingsProjectId);
@@ -220,8 +257,9 @@ export const exportWorkspaceStore = createStore<ExportWorkspaceState>()((set) =>
       }
       return { settings, settingsProjectId: reconciled.settingsProjectId };
     }),
-  toggleClip: (clipId) =>
+  toggleClip: (clipId, source) =>
     set((state) => {
+      const authoritative = authoritativeSource(state.source, source);
       const selectedClipIds = new Set(state.selectedClipIds);
       if (selectedClipIds.has(clipId)) {
         selectedClipIds.delete(clipId);
@@ -230,47 +268,64 @@ export const exportWorkspaceStore = createStore<ExportWorkspaceState>()((set) =>
       }
       const settings = constrainedSettings(
         state.settings,
-        state.source,
+        authoritative,
         selectedClipIds,
         state.previewClipId,
       );
-      return settings === state.settings ? { selectedClipIds } : { selectedClipIds, settings };
+      return {
+        ...(authoritative === state.source ? {} : { source: authoritative }),
+        selectedClipIds,
+        ...(settings === state.settings ? {} : { settings }),
+      };
     }),
-  setAllSelected: (selected) =>
+  setAllSelected: (selected, source) =>
     set((state) => {
+      const authoritative = authoritativeSource(state.source, source);
       const selectedClipIds =
-        selected && state.source
-          ? new Set(state.source.clips.map((clip) => clip.id))
+        selected && authoritative
+          ? new Set(authoritative.clips.map((clip) => clip.id))
           : new Set<string>();
       const settings = constrainedSettings(
         state.settings,
-        state.source,
+        authoritative,
         selectedClipIds,
         state.previewClipId,
       );
-      return settings === state.settings ? { selectedClipIds } : { selectedClipIds, settings };
+      return {
+        ...(authoritative === state.source ? {} : { source: authoritative }),
+        selectedClipIds,
+        ...(settings === state.settings ? {} : { settings }),
+      };
     }),
-  updateSettings: (updates) =>
-    set((state) => ({
-      settings: constrainedSettings(
+  updateSettings: (updates, source) =>
+    set((state) => {
+      const authoritative = authoritativeSource(state.source, source);
+      const settings = constrainedSettings(
         { ...state.settings, ...updates },
-        state.source,
+        authoritative,
         state.selectedClipIds,
         state.previewClipId,
-      ),
-    })),
+      );
+      if (authoritative === state.source && settings === state.settings) return state;
+      return {
+        ...(authoritative === state.source ? {} : { source: authoritative }),
+        settings,
+      };
+    }),
   setResults: (results) => set({ results }),
   setStatus: (status) => set({ status }),
   resetResults: () => set({ results: null, status: "idle" }),
-  setPreviewClip: (previewClipId) =>
+  setPreviewClip: (previewClipId, source) =>
     set((state) => {
+      const authoritative = authoritativeSource(state.source, source);
       const settings = constrainedSettings(
         state.settings,
-        state.source,
+        authoritative,
         state.selectedClipIds,
         previewClipId,
       );
       return {
+        ...(authoritative === state.source ? {} : { source: authoritative }),
         previewClipId,
         previewVersion: state.previewVersion + 1,
         ...(settings === state.settings ? {} : { settings }),

@@ -1,3 +1,4 @@
+import { cellEditReset } from "../../../../core/editor/cellEditReset";
 import { annotationColors } from "../../../../runtime/theme";
 import type { PanelRowSource } from "../../../../core/editor/multiSource";
 import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
@@ -125,9 +126,10 @@ export function SubtitleListView({
   const [editValue, setEditValue] = useState("");
   const pendingCellEditRef = useRef<number | null>(null);
   const [seenResetKey, setSeenResetKey] = useState(resetKey);
-  if (seenResetKey !== resetKey) {
+  const editReset = cellEditReset(seenResetKey, resetKey, pendingCellEditRef.current);
+  if (editReset) {
     setSeenResetKey(resetKey);
-    if (pendingCellEditRef.current !== null) {
+    if (editReset.cancelPendingTimer && pendingCellEditRef.current !== null) {
       window.clearTimeout(pendingCellEditRef.current);
       pendingCellEditRef.current = null;
     }

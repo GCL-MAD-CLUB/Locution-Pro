@@ -1,4 +1,5 @@
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import type { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
+import { useCallback, useMemo, useRef } from "react";
 import { normalizeFrameRate } from "../../core/editor/timeline";
 import {
   mediaPanelTitle,
@@ -311,7 +312,10 @@ export function useSourcePreviewRequest() {
 }
 
 /** Read the panel's source without giving a title or an inactive tab control of playback. */
-export function usePanelMediaSourceSelection(kind?: "subtitles" | "storyboard") {
+export function usePanelMediaSourceSelection(
+  lifetime: RenderLifetime,
+  kind?: "subtitles" | "storyboard",
+) {
   const selection = usePanelMediaSelection((state) => state);
   const panelId = usePanelInstanceId();
   const {
@@ -376,7 +380,7 @@ export function usePanelMediaSourceSelection(kind?: "subtitles" | "storyboard") 
   const activeTrackId = activeSource?.trackId ?? "";
   const project = activeSource?.project ?? null;
   const previousHistoryRef = useRef({ projectId, projectHistory });
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const previous = previousHistoryRef.current;
     previousHistoryRef.current = { projectId, projectHistory };
     if (!kind || previous.projectId !== projectId) return;
@@ -477,15 +481,15 @@ export function usePanelMediaSourceSelection(kind?: "subtitles" | "storyboard") 
 }
 
 /** Issue source commands when the panel is activated, focused, or changes its own selection. */
-export function usePanelMediaSource(kind: "subtitles" | "storyboard") {
-  const source = usePanelMediaSourceSelection(kind);
-  usePublishPanelTitle(mediaPanelTitle(kind, source.selectedSources));
+export function usePanelMediaSource(lifetime: RenderLifetime, kind: "subtitles" | "storyboard") {
+  const source = usePanelMediaSourceSelection(lifetime, kind);
+  usePublishPanelTitle(lifetime, mediaPanelTitle(kind, source.selectedSources));
   const { selection, projectId, activeVideoId, activeTrackId, previewVideoId, project } = source;
   const panelId = usePanelInstanceId();
   const panelActive = usePanelActive();
   const identity = useStableIdentity("media-panel", panelId);
   const playback = usePlaybackStatus();
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     if (playback?.sourcePanelId === panelId && playback.videoId === activeVideoId) {
       selection.rememberFrame(activeVideoId, playback.currentFrame);
     }
@@ -503,7 +507,7 @@ export function usePanelMediaSource(kind: "subtitles" | "storyboard") {
     [],
     ["activeVideoChanged", "previewTrackChanged", "sourcePreviewCleared"],
   );
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     if (
       selection.projectId !== projectId ||
       (selection.videoId === null && Boolean(activeVideoId))
@@ -511,7 +515,7 @@ export function usePanelMediaSource(kind: "subtitles" | "storyboard") {
       selection.openVideo(projectId, activeVideoId, activeTrackId);
     }
   }, [activeTrackId, activeVideoId, previewVideoId, projectId, selection]);
-  useBroadcastEvent(identity, "media.video.opened", ({ payload }) =>
+  useBroadcastEvent(lifetime, identity, "media.video.opened", ({ payload }) =>
     source.selectVideo(payload.videoId, undefined, true) ? "handled" : "ignored",
   );
   const hasProject = Boolean(project);
@@ -554,7 +558,7 @@ export function usePanelMediaSource(kind: "subtitles" | "storyboard") {
     panelActive: boolean;
     panelFocused: boolean;
   } | null>(null);
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const previous = previousControlRef.current;
     previousControlRef.current = { openSource, canOpenSource, panelActive, panelFocused };
     if (
@@ -577,9 +581,10 @@ export function usePanelMediaSource(kind: "subtitles" | "storyboard") {
 
 /** Workspace history belongs to the panel instance, rather than individual media IDs. */
 export function usePanelMediaWorkspaceMenu(
+  lifetime: RenderLifetime,
   kind: "subtitles" | "storyboard",
 ): PanelMenuEntryDefinition[] {
-  const { selection, projectId } = usePanelMediaSourceSelection();
+  const { selection, projectId } = usePanelMediaSourceSelection(lifetime);
   const { projects, mediaItems } = useProjectPort(["projects", "mediaItems"], []);
   const available = panelMediaSources(projects, mediaItems);
   const workspaces = selection.projectId === projectId ? panelMediaWorkspaces(selection) : [];

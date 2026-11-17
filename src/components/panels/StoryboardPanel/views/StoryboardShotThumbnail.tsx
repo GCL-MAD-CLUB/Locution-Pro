@@ -1,8 +1,8 @@
-﻿import { convertFileSrc } from "@tauri-apps/api/core";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { Star, Tags } from "lucide-react";
 import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
 import {
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -100,16 +100,19 @@ interface ShotFrameThumbnailProps {
   timeUs: number;
 }
 
-function useShotFrameThumbnail({
-  assetId,
-  fingerprint,
-  videoPath,
-  frameRate,
-  priority,
-  requestEnabled,
-  resolution,
-  timeUs,
-}: ShotFrameThumbnailProps) {
+function useShotFrameThumbnail(
+  lifetime: RenderLifetime,
+  {
+    assetId,
+    fingerprint,
+    videoPath,
+    frameRate,
+    priority,
+    requestEnabled,
+    resolution,
+    timeUs,
+  }: ShotFrameThumbnailProps,
+) {
   const thumbnailIdentity = `${fingerprint}:${videoPath}:${timeUs}`;
   const [thumbnail, setThumbnail] = useState<{
     identity: string;
@@ -118,7 +121,7 @@ function useShotFrameThumbnail({
     height: number;
   } | null>(null);
   const thumbnailRequestRef = useRef<ReturnType<typeof timelineThumbnails.request> | null>(null);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     let active = true;
     const commonOptions = {
       kind: "storyboard" as const,
@@ -195,7 +198,7 @@ function useShotFrameThumbnail({
     videoPath,
   ]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     thumbnailRequestRef.current?.reprioritize(priority);
   }, [priority]);
 
@@ -206,8 +209,10 @@ export function StoryboardSemanticThumbnail({
   ariaLabel = "语义检索最高得分帧",
   ...props
 }: ShotFrameThumbnailProps & { ariaLabel?: string }) {
-  const thumbnail = useShotFrameThumbnail(props);
-  return (
+  const lifetime = new RenderLifetime();
+
+  const thumbnail = useShotFrameThumbnail(lifetime, props);
+  return lifetime.render(
     <div className="shot-semantic-frame" role="img" aria-label={ariaLabel}>
       {thumbnail && (
         <img
@@ -221,7 +226,7 @@ export function StoryboardSemanticThumbnail({
         />
       )}
       <VideoGlyph className="shot-frame-placeholder" aria-hidden="true" />
-    </div>
+    </div>,
   );
 }
 
@@ -259,7 +264,9 @@ export function ShotFrameButton({
   onSelect,
   onStartKeywordDrag,
 }: ShotFrameButtonProps) {
-  const visibleThumbnail = useShotFrameThumbnail({
+  const lifetime = new RenderLifetime();
+
+  const visibleThumbnail = useShotFrameThumbnail(lifetime, {
     assetId,
     fingerprint,
     videoPath,
@@ -281,7 +288,7 @@ export function ShotFrameButton({
   }, [frameRate, hoverProgress, shot.end_frame, shot.start_us]);
   const previewSrc = isTauriRuntime() ? convertFileSrc(previewVideoPath) : previewVideoPath;
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (hoverTargetTimeUs === null) {
       setHoverFrameReady(false);
       return;
@@ -321,7 +328,7 @@ export function ShotFrameButton({
     return event.currentTarget;
   }
 
-  return (
+  return lifetime.render(
     <button
       type="button"
       className="shot-frame-button"
@@ -377,7 +384,7 @@ export function ShotFrameButton({
         />
       )}
       <VideoGlyph className="shot-frame-placeholder" aria-hidden="true" />
-    </button>
+    </button>,
   );
 }
 

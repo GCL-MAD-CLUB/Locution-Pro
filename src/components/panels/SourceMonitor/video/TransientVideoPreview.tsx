@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { FrameHistogram } from "../../../../core/editor/frameHistogram";
 import { useVideoHistogram } from "../histogram/useVideoHistogram";
@@ -21,11 +22,13 @@ export function TransientVideoPreview({
   onHistogram: (histogram: FrameHistogram | null) => void;
   histogramEnabled: boolean;
 }) {
+  const lifetime = new RenderLifetime();
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [ready, setReady] = useState(false);
   const targetRef = useRef(0);
   targetRef.current = (preview.frame + 0.125) / preview.frameRate;
-  useVideoHistogram(videoRef, preview.src, ready && histogramEnabled, onHistogram);
+  useVideoHistogram(lifetime, videoRef, preview.src, ready && histogramEnabled, onHistogram);
 
   function seek(video: HTMLVideoElement) {
     if (video.readyState < 1 || video.seeking) return;
@@ -43,11 +46,11 @@ export function TransientVideoPreview({
     }
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (videoRef.current) seek(videoRef.current);
   }, [preview.frame, preview.frameRate]);
 
-  return (
+  return lifetime.render(
     <video
       ref={videoRef}
       crossOrigin="anonymous"
@@ -61,6 +64,6 @@ export function TransientVideoPreview({
       onLoadedMetadata={(event) => seek(event.currentTarget)}
       onLoadedData={(event) => seek(event.currentTarget)}
       onSeeked={(event) => seek(event.currentTarget)}
-    />
+    />,
   );
 }

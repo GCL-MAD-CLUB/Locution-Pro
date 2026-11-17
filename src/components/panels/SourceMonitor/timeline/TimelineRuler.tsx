@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useMemo, useRef, useState } from "react";
 import type {
   MouseEventHandler,
   PointerEvent as ReactPointerEvent,
@@ -76,6 +77,8 @@ export function TimelineRuler({
   onSeekFrame,
   onStepFrame,
 }: TimelineRulerProps) {
+  const lifetime = new RenderLifetime();
+
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const timelineStartFrameRef = useRef(timelineStartFrame);
   timelineStartFrameRef.current = timelineStartFrame;
@@ -131,7 +134,7 @@ export function TimelineRuler({
     [durationFrames, timelineWidthPx],
   );
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       timelineDragCleanupRef.current?.();
       cueRangeDragCleanupRef.current?.();
@@ -139,11 +142,11 @@ export function TimelineRuler({
     [hasMedia, canEditCueRange],
   );
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     onMinTimelineSpanFramesChange(minSpanFrames);
   }, [minSpanFrames, onMinTimelineSpanFramesChange]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const element = timelineRef.current;
     if (!element) {
       return;
@@ -156,7 +159,7 @@ export function TimelineRuler({
     return () => resizeObserver.disconnect();
   }, []);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const timeline = timelineRef.current;
     if (!timeline) {
       return;
@@ -349,7 +352,7 @@ export function TimelineRuler({
     cueRangeDragCleanupRef.current = handleEnd;
   }
 
-  return (
+  return lifetime.render(
     <div
       ref={timelineRef}
       className={`monitor-timeline ${storyboardMode ? "storyboard-mode" : ""} ${hasMedia ? "" : "empty-state"}`}
@@ -456,6 +459,6 @@ export function TimelineRuler({
         )}
       </div>
       {children}
-    </div>
+    </div>,
   );
 }

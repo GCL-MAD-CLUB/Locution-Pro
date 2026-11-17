@@ -1,6 +1,7 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { Play } from "lucide-react";
 import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   timelineThumbnails,
   timelineThumbnailResolutionForDisplay,
@@ -15,9 +16,11 @@ interface ExportClipThumbnailProps {
 }
 
 export function ExportClipThumbnail({ clip, durationText, onPlay }: ExportClipThumbnailProps) {
+  const lifetime = new RenderLifetime();
+
   const [src, setSrc] = useState<string | null>(null);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const thumbnail = clip.thumbnail;
     if (!thumbnail || !clip.sourcePath) {
       return;
@@ -47,7 +50,7 @@ export function ExportClipThumbnail({ clip, durationText, onPlay }: ExportClipTh
     };
   }, [clip.sourcePath, clip.thumbnail]);
 
-  return (
+  return lifetime.render(
     <button
       type="button"
       className="export-clip-thumbnail"
@@ -66,6 +69,6 @@ export function ExportClipThumbnail({ clip, durationText, onPlay }: ExportClipTh
         <Play size={11} />
       </span>
       <span className="export-clip-thumbnail-duration">{durationText}</span>
-    </button>
+    </button>,
   );
 }

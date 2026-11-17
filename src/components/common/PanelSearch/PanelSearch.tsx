@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { AdvancedSearchDialog } from "./AdvancedSearchDialog";
 import {
   defaultAdvancedSearch,
@@ -8,7 +9,7 @@ import {
   type AdvancedSearchOptions,
 } from "../../../core/editor/textSearch";
 import { ChevronLeft, ChevronRight, ChevronsUpDown, SlidersHorizontal } from "lucide-react";
-import { Fragment, useEffect, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import {
   canHighlightSearchRule,
@@ -86,6 +87,8 @@ export function PanelSearch({
   onNavigate,
   semantic,
 }: PanelSearchProps) {
+  const lifetime = new RenderLifetime();
+
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const configuration: SearchConfiguration = {
     query,
@@ -134,7 +137,7 @@ export function PanelSearch({
     }
     setThresholdDraft(null);
   }
-  useCloseOnOutsidePointer(Boolean(menu), () => setMenu(null));
+  useCloseOnOutsidePointer(lifetime, Boolean(menu), () => setMenu(null));
   const searchDraftKey = JSON.stringify([disabled, mode, rule, scope, semantic?.available]);
   const [seenSearchDraftKey, setSeenSearchDraftKey] = useState(searchDraftKey);
   if (seenSearchDraftKey !== searchDraftKey) {
@@ -188,7 +191,7 @@ export function PanelSearch({
     );
   }
 
-  return (
+  return lifetime.render(
     <div className="panel-search-row">
       <SearchHistoryInput
         label={label}
@@ -437,7 +440,7 @@ export function PanelSearch({
           </PopupMenu>,
           document.body,
         )}
-    </div>
+    </div>,
   );
 }
 
@@ -493,11 +496,12 @@ export function SearchHighlight({
 }
 
 export function useSearchNavigation(
+  lifetime: RenderLifetime,
   panelRef: RefObject<HTMLElement | null>,
   enabled: boolean,
   onNavigate: (direction: -1 | 1) => void,
 ) {
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const panel = panelRef.current;
     if (!panel || !enabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {

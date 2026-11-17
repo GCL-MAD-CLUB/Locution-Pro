@@ -1,7 +1,6 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { RotateCw } from "lucide-react";
 import {
-  useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -96,6 +95,8 @@ export function StoryboardMotionPanel({
   isPlaying,
   onSeekFrame,
 }: Props) {
+  const lifetime = new RenderLifetime();
+
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<TraceResult | null>(null);
   const cache = useRef(new Map<string, FrameTraceData>());
@@ -126,7 +127,7 @@ export function StoryboardMotionPanel({
     playbackFrame >= startFrame &&
     playbackFrame <= endFrame;
   const demand = useMemo(() => ({ enabled: visible }), [visible]);
-  usePublishProjection(PLAYBACK_TRACE_DEMAND_PROJECTION, identity, demand);
+  usePublishProjection(lifetime, PLAYBACK_TRACE_DEMAND_PROJECTION, identity, demand);
   const [hover, setHover] = useState<{ key: string; progress: number } | null>(null);
   const hoverSession = useRef<{ sessionId: string; assetId: string; frame: number } | null>(null);
   function finishHover() {
@@ -142,7 +143,7 @@ export function StoryboardMotionPanel({
     }
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     window.addEventListener("blur", finishHover);
     return () => {
       window.removeEventListener("blur", finishHover);
@@ -150,11 +151,11 @@ export function StoryboardMotionPanel({
     };
   }, [key, mode, visible]);
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     if (isPlaying) finishHover();
   }, [isPlaying]);
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const chart = chartRef.current;
     if (!chart || !visible) return;
     const measure = () =>
@@ -215,7 +216,7 @@ export function StoryboardMotionPanel({
     );
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!native || !visible || !assetId || startFrame === undefined || endFrame === undefined)
       return;
     const cached = cache.current.get(key);
@@ -243,7 +244,7 @@ export function StoryboardMotionPanel({
     };
   }, [native, visible, assetId, startFrame, endFrame, frameRate, sourceCache, key, retry]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     nativeSession.current?.update(playbackFrame, isPlaying);
   }, [
     native,
@@ -259,7 +260,7 @@ export function StoryboardMotionPanel({
     isPlaying,
   ]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (
       native ||
       isPlaying ||
@@ -385,7 +386,7 @@ export function StoryboardMotionPanel({
               ? "无相邻帧"
               : null;
 
-  return (
+  return lifetime.render(
     <div
       className="storyboard-motion-chart"
       aria-busy={Boolean(!isPlaying && shot && assetId && !current?.failed && !data)}
@@ -477,6 +478,6 @@ export function StoryboardMotionPanel({
           )}
         </div>
       )}
-    </div>
+    </div>,
   );
 }

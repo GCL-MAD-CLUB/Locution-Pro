@@ -1,3 +1,4 @@
+import type { RenderLifetime } from "../lifetime/RenderLifetime";
 import { useMemo } from "react";
 import { useBroadcastEvent } from "../events/react";
 import type { SystemIdentity } from "../systems/identity";
@@ -20,7 +21,10 @@ export interface MediaSelectionCapabilityOptions {
 }
 
 /** Makes the focused media-bin selection available to the top-level File menu. */
-export function useMediaSelectionCapability(options: MediaSelectionCapabilityOptions) {
+export function useMediaSelectionCapability(
+  lifetime: RenderLifetime,
+  options: MediaSelectionCapabilityOptions,
+) {
   const {
     identity,
     active,
@@ -49,7 +53,7 @@ export function useMediaSelectionCapability(options: MediaSelectionCapabilityOpt
       onlineSelectionCount,
     ],
   );
-  usePublishProjection(MEDIA_SELECTION_CAPABILITY_PROJECTION, identity, projection);
+  usePublishProjection(lifetime, MEDIA_SELECTION_CAPABILITY_PROJECTION, identity, projection);
 
   async function run(operation: MediaSelectionOperation) {
     const handler = handlers[operation];
@@ -60,7 +64,11 @@ export function useMediaSelectionCapability(options: MediaSelectionCapabilityOpt
     return "handled" as const;
   }
 
-  useBroadcastEvent(identity, "media.replace-selection.requested", () => run("replaceMedia"));
-  useBroadcastEvent(identity, "media.link-selection.requested", () => run("linkMedia"));
-  useBroadcastEvent(identity, "media.make-selection-offline.requested", () => run("makeOffline"));
+  useBroadcastEvent(lifetime, identity, "media.replace-selection.requested", () =>
+    run("replaceMedia"),
+  );
+  useBroadcastEvent(lifetime, identity, "media.link-selection.requested", () => run("linkMedia"));
+  useBroadcastEvent(lifetime, identity, "media.make-selection-offline.requested", () =>
+    run("makeOffline"),
+  );
 }

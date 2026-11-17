@@ -1,3 +1,4 @@
+import type { RenderLifetime } from "../lifetime/RenderLifetime";
 import { useMemo } from "react";
 import { useBroadcastEvent } from "../events/react";
 import type { SystemIdentity } from "../systems/identity";
@@ -17,7 +18,7 @@ export interface EditCapabilityOptions {
   handlers: Partial<Record<EditOperation, EditHandler>>;
 }
 
-export function useEditCapability(options: EditCapabilityOptions) {
+export function useEditCapability(lifetime: RenderLifetime, options: EditCapabilityOptions) {
   const {
     identity,
     active,
@@ -49,7 +50,7 @@ export function useEditCapability(options: EditCapabilityOptions) {
       visibleCount,
     ],
   );
-  usePublishProjection(EDIT_CAPABILITY_PROJECTION, identity, projection);
+  usePublishProjection(lifetime, EDIT_CAPABILITY_PROJECTION, identity, projection);
 
   async function run(operation: EditOperation) {
     const handler = handlers[operation];
@@ -60,10 +61,12 @@ export function useEditCapability(options: EditCapabilityOptions) {
     return "handled" as const;
   }
 
-  useBroadcastEvent(identity, "edit.copy.requested", () => run("copy"));
-  useBroadcastEvent(identity, "edit.paste.requested", () => run("paste"));
-  useBroadcastEvent(identity, "edit.clear.requested", () => run("clear"));
-  useBroadcastEvent(identity, "edit.duplicate.requested", () => run("duplicate"));
-  useBroadcastEvent(identity, "edit.select-all.requested", () => run("selectAll"));
-  useBroadcastEvent(identity, "edit.clear-selection.requested", () => run("clearSelection"));
+  useBroadcastEvent(lifetime, identity, "edit.copy.requested", () => run("copy"));
+  useBroadcastEvent(lifetime, identity, "edit.paste.requested", () => run("paste"));
+  useBroadcastEvent(lifetime, identity, "edit.clear.requested", () => run("clear"));
+  useBroadcastEvent(lifetime, identity, "edit.duplicate.requested", () => run("duplicate"));
+  useBroadcastEvent(lifetime, identity, "edit.select-all.requested", () => run("selectAll"));
+  useBroadcastEvent(lifetime, identity, "edit.clear-selection.requested", () =>
+    run("clearSelection"),
+  );
 }

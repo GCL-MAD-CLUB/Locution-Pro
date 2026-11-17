@@ -1,6 +1,7 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type PointerEvent } from "react";
 import { frameToTimeUs, timeUsToFrame } from "../../../../core/editor/timeline";
 import { invokeCommand, runBackgroundOperation, runOperation } from "../../../../errors";
 import { createFfmpegTaskId } from "../../../../platform/tauri/ffmpegProgress";
@@ -65,6 +66,8 @@ export function TranscodePreview({
   outputName,
   onRangeChange,
 }: TranscodePreviewProps) {
+  const lifetime = new RenderLifetime();
+
   const durationUs = source.info?.durationUs ?? 0;
   const frameRate = streamFrameRate(source.info?.video[0]?.frameRate);
   const durationFrames = timeUsToFrame(durationUs, frameRate);
@@ -200,7 +203,7 @@ export function TranscodePreview({
   }
 
   // The playhead follows the video while it plays.
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const video = videoRef.current;
     if (!isPlaying || !video) return;
     let handle = 0;
@@ -241,7 +244,7 @@ export function TranscodePreview({
     [encoded, outputName, settings, source.path, timeUs],
   );
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     // Stills wait for playback to stop on a frame.
     if (!isTauriRuntime() || !hasVideo || isPlaying) return;
     const serial = ++requestSerial.current;
@@ -286,7 +289,7 @@ export function TranscodePreview({
     // requestKey stands for every input of the request.
   }, [requestKey, hasVideo, isPlaying]);
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       const previous = runningTask.current;
       if (previous) {
@@ -427,7 +430,7 @@ export function TranscodePreview({
     );
   }
 
-  return (
+  return lifetime.render(
     <section className="transcode-preview" aria-label="预览">
       <div className="transcode-preview-toolbar">
         <div className="transcode-segmented" role="tablist" aria-label="预览方式">
@@ -589,6 +592,6 @@ export function TranscodePreview({
         </p>
       )}
       {noOutputVideo && <p className="transcode-note">当前设置不导出视频，只显示源画面。</p>}
-    </section>
+    </section>,
   );
 }

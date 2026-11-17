@@ -1,5 +1,6 @@
-﻿import { Info } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { Info } from "lucide-react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { PopupMenuItem } from "../../../common/PopupMenu";
 import { ImportMenu } from "../controls/ImportMenu";
@@ -36,12 +37,14 @@ export function ImportSelectionBar({
   onCancel: () => void;
   onImport: () => void;
 }) {
+  const lifetime = new RenderLifetime();
+
   const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const [tooltip, setTooltip] = useState<{ path: string; x: number; y: number } | null>(null);
   const [itemsScrolling, setItemsScrolling] = useState(false);
   const itemsRef = useRef<HTMLDivElement | null>(null);
   const traySelection = useImportTraySelection(items);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const host = itemsRef.current;
     if (!host) return;
     let frame: number | null = null;
@@ -71,7 +74,7 @@ export function ImportSelectionBar({
     action();
     setMenu(null);
   }
-  return (
+  return lifetime.render(
     <footer className="import-selection-bar">
       {items.length ? (
         <>
@@ -205,6 +208,6 @@ export function ImportSelectionBar({
           </PopupMenuItem>
         </ImportMenu>
       )}
-    </footer>
+    </footer>,
   );
 }

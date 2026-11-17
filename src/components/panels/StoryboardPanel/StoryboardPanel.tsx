@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { themeSvgDataUrl } from "../../../runtime/theme";
 import { matchesSearchDuration, type AdvancedSearchOptions } from "../../../core/editor/textSearch";
 import { KeywordPresetControl } from "./annotations/KeywordPresetControl";
@@ -44,7 +45,6 @@ import {
 import { VideoGlyph } from "../../common/MediaKindIcons/MediaKindIcons";
 import {
   Fragment,
-  useEffect,
   useCallback,
   useMemo,
   useRef,
@@ -1118,6 +1118,8 @@ function sortStoryboardShots(
 }
 
 export function StoryboardPanel() {
+  const lifetime = new RenderLifetime();
+
   const panelInstanceId = usePanelInstanceId();
   const panelActive = usePanelActive();
   const panelFocused = usePanelManagerState((state) => state.focusedPanelId === panelInstanceId);
@@ -1131,7 +1133,7 @@ export function StoryboardPanel() {
     toggleSource,
     previewSource,
     selection,
-  } = usePanelMediaSource("storyboard");
+  } = usePanelMediaSource(lifetime, "storyboard");
   const sourceContexts = sources.map((source) => source.context);
   const videoContext = sourceScope(sourceContexts);
   const draftIdentity = sourceDraftIdentity(sourceContexts);
@@ -1217,12 +1219,12 @@ export function StoryboardPanel() {
     setExpandedStackIds,
     shotSelectionCleared,
     shotSelectionReplaced,
-  } = useStoryboardPanelState((state) => state, videoContext, selection.workspaceId);
-  const semanticSearchAvailable = useStoryboardSemanticSearchAvailable();
+  } = useStoryboardPanelState(lifetime, (state) => state, videoContext, selection.workspaceId);
+  const semanticSearchAvailable = useStoryboardSemanticSearchAvailable(lifetime);
   const searchMode =
     storedSearchMode === "semantic" && !semanticSearchAvailable ? "filter" : storedSearchMode;
   const { requestDetection, canRequestDetection, detectionDialog, detectionTasks } =
-    useStoryboardDetection();
+    useStoryboardDetection(lifetime);
   const tracePlaybackStatus = usePlaybackTraceStatus();
   const panelRef = useRef<HTMLElement | null>(null);
   const contentLayoutRef = useRef<HTMLDivElement | null>(null);
@@ -1277,7 +1279,7 @@ export function StoryboardPanel() {
   } | null>(null);
   const multipleSources = sources.length > 1;
   const [sourceDirection, setSourceDirection] = useState<SourceSortDirection>("ascending");
-  usePersistedMediaPanelState({
+  usePersistedMediaPanelState(lifetime, {
     selection,
     onRestoreWorkspaces: selection.hydrateWorkspaces,
     sourceDirection,
@@ -1325,8 +1327,8 @@ export function StoryboardPanel() {
     [videoSources],
   );
   const selectableVideos = useMemo(() => videoSources.map((source) => source.item), [videoSources]);
-  useCloseOnOutsidePointer(Boolean(videoMenu), () => setVideoMenu(null));
-  useBroadcastEvent(identity, "storyboard.detection.completed", ({ payload }) => {
+  useCloseOnOutsidePointer(lifetime, Boolean(videoMenu), () => setVideoMenu(null));
+  useBroadcastEvent(lifetime, identity, "storyboard.detection.completed", ({ payload }) => {
     if (!sources.some((source) => source.context === payload.videoContext)) return "ignored";
     if (multipleSources) return "handled";
     shotSelectionReplaced(payload.firstShotId ? [payload.firstShotId] : [], payload.firstShotId);
@@ -1367,6 +1369,7 @@ export function StoryboardPanel() {
     [shots, sources],
   );
   const semantic = useStoryboardSemanticSearch(
+    lifetime,
     searchMode === "semantic",
     query,
     semanticShots,
@@ -1582,6 +1585,7 @@ export function StoryboardPanel() {
   const sprayKeywordsDisplay = formatParsedStoryboardKeywords(sprayKeywords);
   const sprayUsesCustomLabel = sprayMode === "colorLabel" && sprayCustomLabel.trim().length > 0;
   const { altPressed: sprayAltPressed, shiftPressed: sprayPickingKeywords } = useSprayToolModifiers(
+    lifetime,
     sprayActive,
     sprayMode === "keywords",
   );
@@ -1732,7 +1736,7 @@ export function StoryboardPanel() {
     measureElement: getRowHeight,
     overscan: 4,
   });
-  useBroadcastEvent(identity, "storyboard.reveal-shot.requested", ({ payload }) => {
+  useBroadcastEvent(lifetime, identity, "storyboard.reveal-shot.requested", ({ payload }) => {
     if (!panelActive || !sources.some((source) => source.context === payload.videoContext)) {
       return "ignored";
     }
@@ -1756,7 +1760,7 @@ export function StoryboardPanel() {
     }
     return "handled";
   });
-  const captureThumbnailResizeCenter = useTimelineThumbnailListResizeAnchor({
+  const captureThumbnailResizeCenter = useTimelineThumbnailListResizeAnchor(lifetime, {
     enabled: viewMode === "list",
     itemCount: sortedShots.length,
     itemHeight: storyboardRowHeight,
@@ -1787,12 +1791,13 @@ export function StoryboardPanel() {
     scrollToIconShot(listRef.current, targetIndex, "center");
   }
   useSearchNavigation(
+    lifetime,
     panelRef,
     searchMode === "highlight" && Boolean(query.trim()),
     navigateSearch,
   );
   const searchFocusKey = `${searchMode}\u0000${searchRule}\u0000${searchScope}\u0000${query}`;
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (searchMode !== "highlight" || !query.trim()) return;
     const firstMatchIndex = matchingShotIndices[0];
     if (firstMatchIndex === undefined) return;
@@ -1813,7 +1818,7 @@ export function StoryboardPanel() {
     rowVirtualizer.scrollOffset ?? 0,
     rowVirtualizer.scrollRect?.height ?? 0,
   );
-  const thumbnailWindow = useTimelineThumbnailWindow({
+  const thumbnailWindow = useTimelineThumbnailWindow(lifetime, {
     enabled: viewMode === "list" && Boolean(thumbnailVideoPath),
     sourceKey: videoContext,
     items: sortedShots,
@@ -2013,7 +2018,7 @@ export function StoryboardPanel() {
     footerOptionsMenu,
   );
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const rememberPointerPosition = (event: PointerEvent) => {
       lastPointerPositionRef.current = { x: event.clientX, y: event.clientY };
     };
@@ -2025,7 +2030,7 @@ export function StoryboardPanel() {
     };
   }, []);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!sprayPickingKeywords) {
       setSprayKeywordPickerAnchor(null);
       return;
@@ -2039,7 +2044,7 @@ export function StoryboardPanel() {
     );
   }, [sprayPickingKeywords]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (viewMode === "list") {
       rowVirtualizer.measure();
     }
@@ -2059,7 +2064,7 @@ export function StoryboardPanel() {
     setGridShotSort(defaultStoryboardGridSort);
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!contextMenu) {
       return;
     }
@@ -2086,7 +2091,7 @@ export function StoryboardPanel() {
     };
   }, [contextMenu]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!annotationMenu) {
       return;
     }
@@ -2113,7 +2118,7 @@ export function StoryboardPanel() {
     };
   }, [annotationMenu]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!ratingComparatorMenu) {
       return;
     }
@@ -2135,7 +2140,7 @@ export function StoryboardPanel() {
     };
   }, [ratingComparatorMenu]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!footerSortMenu) {
       return;
     }
@@ -2157,7 +2162,7 @@ export function StoryboardPanel() {
     };
   }, [footerSortMenu]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!footerSprayMenu) {
       return;
     }
@@ -2179,7 +2184,7 @@ export function StoryboardPanel() {
     };
   }, [footerSprayMenu]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!footerOptionsMenu) {
       return;
     }
@@ -2246,7 +2251,7 @@ export function StoryboardPanel() {
     selectionAnchorRef.current = nextSelectionFocus.anchorId;
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const panel = panelRef.current;
     if (!panel) {
       return;
@@ -2335,7 +2340,7 @@ export function StoryboardPanel() {
     return () => panel.removeEventListener("keydown", handleSelectionKeyDown);
   }, [activeShotId, rowVirtualizer, selectedShotIds, shotSelectionReplaced, sortedShots, viewMode]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const handleRippleDeleteKey = (event: KeyboardEvent) => {
       if (
         !isEditAuthority ||
@@ -2357,7 +2362,7 @@ export function StoryboardPanel() {
     return () => window.removeEventListener("keydown", handleRippleDeleteKey);
   });
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const handleAnnotationShortcut = (event: KeyboardEvent) => {
       if (
         !isEditAuthority ||
@@ -2419,7 +2424,7 @@ export function StoryboardPanel() {
     viewMode,
   ]);
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       if (scrollAnimationRef.current !== null) {
         scrollAnimationRef.current();
@@ -2435,7 +2440,7 @@ export function StoryboardPanel() {
     [],
   );
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isPlaying || !panelActive) {
       return;
     }
@@ -3314,7 +3319,7 @@ export function StoryboardPanel() {
     }
   }
 
-  useExportCapability({
+  useExportCapability(lifetime, {
     identity,
     active: isEditAuthority,
     selectedCount: buildCurrentStoryboardSource()?.clips.length ?? 0,
@@ -3557,7 +3562,7 @@ export function StoryboardPanel() {
     }));
   }
 
-  useEditCapability({
+  useEditCapability(lifetime, {
     identity,
     active: isEditAuthority,
     selectedCount,
@@ -3646,7 +3651,7 @@ export function StoryboardPanel() {
     );
   }
 
-  return (
+  return lifetime.render(
     <section ref={panelRef} className="storyboard-panel" style={panelStyle} tabIndex={-1}>
       <div className="storyboard-project-row">
         <VideoGlyph aria-hidden="true" />
@@ -5136,6 +5141,6 @@ export function StoryboardPanel() {
           document.body,
         )}
       {detectionDialog}
-    </section>
+    </section>,
   );
 }

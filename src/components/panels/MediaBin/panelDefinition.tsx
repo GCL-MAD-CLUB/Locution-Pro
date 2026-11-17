@@ -1,4 +1,5 @@
-import { useLayoutEffect } from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+
 import { useShallow } from "zustand/shallow";
 import { useProjectPort } from "../../../systems/ProjectSystem";
 import { definePanel, type PanelMenuEntryDefinition } from "../../common/DockLayout";
@@ -9,11 +10,13 @@ import { mediaBinPanelType, type MediaBinPanelParams } from "./panelTypes";
 export { mediaBinPanelType, type MediaBinPanelParams } from "./panelTypes";
 
 function ManagedMediaBin({ params }: { params: MediaBinPanelParams }) {
+  const lifetime = new RenderLifetime();
+
   const initializeViewMode = useMediaBinState((state) => state.initializeViewMode);
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     initializeViewMode(params.initialViewMode ?? "list");
   }, [initializeViewMode, params.initialViewMode]);
-  return <MediaBin rootFolderId={params.rootFolderId} />;
+  return lifetime.render(<MediaBin rootFolderId={params.rootFolderId} />);
 }
 
 function projectMediaTitle(projectFilePath: string | null) {

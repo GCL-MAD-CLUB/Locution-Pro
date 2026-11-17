@@ -1,9 +1,8 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { SubtitleGlyph, VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
 import {
   Fragment,
-  useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -171,10 +170,12 @@ function RenameInput({
   onCommit: (value: string) => void;
   onCancel: () => void;
 }) {
+  const lifetime = new RenderLifetime();
+
   const [value, setValue] = useState(initialValue);
   const finishedRef = useRef(false);
   const fieldRef = useRef<HTMLTextAreaElement | null>(null);
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const field = fieldRef.current;
     if (!field) return;
     const lines = Math.round(field.scrollHeight / nameLineHeightPx);
@@ -186,7 +187,7 @@ function RenameInput({
     if (commit) onCommit(value);
     else onCancel();
   };
-  return (
+  return lifetime.render(
     <textarea
       ref={fieldRef}
       className={`media-bin-title-editor asset-library-rename${wrap ? " is-wrapping" : ""}`}
@@ -212,11 +213,13 @@ function RenameInput({
         }
         if (event.key === "Escape") finish(false);
       }}
-    />
+    />,
   );
 }
 
 export function AssetLibraryItems(props: AssetLibraryItemsProps) {
+  const lifetime = new RenderLifetime();
+
   const {
     root,
     location,
@@ -269,7 +272,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     );
   const selectedCount = nodes.filter((node) => selectedKeys.has(node.key)).length;
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const element = scrollRef.current;
     if (!element) return;
     const update = () => setContentWidth(element.clientWidth);
@@ -281,7 +284,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
 
   columnsRef.current = grid.columns;
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const element = scrollRef.current;
     if (!element) return;
     const handleWheel = (event: WheelEvent) => {
@@ -293,7 +296,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     return () => element.removeEventListener("wheel", handleWheel);
   }, [onZoom]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!focusKey) return;
     scrollRef.current
       ?.querySelector<HTMLElement>(`[data-asset-key="${CSS.escape(focusKey)}"]`)
@@ -711,7 +714,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
       }
     : undefined;
 
-  return (
+  return lifetime.render(
     <div
       className={`asset-library-items-frame is-${layout.mode}${showHeader ? " has-table-header" : ""}${
         itemCheckboxes ? " has-checkboxes" : ""
@@ -752,6 +755,6 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
         {empty ? <div className="asset-library-empty">{emptyText}</div> : renderItems()}
         {marqueeStyle && <div className="asset-library-marquee" style={marqueeStyle} />}
       </div>
-    </div>
+    </div>,
   );
 }

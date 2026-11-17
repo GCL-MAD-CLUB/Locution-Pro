@@ -1,3 +1,4 @@
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import type { AssetLibraryLocation } from "../../../../core/editor/assetLibrary";
 import {
   assetLibraryExportEntries,
@@ -50,14 +51,17 @@ export function assetLibraryExportSelection(
  * selections: 导出 opens the export workspace, 使用上次设置导出 starts right away. Materials
  * whose media is offline are left out and reported.
  */
-export function useAssetLibraryExport({
-  identity,
-  active,
-  library,
-  showHidden,
-  mediaByEntryId,
-  selectedNodes,
-}: AssetLibraryExportOptions) {
+export function useAssetLibraryExport(
+  lifetime: RenderLifetime,
+  {
+    identity,
+    active,
+    library,
+    showHidden,
+    mediaByEntryId,
+    selectedNodes,
+  }: AssetLibraryExportOptions,
+) {
   const { mediaItems, projects, detachedVideoIds, exportState, messagePublished } = useProjectPort(
     ["mediaItems", "projects", "detachedVideoIds", "exportState"],
     ["messagePublished"],
@@ -121,7 +125,7 @@ export function useAssetLibraryExport({
 
   const selection = assetLibraryExportSelection(selectedNodes);
   const selectedCount = active ? exportableCount(selection) : 0;
-  useExportCapability({
+  useExportCapability(lifetime, {
     identity,
     active,
     selectedCount,

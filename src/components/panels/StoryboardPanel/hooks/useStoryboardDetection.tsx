@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invokeCommand, runOperation } from "../../../../errors";
 import {
@@ -171,12 +172,12 @@ export async function detectStoryboardVideo({
   }
 }
 
-export function useStoryboardDetection() {
+export function useStoryboardDetection(lifetime: RenderLifetime) {
   const { projects, mediaItems, storyboards, projectId, storyboardUpdated } = useProjectPort(
     ["projects", "mediaItems", "storyboards", "projectId"],
     ["storyboardUpdated"],
   );
-  const { tasks } = useTaskProgressStatus("storyboard.detect");
+  const { tasks } = useTaskProgressStatus(lifetime, "storyboard.detect");
   const [conflicts, setConflicts] = useState<
     {
       videoIds: string[];
@@ -185,7 +186,7 @@ export function useStoryboardDetection() {
   >([]);
   const conflictResolversRef = useRef(new Set<(mode: StoryboardDetectionMode | null) => void>());
   const mountedRef = useRef(true);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     mountedRef.current = true;
     setConflicts([]);
     return () => {
@@ -211,7 +212,7 @@ export function useStoryboardDetection() {
       setConflicts((current) => [...current, { videoIds: [videoId], confirm }]);
     });
   }, []);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const expired = new Set(
       conflicts.filter(
         (conflict) =>

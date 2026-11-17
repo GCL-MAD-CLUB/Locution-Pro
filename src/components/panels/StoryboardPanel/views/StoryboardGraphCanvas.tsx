@@ -1,9 +1,8 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
   memo,
   useCallback,
-  useEffect,
   useId,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -292,10 +291,12 @@ const GraphHighlightedEdges = memo(function GraphHighlightedEdges({
   edges: StoryboardGraph["edges"];
   nodes: StoryboardGraph["nodes"];
 }) {
+  const lifetime = new RenderLifetime();
+
   const [retained, setRetained] = useState({ edges, nodes });
   const active = useMemo(() => new Set(edges), [edges]);
   const painted = new Set([...(retained.nodes === nodes ? retained.edges : []), ...edges]);
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     setRetained((previous) => ({
       nodes,
       edges: [...new Set([...(previous.nodes === nodes ? previous.edges : []), ...edges])],
@@ -303,7 +304,7 @@ const GraphHighlightedEdges = memo(function GraphHighlightedEdges({
     const timer = window.setTimeout(() => setRetained({ edges, nodes }), graphHoverDurationMs);
     return () => window.clearTimeout(timer);
   }, [edges, nodes]);
-  return (
+  return lifetime.render(
     <>
       {[...painted].map((edge) => {
         const a = nodes[edge.source];
@@ -332,7 +333,7 @@ const GraphHighlightedEdges = memo(function GraphHighlightedEdges({
           />
         );
       })}
-    </>
+    </>,
   );
 });
 
@@ -348,11 +349,13 @@ function GraphPreviewPresence({
   enabled: boolean;
   children: (preview: StoryboardGraphPreview, exiting: boolean, onExited: () => void) => ReactNode;
 }) {
+  const lifetime = new RenderLifetime();
+
   const [retained, setRetained] = useState(previews);
   const active = new Map(previews.map((preview) => [preview.node.id, preview]));
   const painted = new Map(retained.map((preview) => [preview.node.id, preview]));
   for (const preview of previews) painted.set(preview.node.id, preview);
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     if (!enabled) {
       setRetained([]);
       return;
@@ -369,13 +372,15 @@ function GraphPreviewPresence({
     );
     return () => window.clearTimeout(timer);
   }, [previews, enabled]);
-  return enabled
-    ? [...painted.values()].map((preview) =>
-        children(preview, !active.has(preview.node.id), () => {
-          setRetained((previous) => previous.filter((item) => item.node.id !== preview.node.id));
-        }),
-      )
-    : null;
+  return lifetime.render(
+    enabled
+      ? [...painted.values()].map((preview) =>
+          children(preview, !active.has(preview.node.id), () => {
+            setRetained((previous) => previous.filter((item) => item.node.id !== preview.node.id));
+          }),
+        )
+      : null,
+  );
 }
 
 export function StoryboardGraphCanvas({
@@ -398,6 +403,8 @@ export function StoryboardGraphCanvas({
   onActivateShot,
   children,
 }: StoryboardGraphCanvasProps) {
+  const lifetime = new RenderLifetime();
+
   const panelActive = usePanelActive();
   const stageRef = useRef<HTMLDivElement>(null);
   const nodePaintRef = useRef<SVGSVGElement>(null);
@@ -507,7 +514,7 @@ export function StoryboardGraphCanvas({
     beginDrag,
     moveDrag,
     endDrag,
-  } = useStoryboardGraphMotion(view?.graph, panelActive, pendingNodes, graph);
+  } = useStoryboardGraphMotion(lifetime, view?.graph, panelActive, pendingNodes, graph);
   const clusterPadding =
     (graph?.clusterPadding ?? defaultStoryboardGraphOptions.clusterPadding) * layoutProgress;
   const canvas = useMemo(
@@ -557,14 +564,14 @@ export function StoryboardGraphCanvas({
   const cameraRef = useRef(camera);
   // Wheel and pan write this ref a frame ahead of navigation state. A render
   // from the live simulation must not copy the stale state back over that write.
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     cameraRef.current = camera;
   }, [camera]);
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     if (phase === "ambient" && size.width > 1 && navigation?.layoutSize !== size)
       setNavigation({ graph, camera: initialCamera, layoutSize: size });
   }, [phase, size, navigation?.layoutSize, graph, initialCamera]);
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     if (phase === "ambient" && size.width > 1) loadingFrameRef.current = { camera, canvas, size };
     else if (phase === "ready" && loadingFrameRef.current) {
       loadingFrameRef.current = null;
@@ -572,7 +579,7 @@ export function StoryboardGraphCanvas({
     }
   }, [phase, camera, canvas, size, loadingFrame, graph]);
   const cameraFrameRef = useRef<number | null>(null);
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       if (cameraFrameRef.current !== null) cancelAnimationFrame(cameraFrameRef.current);
     },
@@ -885,7 +892,7 @@ export function StoryboardGraphCanvas({
     resetHover();
   }, [cancelGestures, resetHover]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const keyup = (event: globalThis.KeyboardEvent) => {
       if ((event.code === "Space" || event.key === " ") && temporaryHandRef.current) {
         event.preventDefault();
@@ -906,7 +913,7 @@ export function StoryboardGraphCanvas({
     };
   }, [releaseTemporaryHand]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const stage = stageRef.current;
     if (!stage) return;
     const observer = new ResizeObserver(([entry]) =>
@@ -916,7 +923,7 @@ export function StoryboardGraphCanvas({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     resetHover();
     lastClickRef.current = null;
     lastSprayClickRef.current = null;
@@ -932,7 +939,7 @@ export function StoryboardGraphCanvas({
     resetHover,
   ]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!panelActive) {
       releaseTemporaryHand();
       cancelGestures();
@@ -940,7 +947,7 @@ export function StoryboardGraphCanvas({
     }
   }, [panelActive, releaseTemporaryHand, cancelGestures, resetHover]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const blur = () => {
       cancelGestures();
       resetHover();
@@ -965,7 +972,7 @@ export function StoryboardGraphCanvas({
     };
   }, [cancelGestures, resetHover]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!hoverEnabled) resetHover();
   }, [hoverEnabled, resetHover]);
 
@@ -985,7 +992,7 @@ export function StoryboardGraphCanvas({
     [overviewCanvas],
   );
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const stage = stageRef.current;
     if (!stage) return;
     const wheel = (event: WheelEvent) => {
@@ -1044,7 +1051,7 @@ export function StoryboardGraphCanvas({
       );
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const key = (event: globalThis.KeyboardEvent) => {
       if (!panelActive) return;
       if (
@@ -1073,7 +1080,7 @@ export function StoryboardGraphCanvas({
     };
   }, [panelActive, syncSelectionModifiers]);
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const gesture = marqueeRef.current;
     if (!gesture || gesture.spray || gesture.mode === effectiveSelectionMode) return;
     gesture.mode = effectiveSelectionMode;
@@ -1427,7 +1434,7 @@ export function StoryboardGraphCanvas({
     [overviewEdgePath, overviewCanvas, visibleNodes, selectedShotIds, shotAnnotations],
   );
 
-  return (
+  return lifetime.render(
     <div
       ref={stageRef}
       className={`storyboard-graph-view is-${tool} ${sprayActive ? "is-spraying" : ""} ${hoveredNode ? "has-focus" : ""} ${dragging === "canvas" ? "is-panning" : ""} ${dragging === "node" ? "is-dragging-node" : ""} ${marquee ? "is-selecting" : ""}`}
@@ -1747,6 +1754,6 @@ export function StoryboardGraphCanvas({
           />
         </svg>
       </div>
-    </div>
+    </div>,
   );
 }

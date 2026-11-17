@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../../src/runtime/lifetime/RenderLifetime.ts";
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { PanelSearch } from "../../../../src/components/common/PanelSearch/PanelSearch.tsx";
@@ -47,8 +48,10 @@ export function mountAdvancedSearch(label) {
 
 export function mountAdvancedSearchWithPanelState(label) {
   function Harness() {
+    const lifetime = new RenderLifetime();
+
     const usePanel = label === "字幕" ? useSubtitlePanelState : useStoryboardPanelState;
-    const state = usePanel((state) => state, "mode-regression", 1);
+    const state = usePanel(lifetime, (state) => state, "mode-regression", 1);
     window.searchSnapshot = {
       query: state.query,
       mode: state.searchMode,
@@ -57,30 +60,32 @@ export function mountAdvancedSearchWithPanelState(label) {
       threshold: state.semanticThreshold,
       advanced: state.advancedSearch,
     };
-    return React.createElement(PanelSearch, {
-      label,
-      historyKind: label === "字幕" ? "subtitle" : "storyboard",
-      query: state.query,
-      mode: state.searchMode,
-      rule: state.searchRule,
-      scope: label === "分镜" ? state.searchScope : undefined,
-      advanced: state.advancedSearch,
-      disabled: false,
-      canNavigate: false,
-      summary: "",
-      onQueryChange: state.setQuery,
-      onModeChange: state.setSearchMode,
-      onRuleChange: state.setSearchRule,
-      onScopeChange: state.setSearchScope,
-      onAdvancedChange: state.setAdvancedSearch,
-      onNavigate: () => {},
-      semantic: {
-        threshold: state.semanticThreshold,
-        thresholdDecimals: label === "分镜" ? 3 : 2,
-        available: true,
-        onThresholdChange: state.setSemanticThreshold,
-      },
-    });
+    return lifetime.render(
+      React.createElement(PanelSearch, {
+        label,
+        historyKind: label === "字幕" ? "subtitle" : "storyboard",
+        query: state.query,
+        mode: state.searchMode,
+        rule: state.searchRule,
+        scope: label === "分镜" ? state.searchScope : undefined,
+        advanced: state.advancedSearch,
+        disabled: false,
+        canNavigate: false,
+        summary: "",
+        onQueryChange: state.setQuery,
+        onModeChange: state.setSearchMode,
+        onRuleChange: state.setSearchRule,
+        onScopeChange: state.setSearchScope,
+        onAdvancedChange: state.setAdvancedSearch,
+        onNavigate: () => {},
+        semantic: {
+          threshold: state.semanticThreshold,
+          thresholdDecimals: label === "分镜" ? 3 : 2,
+          available: true,
+          onThresholdChange: state.setSemanticThreshold,
+        },
+      }),
+    );
   }
   const host = document.createElement("div");
   document.body.append(host);

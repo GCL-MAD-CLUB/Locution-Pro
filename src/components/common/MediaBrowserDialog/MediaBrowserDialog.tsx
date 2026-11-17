@@ -1,4 +1,5 @@
-﻿import {
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import {
   ArrowLeft,
   ArrowRight,
   ChevronDown,
@@ -10,7 +11,7 @@
   Search,
   X,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { mediaGridLayout } from "../../../application/media/mediaGridLayout";
 import {
@@ -103,6 +104,8 @@ export function MediaBrowserDialog({
   onConfirm,
   onDirectoryChange,
 }: MediaBrowserDialogProps) {
+  const lifetime = new RenderLifetime();
+
   const [roots, setRoots] = useState<MediaBrowserRoot[]>([]);
   const [listing, setListing] = useState<MediaBrowserDirectory | null>(null);
   const [loading, setLoading] = useState(true);
@@ -119,7 +122,7 @@ export function MediaBrowserDialog({
   const [zoom, setZoom] = useState(0);
   const itemsRef = useRef<HTMLDivElement>(null);
   const [gridLayout, setGridLayout] = useState({ columns: 4, cardWidth: 150 });
-  useCloseOnOutsidePointer(Boolean(filterAnchor), () => setFilterAnchor(null), {
+  useCloseOnOutsidePointer(lifetime, Boolean(filterAnchor), () => setFilterAnchor(null), {
     ignorePopupMenuTargets: true,
   });
   const manualSelectionDirectoryRef = useRef("");
@@ -223,7 +226,7 @@ export function MediaBrowserDialog({
     });
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     let cancelled = false;
     void (async () => {
       const rootsOutcome = await runOperation(operation, () =>
@@ -273,7 +276,7 @@ export function MediaBrowserDialog({
     );
   }, [compatibleExtensions, listing, searchQuery, showHidden, shownExtensions]);
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const element = itemsRef.current;
     if (!element || view !== "grid") return;
     const update = () => {
@@ -290,7 +293,7 @@ export function MediaBrowserDialog({
 
   const suggestedSelectionKey = (suggestedPaths ?? []).map(pathKey).join("\u0000");
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (
       !listing ||
       !suggestedSelectionKey ||
@@ -414,7 +417,7 @@ export function MediaBrowserDialog({
     .filter((root) => pathIsWithin(listing?.directory ?? "", root.path))
     .sort((left, right) => right.path.length - left.path.length)[0];
 
-  return (
+  return lifetime.render(
     <ModalDialog
       title={title}
       className="modal-dialog-large media-browser-dialog"
@@ -624,6 +627,6 @@ export function MediaBrowserDialog({
           onChange={(event) => setZoom(Number(event.currentTarget.value))}
         />
       </div>
-    </ModalDialog>
+    </ModalDialog>,
   );
 }

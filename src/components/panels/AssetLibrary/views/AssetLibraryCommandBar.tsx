@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
   ArrowUpDown,
   ChevronDown,
@@ -90,10 +91,12 @@ export function AssetLibraryCommandBar({
   model: AssetLibraryCommandBarModel;
   actions: AssetLibraryCommandBarActions;
 }) {
+  const lifetime = new RenderLifetime();
+
   const [menu, setMenu] = useState<{ kind: CommandMenu; x: number; y: number } | null>(null);
   /** The one submenu of the open menu: 分组依据 under 排序, 显示 under 查看. */
   const [submenuOpen, setSubmenuOpen] = useState(false);
-  useCloseOnOutsidePointer(Boolean(menu), () => setMenu(null), {
+  useCloseOnOutsidePointer(lifetime, Boolean(menu), () => setMenu(null), {
     capturePointerdown: true,
     ignorePopupMenuTargets: true,
   });
@@ -258,7 +261,7 @@ export function AssetLibraryCommandBar({
     }
   }
 
-  return (
+  return lifetime.render(
     <div className="asset-library-command-bar" role="toolbar" aria-label="素材库命令">
       {menuButton("new", CirclePlus, "新建")}
       <span className="asset-library-command-separator" aria-hidden="true" />
@@ -297,6 +300,6 @@ export function AssetLibraryCommandBar({
           </PopupMenu>,
           document.body,
         )}
-    </div>
+    </div>,
   );
 }

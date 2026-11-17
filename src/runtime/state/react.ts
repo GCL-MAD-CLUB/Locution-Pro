@@ -1,9 +1,15 @@
-import { useLayoutEffect, useMemo } from "react";
+import type { RenderLifetime } from "../lifetime/RenderLifetime";
+import { useMemo } from "react";
 import { stateHub } from "./StateHub";
 import type { SystemIdentity } from "../systems/identity";
 
-export function usePublishProjection<Value>(key: string, owner: SystemIdentity, value: Value) {
-  useLayoutEffect(() => {
+export function usePublishProjection<Value>(
+  lifetime: RenderLifetime,
+  key: string,
+  owner: SystemIdentity,
+  value: Value,
+) {
+  lifetime.beforePaint(() => {
     stateHub.publish(key, owner, value);
     return () => stateHub.remove(key, owner);
   }, [key, owner.instanceId, owner.system, value]);

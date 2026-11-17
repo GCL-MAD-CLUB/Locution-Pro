@@ -1,3 +1,4 @@
+import type { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { definePanel } from "../../common/DockLayout";
 import { StoryboardPanel } from "./StoryboardPanel";
 import {
@@ -11,9 +12,10 @@ export const storyboardPanelType = "storyboard";
 export const storyboardPanelDefinition = definePanel({
   type: storyboardPanelType,
   Component: StoryboardPanel,
-  useMenuItems: () => usePanelMediaWorkspaceMenu("storyboard"),
-  useTitle: () => {
-    const { selectedSources } = usePanelMediaSourceSelection();
+  useMenuItems: (_params: unknown, lifetime: RenderLifetime) =>
+    usePanelMediaWorkspaceMenu(lifetime, "storyboard"),
+  useTitle: (_params: unknown, lifetime: RenderLifetime) => {
+    const { selectedSources } = usePanelMediaSourceSelection(lifetime);
     return mediaPanelTitle("storyboard", selectedSources);
   },
 });

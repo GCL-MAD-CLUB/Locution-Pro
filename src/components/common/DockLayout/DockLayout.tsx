@@ -1,6 +1,5 @@
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import {
-  useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -158,6 +157,8 @@ function DockSelfDropZone({ className, active = true }: { className: string; act
 }
 
 export function DockLayout() {
+  const lifetime = new RenderLifetime();
+
   const instances = usePanelManagerState((state) => state.instances);
   const layout = usePanelManagerState((state) => state.layout);
   const activatePanel = usePanelManagerState((state) => state.activatePanel);
@@ -218,7 +219,7 @@ export function DockLayout() {
     });
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     function measureOverflow() {
       const nextOverflow = areaIds.reduce(
         (result, areaId) => {
@@ -269,11 +270,11 @@ export function DockLayout() {
     };
   }, [layout, instances]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     revealActiveTabs();
   }, [layout, instances, tabsOverflow]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!overflowMenu && !panelMenu) {
       return;
     }
@@ -360,7 +361,7 @@ export function DockLayout() {
     setDropTarget(nextTarget);
   }
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const previousPositions = pendingTabPositionsRef.current;
     pendingTabPositionsRef.current = null;
     if (!previousPositions || !dragRef.current?.dragging) {
@@ -399,7 +400,7 @@ export function DockLayout() {
     });
   }, [dropTarget]);
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       clearTabAnimations();
     },
@@ -925,7 +926,7 @@ export function DockLayout() {
     );
   }
 
-  return (
+  return lifetime.render(
     <>
       <main className="workspace dock-workspace">{renderDockNode(layout.root)}</main>
 
@@ -1011,6 +1012,6 @@ export function DockLayout() {
           })}
         </div>
       )}
-    </>
+    </>,
   );
 }

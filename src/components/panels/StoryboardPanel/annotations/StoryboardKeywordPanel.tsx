@@ -1,15 +1,8 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { KeywordPresetControl } from "./KeywordPresetControl";
 import { useKeywordSet } from "./keywordPresetState";
 import { ChevronsUpDown, ChevronDown, Minus, Plus, Search, Trash2 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ModalDialog } from "../../../common/ModalDialog";
 import {
@@ -97,6 +90,8 @@ export function StoryboardKeywordPanel({
   quickKeywordLabel = "",
   topContent,
 }: StoryboardKeywordPanelProps) {
+  const lifetime = new RenderLifetime();
+
   const {
     keywordNodes,
     libraryKeywordNodes,
@@ -114,7 +109,7 @@ export function StoryboardKeywordPanel({
     setKeywordEditorMode,
     quickFilterKeywordIds,
     toggleQuickFilterKeyword,
-  } = useStoryboardPanelState((state) => state);
+  } = useStoryboardPanelState(lifetime, (state) => state);
   const panelInstanceId = usePanelInstanceId();
   const [keywordInput, setKeywordInput] = useState("");
   const [keywordEditValue, setKeywordEditValue] = useState("");
@@ -190,10 +185,10 @@ export function StoryboardKeywordPanel({
   const keywordParseResult = parseStoryboardKeywordInput(keywordInput);
   const mediaShotIds = useMemo(() => shots.map((shot) => shot.id), [shots]);
 
-  useCloseOnOutsidePointer(Boolean(treeContextMenu), () => setTreeContextMenu(null));
-  useCloseOnOutsidePointer(Boolean(keywordModeMenu), () => setKeywordModeMenu(null));
+  useCloseOnOutsidePointer(lifetime, Boolean(treeContextMenu), () => setTreeContextMenu(null));
+  useCloseOnOutsidePointer(lifetime, Boolean(keywordModeMenu), () => setKeywordModeMenu(null));
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const panel = panelScrollRef.current;
     if (!panel) {
       return;
@@ -255,7 +250,7 @@ export function StoryboardKeywordPanel({
     duplicateNameRequest,
   );
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!active || !panelOpen || !recentOpen || keywordShortcutBlocked) {
       setAltShortcutHintsVisible(false);
       setShortcutKeywordIds((current) => (current.length ? [] : current));
@@ -436,7 +431,7 @@ export function StoryboardKeywordPanel({
     }
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (keywordEditorFocused) {
       keywordEditorRef.current?.focus();
     }
@@ -458,7 +453,7 @@ export function StoryboardKeywordPanel({
 
   const normalizedFilter = filter.trim().toLocaleLowerCase();
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (
       !draggedKeywordHoverId ||
       normalizedFilter ||
@@ -1084,7 +1079,7 @@ export function StoryboardKeywordPanel({
     ? storyboardKeywordLabel(treeContextMenuNode.id, keywordNodes)
     : "";
 
-  return (
+  return lifetime.render(
     <>
       <svg width="0" height="0" aria-hidden="true" style={{ position: "absolute" }}>
         <defs>
@@ -1650,6 +1645,6 @@ export function StoryboardKeywordPanel({
           </ModalDialog>,
           keywordPortalRoot(),
         )}
-    </>
+    </>,
   );
 }

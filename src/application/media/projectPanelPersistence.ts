@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { captureOperationError } from "../../errors";
 import { isTauriRuntime } from "../../platform/tauri/runtime";
 import { usePanelInstanceId } from "../../runtime/systems/PanelState";
@@ -15,6 +16,7 @@ import {
  * `sharedId` replaces the panel id for state that every instance of a panel shares.
  */
 export function usePersistedProjectPanelState<State>(
+  lifetime: RenderLifetime,
   snapshot: State | null,
   onRestore: (saved: State | null, projectId: string) => void,
   enabled = true,
@@ -50,7 +52,7 @@ export function usePersistedProjectPanelState<State>(
     }
   }
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     if (!key) {
       if (restoredKey !== null) setRestoredKey(null);
       return;
@@ -60,9 +62,9 @@ export function usePersistedProjectPanelState<State>(
     setRestoredKey(key);
   }, [loaded, key, projectId, panelId, restoredKey]);
 
-  useEffect(() => () => flush(), [key]);
+  lifetime.afterCommit(() => () => flush(), [key]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!native || !loaded || !key || !projectId || restoredKey !== key || snapshot === null)
       return;
     pendingRef.current = { projectId, panelId, snapshot };

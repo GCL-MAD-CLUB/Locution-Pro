@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import test from "node:test";
 import ts from "typescript";
 import { runInNewContext } from "node:vm";
@@ -11,19 +12,9 @@ import type { MediaBinItem, MediaDocument, MediaStream } from "../../../src/type
 const nodeRequire = createRequire(import.meta.url);
 const modules = new Map<string, Record<string, unknown>>();
 
-function normalize(path: string) {
-  const parts: string[] = [];
-  for (const part of path.split("/")) {
-    if (part === "" || part === ".") continue;
-    if (part === "..") parts.pop();
-    else parts.push(part);
-  }
-  return `/${parts.join("/")}`;
-}
-
 function resolveRelative(dir: string, spec: string) {
   if (spec.includes(".css") || spec.includes("?")) return `stub:${spec}`;
-  const path = normalize(`${dir}/${spec}`);
+  const path = resolve(dir, spec);
   for (const candidate of [path, `${path}.ts`, `${path}.tsx`, `${path}.js`, `${path}/index.ts`]) {
     if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
   }
@@ -44,7 +35,7 @@ function loadModule(filename: string): Record<string, unknown> {
   }).outputText;
   const exports: Record<string, unknown> = {};
   modules.set(filename, exports);
-  const dir = filename.slice(0, filename.lastIndexOf("/"));
+  const dir = dirname(filename);
   runInNewContext(
     compiled,
     {

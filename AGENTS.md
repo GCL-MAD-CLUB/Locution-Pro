@@ -25,6 +25,17 @@
 
 - Use an English title for pull requests.
 
+## React lifecycle
+
+- Do not import, call, alias, or wrap React `useEffect`, `useLayoutEffect`, or
+  `useInsertionEffect`. The ban also applies to browser harnesses.
+- Derive values during render and handle user actions in event handlers.
+- External resources must have an explicit owner and release path. Pass a
+  `RenderLifetime` explicitly through hooks that need the component lifetime;
+  render its boundary on every return path, including empty content. Register
+  resources unconditionally in a stable order; put activation conditions inside
+  acquisition callbacks. Never acquire resources during render.
+
 ## Code formatting
 
 - TypeScript, TSX, JavaScript, JSON, CSS, HTML, and Markdown are formatted with the

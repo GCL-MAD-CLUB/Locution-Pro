@@ -1,5 +1,6 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { Captions, FileAudio2, FileVideo2, Image } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ImportFolderIcon } from "../browser/ImportFolderIcon";
 import { mediaKind, type ImportEntry, type ImportMetadata } from "../browser/importBrowserModel";
 import { importCover, importFrame, importMetadata, queuePreview } from "./importPreview";
@@ -13,6 +14,8 @@ export function ImportMediaVisual({
   scrub?: boolean;
   onMetadata?: (metadata: ImportMetadata) => void;
 }) {
+  const lifetime = new RenderLifetime();
+
   const host = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
   const [cover, setCover] = useState("");
@@ -32,14 +35,14 @@ export function ImportMediaVisual({
         : kind === "subtitle"
           ? Captions
           : FileVideo2;
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const observer = new IntersectionObserver(([item]) => setVisible(item.isIntersecting), {
       rootMargin: "100px",
     });
     if (host.current) observer.observe(host.current);
     return () => observer.disconnect();
   }, []);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!visible || !kind || kind === "subtitle") return;
     let live = true;
     if (kind === "video" || kind === "image")
@@ -57,7 +60,7 @@ export function ImportMediaVisual({
     };
   }, [entry.path, visible, kind, scrub, Boolean(onMetadata)]);
   const hovering = progress !== null;
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!hovering || !duration || !scrub || kind !== "video") return;
     let live = true;
     let timer = 0;
@@ -84,7 +87,7 @@ export function ImportMediaVisual({
       setFrame("");
     };
   }, [hovering, duration, scrub, kind, entry.path]);
-  return (
+  return lifetime.render(
     <span
       ref={host}
       className="import-media-visual"
@@ -105,6 +108,6 @@ export function ImportMediaVisual({
       {scrub && hovering && cover && (
         <span className="import-scrub-line" style={{ left: `${progress! * 100}%` }} />
       )}
-    </span>
+    </span>,
   );
 }

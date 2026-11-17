@@ -1,12 +1,6 @@
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { ChevronDown } from "lucide-react";
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { PopupMenu, PopupMenuItem, PopupMenuSeparator } from "../PopupMenu";
 import "./SelectDropdown.css";
@@ -84,6 +78,8 @@ export function SelectDropdown<T extends string>({
   value,
   onChange,
 }: SelectDropdownProps<T>) {
+  const lifetime = new RenderLifetime();
+
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   function setOpen(next: boolean) {
@@ -134,7 +130,7 @@ export function SelectDropdown<T extends string>({
     });
   }
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     if (!open) {
       return;
     }
@@ -143,7 +139,7 @@ export function SelectDropdown<T extends string>({
     return () => window.cancelAnimationFrame(frame);
   }, [open, items, menuMinWidth, menuWidth, placement, menuVariant]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!open) {
       return;
     }
@@ -256,7 +252,7 @@ export function SelectDropdown<T extends string>({
       </div>
     );
 
-  return (
+  return lifetime.render(
     <div
       ref={rootRef}
       className={`select-dropdown ${open ? "open" : ""} ${disabled ? "disabled" : ""} ${className ?? ""}`}
@@ -280,6 +276,6 @@ export function SelectDropdown<T extends string>({
         </button>
       )}
       {open && !disabled && createPortal(menu, document.body)}
-    </div>
+    </div>,
   );
 }

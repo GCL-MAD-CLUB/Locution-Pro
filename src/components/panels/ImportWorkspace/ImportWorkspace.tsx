@@ -1,4 +1,5 @@
-﻿import { useMemo, useRef, useState } from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePreferencesPort } from "../../../systems/PreferencesSystem";
 import {
@@ -27,7 +28,9 @@ interface ImportWorkspaceProps {
 }
 
 export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspaceProps) {
-  const browser = useImportBrowser();
+  const lifetime = new RenderLifetime();
+
+  const browser = useImportBrowser(lifetime);
   const [view, setView] = useState<"grid" | "list">("grid");
   const [zoom, setZoom] = useState(180);
   const [busy, setBusy] = useState(false);
@@ -68,7 +71,7 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
       ),
     [mediaItems],
   );
-  const selection = useImportSelection(imported);
+  const selection = useImportSelection(lifetime, imported);
   const projectDirectory = projectFilePath ? parentDirectory(projectFilePath) : "";
   const destination =
     settings.destination === "project" ? projectDirectory : settings.customDirectory;
@@ -184,7 +187,7 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
       setBusy(false);
     }
   }
-  return (
+  return lifetime.render(
     <section className="import-workspace" aria-label="导入工作区" aria-busy={busy}>
       <div className="import-workspace-content" inert={busy}>
         <ImportSidebar
@@ -256,6 +259,6 @@ export function ImportWorkspace({ onImportCompleted, onCancel }: ImportWorkspace
           />,
           document.body,
         )}
-    </section>
+    </section>,
   );
 }

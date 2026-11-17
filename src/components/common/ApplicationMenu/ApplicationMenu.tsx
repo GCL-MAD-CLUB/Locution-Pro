@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { useRef, useState } from "react";
 import { PopupMenu, PopupMenuItem, PopupMenuSeparator, PopupMenuSubmenu } from "../PopupMenu";
 import "./ApplicationMenu.css";
 
@@ -98,6 +99,8 @@ interface ApplicationMenuProps {
 }
 
 export function ApplicationMenu({ model }: ApplicationMenuProps) {
+  const lifetime = new RenderLifetime();
+
   const { file, edit, window: windowMenu, beta, help } = model;
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [editMenuOpen, setEditMenuOpen] = useState(false);
@@ -120,7 +123,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
     setTranscodeWindowMenuOpen(false);
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!fileMenuOpen && !editMenuOpen && !windowMenuOpen && !betaMenuOpen && !helpMenuOpen) {
       return;
     }
@@ -160,7 +163,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
     await handler();
   };
 
-  return (
+  return lifetime.render(
     <nav className="application-menu" aria-label="应用菜单" ref={menuRef}>
       <div className="application-menu-root">
         <button
@@ -638,6 +641,6 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
           </PopupMenu>
         )}
       </div>
-    </nav>
+    </nav>,
   );
 }

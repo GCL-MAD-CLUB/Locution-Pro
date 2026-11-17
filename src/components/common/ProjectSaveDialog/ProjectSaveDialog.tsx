@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+
 import { ModalDialog } from "../ModalDialog";
 import "./ProjectSaveDialog.css";
 
@@ -17,7 +18,9 @@ export function ProjectSaveDialog({
   onDiscard,
   onSave,
 }: ProjectSaveDialogProps) {
-  useEffect(() => {
+  const lifetime = new RenderLifetime();
+
+  lifetime.afterCommit(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       if (
         saving ||
@@ -47,7 +50,7 @@ export function ProjectSaveDialog({
     return () => window.removeEventListener("keydown", handleShortcut, true);
   }, [onDiscard, onSave, saving]);
 
-  return (
+  return lifetime.render(
     <ModalDialog
       title=""
       className="project-save-dialog"
@@ -89,6 +92,6 @@ export function ProjectSaveDialog({
       <p className="project-save-dialog-message">
         在关闭之前保存更改到 <strong title={projectName}>“{projectName}”</strong> 吗？
       </p>
-    </ModalDialog>
+    </ModalDialog>,
   );
 }

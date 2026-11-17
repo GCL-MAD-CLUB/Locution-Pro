@@ -1,6 +1,6 @@
 {
   "extends": "../tsconfig.json",
-  "compilerOptions": { "types": ["node", "vite/client"] },
+  "compilerOptions": { "types": ["node", "vite/client"], "allowImportingTsExtensions": true },
   "include": [
     "browser/**/*.ts",
     "browser/**/*.tsx",

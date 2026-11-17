@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../src/runtime/lifetime/RenderLifetime.ts";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
@@ -77,58 +78,66 @@ export async function runSubtitleSemanticTests() {
     render();
   };
   function Duplicate() {
+    const lifetime = new RenderLifetime();
+
     duplicateRenders++;
     duplicateSnapshot = useSubtitleSemanticSearch(
+      lifetime,
       input.enabled,
       input.query,
       input.subtitles.map((cue) => ({ ...cue, source: cue.source ?? input.scope })),
       input.scope,
       clearQuery,
     );
-    return null;
+    return lifetime.render(null);
   }
   const MemoDuplicate = React.memo(Duplicate);
   function Harness() {
+    const lifetime = new RenderLifetime();
+
     snapshot = useSubtitleSemanticSearch(
+      lifetime,
       input.enabled,
       input.query,
       input.subtitles.map((cue) => ({ ...cue, source: cue.source ?? input.scope })),
       input.scope,
       clearQuery,
     );
-    taskStatus = useTaskProgressStatus("subtitle.semanticIndex");
-    return h(
-      React.Fragment,
-      null,
-      h(TaskProgress, { children: null }),
-      h(PanelSearch, {
-        advanced: defaultAdvancedSearch,
-        onAdvancedChange: () => {},
-        historyKind: "subtitle",
-        label: "字幕",
-        query: input.query,
-        mode: input.enabled ? "semantic" : "filter",
-        rule: "contains",
-        disabled: false,
-        canNavigate: false,
-        summary: snapshot.status,
-        onQueryChange: (query) => {
-          input = { ...input, query };
-          render();
-        },
-        onModeChange: () => {},
-        onRuleChange: () => {},
-        onNavigate: () => {},
-        semantic: {
-          threshold,
-          available: snapshot.status === "ready" && snapshot.scores.size > 0,
-          onThresholdChange: (value) => {
-            threshold = value;
+    taskStatus = useTaskProgressStatus(lifetime, "subtitle.semanticIndex");
+    return lifetime.render(
+      h(
+        React.Fragment,
+        null,
+        h(TaskProgress, { children: null }),
+        h(PanelSearch, {
+          advanced: defaultAdvancedSearch,
+          onAdvancedChange: () => {},
+          historyKind: "subtitle",
+          label: "字幕",
+          query: input.query,
+          mode: input.enabled ? "semantic" : "filter",
+          rule: "contains",
+          disabled: false,
+          canNavigate: false,
+          summary: snapshot.status,
+          onQueryChange: (query) => {
+            input = { ...input, query };
             render();
           },
-        },
-      }),
-      duplicate ? h(MemoDuplicate, { input }) : null,
+          onModeChange: () => {},
+          onRuleChange: () => {},
+          onNavigate: () => {},
+          semantic: {
+            threshold,
+            available: snapshot.status === "ready" && snapshot.scores.size > 0,
+            onThresholdChange: (value) => {
+              threshold = value;
+              render();
+            },
+          },
+        }),
+        duplicate ? h(MemoDuplicate, { input }) : null,
+      ),
     );
   }
   const render = () => flushSync(() => root.render(h(Harness)));
@@ -441,13 +450,17 @@ export async function runSubtitleSemanticTableTests({ available = true } = {}) {
   const root = createRoot(host);
   let port, source, subtitle;
   function Harness() {
+    const lifetime = new RenderLifetime();
+
     port = useProjectPort([], ["projectOpened", "projectClosed"]);
-    source = usePanelMediaSourceSelection("subtitles");
-    subtitle = useSubtitlePanelState((state) => state);
-    return h(
-      "div",
-      { className: "dock-panel-surface active", style: { width: 1400, height: 700 } },
-      h(SubtitlePanel),
+    source = usePanelMediaSourceSelection(lifetime, "subtitles");
+    subtitle = useSubtitlePanelState(lifetime, (state) => state);
+    return lifetime.render(
+      h(
+        "div",
+        { className: "dock-panel-surface active", style: { width: 1400, height: 700 } },
+        h(SubtitlePanel),
+      ),
     );
   }
   const act = async (action) => {

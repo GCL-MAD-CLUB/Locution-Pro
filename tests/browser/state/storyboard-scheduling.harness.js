@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../src/runtime/lifetime/RenderLifetime.ts";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
@@ -140,11 +141,15 @@ export async function runStoryboardSchedulingTests() {
   }
 
   function Probe() {
-    const detection = useStoryboardDetection();
-    const status = useTaskProgressStatus();
+    const lifetime = new RenderLifetime();
+
+    const detection = useStoryboardDetection(lifetime);
+    const status = useTaskProgressStatus(lifetime);
     snapshots.detection = detection;
     snapshots.tasks = status.tasks;
-    return h(React.Fragment, null, h(TaskProgress, null), detection.detectionDialog);
+    return lifetime.render(
+      h(React.Fragment, null, h(TaskProgress, null), detection.detectionDialog),
+    );
   }
 
   const act = async (callback) => {

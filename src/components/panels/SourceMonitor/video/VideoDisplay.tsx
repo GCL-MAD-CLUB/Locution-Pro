@@ -1,7 +1,6 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
   useCallback,
-  useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -84,6 +83,8 @@ export function VideoDisplay({
   traceFingerprint,
   traceAssetId,
 }: VideoDisplayProps) {
+  const lifetime = new RenderLifetime();
+
   const setZoomLevel = useSourceMonitorState((state) => state.setZoomLevel);
   const setZoomPan = useSourceMonitorState((state) => state.setZoomPan);
   const zoomLevelRef = useRef(zoomLevel);
@@ -132,6 +133,7 @@ export function VideoDisplay({
     ? (videosRef.current.get(layers.displayed.id) ?? null)
     : null;
   useVideoHistogram(
+    lifetime,
     histogramVideoRef,
     layers.displayed?.id ?? null,
     histogramEnabled && !transientPreview,
@@ -139,6 +141,7 @@ export function VideoDisplay({
   );
   const bindingsRef = useRef(new Map<number, (video: HTMLVideoElement | null) => void>());
   useVideoFrameTrace(
+    lifetime,
     histogramVideoRef,
     layers.displayed?.id ?? null,
     frameRate,
@@ -252,7 +255,7 @@ export function VideoDisplay({
     return binding;
   }
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const video = layers.current && videosRef.current.get(layers.current.id);
     videoRef.current = video ?? null;
     const pending = pendingFrameRef.current;
@@ -279,7 +282,7 @@ export function VideoDisplay({
     if (video === videoRef.current) handler(video);
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const stage = stageRef.current;
     if (!stage) {
       return;
@@ -342,7 +345,7 @@ export function VideoDisplay({
     setZoomPan(nextPan);
   }
 
-  return (
+  return lifetime.render(
     <div
       ref={stageRef}
       className="source-video-stage"
@@ -400,6 +403,6 @@ export function VideoDisplay({
           style={{ transform, transformOrigin: "50% 50%" }}
         />
       )}
-    </div>
+    </div>,
   );
 }

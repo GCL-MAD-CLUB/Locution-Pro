@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { forceCenter } from "d3-force";
 import {
   createStoryboardGraphAmbient,
@@ -18,6 +19,7 @@ const emptyNodes: StoryboardGraph["nodes"] = [];
 // Topology changes immediately; positions, radii, hit targets, links and the
 // overview move together. Preserve velocity when another filter interrupts.
 export function useStoryboardGraphMotion(
+  lifetime: RenderLifetime,
   graph: StoryboardGraph | undefined,
   active: boolean,
   pendingNodes: StoryboardGraph["nodes"] = emptyNodes,
@@ -57,7 +59,7 @@ export function useStoryboardGraphMotion(
     live.current = null;
     dragged.current = null;
   }, []);
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const radiusOnly = previousLayout.current === layoutGraph;
     previousLayout.current = layoutGraph;
     stopLive();
@@ -206,7 +208,7 @@ export function useStoryboardGraphMotion(
     };
   }, [target, graph?.edges, pending, publish, stopLive, layoutGraph]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!pending) return;
     cancelAnimationFrame(springFrame.current);
     if (
@@ -277,7 +279,7 @@ export function useStoryboardGraphMotion(
     simulation.alphaTarget(0).alpha(Math.max(0.3, simulation.alpha())).restart();
   }, []);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!active) {
       endDrag();
       live.current?.stop();

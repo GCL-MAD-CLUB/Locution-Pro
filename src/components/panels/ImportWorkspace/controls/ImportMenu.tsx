@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import { PopupMenu, useCloseOnOutsidePointer } from "../../../common/PopupMenu";
@@ -15,17 +16,21 @@ export function ImportMenu({
   children: ReactNode;
   light?: boolean;
 }) {
-  useCloseOnOutsidePointer(true, onClose, { ignorePopupMenuTargets: true });
-  return createPortal(
-    <PopupMenu
-      className={`import-popup ${light ? "is-light" : "is-dark"}`}
-      ariaLabel={label}
-      contextMenuAnchor={anchor}
-      style={{ position: "fixed", left: anchor.x, top: anchor.y, zIndex: 200 }}
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      {children}
-    </PopupMenu>,
-    document.body,
+  const lifetime = new RenderLifetime();
+
+  useCloseOnOutsidePointer(lifetime, true, onClose, { ignorePopupMenuTargets: true });
+  return lifetime.render(
+    createPortal(
+      <PopupMenu
+        className={`import-popup ${light ? "is-light" : "is-dark"}`}
+        ariaLabel={label}
+        contextMenuAnchor={anchor}
+        style={{ position: "fixed", left: anchor.x, top: anchor.y, zIndex: 200 }}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        {children}
+      </PopupMenu>,
+      document.body,
+    ),
   );
 }

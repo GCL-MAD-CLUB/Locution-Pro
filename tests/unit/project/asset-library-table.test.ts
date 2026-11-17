@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../support/lifetime.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createModuleLoader } from "../support/module-loader.ts";
@@ -68,11 +69,10 @@ function headerFixture(ids: string[]) {
     "../../../src/components/panels/AssetLibrary/views/AssetLibraryListHeader.tsx",
     {
       "react/jsx-runtime": { jsx, jsxs: jsx },
+      "../../../../runtime/lifetime/RenderLifetime": { RenderLifetime },
       react: {
         useRef: (current: unknown) => ({ current }),
         useState: (initial: unknown) => [initial, () => {}],
-        useEffect: () => {},
-        useLayoutEffect: () => {},
       },
       "react-dom": {},
       "../../../common/PopupMenu": { useCloseOnOutsidePointer: () => {} },

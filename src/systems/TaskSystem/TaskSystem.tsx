@@ -1,5 +1,6 @@
+import { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
 import { X } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { captureOperationError, type OperationKey, type PublicContext } from "../../errors";
 import "../../components/common/TaskProgress/TaskProgress.css";
 
@@ -145,9 +146,9 @@ function setSnapshot(nextSnapshot: TaskProgressSnapshot) {
 // import) moves it between nearly every commit. WKWebView delivers those events
 // between commits, so the forced renders chain until React aborts with
 // "Maximum update depth exceeded". Progress may trail by a frame instead.
-function useTaskProgressSnapshot() {
+function useTaskProgressSnapshot(lifetime: RenderLifetime) {
   const [current, setCurrent] = useState(getSnapshot);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const update = () => setCurrent(getSnapshot());
     update();
     return subscribe(update);
@@ -380,8 +381,11 @@ export async function cancelAllTaskProgress() {
   }
 }
 
-export function useTaskProgressStatus(operation?: OperationKey): TaskProgressStatus {
-  const { tasks } = useTaskProgressSnapshot();
+export function useTaskProgressStatus(
+  lifetime: RenderLifetime,
+  operation?: OperationKey,
+): TaskProgressStatus {
+  const { tasks } = useTaskProgressSnapshot(lifetime);
 
   return useMemo(() => {
     const visibleTasks = operation ? tasks.filter((task) => task.operation === operation) : tasks;
@@ -395,17 +399,19 @@ export function useTaskProgressStatus(operation?: OperationKey): TaskProgressSta
 }
 
 export function TaskProgress({ children }: TaskProgressProps) {
-  const { tasks } = useTaskProgressSnapshot();
+  const lifetime = new RenderLifetime();
+
+  const { tasks } = useTaskProgressSnapshot(lifetime);
 
   if (tasks.length === 0) {
-    return children;
+    return lifetime.render(children);
   }
 
   if (tasks.length === 1) {
     const task = tasks[0];
     const fillPercent = taskPercent(task);
     const percent = Math.round(fillPercent);
-    return (
+    return lifetime.render(
       <>
         <div
           className="topbar-progress"
@@ -437,7 +443,7 @@ export function TaskProgress({ children }: TaskProgressProps) {
             )}
           </div>
         </div>
-      </>
+      </>,
     );
   }
 
@@ -445,7 +451,7 @@ export function TaskProgress({ children }: TaskProgressProps) {
   const queued = tasks.filter((task) => task.state === "queued");
   const visibleTasks = [...running, ...queued].slice(0, TASK_PROGRESS_SLOTS);
 
-  return (
+  return lifetime.render(
     <>
       <div className="topbar-progress topbar-progress-multi">
         <span>{`正在执行 ${running.length} 项操作${queued.length ? `，${queued.length} 项排队中` : ""}...`}</span>
@@ -468,6 +474,6 @@ export function TaskProgress({ children }: TaskProgressProps) {
           })}
         </div>
       </div>
-    </>
+    </>,
   );
 }

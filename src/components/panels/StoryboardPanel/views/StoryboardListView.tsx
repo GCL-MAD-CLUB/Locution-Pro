@@ -1,9 +1,9 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { cellEditReset } from "../../../../core/editor/cellEditReset";
 import { annotationColors } from "../../../../runtime/theme";
 import type { PanelRowSource } from "../../../../core/editor/multiSource";
 import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
 import {
-  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -165,6 +165,8 @@ export function StoryboardListView({
   shotTitle,
   shotLabel,
 }: StoryboardListViewProps) {
+  const lifetime = new RenderLifetime();
+
   const {
     activeShotId,
     selectedShotIds,
@@ -178,7 +180,7 @@ export function StoryboardListView({
     setShotFlags,
     setShotColorLabels,
     setShotStackExpanded,
-  } = useStoryboardPanelState((state) => state);
+  } = useStoryboardPanelState(lifetime, (state) => state);
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [editingCell, setEditingCell] = useState<ActiveCell | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -198,7 +200,7 @@ export function StoryboardListView({
   }
   const stackMap = stacksByShotId(shotStacks);
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       cancelPendingCellEdit();
     },
@@ -384,7 +386,7 @@ export function StoryboardListView({
     );
   }
 
-  return (
+  return lifetime.render(
     <div className="storyboard-list-frame" role="table" aria-label="分镜列表" style={tableStyle}>
       <div className="storyboard-list-header-viewport">
         <div ref={headerRef} className="storyboard-list-header" role="row">
@@ -643,6 +645,6 @@ export function StoryboardListView({
           </div>
         )}
       </div>
-    </div>
+    </div>,
   );
 }

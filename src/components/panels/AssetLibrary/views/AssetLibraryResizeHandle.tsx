@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { assetLibraryPaneWidths, type AssetLibraryPane } from "../state/panelState";
 
 /** Divider between framed panes; only the handle being dragged keeps its line visible. */
@@ -13,9 +14,11 @@ export function AssetLibraryResizeHandle({
   width: number;
   onWidthChange: (pane: AssetLibraryPane, width: number) => void;
 }) {
+  const lifetime = new RenderLifetime();
+
   const [active, setActive] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
-  useEffect(() => () => cleanupRef.current?.(), []);
+  lifetime.afterCommit(() => () => cleanupRef.current?.(), []);
 
   function startResize(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;
@@ -45,7 +48,7 @@ export function AssetLibraryResizeHandle({
     window.addEventListener("pointercancel", cleanup);
   }
 
-  return (
+  return lifetime.render(
     <div
       className={`asset-library-resize-handle${active ? " is-active" : ""}`}
       role="separator"
@@ -54,6 +57,6 @@ export function AssetLibraryResizeHandle({
       title="拖动调整宽度，双击恢复默认"
       onPointerDown={startResize}
       onDoubleClick={() => onWidthChange(pane, assetLibraryPaneWidths[pane].initial)}
-    />
+    />,
   );
 }

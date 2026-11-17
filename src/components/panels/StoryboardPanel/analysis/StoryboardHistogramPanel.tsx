@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useMemo } from "react";
 import { usePlaybackStatus } from "../../../../runtime/capabilities/PlaybackCapability";
 import { usePanelInstanceId } from "../../../../runtime/systems/PanelState";
@@ -12,9 +13,11 @@ const layers = [
 ] as const;
 
 export function StoryboardHistogramPanel({ visible }: { visible: boolean }) {
+  const lifetime = new RenderLifetime();
+
   const identity = useStableIdentity("playback-histogram", usePanelInstanceId());
   const demand = useMemo(() => ({ enabled: visible }), [visible]);
-  usePublishProjection(PLAYBACK_HISTOGRAM_DEMAND_PROJECTION, identity, demand);
+  usePublishProjection(lifetime, PLAYBACK_HISTOGRAM_DEMAND_PROJECTION, identity, demand);
   const histogram = usePlaybackStatus()?.histogram;
   const paths = useMemo(() => {
     if (!histogram) return [];
@@ -28,7 +31,7 @@ export function StoryboardHistogramPanel({ visible }: { visible: boolean }) {
         .join(" "),
     }));
   }, [histogram]);
-  return (
+  return lifetime.render(
     <div
       data-preserve-panel-focus
       onPointerDown={(event) => {
@@ -59,6 +62,6 @@ export function StoryboardHistogramPanel({ visible }: { visible: boolean }) {
           ))}
         </svg>
       </div>
-    </div>
+    </div>,
   );
 }

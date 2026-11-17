@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { themeSvgDataUrl } from "../../../runtime/theme";
 import { matchesSearchDuration, type AdvancedSearchOptions } from "../../../core/editor/textSearch";
 import {
@@ -42,7 +43,6 @@ import {
 import { SubtitleGlyph } from "../../common/MediaKindIcons/MediaKindIcons";
 import {
   Fragment,
-  useEffect,
   useCallback,
   useMemo,
   useRef,
@@ -820,6 +820,8 @@ function SubtitleColorMenuItems({ checkedColorLabel, onSelect }: SubtitleColorMe
 }
 
 export function SubtitlePanel() {
+  const lifetime = new RenderLifetime();
+
   const panelInstanceId = usePanelInstanceId();
   const panelActive = usePanelActive();
   const focusedPanelId = usePanelManagerState((state) => state.focusedPanelId);
@@ -835,7 +837,7 @@ export function SubtitlePanel() {
     toggleSource,
     previewSource,
     selection,
-  } = usePanelMediaSource("subtitles");
+  } = usePanelMediaSource(lifetime, "subtitles");
   const sources = useMemo(
     () =>
       selectedSources
@@ -906,8 +908,8 @@ export function SubtitlePanel() {
     setCueColorLabels,
     cueSelectionCleared,
     cueSelectionReplaced,
-  } = useSubtitlePanelState((state) => state, trackContext, selection.workspaceId);
-  const semanticSearchAvailable = useSemanticSearchAvailable();
+  } = useSubtitlePanelState(lifetime, (state) => state, trackContext, selection.workspaceId);
+  const semanticSearchAvailable = useSemanticSearchAvailable(lifetime);
   const searchMode =
     storedSearchMode === "semantic" && !semanticSearchAvailable ? "filter" : storedSearchMode;
   const panelRef = useRef<HTMLElement | null>(null);
@@ -963,7 +965,7 @@ export function SubtitlePanel() {
   );
   const activeTrack = activeSource?.tracks.find((track) => track.id === activeTrackId);
   const [sourceDirection, setSourceDirection] = useState<SourceSortDirection>("ascending");
-  usePersistedMediaPanelState({
+  usePersistedMediaPanelState(lifetime, {
     selection,
     onRestoreWorkspaces: selection.hydrateWorkspaces,
     sourceDirection,
@@ -1006,6 +1008,7 @@ export function SubtitlePanel() {
   );
   const semanticScope = JSON.stringify([projectId, selection.workspaceId, trackContext]);
   const semantic = useSubtitleSemanticSearch(
+    lifetime,
     searchMode === "semantic",
     query,
     semanticSubtitles,
@@ -1132,7 +1135,7 @@ export function SubtitlePanel() {
   const footerSortLabel =
     subtitleSortOptions.find((option) => option.id === activeCueSort.columnId)?.label ?? "媒体开始";
   const sprayUsesCustomLabel = sprayMode === "colorLabel" && sprayCustomLabel.trim().length > 0;
-  const { altPressed: sprayAltPressed } = useSprayToolModifiers(sprayActive, false);
+  const { altPressed: sprayAltPressed } = useSprayToolModifiers(lifetime, sprayActive, false);
   const sprayCanEraseWithAlt =
     (sprayMode === "colorLabel" && (sprayColorLabel !== null || sprayUsesCustomLabel)) ||
     (sprayMode === "flag" && sprayFlag !== "none");
@@ -1282,7 +1285,7 @@ export function SubtitlePanel() {
     measureElement: getRowHeight,
     overscan: 6,
   });
-  const captureThumbnailResizeCenter = useTimelineThumbnailListResizeAnchor({
+  const captureThumbnailResizeCenter = useTimelineThumbnailListResizeAnchor(lifetime, {
     itemCount: sortedCues.length,
     itemHeight: subtitleRowHeight,
     measure: rowVirtualizer.measure,
@@ -1308,12 +1311,13 @@ export function SubtitlePanel() {
     rowVirtualizer.scrollToIndex(targetIndex, { align: "center" });
   }
   useSearchNavigation(
+    lifetime,
     panelRef,
     searchMode === "highlight" && Boolean(query.trim()),
     navigateSearch,
   );
   const searchFocusKey = `${searchMode}\u0000${searchRule}\u0000${query}`;
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (searchMode !== "highlight" || !query.trim()) return;
     const firstMatchIndex = matchingCueIndices[0];
     if (firstMatchIndex === undefined) return;
@@ -1334,7 +1338,7 @@ export function SubtitlePanel() {
     rowVirtualizer.scrollOffset ?? 0,
     rowVirtualizer.scrollRect?.height ?? 0,
   );
-  const thumbnailWindow = useTimelineThumbnailWindow({
+  const thumbnailWindow = useTimelineThumbnailWindow(lifetime, {
     enabled: Boolean(thumbnailVideoPath),
     sourceKey: trackContext,
     items: sortedCues,
@@ -1463,7 +1467,7 @@ export function SubtitlePanel() {
         ? `${videoLabel} 无字幕`
         : "未选择";
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     rowVirtualizer.measure();
   }, [rowVirtualizer, subtitleRowHeight]);
 
@@ -1491,6 +1495,7 @@ export function SubtitlePanel() {
   }
 
   useCloseOnOutsidePointer(
+    lifetime,
     Boolean(contextMenu) || Boolean(annotationMenu),
     () => {
       setContextMenu(null);
@@ -1511,7 +1516,7 @@ export function SubtitlePanel() {
     footerSprayMenu ||
     footerOptionsMenu,
   );
-  useCloseOnOutsidePointer(anyMenu, () => {
+  useCloseOnOutsidePointer(lifetime, anyMenu, () => {
     setContextMenu(null);
     setAnnotationMenu(null);
     setTrackMenu(null);
@@ -1533,7 +1538,7 @@ export function SubtitlePanel() {
     selectionAnchorRef.current = nextSelectionFocus.anchorId;
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const panel = panelRef.current;
     if (!panel) {
       return;
@@ -1602,7 +1607,7 @@ export function SubtitlePanel() {
     return () => panel.removeEventListener("keydown", handleSelectionKeyDown);
   }, [activeCueId, cueSelectionReplaced, rowVirtualizer, selectedCueIds, sortedCues]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const handleRippleDeleteKey = (event: KeyboardEvent) => {
       if (
         !isEditAuthority ||
@@ -1624,7 +1629,7 @@ export function SubtitlePanel() {
     return () => window.removeEventListener("keydown", handleRippleDeleteKey);
   });
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const handleAnnotationShortcut = (event: KeyboardEvent) => {
       if (
         !isEditAuthority ||
@@ -1683,7 +1688,7 @@ export function SubtitlePanel() {
     sortedCues,
   ]);
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       if (scrollAnimationRef.current !== null) {
         scrollAnimationRef.current();
@@ -1696,7 +1701,7 @@ export function SubtitlePanel() {
     [],
   );
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isPlaying || !panelActive) {
       return;
     }
@@ -1964,7 +1969,7 @@ export function SubtitlePanel() {
     }
   }
 
-  useExportCapability({
+  useExportCapability(lifetime, {
     identity,
     active: isEditAuthority,
     selectedCount: buildCurrentSubtitleSource()?.clips.length ?? 0,
@@ -2475,7 +2480,7 @@ export function SubtitlePanel() {
     );
   }
 
-  useEditCapability({
+  useEditCapability(lifetime, {
     identity,
     active: isEditAuthority,
     selectedCount,
@@ -2487,7 +2492,7 @@ export function SubtitlePanel() {
     },
   });
 
-  return (
+  return lifetime.render(
     <section ref={panelRef} className="subtitle-panel" style={panelStyle} tabIndex={-1}>
       <div className="subtitle-project-row">
         <SubtitleGlyph aria-hidden="true" />
@@ -3611,6 +3616,6 @@ export function SubtitlePanel() {
           </PopupMenu>,
           document.body,
         )}
-    </section>
+    </section>,
   );
 }

@@ -1,3 +1,4 @@
+import type { RenderLifetime } from "../lifetime/RenderLifetime";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { createStore, type StateCreator, type StoreApi } from "zustand/vanilla";
@@ -55,11 +56,11 @@ export function usePanelActive() {
 }
 
 /** The mounted panel owns its title, including when its tab is inactive. */
-export function usePublishPanelTitle(title: string) {
+export function usePublishPanelTitle(lifetime: RenderLifetime, title: string) {
   const instanceId = usePanelInstanceId();
   const identity = useStableIdentity("panel-title", instanceId);
   const value = useMemo(() => ({ title }), [title]);
-  usePublishProjection(PANEL_TITLE_PROJECTION, identity, value);
+  usePublishProjection(lifetime, PANEL_TITLE_PROJECTION, identity, value);
 }
 
 export function usePublishedPanelTitle() {

@@ -1,9 +1,10 @@
+import { RenderLifetime } from "./runtime/lifetime/RenderLifetime";
 import { applyAppearance, defaultThemeColor } from "./runtime/theme";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Loader2 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useStore } from "zustand";
 import {
   appPanelRegistry,
@@ -78,6 +79,7 @@ import { cancelAllTaskProgress, useTaskProgressStatus } from "./systems/TaskSyst
 import { runMediaImportBatchTask } from "./application/media/mediaImportTask";
 import {
   checkForUpdate,
+  checkForStartupUpdate,
   compareVersions,
   createUpdateWriteBarrier,
   installPreparedUpdate,
@@ -329,6 +331,8 @@ type AppWorkspace = (typeof appWorkspaces)[number]["id"];
 type PendingCloseTarget = "project" | "window";
 
 function AppContent() {
+  const lifetime = new RenderLifetime();
+
   const identity = useStableIdentity("app-shell");
   const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("edit");
   const exportHistoryCursor = useExportWorkspaceState((state) => state.rangeHistoryCursor);
@@ -438,7 +442,7 @@ function AppContent() {
   const [restartingBeta, setRestartingBeta] = useState(false);
   const startupPreferenceApplied = useRef(false);
   const autoSaveIntervalMinutes = preferences.auto_save_interval_minutes;
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     applyAppearance(preferences.appearance ?? "darkest");
   }, [preferences.appearance]);
   const autoSaveEnabled = preferences.auto_save_enabled;
@@ -466,7 +470,7 @@ function AppContent() {
     : (activeMediaDisplayName || mediaItems[0]?.file_name)?.replace(/\.[^.]+$/, "") || "未命名项目";
   const autoSaveProjectNameRef = useRef(autoSaveProjectName);
   autoSaveProjectNameRef.current = autoSaveProjectName;
-  const { tasks: runningTasks } = useTaskProgressStatus();
+  const { tasks: runningTasks } = useTaskProgressStatus(lifetime);
   const isBusy =
     runningTasks.some((task) => task.blocking) ||
     historyNavigating ||
@@ -508,7 +512,7 @@ function AppContent() {
   const activeStatusLabel =
     runningTasks.length === 1 ? runningTasks[0].label : `正在执行 ${runningTasks.length} 项操作...`;
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (warnings.length === 0) {
       return;
     }
@@ -520,14 +524,14 @@ function AppContent() {
     return () => window.clearTimeout(timeoutId);
   }, [warnings, warningsReplaced]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
     void loadPreferences();
   }, [loadPreferences]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!preferencesLoaded || startupPreferenceApplied.current) return;
     startupPreferenceApplied.current = true;
     if (!preferences.show_home_on_startup) {
@@ -535,7 +539,7 @@ function AppContent() {
     }
   }, [preferencesLoaded, preferences.show_home_on_startup]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isTauriRuntime()) return;
     let active = true;
     void (async () => {
@@ -557,7 +561,7 @@ function AppContent() {
       }
       if (!active) return;
       try {
-        const result = await checkForUpdate();
+        const result = await checkForStartupUpdate();
         if (
           !active ||
           updateRequestRef.current !== 0 ||
@@ -582,14 +586,14 @@ function AppContent() {
     };
   }, []);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (updateDialogState?.status !== "installed") return;
     void acknowledgeUpdateNotes().catch((error) =>
       captureOperationError("help.checkUpdates", error),
     );
   }, [updateDialogState]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isTauriRuntime() || !hasProject || !autoSaveEnabled) {
       return;
     }
@@ -627,7 +631,7 @@ function AppContent() {
 
   // macOS reports Finder opens as events, including while the app is running;
   // the backend stores the path for take_launch_project_path first.
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
@@ -656,7 +660,7 @@ function AppContent() {
     };
   }, []);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
@@ -681,7 +685,7 @@ function AppContent() {
       });
   }, []);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     try {
       window.localStorage.setItem(recentMediaStorageKey, JSON.stringify(recentMediaPaths));
     } catch (error) {
@@ -690,7 +694,7 @@ function AppContent() {
     }
   }, [recentMediaPaths]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     try {
       window.localStorage.setItem(recentProjectStorageKey, JSON.stringify(recentProjects));
     } catch (error) {
@@ -704,7 +708,7 @@ function AppContent() {
   // project is always kept (its id may not be on the list yet while unsaved),
   // and pruning waits until the launch-path project, if any, has been opened so
   // it cannot be wiped before its recorded state is read.
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isTauriRuntime() || !launchResolved) {
       return;
     }
@@ -725,7 +729,7 @@ function AppContent() {
     };
   }, [launchResolved, projectId, recentProjects]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
@@ -735,7 +739,7 @@ function AppContent() {
     runBackgroundOperation("window.title", () => getCurrentWindow().setTitle(title));
   }, [project, projectDirty, projectFilePath]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
@@ -829,7 +833,7 @@ function AppContent() {
     }
   }
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       const resolve = pendingDiscardResolveRef.current;
       pendingDiscardResolveRef.current = null;
@@ -1470,20 +1474,20 @@ function AppContent() {
     messagePublished(`已删除当前及其后的 ${removedCount} 条历史记录。`);
   }
 
-  useBroadcastEvent(identity, "media.import.requested", async ({ payload }) => {
+  useBroadcastEvent(lifetime, identity, "media.import.requested", async ({ payload }) => {
     await importMedia(payload.paths, payload.folderId ?? null);
     return "handled" as const;
   });
 
   // The transcode queue runs in the background, so it always needs to know
   // where the project lives to resolve the encoder bin folder.
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     transcodeQueueStore
       .getState()
       .setProjectDirectory(projectFilePath ? parentDirectory(projectFilePath) : "");
   }, [projectFilePath]);
 
-  useBroadcastEvent(identity, "transcode.export.requested", async ({ payload }) => {
+  useBroadcastEvent(lifetime, identity, "transcode.export.requested", async ({ payload }) => {
     if (!betaTranscodeEnabled) return "handled" as const;
     const plan = await sendExportToTranscode(payload.source, payload.settings);
     setActiveWorkspace("transcode");
@@ -1497,7 +1501,7 @@ function AppContent() {
     return "handled" as const;
   });
 
-  useBroadcastEvent(identity, "transcode.enqueue.requested", async ({ payload }) => {
+  useBroadcastEvent(lifetime, identity, "transcode.enqueue.requested", async ({ payload }) => {
     if (!betaTranscodeEnabled) return "handled" as const;
     const added = enqueueTranscodeSources(payload.paths);
     setActiveWorkspace("transcode");
@@ -1509,7 +1513,7 @@ function AppContent() {
   });
 
   /** Files finished outputs into the project's root `encoder` media bin. */
-  useBroadcastEvent(identity, "transcode.output.completed", async ({ payload }) => {
+  useBroadcastEvent(lifetime, identity, "transcode.output.completed", async ({ payload }) => {
     if (payload.paths.length === 0 || isMediaBinReadOnly) {
       return "handled" as const;
     }
@@ -1533,13 +1537,13 @@ function AppContent() {
     return "handled" as const;
   });
 
-  useBroadcastEvent(identity, "export.requested", async ({ payload }) => {
+  useBroadcastEvent(lifetime, identity, "export.requested", async ({ payload }) => {
     exportWorkspaceStore.getState().setSource(payload.source);
     setActiveWorkspace("export");
     return "handled" as const;
   });
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       if (event.repeat) {
         return;
@@ -1906,7 +1910,7 @@ function AppContent() {
     },
   };
 
-  return (
+  return lifetime.render(
     <HistoryPanelServicesProvider
       services={{
         disabled: isBusy,
@@ -2036,11 +2040,13 @@ function AppContent() {
           />
         )}
       </div>
-    </HistoryPanelServicesProvider>
+    </HistoryPanelServicesProvider>,
   );
 }
 
 function WorkspaceConfigAutoSave() {
+  const lifetime = new RenderLifetime();
+
   const instances = usePanelManagerState((state) => state.instances);
   const layout = usePanelManagerState((state) => state.layout);
   const focusedPanelId = usePanelManagerState((state) => state.focusedPanelId);
@@ -2078,7 +2084,7 @@ function WorkspaceConfigAutoSave() {
     [],
   );
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
@@ -2092,7 +2098,7 @@ function WorkspaceConfigAutoSave() {
     }, workspaceConfigSaveDelayMs);
   }, [config, saveLatestConfig]);
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       if (saveTimerRef.current !== null) {
         window.clearTimeout(saveTimerRef.current);
@@ -2103,15 +2109,17 @@ function WorkspaceConfigAutoSave() {
     [saveLatestConfig],
   );
 
-  return null;
+  return lifetime.render(null);
 }
 
 function RestoredPanelManager() {
+  const lifetime = new RenderLifetime();
+
   const [initialState, setInitialState] = useState<PanelManagerInitialState | null>(() =>
     isTauriRuntime() ? null : initialAppPanelState,
   );
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
@@ -2138,14 +2146,14 @@ function RestoredPanelManager() {
   }, []);
 
   if (!initialState) {
-    return <div className="app-shell" />;
+    return lifetime.render(<div className="app-shell" />);
   }
 
-  return (
+  return lifetime.render(
     <PanelManagerProvider initialState={initialState} defaultState={initialAppPanelState}>
       <WorkspaceConfigAutoSave />
       <AppContent />
-    </PanelManagerProvider>
+    </PanelManagerProvider>,
   );
 }
 

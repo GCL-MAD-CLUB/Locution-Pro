@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
+import { useMemo, useRef, useState } from "react";
 import {
   serializeStoryboardGraphOptions,
   type StoryboardGraph,
@@ -17,6 +18,7 @@ type GraphState =
   | { status: "cancelled" | "failed"; message: string };
 
 export function useStoryboardGraph(
+  lifetime: RenderLifetime,
   shots: readonly SemanticShot[],
   scope: string,
   enabled: boolean,
@@ -42,13 +44,13 @@ export function useStoryboardGraph(
   const sequence = useRef(0);
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<{ key: string; state: GraphState } | null>(null);
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       layout.current?.worker.terminate();
     },
     [],
   );
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!enabled) return;
     if (!shots.length) {
       const { nodeRadii: _, ...settings } = workerOptions;

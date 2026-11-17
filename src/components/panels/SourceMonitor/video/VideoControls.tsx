@@ -1,5 +1,5 @@
-﻿import {
-  useEffect,
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import {
   useRef,
   useState,
   type CSSProperties,
@@ -145,6 +145,8 @@ export function VideoControls({
   onTogglePlayback,
   onPreviewModeChange,
 }: VideoControlsProps) {
+  const lifetime = new RenderLifetime();
+
   const rowRef = useRef<HTMLDivElement | null>(null);
   const timeEditorRef = useRef<HTMLSpanElement | null>(null);
   const timecodeScrubRef = useRef<TimecodeScrubState | null>(null);
@@ -164,7 +166,7 @@ export function VideoControls({
   const monitorTimeColumnCh = Math.max(11, monitorTimeText.length, monitorDurationText.length);
   const monitorTimeStyle = { "--monitor-time-ch": monitorTimeColumnCh } as CSSProperties;
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const row = rowRef.current;
     if (!row) {
       return;
@@ -178,7 +180,7 @@ export function VideoControls({
     return () => row.removeEventListener("wheel", handleWheel);
   }, [durationFrames, hasMedia, minTimelineSpanFrames]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!editingTime) {
       return;
     }
@@ -205,7 +207,7 @@ export function VideoControls({
     setEditingTime(false);
   }
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       clearTimecodeScrubTimer();
     },
@@ -442,7 +444,7 @@ export function VideoControls({
     }),
   );
 
-  return (
+  return lifetime.render(
     <div
       ref={rowRef}
       className={`source-control-row ${hasMedia ? "" : "empty-state"} ${storyboardActions ? "with-storyboard-actions" : ""} ${showZoom || previewModeOptions.length > 0 ? "" : "without-menus"}`}
@@ -545,6 +547,6 @@ export function VideoControls({
         />
       )}
       <span className="monitor-duration">{monitorDurationText}</span>
-    </div>
+    </div>,
   );
 }

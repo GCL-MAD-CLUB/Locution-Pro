@@ -1,4 +1,5 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { invokeCommand, runOperation } from "../../../../errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import {
@@ -17,7 +18,7 @@ import {
   saveImportSettings,
 } from "./importBrowserConfig";
 
-export function useImportBrowser() {
+export function useImportBrowser(lifetime: RenderLifetime) {
   const [locations, setLocations] = useState<ImportLocation[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [settings, setSettings] = useState<ImportSettings>(defaultImportSettings);
@@ -66,7 +67,7 @@ export function useImportBrowser() {
     setSettings(next);
     void saveImportSettings(next);
   }, []);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     let live = true;
     if (isTauriRuntime())
       void (async () => {

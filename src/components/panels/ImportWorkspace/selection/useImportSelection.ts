@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useMemo, useRef, useState } from "react";
 import { invokeCommand, runOperation } from "../../../../errors";
 import { pathKey, type ImportDirectory, type ImportEntry } from "../browser/importBrowserModel";
 import {
@@ -25,11 +26,11 @@ async function readFolder(path: string, signal: AbortSignal) {
   }
 }
 
-export function useImportSelection(imported: Set<string>) {
+export function useImportSelection(lifetime: RenderLifetime, imported: Set<string>) {
   const [rawItems, setItems] = useState<ImportSelectionItem[]>([]);
   const jobs = useRef(new Map<string, AbortController>());
   const entries = useRef(new Map<string, ImportEntry>());
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       jobs.current.forEach((job) => job.abort());
       jobs.current.clear();

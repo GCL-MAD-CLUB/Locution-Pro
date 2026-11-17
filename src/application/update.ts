@@ -118,6 +118,14 @@ export function compareVersions(left: string, right: string): number | null {
 }
 
 let activeCheck: Promise<UpdateCheckResult> | null = null;
+let startupCheck: Promise<UpdateCheckResult> | null = null;
+
+/** Automatic discovery belongs to the app session, including a settled failure.
+ * Remounting UI must not repeat it; explicit checks can always start a new request.
+ */
+export function checkForStartupUpdate(): Promise<UpdateCheckResult> {
+  return (startupCheck ??= checkForUpdate());
+}
 
 export function isStableUpdateVersion(version: string) {
   return /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version);

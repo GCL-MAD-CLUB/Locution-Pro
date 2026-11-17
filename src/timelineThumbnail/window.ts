@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { RenderLifetime } from "../runtime/lifetime/RenderLifetime";
+import { useMemo, useRef, useState } from "react";
 import type { TimelineThumbnailBackfillRequest, TimelineThumbnailRequest } from "./manager";
 import { timelineThumbnailResolutions, type TimelineThumbnailResolution } from "./resolution";
 
@@ -172,17 +173,20 @@ export function timelineThumbnailWindowContains(plan: TimelineThumbnailWindowPla
   return index >= plan.targetStartIndex && index < plan.targetEndIndex;
 }
 
-export function useTimelineThumbnailWindow<Item>({
-  enabled,
-  sourceKey,
-  items,
-  getItemKey,
-  visibleRange,
-  targetResolution,
-  requestThumbnail,
-  backfillThumbnail,
-  debounceMs = defaultWindowDebounceMs,
-}: TimelineThumbnailWindowOptions<Item>) {
+export function useTimelineThumbnailWindow<Item>(
+  lifetime: RenderLifetime,
+  {
+    enabled,
+    sourceKey,
+    items,
+    getItemKey,
+    visibleRange,
+    targetResolution,
+    requestThumbnail,
+    backfillThumbnail,
+    debounceMs = defaultWindowDebounceMs,
+  }: TimelineThumbnailWindowOptions<Item>,
+) {
   const getItemKeyRef = useRef(getItemKey);
   const requestThumbnailRef = useRef(requestThumbnail);
   const backfillThumbnailRef = useRef(backfillThumbnail);
@@ -198,7 +202,7 @@ export function useTimelineThumbnailWindow<Item>({
   );
   const [debouncedPlan, setDebouncedPlan] = useState(rawPlan);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (rawPlan.signature === debouncedPlan.signature) {
       return;
     }
@@ -210,7 +214,7 @@ export function useTimelineThumbnailWindow<Item>({
     return () => window.clearTimeout(timer);
   }, [debounceMs, debouncedPlan.signature, rawPlan]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!enabled || !sourceKey) {
       sessionRef.current += 1;
       for (const record of requestsRef.current.values()) {
@@ -335,7 +339,7 @@ export function useTimelineThumbnailWindow<Item>({
     })();
   }, [debouncedPlan, enabled, items, rawPlan.signature, sourceKey, targetResolution]);
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       sessionRef.current += 1;
       for (const record of requestsRef.current.values()) {

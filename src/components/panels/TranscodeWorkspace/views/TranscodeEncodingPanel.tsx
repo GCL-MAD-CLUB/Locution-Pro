@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useState } from "react";
 import {
   fileName,
   formatDuration,
@@ -7,9 +8,9 @@ import {
   useTranscodeQueueState,
 } from "../../../../systems/TranscodeSystem";
 
-function useNow(active: boolean) {
+function useNow(lifetime: RenderLifetime, active: boolean) {
   const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!active) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -18,6 +19,8 @@ function useNow(active: boolean) {
 }
 
 export function TranscodeEncodingPanel() {
+  const lifetime = new RenderLifetime();
+
   const sources = useTranscodeQueueState((state) => state.sources);
   const activeOutputId = useTranscodeQueueState((state) => state.activeOutputId);
   const capabilities = useTranscodeQueueState((state) => state.capabilities);
@@ -25,10 +28,10 @@ export function TranscodeEncodingPanel() {
   const active = sources
     .flatMap((source) => source.outputs.map((output) => ({ source, output })))
     .find(({ output }) => output.id === activeOutputId);
-  const now = useNow(Boolean(active));
+  const now = useNow(lifetime, Boolean(active));
 
   if (!active) {
-    return (
+    return lifetime.render(
       <div className="transcode-encoding is-idle">
         <p className="transcode-empty">
           {configLoaded && !capabilities
@@ -38,7 +41,7 @@ export function TranscodeEncodingPanel() {
         {capabilities?.version && (
           <p className="transcode-note">编码器：FFmpeg {capabilities.version}</p>
         )}
-      </div>
+      </div>,
     );
   }
 
@@ -46,7 +49,7 @@ export function TranscodeEncodingPanel() {
   const elapsedMs = output.startedAt ? now - output.startedAt : 0;
   const remainingMs =
     output.progress > 0.01 ? (elapsedMs / output.progress) * (1 - output.progress) : null;
-  return (
+  return lifetime.render(
     <div className="transcode-encoding">
       <div className="transcode-encoding-title" title={source.path}>
         {fileName(source.path)}
@@ -81,6 +84,6 @@ export function TranscodeEncodingPanel() {
         </span>
         <span>{Math.round(output.progress * 100)}%</span>
       </div>
-    </div>
+    </div>,
   );
 }

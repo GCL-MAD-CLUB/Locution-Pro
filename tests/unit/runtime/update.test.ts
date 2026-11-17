@@ -111,6 +111,30 @@ test("update checks expose only newer releases and share an active request", asy
   assert.equal(JSON.stringify(await next), JSON.stringify({ status: "available", release }));
 });
 
+test("startup checks survive remounts after settling while manual checks remain fresh", async () => {
+  const { update, invocations } = loadUpdate({ version: "0.4.0" } as ReleaseInfo);
+  const first = update.checkForStartupUpdate();
+  assert.equal(update.checkForStartupUpdate(), first);
+  await first;
+  assert.equal(update.checkForStartupUpdate(), first);
+  assert.deepEqual(invocations, ["fetch_latest_release"]);
+  await update.checkForUpdate();
+  assert.deepEqual(invocations, ["fetch_latest_release", "fetch_latest_release"]);
+});
+
+test("failed startup checks are not retried by remounts and allow an explicit retry", async () => {
+  const { update, invocations, pending } = loadUpdate();
+  const first = update.checkForStartupUpdate();
+  pending.reject(new Error("offline"));
+  await assert.rejects(first, /offline/);
+  assert.equal(update.checkForStartupUpdate(), first);
+  assert.deepEqual(invocations, ["fetch_latest_release"]);
+  const retry = update.checkForUpdate();
+  assert.notEqual(retry, first);
+  await assert.rejects(retry, /offline/);
+  assert.deepEqual(invocations, ["fetch_latest_release", "fetch_latest_release"]);
+});
+
 test("update availability waits for the download and falls back to the release page on failure", async () => {
   const download = deferred<void>();
   const update = loadModule<UpdateModule>("../../../src/application/update.ts", {

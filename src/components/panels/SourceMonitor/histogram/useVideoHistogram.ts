@@ -1,9 +1,11 @@
-import { useEffect, useRef, type RefObject } from "react";
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useRef, type RefObject } from "react";
 import { captureOperationError } from "../../../../errors";
 import type { FrameHistogram } from "../../../../core/editor/frameHistogram";
 import type { FrameHistogramWorkerResponse } from "./frameHistogramWorker";
 
 export function useVideoHistogram(
+  lifetime: RenderLifetime,
   videoRef: RefObject<HTMLVideoElement | null>,
   sourceKey: string | number | null,
   enabled: boolean,
@@ -11,7 +13,7 @@ export function useVideoHistogram(
 ) {
   const callback = useRef(onHistogram);
   callback.current = onHistogram;
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const video = videoRef.current;
     if (!enabled) return;
     callback.current(null);

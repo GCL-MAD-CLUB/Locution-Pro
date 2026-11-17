@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+
 import {
   transcodePanelRegistry,
   transcodePanelStore,
@@ -14,17 +15,19 @@ import "./TranscodeWorkspace.css";
  * registry and layout, plus the settings dialog the queue opens.
  */
 export function TranscodeWorkspace() {
+  const lifetime = new RenderLifetime();
+
   const editing = useTranscodeEditor((state) => state.editing);
   const closeEditor = useTranscodeEditor((state) => state.close);
   // The saved layout arrives with the config; showing the default first
   // would flash a different arrangement.
   const configLoaded = useTranscodeQueueState((state) => state.configLoaded);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     void ensureTranscodeReady();
   }, []);
 
-  return (
+  return lifetime.render(
     <>
       {configLoaded ? (
         <PanelRegistryProvider registry={transcodePanelRegistry}>
@@ -43,6 +46,6 @@ export function TranscodeWorkspace() {
           onClose={closeEditor}
         />
       )}
-    </>
+    </>,
   );
 }

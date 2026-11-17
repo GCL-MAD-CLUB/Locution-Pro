@@ -1,4 +1,5 @@
-import { useEffect, useRef, type RefObject } from "react";
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useRef, type RefObject } from "react";
 import { captureOperationError } from "../../../../errors";
 import { type PlaybackTraceSample } from "../../../../core/editor/frameTrace";
 import { timeUsToFrame } from "../../../../core/editor/timeline";
@@ -13,6 +14,7 @@ import {
 import { getFrameTraceCache } from "../../../../application/media/frameTraceCache";
 
 export function useVideoFrameTrace(
+  lifetime: RenderLifetime,
   videoRef: RefObject<HTMLVideoElement | null>,
   sourceKey: number | null,
   frameRate: number,
@@ -22,7 +24,7 @@ export function useVideoFrameTrace(
 ) {
   const callback = useRef(onSample);
   callback.current = onSample;
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     callback.current(null);
     const video = videoRef.current;
     if (!enabled || !video || sourceKey === null) return;

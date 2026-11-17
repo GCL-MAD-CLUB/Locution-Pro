@@ -1,4 +1,5 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { useRef, useState } from "react";
 import { File, Folder } from "lucide-react";
 import { invokeCommand, runOperation } from "../../../errors";
 import { createFfmpegTaskId } from "../../../platform/tauri/ffmpegProgress";
@@ -48,8 +49,10 @@ export function BrowserSystemIcon({
   path: string;
   directory?: boolean;
 }) {
+  const lifetime = new RenderLifetime();
+
   const [src, setSrc] = useState("");
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     let live = true;
     void iconSource(path).then((value) => {
       if (live) setSrc(value);
@@ -58,12 +61,14 @@ export function BrowserSystemIcon({
       live = false;
     };
   }, [path]);
-  return src ? (
-    <img className="media-browser-system-icon" src={src} alt="" draggable={false} />
-  ) : directory ? (
-    <Folder aria-hidden="true" />
-  ) : (
-    <File aria-hidden="true" />
+  return lifetime.render(
+    src ? (
+      <img className="media-browser-system-icon" src={src} alt="" draggable={false} />
+    ) : directory ? (
+      <Folder aria-hidden="true" />
+    ) : (
+      <File aria-hidden="true" />
+    ),
   );
 }
 
@@ -76,6 +81,8 @@ export function BrowserVisual({
   directory: boolean;
   preview: boolean;
 }) {
+  const lifetime = new RenderLifetime();
+
   const host = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
   const [cover, setCover] = useState("");
@@ -87,7 +94,7 @@ export function BrowserVisual({
     progress === null
       ? null
       : Math.min(Math.round(duration * progress), Math.max(0, duration - 40_000));
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (progress === null || !duration || !preview || !visible) {
       setFrame("");
       return;
@@ -128,12 +135,12 @@ export function BrowserVisual({
   }, [progress !== null, duration, path, preview, visible]);
   const isVideo =
     preview && !directory && /\.(mp4|mov|mkv|avi|webm|m4v|mts|m2ts|ts|mpeg|mpg)$/i.test(path);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting));
     if (host.current) observer.observe(host.current);
     return () => observer.disconnect();
   }, []);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!visible || !isVideo) return;
     let live = true;
     let url = "";
@@ -155,7 +162,7 @@ export function BrowserVisual({
       setCover("");
     };
   }, [visible, isVideo, path]);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (progress === null || duration > 0 || !isVideo) return;
     let live = true;
     void queued(async () => {
@@ -172,7 +179,7 @@ export function BrowserVisual({
       live = false;
     };
   }, [progress !== null, duration, isVideo, path]);
-  return (
+  return lifetime.render(
     <span
       ref={host}
       className="media-browser-file-visual is-icon"
@@ -193,6 +200,6 @@ export function BrowserVisual({
       ) : (
         visible && <BrowserSystemIcon path={path} directory={directory} />
       )}
-    </span>
+    </span>,
   );
 }

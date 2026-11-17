@@ -1,6 +1,6 @@
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
   useCallback,
-  useEffect,
   useRef,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -29,7 +29,7 @@ function isNameTarget(target: EventTarget | null) {
  * Clicking the only selected item's name again renames it after a pause. Any further
  * press or key before then, including the second click of a double-click, cancels the rename.
  */
-export function useSlowClickRename(startRename: (key: string) => void) {
+export function useSlowClickRename(lifetime: RenderLifetime, startRename: (key: string) => void) {
   const armedRef = useRef<ArmedPress | null>(null);
   const timerRef = useRef<number | null>(null);
   const startRenameRef = useRef(startRename);
@@ -41,7 +41,7 @@ export function useSlowClickRename(startRename: (key: string) => void) {
     timerRef.current = null;
   }, []);
 
-  useEffect(() => cancel, [cancel]);
+  lifetime.afterCommit(() => cancel, [cancel]);
 
   /** Arms the rename only on the name text of the sole selected item. */
   const armOnPointerDown = useCallback(

@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight, Search } from "lucide-react";
 import {
   useState,
@@ -99,9 +100,11 @@ function AddressInput({
 }
 
 export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
+  const lifetime = new RenderLifetime();
+
   const { library, location, path, backStack, forwardStack, dropTargetKey } = props;
   const [menu, setMenu] = useState<AddressMenu | null>(null);
-  useCloseOnOutsidePointer(Boolean(menu), () => setMenu(null), {
+  useCloseOnOutsidePointer(lifetime, Boolean(menu), () => setMenu(null), {
     capturePointerdown: true,
     ignorePopupMenuTargets: true,
   });
@@ -263,7 +266,7 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
 
   const hasChildren = libraryPlace !== null && childFolders(libraryPlace).length > 0;
 
-  return (
+  return lifetime.render(
     <div className="asset-library-location-row">
       <div className="asset-library-history" aria-label="位置历史">
         <button
@@ -368,6 +371,6 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
         />
       </label>
       {renderMenu()}
-    </div>
+    </div>,
   );
 }

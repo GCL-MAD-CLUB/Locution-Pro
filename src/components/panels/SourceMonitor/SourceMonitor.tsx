@@ -1,14 +1,6 @@
-﻿import { convertFileSrc } from "@tauri-apps/api/core";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type DragEvent,
-  type SyntheticEvent,
-} from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { useCallback, useMemo, useRef, useState, type DragEvent, type SyntheticEvent } from "react";
 import { flushSync } from "react-dom";
 import { useSourcePreviewRequest } from "../../../application/media/panelMediaSources";
 import { usePersistedProjectPanelState } from "../../../application/media/projectPanelPersistence";
@@ -203,6 +195,8 @@ function isEditableKeyboardTarget(target: EventTarget | null) {
 }
 
 export function SourceMonitor() {
+  const lifetime = new RenderLifetime();
+
   const panelInstanceId = usePanelInstanceId();
   const isExportMonitor = panelInstanceId === "export-source";
   const exportSource = useExportWorkspaceState((state) => state.source);
@@ -296,6 +290,7 @@ export function SourceMonitor() {
     restorePanelFrame,
   } = useSourceMonitorState((state) => state);
   const playbackHistoryReady = usePersistedProjectPanelState<{ playbackHistoryVideoIds: string[] }>(
+    lifetime,
     playbackHistoryProjectId === projectId ? { playbackHistoryVideoIds } : null,
     (saved, restoredProjectId) => {
       const ids = Array.isArray(saved?.playbackHistoryVideoIds)
@@ -408,7 +403,7 @@ export function SourceMonitor() {
     ? isMediaVideoDetached(activeVideoItem, detachedVideoIds)
     : false;
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (
       playbackHistoryReady &&
       playbackHistoryProjectId === projectId &&
@@ -518,7 +513,7 @@ export function SourceMonitor() {
     }
   }
 
-  useBroadcastEvent(identity, "playback.frame-preview.requested", ({ payload }) => {
+  useBroadcastEvent(lifetime, identity, "playback.frame-preview.requested", ({ payload }) => {
     if (payload.frame === null) {
       if (hoverPreviewRestoreRef.current?.sessionId !== payload.sessionId) return "ignored";
       finishHoverPreview();
@@ -574,7 +569,7 @@ export function SourceMonitor() {
     setClearedHoverForPlayback(false);
   }
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     if (!panelActive) finishHoverPreview();
   }, [panelActive]);
   const videoContext = storyboardVideoContext(activeVideoId, project);
@@ -647,7 +642,7 @@ export function SourceMonitor() {
   const exportRangeStartFrame = exportRange?.startFrame;
   const exportRangeEndFrame = exportRange?.endFrame;
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isExportMonitor) return;
     const range =
       exportRangeStartFrame === undefined || exportRangeEndFrame === undefined
@@ -660,7 +655,7 @@ export function SourceMonitor() {
     cuePlaybackEndFrameRef.current = range?.endFrame ?? null;
   }, [isExportMonitor, exportRangeStartFrame, exportRangeEndFrame, setCueRange]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isExportMonitor || durationFrames <= 0) return;
     const clip = exportClipRef.current;
     if (!clip) return;
@@ -689,7 +684,7 @@ export function SourceMonitor() {
     updateTimelineStartFrame,
   ]);
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const mediaChanged = panelMediaKey !== mediaKey;
     const nextSpan = durationFrames > 0 ? durationFrames : defaultTimelineSpanFrames;
     syncMedia(mediaKey, durationFrames);
@@ -711,7 +706,7 @@ export function SourceMonitor() {
     setPlaybackMode(0);
   }, [mediaKey]);
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     if (
       isExportMonitor ||
       !panelActive ||
@@ -747,7 +742,7 @@ export function SourceMonitor() {
     sourceRequest,
   ]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const pendingSeek = pendingSourceSeekRef.current;
     if (pendingSeek?.videoId !== undefined && pendingSeek.videoId !== activeVideoId) {
       pendingSourceSeekRef.current = null;
@@ -756,7 +751,7 @@ export function SourceMonitor() {
     flushPendingSourceSeek();
   }, [activeVideoId, mediaKey]);
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       if (playbackTickRef.current !== null) {
         cancelAnimationFrame(playbackTickRef.current);
@@ -768,7 +763,7 @@ export function SourceMonitor() {
     [],
   );
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (durationFrames <= 0) {
       return;
     }
@@ -869,7 +864,7 @@ export function SourceMonitor() {
     applySeekRequestRef.current?.(pending);
   }
 
-  const { isAuthority: isPlaybackShortcutAuthority } = usePlaybackCapability({
+  const { isAuthority: isPlaybackShortcutAuthority } = usePlaybackCapability(lifetime, {
     videoSource: videoSrc,
     histogram: histogramFrame?.source === videoSrc ? histogramFrame.bins : null,
     identity,
@@ -895,7 +890,7 @@ export function SourceMonitor() {
     },
   });
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const isShortcutScopeActive = (target?: EventTarget | null) => {
       if (!panelActive || !isPlaybackShortcutAuthority || isPopupMenuOpen()) {
         return false;
@@ -1864,7 +1859,7 @@ export function SourceMonitor() {
     );
   }
 
-  return (
+  return lifetime.render(
     <div
       ref={sourceMonitorRef}
       className={`source-monitor ${hasMedia ? "" : "empty-state"} ${
@@ -2061,6 +2056,6 @@ export function SourceMonitor() {
           onClose={() => setStillExportRequest(null)}
         />
       )}
-    </div>
+    </div>,
   );
 }

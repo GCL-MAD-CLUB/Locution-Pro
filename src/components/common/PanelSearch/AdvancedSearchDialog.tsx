@@ -1,4 +1,5 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
 import {
   canHighlightSearchRule,
   defaultAdvancedSearch,
@@ -37,11 +38,13 @@ export function AdvancedSearchDialog({
   onApply: (value: AdvancedSearchDraft) => void;
   onClose: () => void;
 }) {
+  const lifetime = new RenderLifetime();
+
   const [draft, setDraft] = useState(initial);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const fieldId = useId();
   const ref = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const inputs = Array.from(ref.current?.querySelectorAll("textarea") ?? []);
     function resize(input: HTMLTextAreaElement) {
       const style = getComputedStyle(input);
@@ -66,7 +69,7 @@ export function AdvancedSearchDialog({
     inputs.forEach((input) => observer.observe(input));
     return () => observer.disconnect();
   }, [draft.query, draft.options.negativePrompts, draft.options.excludedText, draft.mode]);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const previous = document.activeElement;
     ref.current?.querySelector<HTMLTextAreaElement>("textarea:not(:disabled)")?.focus();
     return () => {
@@ -148,7 +151,7 @@ export function AdvancedSearchDialog({
     if (!error) onApply(draft);
   }
 
-  return (
+  return lifetime.render(
     <div
       ref={ref}
       className="advanced-search-modal"
@@ -330,6 +333,6 @@ export function AdvancedSearchDialog({
           </div>
         )}
       </ModalDialog>
-    </div>
+    </div>,
   );
 }

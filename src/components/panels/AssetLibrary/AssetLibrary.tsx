@@ -1,6 +1,6 @@
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -89,6 +89,8 @@ interface ContextMenuState extends AssetLibraryContextMenuState {
 }
 
 export function AssetLibrary() {
+  const lifetime = new RenderLifetime();
+
   const panelInstanceId = usePanelInstanceId();
   const panelActive = usePanelActive();
   const focusedPanelId = usePanelManagerState((state) => state.focusedPanelId);
@@ -106,7 +108,7 @@ export function AssetLibrary() {
     ["assetLibraryUpdated", "messagePublished", "activeVideoChanged"],
   );
   const view = useAssetLibraryState((state) => state);
-  const home = useAssetLibraryHome();
+  const home = useAssetLibraryHome(lifetime);
   const { clipboard, cut } = useAssetLibraryClipboard();
   const commands = useMemo(() => assetLibraryCommands(assetLibraryUpdated), [assetLibraryUpdated]);
   const iconColumnsRef = useRef(1);
@@ -116,7 +118,7 @@ export function AssetLibrary() {
   const externalDropTarget = useExternalAssetLibraryDropTarget();
   const shownDropTargetKey = dropTargetKey ?? externalDropTarget?.key ?? null;
   const dragCleanupRef = useRef<(() => void) | null>(null);
-  useEffect(() => () => dragCleanupRef.current?.(), []);
+  lifetime.afterCommit(() => () => dragCleanupRef.current?.(), []);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const [addressEditing, setAddressEditing] = useState(false);
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -131,7 +133,7 @@ export function AssetLibrary() {
   const inLibrary = isAssetLibraryLocation(location);
   const locationValid = location === place;
   const { replaceLocation } = view;
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!locationValid) replaceLocation(location);
   }, [location, locationValid, replaceLocation]);
 
@@ -147,7 +149,7 @@ export function AssetLibrary() {
   // As in a file manager's navigation pane, the tree reveals a folder when navigation enters
   // it, but opening a library root does not expand that root by itself.
   const { expandKeys } = view;
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     expandKeys([
       ...(location.folderId ? [assetLocationKey({ root: location.root, folderId: null })] : []),
       ...path.slice(0, -1).map((folder) => assetFolderKey(folder.id)),
@@ -175,7 +177,7 @@ export function AssetLibrary() {
   const selectedNodes = nodes.filter((node) => view.selectedKeys.has(node.key));
   const selection = assetLibrarySelectionFromKeys(selectedNodes.map((node) => node.key));
   const selectedEntryIds = selection.entryIds;
-  const exporting = useAssetLibraryExport({
+  const exporting = useAssetLibraryExport(lifetime, {
     identity,
     active: isEditAuthority,
     library,
@@ -186,7 +188,7 @@ export function AssetLibrary() {
 
   // Drop selection keys whose nodes are no longer visible (deleted, moved, filtered).
   const { select } = view;
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const visible = [...view.selectedKeys].filter((key) => nodeIndex.has(key));
     if (visible.length !== view.selectedKeys.size) select(visible);
   }, [nodeIndex, select, view.selectedKeys]);
@@ -278,7 +280,7 @@ export function AssetLibrary() {
     if (node && node.kind !== "library") view.setRenamingKey(node.key);
   }
 
-  useEditCapability({
+  useEditCapability(lifetime, {
     identity,
     active: isEditAuthority,
     selectedCount: selectedNodes.length,
@@ -296,7 +298,7 @@ export function AssetLibrary() {
 
   // --- Pointer selection -------------------------------------------------------------
 
-  const slowClickRename = useSlowClickRename(startRename);
+  const slowClickRename = useSlowClickRename(lifetime, startRename);
 
   function handleNodePointerDown(event: ReactPointerEvent<HTMLElement>, node: AssetLibraryNode) {
     const selected = view.selectedKeys.has(node.key);
@@ -442,7 +444,7 @@ export function AssetLibrary() {
 
   // --- Context menu --------------------------------------------------------------------
 
-  useCloseOnOutsidePointer(Boolean(menu), () => setMenu(null), {
+  useCloseOnOutsidePointer(lifetime, Boolean(menu), () => setMenu(null), {
     capturePointerdown: true,
     ignorePopupMenuTargets: true,
   });
@@ -622,7 +624,7 @@ export function AssetLibrary() {
     .filter(Boolean)
     .join(" ");
 
-  return (
+  return lifetime.render(
     <section
       ref={sectionRef}
       className="media-bin-panel asset-library"
@@ -784,6 +786,6 @@ export function AssetLibrary() {
         />
       )}
       <DragPreview preview={dragPreview} />
-    </section>
+    </section>,
   );
 }

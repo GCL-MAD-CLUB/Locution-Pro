@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { Waypoints } from "lucide-react";
 import { useMemo, useState } from "react";
 import { defaultStoryboardGraphOptions } from "../../../../core/editor/storyboardGraph/options";
@@ -34,6 +35,8 @@ export function StoryboardGraphView({
   available,
   ...props
 }: StoryboardGraphViewProps) {
+  const lifetime = new RenderLifetime();
+
   const panelActive = usePanelActive();
   const [clusterEnabled, setClusterEnabled] = useState(
     defaultStoryboardGraphOptions.clusterEnabled,
@@ -44,6 +47,7 @@ export function StoryboardGraphView({
   );
   const visibleIds = useMemo(() => props.shots.map((shot) => shot.id), [props.shots]);
   const result = useStoryboardGraph(
+    lifetime,
     semanticShots,
     scope,
     available && panelActive && props.shots.length > 0,
@@ -52,8 +56,10 @@ export function StoryboardGraphView({
   );
   const empty = !semanticShots.length || !props.shots.length;
   if (empty)
-    return <div className="storyboard-graph-view" role="region" aria-label="分镜语义图谱" />;
-  return (
+    return lifetime.render(
+      <div className="storyboard-graph-view" role="region" aria-label="分镜语义图谱" />,
+    );
+  return lifetime.render(
     <StoryboardGraphCanvas
       key={scope}
       {...props}
@@ -70,6 +76,6 @@ export function StoryboardGraphView({
       ) : (
         <GraphError {...result} />
       )}
-    </StoryboardGraphCanvas>
+    </StoryboardGraphCanvas>,
   );
 }

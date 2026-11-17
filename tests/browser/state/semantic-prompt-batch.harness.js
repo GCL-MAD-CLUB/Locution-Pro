@@ -1,4 +1,5 @@
 import React from "react";
+import { RenderLifetime } from "../../../src/runtime/lifetime/RenderLifetime.ts";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { useSubtitleSemanticSearch } from "../../../src/application/media/subtitleSemanticSearch.ts";
@@ -58,9 +59,18 @@ export async function runSemanticPromptBatchTests(kind) {
           },
         ];
   function Harness() {
+    const lifetime = new RenderLifetime();
     const useSearch = kind === "subtitle" ? useSubtitleSemanticSearch : useStoryboardSemanticSearch;
-    snapshot = useSearch(true, input.query, items, input.scope, () => {}, input.negativePrompts);
-    return null;
+    snapshot = useSearch(
+      lifetime,
+      true,
+      input.query,
+      items,
+      input.scope,
+      () => {},
+      input.negativePrompts,
+    );
+    return lifetime.render(null);
   }
   const render = () => flushSync(() => root.render(React.createElement(Harness)));
   const change = (next) => {

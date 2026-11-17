@@ -1,4 +1,5 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useRef, useState } from "react";
 import type { CSSProperties, PointerEventHandler } from "react";
 import { clampTimelineStartFrame } from "../../../../core/editor/timeline";
 
@@ -67,6 +68,8 @@ export function MonitorRange({
   onTimelineStartFrameChange,
   onTimelineSpanFramesChange,
 }: MonitorRangeProps) {
+  const lifetime = new RenderLifetime();
+
   const rangeRef = useRef<HTMLDivElement | null>(null);
   const timelineStartFrameRef = useRef(timelineStartFrame);
   timelineStartFrameRef.current = timelineStartFrame;
@@ -84,7 +87,7 @@ export function MonitorRange({
     "--monitor-range-width": `${indicatorWidthRatio * 100}%`,
   } as CSSProperties;
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const range = rangeRef.current;
     if (!range) {
       return;
@@ -104,7 +107,7 @@ export function MonitorRange({
     return () => resizeObserver.disconnect();
   }, []);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const range = rangeRef.current;
     if (!range) {
       return;
@@ -348,7 +351,7 @@ export function MonitorRange({
     };
   }
 
-  return (
+  return lifetime.render(
     <div ref={rangeRef} className={`monitor-range ${hasMedia ? "" : "empty-state"}`} tabIndex={-1}>
       <span className="monitor-range-min-width-probe" aria-hidden="true" />
       <div className="monitor-range-track">
@@ -377,6 +380,6 @@ export function MonitorRange({
           />
         </div>
       </div>
-    </div>
+    </div>,
   );
 }

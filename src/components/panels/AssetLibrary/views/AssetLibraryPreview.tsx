@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useRef, useState } from "react";
 import { SubtitleGlyph, VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
 import {
   timelineThumbnailResolutionForDisplay,
@@ -22,9 +23,9 @@ interface AssetLibraryThumbnailProps {
   priority?: number;
 }
 
-function useNearViewport(element: HTMLElement | null) {
+function useNearViewport(lifetime: RenderLifetime, element: HTMLElement | null) {
   const [visible, setVisible] = useState(false);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!element) return;
     const observer = new IntersectionObserver(
       ([record]) => setVisible(Boolean(record?.isIntersecting)),
@@ -43,8 +44,10 @@ export function AssetLibraryThumbnail({
   enabled,
   priority = 0,
 }: AssetLibraryThumbnailProps) {
+  const lifetime = new RenderLifetime();
+
   const [element, setElement] = useState<HTMLDivElement | null>(null);
-  const visible = useNearViewport(element);
+  const visible = useNearViewport(lifetime, element);
   const resolution = timelineThumbnailResolutionForDisplay(displayWidth, (displayWidth * 9) / 16);
   const kind = entry.root === "subtitles" ? "subtitle" : "storyboard";
   const identity = media ? `${kind}:${media.fingerprint}:${media.videoPath}:${entry.start_us}` : "";
@@ -55,7 +58,7 @@ export function AssetLibraryThumbnail({
   } | null>(null);
   const requestRef = useRef<ReturnType<typeof timelineThumbnails.request> | null>(null);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!media) return;
     const options = {
       kind,
@@ -106,7 +109,7 @@ export function AssetLibraryThumbnail({
     visible,
   ]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     requestRef.current?.reprioritize(priority);
   }, [priority]);
 
@@ -116,7 +119,7 @@ export function AssetLibraryThumbnail({
       ? SubtitleGlyph
       : VideoGlyph;
   const shown = thumbnail?.identity === identity ? thumbnail : null;
-  return (
+  return lifetime.render(
     <div ref={setElement} className="asset-library-thumbnail" data-offline={!media || undefined}>
       {shown ? (
         <img src={shown.src} alt="" decoding="async" draggable={false} />
@@ -126,7 +129,7 @@ export function AssetLibraryThumbnail({
           aria-hidden="true"
         />
       )}
-    </div>
+    </div>,
   );
 }
 
@@ -141,6 +144,8 @@ interface AssetLibraryHoverFrameProps {
  * entry's range, shown over the cover once the seek lands.
  */
 export function AssetLibraryHoverFrame({ entry, media, progress }: AssetLibraryHoverFrameProps) {
+  const lifetime = new RenderLifetime();
+
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [ready, setReady] = useState(false);
   const targetSeconds = assetLibraryEntryHoverTimeUs(entry, progress) / 1_000_000;
@@ -158,13 +163,13 @@ export function AssetLibraryHoverFrame({ entry, media, progress }: AssetLibraryH
     }
   }
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const video = videoRef.current;
     if (video && video.readyState >= HTMLMediaElement.HAVE_METADATA) seek(video);
     // seek reads the latest target; rerun only when it moves.
   }, [targetSeconds]);
 
-  return (
+  return lifetime.render(
     <video
       ref={videoRef}
       className={`media-bin-card-thumbnail media-bin-card-hover-thumbnail${ready ? " is-ready" : ""}`}
@@ -177,7 +182,7 @@ export function AssetLibraryHoverFrame({ entry, media, progress }: AssetLibraryH
       onLoadedMetadata={(event) => seek(event.currentTarget)}
       onLoadedData={(event) => seek(event.currentTarget)}
       onSeeked={() => setReady(true)}
-    />
+    />,
   );
 }
 

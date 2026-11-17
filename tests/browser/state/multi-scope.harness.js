@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../src/runtime/lifetime/RenderLifetime.ts";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
@@ -160,24 +161,30 @@ export async function runMultiScopeTests(fullUi = false) {
     return null;
   }
   function Panel({ id, kind }) {
-    const source = fullUi ? usePanelMediaSourceSelection(kind) : usePanelMediaSource(kind);
-    const board = useStoryboardPanelState((state) => state);
-    const subtitle = useSubtitlePanelState((state) => state);
-    const detection = useStoryboardDetection();
+    const lifetime = new RenderLifetime();
+
+    const source = fullUi
+      ? usePanelMediaSourceSelection(lifetime, kind)
+      : usePanelMediaSource(lifetime, kind);
+    const board = useStoryboardPanelState(lifetime, (state) => state);
+    const subtitle = useSubtitlePanelState(lifetime, (state) => state);
+    const detection = useStoryboardDetection(lifetime);
     const context = sourceScope(source.selectedSources.map((entry) => entry.context));
-    React.useEffect(() => board.syncVideoContext(context), [context]);
+    lifetime.afterCommit(() => board.syncVideoContext(context), [context]);
     const trackContext = sourceScope(
       source.selectedSources
         .filter((entry) => entry.trackId)
         .map((entry) => `${entry.context}:${entry.trackId}`),
     );
-    React.useEffect(() => subtitle.syncTrackContext(trackContext), [trackContext]);
+    lifetime.afterCommit(() => subtitle.syncTrackContext(trackContext), [trackContext]);
     snapshots[id] = { source, board, subtitle, detection };
-    return h(
-      "div",
-      { className: "dock-panel-surface active", style: { width: 550, height: 600 } },
-      fullUi && h(kind === "storyboard" ? StoryboardPanel : SubtitlePanel),
-      detection.detectionDialog,
+    return lifetime.render(
+      h(
+        "div",
+        { className: "dock-panel-surface active", style: { width: 550, height: 600 } },
+        fullUi && h(kind === "storyboard" ? StoryboardPanel : SubtitlePanel),
+        detection.detectionDialog,
+      ),
     );
   }
   const initial = {

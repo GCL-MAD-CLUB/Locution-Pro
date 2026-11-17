@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../../src/runtime/lifetime/RenderLifetime.ts";
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { StoryboardGraphCanvas } from "../../../../src/components/panels/StoryboardPanel/views/StoryboardGraphCanvas.tsx";
@@ -216,6 +217,8 @@ export function mountLiveGraph(holdIndex = false, empty = false, count = 9, layo
   host.style.cssText = "position:absolute;left:24px;top:24px;width:800px;height:500px";
   document.body.append(host);
   function Harness() {
+    const lifetime = new RenderLifetime();
+
     const [currentShots, setCurrentShots] = useState(empty ? [] : liveShots);
     const [sprayActive, setSprayActive] = useState(false);
     window.graphLiveSetSprayActive = setSprayActive;
@@ -234,8 +237,13 @@ export function mountLiveGraph(holdIndex = false, empty = false, count = 9, layo
         })),
       [currentShots],
     );
-    const semantic = useStoryboardSemanticSearch(true, query, semanticShots, "graph-live", () =>
-      setQuery(""),
+    const semantic = useStoryboardSemanticSearch(
+      lifetime,
+      true,
+      query,
+      semanticShots,
+      "graph-live",
+      () => setQuery(""),
     );
     const visible = React.useMemo(
       () =>
@@ -254,27 +262,29 @@ export function mountLiveGraph(holdIndex = false, empty = false, count = 9, layo
     window.graphLiveDelete = (ids) =>
       setCurrentShots((current) => current.filter((shot) => !ids.includes(shot.id)));
     window.graphLiveSearchStatus = semantic.status;
-    return React.createElement(
-      React.Fragment,
-      null,
-      React.createElement(TaskProgress, null, null),
-      React.createElement(StoryboardGraphView, {
-        semanticShots,
-        scope: "graph-live",
-        available: true,
-        shots: visible,
-        sourceForShot: () => source,
-        shotTitle: (shot) => `Shot ${shot.id}`,
-        selectedShotIds: new Set(),
-        sprayActive,
-        onSelectionChange: (ids) => window.graphLiveInteractions.selections.push([...ids]),
-        onActivateShot: (shot) => window.graphLiveInteractions.activations.push(shot.id),
-        onSprayShots: (ids) => window.graphLiveInteractions.sprays.push([...ids]),
-        onContextMenu: (event) => {
-          event.preventDefault();
-          window.graphLiveInteractions.menus++;
-        },
-      }),
+    return lifetime.render(
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(TaskProgress, null, null),
+        React.createElement(StoryboardGraphView, {
+          semanticShots,
+          scope: "graph-live",
+          available: true,
+          shots: visible,
+          sourceForShot: () => source,
+          shotTitle: (shot) => `Shot ${shot.id}`,
+          selectedShotIds: new Set(),
+          sprayActive,
+          onSelectionChange: (ids) => window.graphLiveInteractions.selections.push([...ids]),
+          onActivateShot: (shot) => window.graphLiveInteractions.activations.push(shot.id),
+          onSprayShots: (ids) => window.graphLiveInteractions.sprays.push([...ids]),
+          onContextMenu: (event) => {
+            event.preventDefault();
+            window.graphLiveInteractions.menus++;
+          },
+        }),
+      ),
     );
   }
   createRoot(host).render(React.createElement(Harness));

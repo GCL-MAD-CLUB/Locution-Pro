@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { useMemo, useRef, useState } from "react";
 import { runBackgroundOperation } from "../../../errors";
 import {
   listenToNativeApplicationMenu,
@@ -25,6 +26,8 @@ interface NativeApplicationMenuProps {
 
 /** Mirrors the application menu model into the macOS menu bar. */
 export function NativeApplicationMenu({ model }: NativeApplicationMenuProps) {
+  const lifetime = new RenderLifetime();
+
   const [editingText, setEditingText] = useState(() =>
     isTextEditingElement(document.activeElement),
   );
@@ -38,7 +41,7 @@ export function NativeApplicationMenu({ model }: NativeApplicationMenuProps) {
   // unchanged.
   const [resync, setResync] = useState(0);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     runBackgroundOperation("app.menu", () => setNativeApplicationMenu(JSON.parse(description)));
   }, [description, resync]);
 
@@ -46,7 +49,7 @@ export function NativeApplicationMenu({ model }: NativeApplicationMenuProps) {
   // nothing to copy or undo, so their key equivalents keep working there.
   // Read the active element once focus settles: when the window resigns key,
   // WebKit sends focusout but the field remains the document's active element.
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     let pending: number | undefined;
     const update = () => {
       window.clearTimeout(pending);
@@ -63,7 +66,7 @@ export function NativeApplicationMenu({ model }: NativeApplicationMenuProps) {
     };
   }, []);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
     const onSelect = (id: string) => {
@@ -95,5 +98,5 @@ export function NativeApplicationMenu({ model }: NativeApplicationMenuProps) {
     };
   }, []);
 
-  return null;
+  return lifetime.render(null);
 }

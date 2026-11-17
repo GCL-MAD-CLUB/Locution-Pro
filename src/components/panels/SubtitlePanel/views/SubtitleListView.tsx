@@ -1,10 +1,10 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { cellEditReset } from "../../../../core/editor/cellEditReset";
 import { annotationColors } from "../../../../runtime/theme";
 import type { PanelRowSource } from "../../../../core/editor/multiSource";
 import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
 import { Star } from "lucide-react";
 import {
-  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -112,6 +112,8 @@ export function SubtitleListView({
   onOpenAnnotationMenu,
   cueLabel,
 }: SubtitleListViewProps) {
+  const lifetime = new RenderLifetime();
+
   const {
     activeCueId,
     selectedCueIds,
@@ -120,7 +122,7 @@ export function SubtitleListView({
     setCueRatings,
     setCueFlags,
     setCueColorLabels,
-  } = useSubtitlePanelState((state) => state);
+  } = useSubtitlePanelState(lifetime, (state) => state);
   const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
   const [editingCueId, setEditingCueId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -137,7 +139,7 @@ export function SubtitleListView({
     setActiveCell(null);
   }
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       cancelPendingCellEdit();
     },
@@ -204,7 +206,7 @@ export function SubtitleListView({
     setEditingCueId(null);
   }
 
-  return (
+  return lifetime.render(
     <div className="subtitle-list-frame" role="table" aria-label="字幕列表" style={tableStyle}>
       <div className="subtitle-list-header-viewport">
         <div ref={headerRef} className="subtitle-list-header" role="row">
@@ -460,6 +462,6 @@ export function SubtitleListView({
           </div>
         )}
       </div>
-    </div>
+    </div>,
   );
 }

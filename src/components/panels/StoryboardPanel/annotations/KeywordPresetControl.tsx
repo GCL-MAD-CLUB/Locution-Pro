@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useState } from "react";
 import { ChevronsUpDown } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -34,11 +35,13 @@ function KeywordPresetMenu({
   variant?: "sidebar" | "spray" | "editor";
   ariaLabel: string;
 }) {
+  const lifetime = new RenderLifetime();
+
   const [anchor, setAnchor] = useState<{ x: number; y: number; width: number } | null>(null);
-  useCloseOnOutsidePointer(Boolean(anchor), () => setAnchor(null));
+  useCloseOnOutsidePointer(lifetime, Boolean(anchor), () => setAnchor(null));
   const label = items.find((item) => item.type === "option" && item.value === value);
   const spray = variant === "spray";
-  return (
+  return lifetime.render(
     <>
       <button
         type="button"
@@ -101,7 +104,7 @@ function KeywordPresetMenu({
           </PopupMenu>,
           document.body,
         )}
-    </>
+    </>,
   );
 }
 

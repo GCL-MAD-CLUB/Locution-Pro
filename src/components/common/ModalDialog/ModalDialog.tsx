@@ -1,5 +1,6 @@
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { captureOperationError, invokeCommand, runBackgroundOperation } from "../../../errors";
 import "./ModalDialog.css";
 
@@ -97,12 +98,14 @@ export function ModalDialog({
   onCancel,
   onConfirm,
 }: ModalDialogProps) {
+  const lifetime = new RenderLifetime();
+
   const titleId = useId();
   const dialogRef = useRef<HTMLElement>(null);
   const [attentionActive, setAttentionActive] = useState(false);
   const attentionTimerRef = useRef<number | null>(null);
 
-  useEffect(
+  lifetime.afterCommit(
     () => () => {
       if (attentionTimerRef.current !== null) {
         window.clearTimeout(attentionTimerRef.current);
@@ -111,7 +114,7 @@ export function ModalDialog({
     [],
   );
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && !event.repeat) {
         onCancel();
@@ -121,7 +124,7 @@ export function ModalDialog({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onCancel]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!focusTrap) {
       return;
     }
@@ -137,7 +140,7 @@ export function ModalDialog({
     };
   }, [focusTrap, initialFocusRef]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!focusTrap) {
       return;
     }
@@ -189,7 +192,7 @@ export function ModalDialog({
     });
   }
 
-  return (
+  return lifetime.render(
     <div className="modal-dialog-backdrop" role="presentation" onMouseDown={requestAttention}>
       <section
         ref={dialogRef}
@@ -236,6 +239,6 @@ export function ModalDialog({
           )}
         </footer>
       </section>
-    </div>
+    </div>,
   );
 }

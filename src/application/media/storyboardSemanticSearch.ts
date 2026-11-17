@@ -1,3 +1,4 @@
+import type { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
 import { searchSemanticPrompts } from "../../core/editor/semanticPrompts";
 import {
   searchLines,
@@ -5,15 +6,15 @@ import {
   semanticPromptErrors,
 } from "../../core/editor/textSearch";
 import { Channel } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { invokeCommand, runOperation } from "../../errors";
 import { normalizeError } from "../../errors/runtime";
 import { createTaskProgress } from "../../systems/TaskSystem";
 import { isTauriRuntime } from "../../platform/tauri/runtime";
 
-export function useStoryboardSemanticSearchAvailable() {
+export function useStoryboardSemanticSearchAvailable(lifetime: RenderLifetime) {
   const [available, setAvailable] = useState(false);
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isTauriRuntime()) return;
     let active = true;
     void runOperation("storyboard.semanticAvailability", () =>
@@ -219,6 +220,7 @@ export function ensureStoryboardSemanticIndex(shots: readonly SemanticShot[], sc
 }
 
 export function useStoryboardSemanticSearch(
+  lifetime: RenderLifetime,
   enabled: boolean,
   query: string,
   shots: readonly SemanticShot[],
@@ -283,14 +285,14 @@ export function useStoryboardSemanticSearch(
     };
   }, [requestKey, result, scope, query, negativePrompts, shots]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (reusable) {
       completedRequest.current = requestKey;
       return;

@@ -1,4 +1,5 @@
-﻿import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   Grid2X2,
   FolderPlus,
@@ -15,7 +16,6 @@ import {
   Unlink2,
 } from "lucide-react";
 import {
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -202,13 +202,16 @@ function isImportedMediaFile(item: MediaBinItem) {
 }
 
 export function MediaBin({ rootFolderId = null }: MediaBinProps) {
+  const lifetime = new RenderLifetime();
+
   const { betaTranscodeEnabled } = usePreferencesPort(["betaTranscodeEnabled"], []);
   const panelInstanceId = usePanelInstanceId();
   const panelActive = usePanelActive();
   const focusedPanelId = usePanelManagerState((state) => state.focusedPanelId);
   const openPanel = usePanelManagerState((state) => state.openPanel);
   const identity = useStableIdentity("media-bin", panelInstanceId);
-  const { requestDetection, canRequestDetection, detectionDialog } = useStoryboardDetection();
+  const { requestDetection, canRequestDetection, detectionDialog } =
+    useStoryboardDetection(lifetime);
   const {
     projects,
     mediaFolders,
@@ -296,7 +299,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     setBindingVideoId,
   } = useMediaBinState((state) => state);
   const clipboardItemCount = useMediaBinClipboardItemCount();
-  const { isRunning: isImporting } = useTaskProgressStatus("media.import");
+  const { isRunning: isImporting } = useTaskProgressStatus(lifetime, "media.import");
   const isEditAuthority = panelActive && focusedPanelId === panelInstanceId;
   const isReadOnly = mediaBinReadOnly;
   const setReadOnly = mediaBinReadOnlyChanged;
@@ -589,7 +592,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
   ]);
 
   const analysisRetryAfter = useRef(new Map<string, number>());
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!isTauriRuntime()) return;
     let disposed = false;
     let checking = false;
@@ -635,18 +638,18 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     };
   }, [projects, mediaItems]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (isReadOnly && bindingPopoverOpen) {
       setBindingPopoverOpen(false);
     }
   }, [bindingPopoverOpen, isReadOnly, setBindingPopoverOpen]);
 
-  useCloseOnOutsidePointer(Boolean(contextMenu), () => setContextMenu(null), {
+  useCloseOnOutsidePointer(lifetime, Boolean(contextMenu), () => setContextMenu(null), {
     capturePointerdown: true,
     ignorePopupMenuTargets: true,
   });
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     const nextSelection = Array.from(selectedIds).filter((itemId) => scopedEntryIds.has(itemId));
     if (nextSelection.length !== selectedIds.size) {
       selectItems(nextSelection);
@@ -1061,7 +1064,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     messagePublished(`已复制所选内容并创建媒体箱“${folder.name}”。`);
   }
 
-  useEditCapability({
+  useEditCapability(lifetime, {
     identity,
     active: isEditAuthority,
     selectedCount: selectedIds.size,
@@ -1226,7 +1229,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     makeMediaOffline(selectedOnlineItems);
   }
 
-  useMediaSelectionCapability({
+  useMediaSelectionCapability(lifetime, {
     identity,
     active: isEditAuthority,
     offlineSelectionCount: directlySelectedOfflineItems.length,
@@ -1314,7 +1317,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     }
   }
 
-  useExportCapability({
+  useExportCapability(lifetime, {
     identity,
     active: isEditAuthority,
     selectedCount: buildCurrentMediaBinSource()?.clips.length ?? 0,
@@ -1355,7 +1358,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     });
   }
 
-  return (
+  return lifetime.render(
     <>
       <section ref={panelRef} className="media-bin-panel" tabIndex={-1}>
         <div className="media-bin-project-row">
@@ -2111,6 +2114,6 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
           document.body,
         )}
       {detectionDialog}
-    </>
+    </>,
   );
 }

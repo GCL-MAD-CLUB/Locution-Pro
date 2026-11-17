@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { Check, ChevronRight } from "lucide-react";
 import {
   Children,
@@ -6,8 +7,6 @@ import {
   isValidElement,
   useCallback,
   useContext,
-  useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -37,6 +36,7 @@ interface UseCloseOnOutsidePointerOptions {
  * clicking anywhere, pressing Escape, resizing the window, or losing window focus.
  */
 export function useCloseOnOutsidePointer(
+  lifetime: RenderLifetime,
   open: boolean,
   onClose: () => void,
   options: UseCloseOnOutsidePointerOptions = {},
@@ -46,7 +46,7 @@ export function useCloseOnOutsidePointer(
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!open) {
       return;
     }
@@ -132,6 +132,8 @@ export function PopupMenu({
   onPointerDown,
   onContextMenu,
 }: PopupMenuProps) {
+  const lifetime = new RenderLifetime();
+
   const menuRef = useRef<HTMLDivElement | null>(null);
   const viewportLayoutRef = useRef(initialViewportLayout);
   const positionedRef = useRef(false);
@@ -225,7 +227,7 @@ export function PopupMenu({
     submenuAnchorTop,
   ]);
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     fitToViewport();
     if (!positionedRef.current) {
       positionedRef.current = true;
@@ -233,7 +235,7 @@ export function PopupMenu({
     }
   }, [children, fitToViewport, style]);
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     const menu = menuRef.current;
     if (!menu) {
       return;
@@ -249,7 +251,7 @@ export function PopupMenu({
     };
   }, [fitToViewport]);
 
-  useEffect(() => {
+  lifetime.afterCommit(() => {
     if (!enableMnemonics) {
       return;
     }
@@ -295,7 +297,7 @@ export function PopupMenu({
       : undefined,
   ].filter(Boolean);
 
-  return (
+  return lifetime.render(
     <div
       ref={menuRef}
       className={["popup-menu", className].filter(Boolean).join(" ")}
@@ -312,7 +314,7 @@ export function PopupMenu({
       onContextMenu={onContextMenu}
     >
       {children}
-    </div>
+    </div>,
   );
 }
 
@@ -551,6 +553,8 @@ export function PopupMenuSubmenu({
   menuClassName,
   onOpenChange,
 }: PopupMenuSubmenuProps) {
+  const lifetime = new RenderLifetime();
+
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const hoverTimer = useRef<number | null>(null);
@@ -584,7 +588,7 @@ export function PopupMenuSubmenu({
     [clearHoverTimer],
   );
 
-  useEffect(() => clearHoverTimer, [clearHoverTimer]);
+  lifetime.afterCommit(() => clearHoverTimer, [clearHoverTimer]);
 
   const updateAnchor = useCallback(() => {
     const next = hostRef.current?.getBoundingClientRect() ?? null;
@@ -600,7 +604,7 @@ export function PopupMenuSubmenu({
     );
   }, []);
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     if (!open) {
       setAnchor(null);
       return;
@@ -614,7 +618,7 @@ export function PopupMenuSubmenu({
     };
   }, [open, updateAnchor]);
 
-  return (
+  return lifetime.render(
     <div
       ref={hostRef}
       className="popup-menu-submenu"
@@ -657,6 +661,6 @@ export function PopupMenuSubmenu({
           </PopupMenu>,
           document.body,
         )}
-    </div>
+    </div>,
   );
 }

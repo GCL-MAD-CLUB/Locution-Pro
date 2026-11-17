@@ -1,4 +1,5 @@
-import { useLayoutEffect, useState } from "react";
+import type { RenderLifetime } from "../runtime/lifetime/RenderLifetime";
+import { useState } from "react";
 
 export const timelineThumbnailResolutions = [
   { width: 160, height: 90 },
@@ -24,11 +25,13 @@ export function timelineThumbnailResolutionForDisplay(
   );
 }
 
-export function useTimelineThumbnailResolution<Element extends HTMLElement>() {
+export function useTimelineThumbnailResolution<Element extends HTMLElement>(
+  lifetime: RenderLifetime,
+) {
   const [element, setElement] = useState<Element | null>(null);
   const [resolution, setResolution] = useState<TimelineThumbnailResolution | null>(null);
 
-  useLayoutEffect(() => {
+  lifetime.beforePaint(() => {
     if (!element) {
       return;
     }

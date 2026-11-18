@@ -40,6 +40,40 @@ test("导出只有派发后才返回编辑页，完成后显示实际导出数�
   await expect(app.getByText("已导出 1 个片段。", { exact: true })).toBeVisible();
 });
 
+test("范围扩展默认联动，可切换单位并独立设置后提交", async ({ app, native }) => {
+  await prepareExport(app);
+  const extension = app.getByRole("group", { name: "导出范围扩展" });
+  const before = extension.getByRole("spinbutton", { name: "片头扩展" });
+  const after = extension.getByRole("spinbutton", { name: "片尾扩展" });
+  const link = extension.getByRole("button", { name: "联动片头和片尾扩展" });
+  const unit = extension.getByRole("button", { name: "扩展单位" });
+  await expect(unit).toHaveText("帧");
+  await expect(link).toHaveAttribute("aria-pressed", "true");
+  await before.fill("2");
+  await expect(after).toHaveValue("2");
+  await unit.click();
+  await app.getByRole("option", { name: "秒", exact: true }).click();
+  await expect(unit).toHaveText("秒");
+  await link.click();
+  await expect(link).toHaveAttribute("aria-pressed", "false");
+  await after.fill("0.25");
+  await expect(before).toHaveValue("2");
+  await expect(after).toHaveValue("0.25");
+
+  await app
+    .locator(".export-action-bar")
+    .getByRole("button", { name: "导出", exact: true })
+    .click();
+  await expect.poll(async () => (await native.calls("export_clips")).length).toBe(1);
+  const [call] = await native.calls("export_clips");
+  expect(call.args.options.rangeExtension).toEqual({
+    unit: "seconds",
+    before: 2,
+    after: 0.25,
+    linked: false,
+  });
+});
+
 for (const action of ["取消", "跳过"]) {
   test(`冲突时${action}保持导出页且从不派发编码`, async ({ app, native }) => {
     await prepareExport(app);

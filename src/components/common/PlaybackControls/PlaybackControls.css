@@ -344,6 +344,18 @@
   left: 6px;
 }
 
+.timeline-cue-extension-edge {
+  pointer-events: none;
+}
+
+.timeline-cue-extension-fill {
+  opacity: 0.5;
+}
+
+.timeline-cue-extension-edge .timeline-cue-brace {
+  stroke-dasharray: 2 2;
+}
+
 .timeline-cue-move-handle {
   position: absolute;
   bottom: 7px;

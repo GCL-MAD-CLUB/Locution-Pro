@@ -158,6 +158,33 @@ const fn default_export_existing_file_mode() -> ExportExistingFileMode {
     ExportExistingFileMode::Ask
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ExportRangeExtensionUnit {
+    #[default]
+    Frames,
+    Seconds,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ExportRangeExtension {
+    pub(crate) unit: ExportRangeExtensionUnit,
+    pub(crate) before: f64,
+    pub(crate) after: f64,
+    pub(crate) linked: bool,
+}
+
+impl Default for ExportRangeExtension {
+    fn default() -> Self {
+        Self {
+            unit: ExportRangeExtensionUnit::Frames,
+            before: 0.0,
+            after: 0.0,
+            linked: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ExportOptions {
@@ -221,6 +248,8 @@ pub(crate) struct ExportOptions {
     /// the conflict resolution itself runs on the frontend).
     #[serde(default = "default_export_existing_file_mode")]
     pub(crate) existing_file_mode: ExportExistingFileMode,
+    #[serde(default)]
+    pub(crate) range_extension: ExportRangeExtension,
 }
 
 const fn default_export_hardware_acceleration() -> ExportHardwareAcceleration {

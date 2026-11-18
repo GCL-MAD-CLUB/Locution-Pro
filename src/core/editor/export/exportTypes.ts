@@ -1,4 +1,6 @@
-import type { UserNotice } from "../../../types";
+import type { ExportRangeExtension, UserNotice } from "../../../types";
+
+export type { ExportRangeExtension } from "../../../types";
 
 /** "asset-library" is a library selection that mixes subtitle and storyboard materials. */
 export type ExportSourceKind = "storyboard" | "subtitle" | "media-bin" | "asset-library";
@@ -159,6 +161,7 @@ export interface ExportSettings {
   /** Explicit merged-output filename (with extension) for merge exports. */
   outputName: string;
   existingFileMode: ExportExistingFileMode;
+  rangeExtension?: ExportRangeExtension;
 }
 
 export interface ExportOutput {

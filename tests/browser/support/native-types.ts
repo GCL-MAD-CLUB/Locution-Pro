@@ -1,4 +1,9 @@
-import type { MediaDocument, Preferences, ProjectWorkspace } from "../../../src/types";
+import type {
+  ExportRangeExtension,
+  MediaDocument,
+  Preferences,
+  ProjectWorkspace,
+} from "../../../src/types";
 import type { TranscodeSettings } from "../../../src/systems/TranscodeSystem/transcodeTypes";
 import type { ImportBrowserConfig } from "../../../src/components/panels/ImportWorkspace/browser/importBrowserConfig";
 import type { ImportSettings } from "../../../src/core/editor/import/importBrowserModel";
@@ -13,7 +18,12 @@ export interface NativeArguments {
   job: { outputDir: string; outputName: string; settings: TranscodeSettings };
   mediaSources: Record<string, MediaDocument>;
   name: string;
-  options: { directory?: boolean; outputDir: string; existingFileMode: string };
+  options: {
+    directory?: boolean;
+    outputDir: string;
+    existingFileMode: string;
+    rangeExtension?: ExportRangeExtension;
+  };
   patch: Partial<ImportBrowserConfig>;
   path: string;
   paths: string[];

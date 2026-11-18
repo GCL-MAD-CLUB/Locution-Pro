@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import test from "node:test";
 import { createModuleLoader } from "../../support/module-loader.ts";
+import { exportRange } from "../../support/export-range.ts";
 
 type TypesModule = typeof import("../../../../src/systems/TranscodeSystem/transcodeTypes.ts");
 type CatalogModule = typeof import("../../../../src/systems/TranscodeSystem/transcodeCatalog.ts");
@@ -441,6 +442,7 @@ function loadSendToTranscode() {
     {
       "../../systems/ExportSystem": exportSystem,
       "../../systems/TranscodeSystem": transcodeSystem,
+      "../../core/editor/export/exportRange": exportRange,
     },
     globals,
   );

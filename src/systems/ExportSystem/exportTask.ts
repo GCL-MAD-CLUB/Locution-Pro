@@ -20,6 +20,10 @@ import type {
   ExportSource,
 } from "../../core/editor/export/exportTypes";
 import { isAudioOnlyContainer } from "../../core/editor/export/exportTypes";
+import {
+  defaultExportRangeExtension,
+  resolveExportClipRange,
+} from "../../core/editor/export/exportRange";
 import { refreshExportClipAudioBindings } from "./exportResolvers";
 import { resolveExportDestinationDir } from "./exportDestination";
 import { computeExportFileNames } from "./exportRename";
@@ -44,14 +48,14 @@ export interface ExportTaskSubmission {
   completion: Promise<ExportTaskOutcome>;
 }
 
-function backendClip(clip: ExportClip, useProxy: boolean, outputName: string) {
+function backendClip(clip: ExportClip, settings: ExportSettings, outputName: string) {
   // Proxy generation preserves only `0:a:0`. Do not mix a proxy video with a
   // selected non-primary original track: reject the proxy for this clip so its
   // video and audio retain the same original timeline.
   const proxyCanSupplySelectedAudio = !(clip.audioSources ?? []).some(
     (source) => source.primary && source.audioTrackIndex !== 0,
   );
-  const proxyPath = useProxy && proxyCanSupplySelectedAudio ? clip.proxyPath : null;
+  const proxyPath = settings.useProxy && proxyCanSupplySelectedAudio ? clip.proxyPath : null;
   const proxySelected = Boolean(proxyPath);
   return {
     id: clip.id,
@@ -64,8 +68,7 @@ function backendClip(clip: ExportClip, useProxy: boolean, outputName: string) {
         : { sourcePath: source.sourcePath, audioTrackIndex: source.audioTrackIndex },
     ),
     label: clip.label,
-    startUs: clip.startUs,
-    endUs: clip.endUs,
+    ...resolveExportClipRange(clip, settings.rangeExtension),
     outputName,
   };
 }
@@ -134,6 +137,7 @@ export function normalizeExportSettings(settings: ExportSettings): ExportSetting
     startNumber: settings.startNumber ?? 1,
     extensionCase: settings.extensionCase ?? "lower",
     existingFileMode: settings.existingFileMode ?? "ask",
+    rangeExtension: { ...(settings.rangeExtension ?? defaultExportRangeExtension) },
     hardwareAcceleration: settings.hardwareAcceleration ?? "auto",
     includeVideo,
     includeAudio,
@@ -266,9 +270,7 @@ async function executeExportEvent(event: PendingExport): Promise<ExportTaskOutco
     if (cancelled || task.cancelled) return { status: "cancelled" };
     try {
       const exportCompletion = invokeCommand<ExportResult>("export_clips", {
-        clips: exportClips.map((clip) =>
-          backendClip(clip, normalized.useProxy, names.get(clip.id) ?? ""),
-        ),
+        clips: exportClips.map((clip) => backendClip(clip, normalized, names.get(clip.id) ?? "")),
         options: {
           ...normalized,
           outputDir,

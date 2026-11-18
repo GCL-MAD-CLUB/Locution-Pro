@@ -206,6 +206,13 @@ export interface ProjectEditorState {
 }
 
 /** The export settings recorded with the last completed export of this project. */
+export interface ExportRangeExtension {
+  unit: "frames" | "seconds";
+  before: number;
+  after: number;
+  linked: boolean;
+}
+
 export interface ProjectExportState {
   mode: "merge" | "individual";
   container: "mp4_h264" | "mp4_hevc" | "mov_prores" | "webm_vp9" | "mp3_audio" | "aac_audio";
@@ -248,6 +255,7 @@ export interface ProjectExportState {
   /** Explicit merged-output filename (with extension) round-tripped from the backend. */
   outputName: string;
   existingFileMode: "ask" | "uniqueName" | "overwrite" | "skip";
+  rangeExtension?: ExportRangeExtension;
 }
 
 /** The two fixed top-level folders of the asset library. */

@@ -34,6 +34,7 @@ export interface TimelineRulerProps {
   timelineStartFrame: number;
   timelineSpanFrames: number;
   cueRange: MonitorCueRange | null;
+  extendedCueRange?: MonitorCueRange | null;
   cueRangeEditable?: boolean;
   skippedRanges?: readonly StoryboardGap[];
   onCueRangeChange?: (range: MonitorCueRange) => void;
@@ -70,6 +71,7 @@ export function TimelineRuler({
   timelineStartFrame,
   timelineSpanFrames,
   cueRange,
+  extendedCueRange,
   cueRangeEditable = true,
   skippedRanges = [],
   onCueRangeChange,
@@ -122,6 +124,25 @@ export function TimelineRuler({
           showEnd: cueRangePercent.end >= 0 && cueRangePercent.end <= 100,
         }
       : null;
+  const extendedCuePercent =
+    cueRange && cueRangePercent && extendedCueRange
+      ? [
+          {
+            side: "start",
+            boundary:
+              ((extendedCueRange.startFrame - timelineStartFrame) / timelineVisibleSpanFrames) *
+              100,
+            inner: cueRangePercent.start,
+          },
+          {
+            side: "end",
+            boundary:
+              ((extendedCueRange.endFrame + 1 - timelineStartFrame) / timelineVisibleSpanFrames) *
+              100,
+            inner: cueRangePercent.end,
+          },
+        ]
+      : [];
 
   const ruler = useMemo(
     () =>
@@ -368,6 +389,30 @@ export function TimelineRuler({
       onContextMenu={onContextMenu}
     >
       <div className="timeline-ruler">
+        {hasMedia &&
+          extendedCuePercent.map(({ side, boundary, inner }) => {
+            const start = Math.max(0, side === "start" ? boundary : inner);
+            const end = Math.min(100, side === "start" ? inner : boundary);
+            if (end <= start) return null;
+            return (
+              <div key={side} className="timeline-cue-range" aria-hidden="true">
+                <div
+                  className="timeline-cue-fill timeline-cue-extension-fill"
+                  style={{ left: `${start}%`, right: `${100 - end}%` }}
+                />
+                {boundary >= 0 && boundary <= 100 && (
+                  <span
+                    className={`timeline-cue-edge timeline-cue-extension-edge ${side}`}
+                    style={{ left: `${boundary}%` }}
+                  >
+                    <svg className="timeline-cue-brace" viewBox="0 0 2 20">
+                      <path d={side === "start" ? "M2 0V8L0 10L2 12V20" : "M0 0V8L2 10L0 12V20"} />
+                    </svg>
+                  </span>
+                )}
+              </div>
+            );
+          })}
         {hasMedia && visibleCueRange && (
           <div className={`timeline-cue-range ${canEditCueRange ? "" : "read-only"}`}>
             <div

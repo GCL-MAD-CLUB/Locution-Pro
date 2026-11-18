@@ -15,12 +15,15 @@ import { eventSource } from "../../../runtime/events/EventHub";
 import { publishEvent } from "../../../runtime/events/react";
 import { isMediaItemOffline, useProjectPort } from "../../../systems/ProjectSystem";
 import {
+  exportClipDurationUs,
+  resolveExportClipRange,
+} from "../../../core/editor/export/exportRange";
+import {
   dirname,
   readRememberedExportDir,
   exportAudioBindingKey,
   refreshExportSourceAudioBindings,
   useExportWorkspaceState,
-  type ExportClip,
   type ExportSource,
 } from "../../../systems/ExportSystem";
 import { ExportActionBar } from "./controls/ExportActionBar";
@@ -50,13 +53,6 @@ function suggestedStem(projectFilePath: string | null, source: ExportSource | nu
     }
   }
   return "导出";
-}
-
-function clipDurationUs(clip: ExportClip) {
-  if (clip.endUs > 0) {
-    return Math.max(0, clip.endUs - clip.startUs);
-  }
-  return Math.max(0, clip.durationUs);
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -277,9 +273,9 @@ export function ExportWorkspace({ onExportStarted, sourcePanelType }: ExportWork
   const previewClip = source
     ? (source.clips.find((clip) => clip.id === previewClipId) ?? source.clips[0] ?? null)
     : null;
-  const previewClipRef = useRef(previewClip);
+  const previewRef = useRef({ clip: previewClip, extension: settings.rangeExtension });
   lifetime.useBeforePaint(() => {
-    previewClipRef.current = previewClip;
+    previewRef.current = { clip: previewClip, extension: settings.rangeExtension };
   });
   const mediaItemsRef = useRef(mediaItems);
   lifetime.useBeforePaint(() => {
@@ -295,7 +291,7 @@ export function ExportWorkspace({ onExportStarted, sourcePanelType }: ExportWork
   }
 
   lifetime.useAfterCommit(() => {
-    const previewClip = previewClipRef.current;
+    const { clip: previewClip, extension } = previewRef.current;
     if (!previewClip) {
       return;
     }
@@ -310,12 +306,13 @@ export function ExportWorkspace({ onExportStarted, sourcePanelType }: ExportWork
     }
     const play = previewPlayRequestRef.current === previewClip.id;
     previewPlayRequestRef.current = null;
+    const range = resolveExportClipRange(previewClip, extension);
     void publishEvent(
       "playback.seek.requested",
       {
         videoId: sourceItem?.id,
-        timeUs: previewClip.startUs,
-        focusEndUs: previewClip.endUs > 0 ? previewClip.endUs : undefined,
+        timeUs: range.startUs,
+        focusEndUs: range.endUs > 0 ? range.endUs : previewClip.sourceMedia?.durationUs,
         play,
       },
       exportWorkspaceEventSource,
@@ -331,7 +328,7 @@ export function ExportWorkspace({ onExportStarted, sourcePanelType }: ExportWork
   const selectedDurationUs = source
     ? source.clips
         .filter((clip) => selectedClipIds.has(clip.id))
-        .reduce((sum, clip) => sum + clipDurationUs(clip), 0)
+        .reduce((sum, clip) => sum + exportClipDurationUs(clip, settings.rangeExtension), 0)
     : 0;
 
   const settingsTrack = settingsRatio * (1 - leftRatio);
@@ -352,6 +349,7 @@ export function ExportWorkspace({ onExportStarted, sourcePanelType }: ExportWork
               <ExportSourceList
                 source={source}
                 selectedClipIds={selectedClipIds}
+                selectedDurationUs={selectedDurationUs}
                 previewClipId={previewClip?.id ?? null}
                 onToggleClip={(clipId) => toggleClip(clipId, source)}
                 onSetAllSelected={(selected) => setAllSelected(selected, source)}

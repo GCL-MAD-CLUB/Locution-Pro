@@ -1,4 +1,4 @@
-import { assetLibraryViewPresets } from "../../../../core/editor/assetLibrary";
+import { assetLibraryViewPresets } from "../../../../core/editor/assetLibrary/assetLibrary";
 import type { AssetLibraryNode } from "../model/nodes";
 
 export interface AssetLibraryKeyInput {

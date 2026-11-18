@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 
@@ -10,12 +11,15 @@ export function createModuleLoader(base: string) {
     globals: Record<string, unknown> = {},
   ): T {
     const filename = new URL(path, base);
+    const sourcePath = fileURLToPath(filename);
     const compiled = ts.transpileModule(readFileSync(filename, "utf8"), {
-      fileName: filename.pathname,
+      fileName: sourcePath,
       compilerOptions: {
         target: ts.ScriptTarget.ES2022,
         module: ts.ModuleKind.CommonJS,
         jsx: ts.JsxEmit.ReactJSX,
+        inlineSourceMap: true,
+        inlineSources: true,
       },
       reportDiagnostics: true,
     });
@@ -43,7 +47,7 @@ export function createModuleLoader(base: string) {
           return imports[name];
         },
       },
-      { filename: filename.pathname },
+      { filename: sourcePath },
     );
     return exports as unknown as T;
   };

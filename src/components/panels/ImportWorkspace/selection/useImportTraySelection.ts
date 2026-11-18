@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { pathKey } from "../browser/importBrowserModel";
+import { pathKey } from "../../../../core/editor/import/importBrowserModel";
 import type { ImportSelectionItem } from "../browser/importFolderScan";
 import { traySelectionForItems } from "./traySelection";
 

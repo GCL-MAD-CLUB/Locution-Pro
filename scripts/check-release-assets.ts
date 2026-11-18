@@ -13,7 +13,7 @@ import {
   updaterName,
   validateRelease,
   isReleaseRepository,
-} from "../site/src/release-contract.js";
+} from "../site/src/release-contract.ts";
 import { inspectAsset } from "./prepare-release-manifest.ts";
 import type { AssetFormat, ReleaseManifest } from "./prepare-release-manifest.ts";
 

@@ -1,6 +1,6 @@
-import { invokeCommand } from "../../errors";
+import { invokeCommand } from "../../runtime/errors";
 import { clampFileName } from "./exportRename";
-import type { ExportClip, ExportMode } from "./exportTypes";
+import type { ExportClip, ExportMode } from "../../core/editor/export/exportTypes";
 
 /** User choice for every conflicting target file, applied to all of them at once. */
 export type ExportConflictAction = "overwrite" | "skip" | "uniqueName" | "cancel";

@@ -1,4 +1,4 @@
-﻿import { open as openDialog } from "@tauri-apps/plugin-dialog";
+﻿import { open as openDialog } from "../../../platform/tauri/dialogs";
 import { useState } from "react";
 import { useScopedState } from "../../../runtime/state/useScopedState";
 import {
@@ -9,9 +9,9 @@ import {
   type ProxyLocation,
   type ProxyPreset,
   type ProxyWatermark,
-} from "../../../application/media/proxyGeneration";
-import { runProxyGenerationTask } from "../../../application/media/proxyGenerationTask";
-import { runOperation } from "../../../errors";
+} from "../../../application/proxy/proxyGeneration";
+import { runProxyGenerationTask } from "../../../application/proxy/proxyGenerationTask";
+import { runOperation } from "../../../runtime/errors";
 import { mediaDisplayName, useProjectPort } from "../../../systems/ProjectSystem";
 import { usePreferencesPort } from "../../../systems/PreferencesSystem";
 import { isMacOSRuntime, isTauriRuntime } from "../../../platform/tauri/runtime";

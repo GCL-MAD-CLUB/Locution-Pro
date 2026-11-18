@@ -1,9 +1,9 @@
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open } from "../../../../platform/tauri/dialogs";
 import { CopyPlus, ListPlus, ListX, Play, Plus, RotateCcw, Square, Trash2 } from "lucide-react";
-import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
+import { VideoGlyph } from "../../../common/MediaKindIcons";
 import { useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-import { runOperation } from "../../../../errors";
+import { runOperation } from "../../../../runtime/errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import { useEditCapability } from "../../../../runtime/capabilities/EditCapability";
 import { useStableIdentity } from "../../../../runtime/state/react";

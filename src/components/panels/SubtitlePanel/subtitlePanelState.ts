@@ -3,17 +3,17 @@ import {
   defaultAdvancedSearch,
   defaultSemanticThreshold,
   type AdvancedSearchOptions,
-} from "../../../core/editor/textSearch";
+} from "../../../core/editor/search/textSearch";
 import { useMemo } from "react";
-import { panelSessionForContext } from "../../../core/editor/panelSourceSelection";
-import { withoutEmptySelectionFilter } from "../../../core/editor/selectionFilter";
-import { scopedSubtitles } from "../../../core/editor/multiSource";
+import { panelSessionForContext } from "../../../core/editor/mediaSources/panelSourceSelection";
+import { withoutEmptySelectionFilter } from "../../../core/editor/selection/selectionFilter";
+import { scopedSubtitles } from "../../../core/editor/mediaSources/multiSource";
 import { createPanelState } from "../../../runtime/systems/PanelState";
 import {
   canHighlightSearchRule,
   type SearchMode,
   type SearchRule,
-} from "../../../core/editor/textSearch";
+} from "../../../core/editor/search/textSearch";
 import { useProjectPort } from "../../../systems/ProjectSystem";
 import type { SubtitleCueAnnotation, SubtitleCueColorLabel, SubtitleState } from "../../../types";
 

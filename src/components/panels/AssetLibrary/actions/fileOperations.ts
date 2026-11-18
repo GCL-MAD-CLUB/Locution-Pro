@@ -9,8 +9,8 @@ import {
   type AssetLibraryLocation,
   type AssetLibraryPlace,
   type AssetLibrarySelection,
-} from "../../../../core/editor/assetLibrary";
-import { assetLibraryHomeLabel } from "../../../../core/editor/assetLibraryHome";
+} from "../../../../core/editor/assetLibrary/assetLibrary";
+import { assetLibraryHomeLabel } from "../../../../core/editor/assetLibrary/assetLibraryHome";
 import type { AssetLibraryFolder, ProjectAssetLibraryState } from "../../../../types";
 import type { AssetLibraryCommands } from "./commands";
 import {

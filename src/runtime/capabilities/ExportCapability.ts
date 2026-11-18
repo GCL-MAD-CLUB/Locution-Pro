@@ -1,6 +1,6 @@
 import type { RenderLifetime } from "../lifetime/RenderLifetime";
 import { useMemo } from "react";
-import { captureOperationError } from "../../errors";
+import { captureOperationError } from "../errors";
 import { useBroadcastEvent } from "../events/react";
 import type { SystemIdentity } from "../systems/identity";
 import { EXPORT_CAPABILITY_PROJECTION, type ExportCapabilityProjection } from "../state/contracts";

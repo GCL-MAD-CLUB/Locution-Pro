@@ -225,7 +225,11 @@ for (const path of frontendFiles) {
           node.expression.name.text === "invoke" &&
           ts.isIdentifier(node.expression.expression) &&
           tauriCoreNamespaces.has(node.expression.expression.text));
-      if (directInvoke && normalizedPath !== "src/errors/runtime.ts" && !directInvokeReported) {
+      if (
+        directInvoke &&
+        normalizedPath !== "src/runtime/errors/runtime.ts" &&
+        !directInvokeReported
+      ) {
         directInvokeReported = true;
         fail(path, "Tauri invoke must go through invokeCommand");
       }
@@ -260,7 +264,7 @@ for (const path of frontendFiles) {
   if (/\bthrow\s+(?!clientError\s*\(|normalizeError\s*\()/u.test(source)) {
     fail(path, "frontend throw sites must throw clientError or a normalized boundary error");
   }
-  if (normalizedPath !== "src/errors/model.ts" && /\bnew\s+ClientError\s*\(/u.test(source)) {
+  if (normalizedPath !== "src/core/errors.ts" && /\bnew\s+ClientError\s*\(/u.test(source)) {
     fail(path, "ClientError construction must go through clientError");
   }
   for (const call of callsOf(source, "clientError")) {
@@ -330,7 +334,7 @@ const nativeCategories = new Set(
     (match) => match[1],
   ),
 );
-const frontendTypesPath = join(root, "src", "errors", "model.ts");
+const frontendTypesPath = join(root, "src", "core", "errors.ts");
 const frontendTypesSource = readFileSync(frontendTypesPath, "utf8");
 const categoryArray = frontendTypesSource.match(
   /export const ERROR_CATEGORIES\s*=\s*\[([\s\S]*?)\]\s*as const/u,

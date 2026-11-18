@@ -1,4 +1,6 @@
-import { clientError, invokeCommand, runOperation } from "../../../../errors";
+import { clientError, invokeCommand, runOperation } from "../../../../runtime/errors";
+
+import workletUrl from "./shuttleAudio.worklet.ts?worker&url";
 
 const PCM_MAGIC = "LPCM";
 const PCM_HEADER_BYTES = 24;
@@ -195,7 +197,7 @@ export class RollingPcmAudioController {
     const context = new AudioContextClass({ latencyHint: "interactive" });
     this.context = context;
     await context.resume();
-    await context.audioWorklet.addModule(new URL("./shuttleAudio.worklet.js", import.meta.url));
+    await context.audioWorklet.addModule(workletUrl);
     if (this.context !== context || context.state === "closed") {
       return null;
     }

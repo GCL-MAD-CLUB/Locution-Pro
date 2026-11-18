@@ -1,10 +1,10 @@
 import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
+import { renderStoryboardKeywordLabel } from "../annotations/renderStoryboardKeywordLabel";
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { annotationColors } from "../../../../runtime/theme";
-import type { PanelRowSource } from "../../../../core/editor/multiSource";
-import type { VirtualItem } from "@tanstack/react-virtual";
-import type { RowVirtualizer } from "../../../../runtime/state/useRowVirtualizer";
+import type { PanelRowSource } from "../../../../core/editor/mediaSources/multiSource";
+import type { RowVirtualizer, VirtualItem } from "../../../../runtime/state/useRowVirtualizer";
 import {
   useRef,
   useState,
@@ -16,24 +16,18 @@ import {
   type UIEvent as ReactUIEvent,
 } from "react";
 import { Star } from "lucide-react";
-import { formatMonitorFrame, formatMonitorTime } from "../../../../core/editor/time";
-import { frameToTimeUs } from "../../../../core/editor/timeline";
+import { formatMonitorFrame, formatMonitorTime } from "../../../../core/editor/playback/time";
+import { frameToTimeUs } from "../../../../core/editor/playback/timeline";
 import {
   timelineThumbnailWindowContains,
   type TimelineThumbnailResolution,
   type TimelineThumbnailWindowPlan,
-} from "../../../../timelineThumbnail";
+} from "../../../../application/thumbnails/timeline";
 import type { StoryboardShot } from "../../../../types";
-import {
-  SearchHighlight,
-  type SearchHighlightOptions,
-} from "../../../common/PanelSearch/PanelSearch";
-import { storyboardShotColorLabels } from "../annotations/StoryboardColorLabelButtons";
+import { SearchHighlight, type SearchHighlightOptions } from "../../../common/PanelSearch";
+import { storyboardShotColorLabels } from "../../../common/StoryboardAnnotations";
 import { StoryboardSemanticThumbnail, StoryboardShotThumbnail } from "./StoryboardShotThumbnail";
-import {
-  parseStoryboardKeywordInput,
-  renderStoryboardKeywordLabel,
-} from "../annotations/storyboardKeywords";
+import { parseStoryboardKeywordInput } from "../../../../core/editor/storyboard/storyboardKeywords";
 import {
   formatStoryboardKeywords,
   useStoryboardPanelState,

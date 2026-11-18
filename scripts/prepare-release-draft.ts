@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { checkReleaseAssets } from "./check-release-assets.ts";
 import type { VerifiedReleaseFile } from "./check-release-assets.ts";
-import { isReleaseVersion, isReleaseRepository } from "../site/src/release-contract.js";
+import { isReleaseVersion, isReleaseRepository } from "../site/src/release-contract.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 

@@ -1,5 +1,5 @@
-import { invokeCommand, runOperation } from "../../../../errors";
-import type { ImportSettings } from "./importBrowserModel";
+import { invokeCommand, runOperation } from "../../../../runtime/errors";
+import type { ImportSettings } from "../../../../core/editor/import/importBrowserModel";
 
 export interface ImportBrowserConfig {
   favorites: string[];

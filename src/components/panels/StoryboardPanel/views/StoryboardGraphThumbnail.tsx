@@ -1,8 +1,8 @@
 import { Star, Tags } from "lucide-react";
 import { memo } from "react";
-import { timelineThumbnailResolutionForDisplay } from "../../../../timelineThumbnail";
-import type { PanelRowSource } from "../../../../core/editor/multiSource";
-import { frameToTimeUs } from "../../../../core/editor/timeline";
+import { timelineThumbnailResolutionForDisplay } from "../../../../application/thumbnails/timeline";
+import type { PanelRowSource } from "../../../../core/editor/mediaSources/multiSource";
+import { frameToTimeUs } from "../../../../core/editor/playback/timeline";
 import type { StoryboardShot, StoryboardShotAnnotation } from "../../../../types";
 import { ShotFrameButton } from "./StoryboardShotThumbnail";
 

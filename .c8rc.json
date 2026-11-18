@@ -1,0 +1,12 @@
+{
+  "all": true,
+  "check-coverage": true,
+  "include": ["src/**/*.{ts,tsx}", "site/**/*.ts", "docs/user-guide/.vitepress/theme/**/*.ts"],
+  "exclude": ["**/*.d.ts"],
+  "exclude-after-remap": true,
+  "reporter": ["text-summary", "json-summary", "lcov"],
+  "lines": 17,
+  "statements": 17,
+  "functions": 49,
+  "branches": 77
+}

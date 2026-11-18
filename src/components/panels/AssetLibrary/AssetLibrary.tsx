@@ -17,7 +17,7 @@ import {
   type AssetLibraryLocation,
   type AssetLibraryPlace,
   type AssetLibrarySelection,
-} from "../../../core/editor/assetLibrary";
+} from "../../../core/editor/assetLibrary/assetLibrary";
 import { useEditCapability } from "../../../runtime/capabilities/EditCapability";
 import { publishEvent } from "../../../runtime/events/react";
 import { useStableIdentity } from "../../../runtime/state/react";
@@ -26,8 +26,8 @@ import { useProjectPort } from "../../../systems/ProjectSystem";
 import type { AssetLibraryEntry } from "../../../types";
 import { usePanelManagerState } from "../../common/DockLayout";
 import { isPopupMenuEventTarget, useCloseOnOutsidePointer } from "../../common/PopupMenu";
-import { annotationShortcutAction } from "../../common/utils/annotationShortcuts";
-import { useExternalAssetLibraryDropTarget } from "../../common/utils/assetLibraryDropTarget";
+import { annotationShortcutAction } from "../../common/AnnotationTools";
+import { useExternalAssetLibraryDropTarget } from "../../common/AssetLibraryDrag";
 import "./AssetLibrary.css";
 import { assetLibraryAnnotationActions, assetLibraryCommands } from "./actions/commands";
 import { useAssetLibraryDragDrop, type AssetLibraryDragPreview } from "./actions/dragDrop";
@@ -39,8 +39,8 @@ import {
   isAssetLibraryEditableTarget,
   type AssetLibraryKeyCommand,
 } from "./actions/selection";
-import { assetLibrarySelectionHidden } from "../../../core/editor/assetLibraryVisibility";
-import { assetLibraryFilterActive } from "../../../core/editor/assetLibraryFilter";
+import { assetLibrarySelectionHidden } from "../../../core/editor/assetLibrary/assetLibraryVisibility";
+import { assetLibraryFilterActive } from "../../../core/editor/assetLibrary/assetLibraryFilter";
 import { assetLibraryColumnScope } from "./model/columns";
 import { assetLibraryHomeActions, useAssetLibraryHome } from "./state/home";
 import {
@@ -234,7 +234,6 @@ export function AssetLibrary() {
     }
     homeActions.recordUse(entry.id);
     activeVideoChanged(media.videoId);
-    void publishEvent("media.video.opened", { videoId: media.videoId }, identity);
     void publishEvent(
       "playback.seek.requested",
       { videoId: media.videoId, timeUs: entry.start_us, focusEndUs: entry.end_us, play: true },

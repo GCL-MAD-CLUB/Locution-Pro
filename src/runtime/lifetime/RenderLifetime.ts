@@ -1,6 +1,6 @@
 ﻿import { Component, createElement, type ReactNode } from "react";
 
-import { normalizeError } from "../../errors/runtime";
+import { normalizeError } from "../errors/runtime";
 
 type Release = () => void;
 type Acquire = () => void | Release;

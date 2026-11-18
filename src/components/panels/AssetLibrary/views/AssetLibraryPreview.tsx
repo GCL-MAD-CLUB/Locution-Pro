@@ -1,15 +1,14 @@
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useRef, useState } from "react";
-import { SubtitleGlyph, VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
+import { SubtitleGlyph, VideoGlyph, OfflineFileIcon } from "../../../common/MediaKindIcons";
 import {
   timelineThumbnailResolutionForDisplay,
   timelineThumbnails,
-} from "../../../../timelineThumbnail";
+} from "../../../../application/thumbnails/timeline";
 import type { AssetLibraryEntry } from "../../../../types";
-import { OfflineFileIcon } from "../../MediaBin/views/MediaBinFolderIcon";
 import type { ResolvedAssetMedia } from "../model/nodes";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { assetLibraryEntryHoverTimeUs } from "../../../../core/editor/assetLibrary";
+import { convertFileSrc } from "../../../../platform/tauri/media";
+import { assetLibraryEntryHoverTimeUs } from "../../../../core/editor/assetLibrary/assetLibrary";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import { DragStackPreview } from "../../../common/DragStackPreview";
 import type { AssetLibraryDragPreview as DragPreview } from "../actions/dragDrop";

@@ -1,6 +1,6 @@
 import type { RenderLifetime } from "../lifetime/RenderLifetime";
 import { useRef } from "react";
-import { runOperation } from "../../errors";
+import { runOperation } from "../errors";
 import type { ApplicationEventMap, ApplicationEventType } from "./contracts";
 import {
   eventHub,

@@ -4,9 +4,9 @@ import {
   cancelTask,
   type ScheduledTask,
 } from "../../runtime/scheduling";
-import { mediaKind } from "../../components/panels/ImportWorkspace/browser/importBrowserModel";
-import { invokeCommand, runOperation } from "../../errors";
-import { normalizeError } from "../../errors/runtime";
+import { mediaKind } from "../../core/editor/import/importBrowserModel";
+import { invokeCommand, runOperation } from "../../runtime/errors";
+import { normalizeError } from "../../runtime/errors/runtime";
 import {
   cancelFfmpegTask,
   createFfmpegTaskId,

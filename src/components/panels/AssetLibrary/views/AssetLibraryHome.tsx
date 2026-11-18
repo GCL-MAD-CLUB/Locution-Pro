@@ -16,11 +16,11 @@ import {
   assetLibraryProjectLabel,
   assetLibraryRootLabels,
   formatAssetLibraryDate,
-} from "../../../../core/editor/assetLibrary";
+} from "../../../../core/editor/assetLibrary/assetLibrary";
 import type {
   AssetLibraryHome,
   AssetLibraryHomeTab,
-} from "../../../../core/editor/assetLibraryHome";
+} from "../../../../core/editor/assetLibrary/assetLibraryHome";
 import type { ProjectAssetLibraryState } from "../../../../types";
 import { assetNodeParentText, type AssetLibraryNode } from "../model/nodes";
 import "./AssetLibraryHome.css";

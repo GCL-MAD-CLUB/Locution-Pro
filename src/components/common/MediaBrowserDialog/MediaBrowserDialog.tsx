@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { mediaGridLayout } from "../../../application/media/mediaGridLayout";
+import { mediaGridLayout } from "../../../application/mediaPreviews/mediaGridLayout";
 import {
   PopupMenu,
   PopupMenuItem,
@@ -22,7 +22,7 @@ import {
 } from "../PopupMenu";
 import { SelectDropdown, selectDropdownItems } from "../SelectDropdown";
 import { BrowserSystemIcon, BrowserVisual } from "./BrowserVisual";
-import { invokeCommand, runOperation, type OperationKey } from "../../../errors";
+import { invokeCommand, runOperation, type OperationKey } from "../../../runtime/errors";
 import { ModalDialog } from "../ModalDialog";
 import "./MediaBrowserDialog.css";
 

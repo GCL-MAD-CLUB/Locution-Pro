@@ -1,0 +1,2179 @@
+import { scheduleAfter, repeatEvery, cancelTask, type ScheduledTask } from "../runtime/scheduling";
+import { RenderLifetime } from "../runtime/lifetime/RenderLifetime";
+import { applyAppearance, defaultThemeColor } from "../runtime/theme";
+import { listen } from "../platform/tauri/events";
+import { getCurrentWindow } from "../platform/tauri/window";
+import { open, save } from "../platform/tauri/dialogs";
+import { Loader2 } from "lucide-react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useStore } from "zustand";
+import {
+  appPanelRegistry,
+  initialAppPanelState,
+  withoutUnavailableAppPanels,
+  withAppPanelDefaults,
+} from "./appPanelRegistry";
+import { finishWindowClose, windowCloseAction } from "../application/window/windowClose";
+import { subtitleStreamNotFoundCode, runMediaImportBatchTask } from "../systems/MediaImportSystem";
+import {
+  showTranscodePanel,
+  transcodePanelRegistry,
+  transcodePanelStore,
+  transcodePanels,
+} from "./transcodePanelRegistry";
+import { publishEvent, useBroadcastEvent } from "../runtime/events/react";
+import { readAppStorage } from "../runtime/storage";
+import { useProjections } from "../runtime/state/StateHub";
+import {
+  EDIT_CAPABILITY_PROJECTION,
+  type EditCapabilityProjection,
+  EXPORT_CAPABILITY_PROJECTION,
+  type ExportCapabilityProjection,
+  MEDIA_SELECTION_CAPABILITY_PROJECTION,
+  type MediaSelectionCapabilityProjection,
+} from "../runtime/state/contracts";
+import { useStableIdentity } from "../runtime/state/react";
+import {
+  ApplicationMenu,
+  NativeApplicationMenu,
+  type ApplicationMenuModel,
+} from "../components/common/ApplicationMenu";
+import {
+  DockLayout,
+  PanelManagerProvider,
+  PanelRegistryProvider,
+  usePanelManagerState,
+  type DockAreaId,
+  type OpenPanelRequest,
+  type PanelManagerInitialState,
+} from "../components/common/DockLayout";
+import { ExportWorkspace } from "../components/panels/ExportWorkspace";
+import { sendExportToTranscode } from "../application/transcode/sendExportToTranscode";
+import { assetLibraryPanelType } from "../components/panels/AssetLibrary";
+import { HistoryPanelServicesProvider, historyPanelType } from "../components/panels/HistoryPanel";
+import { exportWorkspaceStore, useExportWorkspaceState } from "../systems/ExportSystem";
+import { ImportWorkspace } from "../components/panels/ImportWorkspace";
+import { TranscodeWorkspace } from "../components/panels/TranscodeWorkspace";
+import {
+  encoderBinFolderId,
+  encoderFolderName,
+  enqueueTranscodeSources,
+  parentDirectory,
+  transcodeQueueStore,
+} from "../systems/TranscodeSystem";
+import { mediaBinPanelType, type MediaBinPanelParams } from "../components/panels/MediaBin";
+import { ProjectDiscardDialog, ProjectSaveDialog } from "../components/common/ProjectSaveDialog";
+import { ExportConflictDialog } from "../components/common/ExportConflictDialog";
+import {
+  PreferencesDialog,
+  preferencesCategories,
+  type PreferencesCategory,
+} from "../components/common/PreferencesDialog";
+import { AboutDialog } from "../components/common/AboutDialog";
+import { BetaRestartDialog } from "../components/common/BetaRestartDialog";
+import { UpdateDialog, type UpdateDialogState } from "../components/common/UpdateDialog";
+import { ProxyCreationDialog } from "../components/common/ProxyCreationDialog";
+import { ProjectHome } from "../components/common/ProjectHome";
+import { SecondaryTopbar } from "../components/common/SecondaryTopbar";
+import { sourcePanelType } from "../components/panels/SourceMonitor";
+import { storyboardPanelType } from "../components/panels/StoryboardPanel";
+import { subtitlePanelType } from "../components/panels/SubtitlePanel";
+import { cancelAllTaskProgress, useTaskProgressStatus } from "../systems/TaskSystem";
+import {
+  checkForUpdate,
+  checkForStartupUpdate,
+  compareVersions,
+  createUpdateWriteBarrier,
+  installPreparedUpdate,
+  loadUpdateStartup,
+  startupUpdateNotifications,
+  setUpdateIgnored,
+  acknowledgeUpdateNotes,
+  saveBeforeUpdate,
+} from "../application/update/update";
+import {
+  captureOperationError,
+  clientError,
+  invokeCommand,
+  runBackgroundOperation,
+  runOperation,
+} from "../runtime/errors";
+import { normalizeError } from "../runtime/errors/runtime";
+import {
+  captureProjectAutoSave,
+  defaultMediaBinFolderColor,
+  getProjectWorkspaceSnapshot,
+  loadProjectStates,
+  mediaDisplayName,
+  persistExportState,
+  projectStatesLoaded,
+  pruneProjectStates,
+  useProjectPort,
+} from "../systems/ProjectSystem";
+import { usePreferencesPort } from "../systems/PreferencesSystem";
+import { isMacOSRuntime, isTauriRuntime } from "../platform/tauri/runtime";
+import type { MediaBinFolder, MediaBinItem, OpenProjectResult, RecentProjectEntry } from "../types";
+
+const projectFilters = [
+  {
+    name: "Locution Pro Project",
+    extensions: ["lcp"],
+  },
+];
+
+const subtitleFilters = [
+  {
+    name: "Subtitle",
+    extensions: ["srt", "ass", "ssa", "vtt", "webvtt"],
+  },
+];
+
+const mediaFilters = [
+  {
+    name: "媒体文件",
+    extensions: [
+      "mkv",
+      "mp4",
+      "mov",
+      "webm",
+      "avi",
+      "ts",
+      "m2ts",
+      "mpeg",
+      "mpg",
+      "wav",
+      "mp3",
+      "m4a",
+      "aac",
+      "flac",
+      "ogg",
+      "opus",
+      "wma",
+      "srt",
+      "ass",
+      "ssa",
+      "vtt",
+      "webvtt",
+    ],
+  },
+];
+
+const subtitleExtensions = new Set(subtitleFilters[0].extensions);
+const recentMediaStorageKey = "locution-pro:recent-media-paths";
+const recentProjectStorageKey = "locution-pro:recent-project-paths";
+const launchProjectEvent = "launch-project-path";
+const recentPathsLimit = 10;
+const warningDisplayDurationMs = 5000;
+const workspaceConfigSaveDelayMs = 120;
+const storyboardPanelDefaultMigrationKey = "locution-pro:workspace:storyboard-panel-default:v1";
+
+function fileName(path: string) {
+  return path.split(/[\\/]/).pop() ?? path;
+}
+
+function orderedMediaFolders(mediaFolders: MediaBinFolder[]) {
+  const foldersByParent = new Map<string | null, MediaBinFolder[]>();
+  for (const folder of mediaFolders) {
+    const siblings = foldersByParent.get(folder.parent_id) ?? [];
+    siblings.push(folder);
+    foldersByParent.set(folder.parent_id, siblings);
+  }
+  const result: Array<{ folder: MediaBinFolder; depth: number }> = [];
+  const visited = new Set<string>();
+  const appendChildren = (parentId: string | null, depth: number) => {
+    for (const folder of foldersByParent.get(parentId) ?? []) {
+      if (visited.has(folder.id)) {
+        continue;
+      }
+      visited.add(folder.id);
+      result.push({ folder, depth });
+      appendChildren(folder.id, depth + 1);
+    }
+  };
+  appendChildren(null, 0);
+  for (const folder of mediaFolders) {
+    if (!visited.has(folder.id)) {
+      visited.add(folder.id);
+      result.push({ folder, depth: 0 });
+      appendChildren(folder.id, 1);
+    }
+  }
+  return result;
+}
+
+function fileExtension(path: string) {
+  return fileName(path).split(".").pop()?.toLocaleLowerCase() ?? "";
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null) {
+  const element = target as HTMLElement | null;
+  return (
+    element?.tagName === "INPUT" ||
+    element?.tagName === "TEXTAREA" ||
+    element?.tagName === "SELECT" ||
+    Boolean(element?.isContentEditable)
+  );
+}
+
+function readRecentPaths(storageKey: string) {
+  try {
+    const stored = readAppStorage(storageKey);
+    if (!stored) {
+      return [];
+    }
+    const paths = JSON.parse(stored);
+    return Array.isArray(paths)
+      ? paths.filter((path): path is string => typeof path === "string").slice(0, recentPathsLimit)
+      : [];
+  } catch (error) {
+    captureOperationError("storage.recentPaths", error);
+    return [];
+  }
+}
+
+/**
+ * Reads the recently-opened projects list. Older builds persisted plain paths;
+ * those entries are migrated in place to `{ path, projectId }` pairs with an
+ * unknown (empty) document id until the project is next opened.
+ */
+function readRecentProjects(): RecentProjectEntry[] {
+  try {
+    const stored = readAppStorage(recentProjectStorageKey);
+    if (!stored) {
+      return [];
+    }
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    if (parsed.every((entry) => typeof entry === "string")) {
+      return parsed
+        .filter((entry): entry is string => typeof entry === "string")
+        .map((path) => ({ path, projectId: "" }))
+        .slice(0, recentPathsLimit);
+    }
+    return parsed
+      .filter(
+        (entry): entry is RecentProjectEntry =>
+          typeof entry?.path === "string" && typeof entry?.projectId === "string",
+      )
+      .slice(0, recentPathsLimit);
+  } catch (error) {
+    captureOperationError("storage.recentPaths", error);
+    return [];
+  }
+}
+
+function markStoryboardPanelDefaultMigrationApplied() {
+  try {
+    window.localStorage.setItem(storyboardPanelDefaultMigrationKey, "1");
+  } catch (error) {
+    captureOperationError("workspace.save", error);
+  }
+}
+
+function storyboardPanelDefaultMigrationApplied() {
+  try {
+    return readAppStorage(storyboardPanelDefaultMigrationKey) === "1";
+  } catch (error) {
+    captureOperationError("workspace.load", error);
+    return false;
+  }
+}
+
+function restoreAppPanelDefaults(state: PanelManagerInitialState): PanelManagerInitialState {
+  if (state.instances.some((instance) => instance.id === "storyboard")) {
+    markStoryboardPanelDefaultMigrationApplied();
+    return state;
+  }
+  if (storyboardPanelDefaultMigrationApplied()) {
+    return state;
+  }
+  const restored = withAppPanelDefaults(state);
+  if (restored !== state) {
+    markStoryboardPanelDefaultMigrationApplied();
+  }
+  return restored;
+}
+
+function standaloneSubtitleItem(path: string, index: number): MediaBinItem {
+  const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${index}`;
+  return {
+    id: `external-subtitle:${random}:${path.length}`,
+    bin_id: null,
+    kind: "subtitle",
+    enabled: true,
+    hidden: false,
+    offline: false,
+    path,
+    file_name: fileName(path),
+    duration_us: 0,
+    start_time_us: 0,
+    bound_to_video_id: null,
+    source_video_id: null,
+    stream_index: null,
+    subtitle_track_id: null,
+    codec: fileExtension(path) || "subtitle",
+    language: null,
+    extracted: false,
+    origin: "imported",
+    color: defaultThemeColor("--color-media-subtitle"),
+  };
+}
+
+const appWorkspaces = [
+  { id: "import", label: "导入" },
+  { id: "edit", label: "编辑" },
+  { id: "export", label: "导出" },
+  { id: "transcode", label: "转码" },
+] as const;
+
+type AppWorkspace = (typeof appWorkspaces)[number]["id"];
+type PendingCloseTarget = "project" | "window";
+
+function AppContent() {
+  const lifetime = new RenderLifetime();
+
+  const identity = useStableIdentity("app-shell");
+  const [activeWorkspace, setActiveWorkspace] = useState<AppWorkspace>("edit");
+  const exportHistoryCursor = useExportWorkspaceState((state) => state.rangeHistoryCursor);
+  const exportHistoryLength = useExportWorkspaceState((state) => state.rangeHistory.length);
+  const focusedPanelId = usePanelManagerState((state) => state.focusedPanelId);
+  const panelInstances = usePanelManagerState((state) => state.instances);
+  const openPanel = usePanelManagerState((state) => state.openPanel);
+  const transcodePanelInstances = useStore(transcodePanelStore, (state) => state.instances);
+  const closePanel = usePanelManagerState((state) => state.closePanel);
+  const [projectHomeMode, setProjectHomeMode] = useState<"startup" | "manual" | null>("startup");
+  const [preferencesCategory, setPreferencesCategory] = useState<PreferencesCategory | null>(null);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [updateDialogState, setUpdateDialogState] = useState<UpdateDialogState | null>(null);
+  const updateDialogQueueRef = useRef<UpdateDialogState[]>([]);
+  const startupDialogsOpenRef = useRef(false);
+  const updateRequestRef = useRef(0);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateInstalling, setUpdateInstalling] = useState(false);
+  const updateInstallingRef = useRef(false);
+  const [projectWrites] = useState(createUpdateWriteBarrier);
+  const [historyNavigating, setHistoryNavigating] = useState(false);
+  const [recentMediaPaths, setRecentMediaPaths] = useState(() =>
+    readRecentPaths(recentMediaStorageKey),
+  );
+  const [recentProjects, setRecentProjects] = useState(() => readRecentProjects());
+  const [launchResolved, setLaunchResolved] = useState(false);
+  const [pendingCloseTarget, setPendingCloseTarget] = useState<PendingCloseTarget | null>(null);
+  const [closeSavePending, setCloseSavePending] = useState(false);
+  const [pendingDiscardMessage, setPendingDiscardMessage] = useState<string | null>(null);
+  const [discardSavePending, setDiscardSavePending] = useState(false);
+  const closingWindowRef = useRef(false);
+  const openProjectRef = useRef(openProject);
+  openProjectRef.current = openProject;
+  const pendingDiscardResolveRef = useRef<((discard: boolean) => void) | null>(null);
+
+  const {
+    project,
+    activeVideoId,
+    mediaFolders,
+    mediaItems,
+    projectFilePath,
+    projectId,
+    exportState,
+    projectDirty,
+    message,
+    warnings,
+    projectHistory,
+    projectOpened,
+    projectCreated,
+    projectSaved,
+    projectClosed,
+    mediaProjectsAdded,
+    mediaItemsAdded,
+    mediaItemsMovedToFolder,
+    mediaFolderAdded,
+    messagePublished,
+    warningsReplaced,
+    warningsAppended,
+    projectHistoryJumped,
+    projectHistoryFutureDiscarded,
+    projectRestored,
+    mediaBinReadOnly,
+  } = useProjectPort(
+    [
+      "project",
+      "activeVideoId",
+      "mediaFolders",
+      "mediaItems",
+      "projectFilePath",
+      "projectId",
+      "exportState",
+      "projectDirty",
+      "message",
+      "warnings",
+      "mediaBinReadOnly",
+      "projectHistory",
+    ],
+    [
+      "projectOpened",
+      "projectCreated",
+      "projectSaved",
+      "projectClosed",
+      "mediaProjectsAdded",
+      "mediaItemsAdded",
+      "mediaItemsMovedToFolder",
+      "mediaFolderAdded",
+      "messagePublished",
+      "warningsReplaced",
+      "warningsAppended",
+      "projectHistoryJumped",
+      "projectHistoryFutureDiscarded",
+      "projectRestored",
+    ],
+  );
+  const {
+    preferences,
+    loaded: preferencesLoaded,
+    loadPreferences,
+    updatePreferences,
+    betaTranscodeEnabled,
+  } = usePreferencesPort(
+    ["preferences", "loaded", "betaTranscodeEnabled"],
+    ["loadPreferences", "updatePreferences"],
+  );
+  const [savingBeta, setSavingBeta] = useState(false);
+  const [betaRestartOpen, setBetaRestartOpen] = useState(false);
+  const [restartingBeta, setRestartingBeta] = useState(false);
+  const startupPreferenceApplied = useRef(false);
+  const autoSaveIntervalMinutes = preferences.auto_save_interval_minutes;
+  lifetime.useBeforePaint(() => {
+    applyAppearance(preferences.appearance ?? "darkest");
+  }, [preferences.appearance]);
+  const autoSaveEnabled = preferences.auto_save_enabled;
+  const isMediaBinReadOnly = mediaBinReadOnly;
+  const focusedPanel = focusedPanelId ? panelInstances[focusedPanelId] : undefined;
+  const editCapabilities = useProjections<EditCapabilityProjection>(EDIT_CAPABILITY_PROJECTION);
+  const activeEditCapability = editCapabilities.find(
+    (projection) => projection.value.active,
+  )?.value;
+  const exportCapabilities = useProjections<ExportCapabilityProjection>(
+    EXPORT_CAPABILITY_PROJECTION,
+  );
+  const activeExportCapability = exportCapabilities.find(
+    (projection) => projection.value.active,
+  )?.value;
+  const mediaSelectionCapabilities = useProjections<MediaSelectionCapabilityProjection>(
+    MEDIA_SELECTION_CAPABILITY_PROJECTION,
+  );
+  const activeMediaSelectionCapability = mediaSelectionCapabilities.find(
+    (projection) => projection.value.active,
+  )?.value;
+  const activeMediaDisplayName = mediaDisplayName(project, mediaItems, activeVideoId);
+  const autoSaveProjectName = projectFilePath
+    ? fileName(projectFilePath).replace(/\.lcp$/i, "")
+    : (activeMediaDisplayName || mediaItems[0]?.file_name)?.replace(/\.[^.]+$/, "") || "未命名项目";
+  const autoSaveProjectNameRef = useRef(autoSaveProjectName);
+  autoSaveProjectNameRef.current = autoSaveProjectName;
+  const { tasks: runningTasks } = useTaskProgressStatus(lifetime);
+  const isBusy =
+    runningTasks.some((task) => task.blocking) ||
+    historyNavigating ||
+    updateInstalling ||
+    restartingBeta;
+  const hasProject = Boolean(projectFilePath || mediaItems.length > 0 || mediaFolders.length > 0);
+  const canUndo =
+    activeWorkspace === "export"
+      ? exportHistoryCursor > 0
+      : projectHistory.active && projectHistory.cursor > 0;
+  const canRedo =
+    activeWorkspace === "export"
+      ? exportHistoryCursor < exportHistoryLength
+      : projectHistory.active && projectHistory.cursor < projectHistory.entries.length;
+  const canCloseFocusedPanel = activeWorkspace === "edit" && Boolean(focusedPanel) && !isBusy;
+  const savedUpdateProjectPathRef = useRef(projectFilePath);
+  savedUpdateProjectPathRef.current = projectFilePath;
+  const projectDirtyRef = useRef(projectDirty);
+  projectDirtyRef.current = projectDirty;
+  const canRestoreProject = hasProject && projectDirty && !isBusy;
+  const editScope = activeWorkspace === "edit" ? focusedPanel : undefined;
+  const mediaEditScopeActive = editScope?.type === mediaBinPanelType;
+  const focusedMediaFolderId = mediaEditScopeActive
+    ? (editScope.params as MediaBinPanelParams).rootFolderId
+    : null;
+  const canCopy = activeEditCapability?.capabilities.copy ?? false;
+  const canPaste = activeEditCapability?.capabilities.paste ?? false;
+  const canClear = activeEditCapability?.capabilities.clear ?? false;
+  const canDuplicate = activeEditCapability?.capabilities.duplicate ?? false;
+  const canSelectAll = activeEditCapability?.capabilities.selectAll ?? false;
+  const canClearSelection = activeEditCapability?.capabilities.clearSelection ?? false;
+  const canExportSelection = activeExportCapability?.capabilities.configure ?? false;
+  const canQuickExportSelection = activeExportCapability?.capabilities.quick ?? false;
+  const canReplaceSelectedMedia =
+    activeMediaSelectionCapability?.capabilities.replaceMedia ?? false;
+  const canLinkSelectedMedia = activeMediaSelectionCapability?.capabilities.linkMedia ?? false;
+  const canMakeSelectedMediaOffline =
+    activeMediaSelectionCapability?.capabilities.makeOffline ?? false;
+  const activeStatusLabel =
+    runningTasks.length === 1 ? runningTasks[0].label : `正在执行 ${runningTasks.length} 项操作...`;
+
+  lifetime.useAfterCommit(() => {
+    if (warnings.length === 0) {
+      return;
+    }
+
+    const timeoutId = scheduleAfter(() => {
+      warningsReplaced([]);
+    }, warningDisplayDurationMs);
+
+    return () => cancelTask(timeoutId);
+  }, [warnings, warningsReplaced]);
+
+  lifetime.useAfterCommit(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    void loadPreferences();
+  }, [loadPreferences]);
+
+  lifetime.useAfterCommit(() => {
+    if (!preferencesLoaded || startupPreferenceApplied.current) return;
+    startupPreferenceApplied.current = true;
+    if (!preferences.show_home_on_startup) {
+      setProjectHomeMode((current) => (current === "startup" ? null : current));
+    }
+  }, [preferencesLoaded, preferences.show_home_on_startup]);
+
+  lifetime.useAfterCommit(() => {
+    if (!isTauriRuntime()) return;
+    let active = true;
+    void (async () => {
+      let ignoredVersions: string[] = [];
+      let cachedVersion: string | undefined;
+      try {
+        const startup = await loadUpdateStartup();
+        if (!active) return;
+        ignoredVersions = startup.ignoredVersions;
+        cachedVersion = startup.pending?.version;
+        if (updateRequestRef.current === 0) {
+          const notifications = startupUpdateNotifications(startup);
+          updateDialogQueueRef.current = notifications.slice(1);
+          startupDialogsOpenRef.current = notifications.length > 0;
+          setUpdateDialogState(notifications[0] ?? null);
+        }
+      } catch (error) {
+        captureOperationError("help.checkUpdates", error);
+      }
+      if (!active) return;
+      try {
+        const result = await checkForStartupUpdate();
+        if (
+          !active ||
+          updateRequestRef.current !== 0 ||
+          result.status === "latest" ||
+          (cachedVersion !== undefined &&
+            (compareVersions(result.release.version, cachedVersion) ?? 0) <= 0) ||
+          ignoredVersions.includes(result.release.version)
+        )
+          return;
+        const notification: UpdateDialogState = { status: result.status, release: result.release };
+        if (startupDialogsOpenRef.current) updateDialogQueueRef.current.push(notification);
+        else {
+          startupDialogsOpenRef.current = true;
+          setUpdateDialogState(notification);
+        }
+      } catch (error) {
+        captureOperationError("help.checkUpdates", error);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  lifetime.useAfterCommit(() => {
+    if (updateDialogState?.status !== "installed") return;
+    void acknowledgeUpdateNotes().catch((error) =>
+      captureOperationError("help.checkUpdates", error),
+    );
+  }, [updateDialogState]);
+
+  lifetime.useAfterCommit(() => {
+    if (!isTauriRuntime() || !hasProject || !autoSaveEnabled) {
+      return;
+    }
+
+    let snapshotRunning = false;
+    const timer = repeatEvery(() => {
+      if (snapshotRunning || updateInstallingRef.current) {
+        return;
+      }
+      snapshotRunning = true;
+      const snapshot = captureProjectAutoSave();
+      void runOperation("project.autosave", () =>
+        projectWrites.track(
+          invokeCommand<boolean>("auto_save_project_snapshot", {
+            projectName: autoSaveProjectNameRef.current,
+            workspace: snapshot.workspace,
+            projectPath: snapshot.path,
+            // A session that only imported media has no document id yet; an empty
+            // id keeps auto-save snapshots content-deduplicated instead of minting
+            // a fresh, ever-changing id every tick.
+            projectId: snapshot.projectId ?? "",
+          }),
+        ),
+      )
+        .then((outcome) => {
+          if (outcome.status === "success" && outcome.value) snapshot.markSaved();
+        })
+        .finally(() => {
+          snapshotRunning = false;
+        });
+    }, autoSaveIntervalMinutes * 60_000);
+
+    return () => cancelTask(timer);
+  }, [autoSaveEnabled, autoSaveIntervalMinutes, hasProject, projectId]);
+
+  // macOS reports Finder opens as events, including while the app is running;
+  // the backend stores the path for take_launch_project_path first.
+  lifetime.useAfterCommit(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    let disposed = false;
+    let unlistenLaunchProject: (() => void) | undefined;
+    runBackgroundOperation("project.launchPath", async () => {
+      const unlisten = await listen(launchProjectEvent, () => {
+        void runOperation("project.launchPath", () =>
+          invokeCommand<string | null>("take_launch_project_path"),
+        ).then((outcome) => {
+          if (outcome.status === "success" && outcome.value) {
+            return openProjectRef.current(outcome.value);
+          }
+        });
+      });
+      if (disposed) {
+        unlisten();
+      } else {
+        unlistenLaunchProject = unlisten;
+      }
+    });
+    return () => {
+      disposed = true;
+      unlistenLaunchProject?.();
+    };
+  }, []);
+
+  lifetime.useAfterCommit(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    void runOperation("project.launchPath", async () => {
+      // Load the per-project state store first so a launch-path project's
+      // recorded export settings are available when it is opened.
+      if (!projectStatesLoaded()) {
+        await loadProjectStates();
+      }
+      return invokeCommand<string | null>("take_launch_project_path");
+    })
+      .then((outcome) => {
+        if (outcome.status === "success" && outcome.value) {
+          return openProject(outcome.value);
+        }
+      })
+      .finally(() => {
+        // Unlock pruning only after the launch-path project (if any) is open,
+        // so the first prune cannot delete its recorded state.
+        setLaunchResolved(true);
+      });
+  }, []);
+
+  lifetime.useAfterCommit(() => {
+    try {
+      window.localStorage.setItem(recentMediaStorageKey, JSON.stringify(recentMediaPaths));
+    } catch (error) {
+      captureOperationError("storage.recentPaths", error);
+      // Recent imports are a convenience feature; importing itself must still work.
+    }
+  }, [recentMediaPaths]);
+
+  lifetime.useAfterCommit(() => {
+    try {
+      window.localStorage.setItem(recentProjectStorageKey, JSON.stringify(recentProjects));
+    } catch (error) {
+      captureOperationError("storage.recentPaths", error);
+      // Recent projects are a convenience feature; opening and saving must still work.
+    }
+  }, [recentProjects]);
+
+  // Per-project state retention mirrors the recently-opened list: a project's
+  // global state is dropped exactly when it leaves the list. The current
+  // project is always kept (its id may not be on the list yet while unsaved),
+  // and pruning waits until the launch-path project, if any, has been opened so
+  // it cannot be wiped before its recorded state is read.
+  lifetime.useAfterCommit(() => {
+    if (!isTauriRuntime() || !launchResolved) {
+      return;
+    }
+    let cancelled = false;
+    const keepProjectIds = [projectId, ...recentProjects.map((entry) => entry.projectId)].filter(
+      (id): id is string => Boolean(id),
+    );
+    void (async () => {
+      if (!projectStatesLoaded()) {
+        await loadProjectStates();
+      }
+      if (!cancelled) {
+        await pruneProjectStates(keepProjectIds);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [launchResolved, projectId, recentProjects]);
+
+  lifetime.useAfterCommit(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    const projectTitle = projectFilePath ?? (project ? "未命名项目" : "");
+    const title = ` Locution Pro${projectTitle ? ` - ${projectTitle}${projectDirty ? " *" : ""}` : ""}`;
+    runBackgroundOperation("window.title", () => getCurrentWindow().setTitle(title));
+  }, [project, projectDirty, projectFilePath]);
+
+  lifetime.useAfterCommit(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    let disposed = false;
+    let unlistenCloseRequested: (() => void) | undefined;
+
+    const currentWindow = getCurrentWindow();
+    runBackgroundOperation("window.closeListener", async () => {
+      const unlisten = await currentWindow.onCloseRequested((event) => {
+        const action = windowCloseAction({
+          updateInstalling: updateInstallingRef.current,
+          closing: closingWindowRef.current,
+          projectDirty: projectDirtyRef.current,
+        });
+        // Hold the platform close until export cancellation and cleanup finish.
+        // destroy() is what exits. A repeated close while that wait runs is ignored.
+        event.preventDefault();
+        if (action === "block-install" || action === "ignore-reentry") {
+          return;
+        }
+        if (action === "confirm-dirty") {
+          setPendingCloseTarget("window");
+          return;
+        }
+        closingWindowRef.current = true;
+        void runOperation("project.close", async () => {
+          try {
+            await finishWindowClose(
+              () => cancelAllTaskProgress(),
+              () => getCurrentWindow().destroy(),
+            );
+          } catch (error) {
+            closingWindowRef.current = false;
+            throw normalizeError(error);
+          }
+        });
+      });
+      if (disposed) {
+        unlisten();
+      } else {
+        unlistenCloseRequested = unlisten;
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unlistenCloseRequested?.();
+    };
+  }, []);
+
+  function confirmDiscardChanges(message: string) {
+    if (!projectDirty) {
+      return true;
+    }
+    return new Promise<boolean>((resolve) => {
+      pendingDiscardResolveRef.current?.(false);
+      pendingDiscardResolveRef.current = resolve;
+      setPendingDiscardMessage(message);
+    });
+  }
+
+  function completeDiscardConfirmation(discard: boolean) {
+    const resolve = pendingDiscardResolveRef.current;
+    pendingDiscardResolveRef.current = null;
+    setPendingDiscardMessage(null);
+    resolve?.(discard);
+  }
+
+  async function saveAndCompleteDiscardConfirmation() {
+    if (discardSavePending || !pendingDiscardResolveRef.current) {
+      return;
+    }
+    setDiscardSavePending(true);
+    const saved = await saveProjectWithOutcome();
+    if (saved) {
+      completeDiscardConfirmation(true);
+    }
+    setDiscardSavePending(false);
+  }
+
+  function cancelDiscardConfirmation() {
+    if (!discardSavePending) {
+      completeDiscardConfirmation(false);
+    }
+  }
+
+  function discardDiscardConfirmation() {
+    if (!discardSavePending) {
+      completeDiscardConfirmation(true);
+    }
+  }
+
+  lifetime.useAfterCommit(
+    () => () => {
+      const resolve = pendingDiscardResolveRef.current;
+      pendingDiscardResolveRef.current = null;
+      resolve?.(false);
+    },
+    [],
+  );
+
+  async function exitApplication() {
+    if (!isTauriRuntime()) {
+      window.close();
+      return;
+    }
+    await runOperation("project.close", () => getCurrentWindow().close());
+  }
+
+  async function openLocutionProHelp() {
+    if (!isTauriRuntime()) {
+      messagePublished("此功能仅在桌面版可用。");
+      return;
+    }
+    const outcome = await runOperation("help.openDocumentation", () =>
+      invokeCommand("open_user_guide"),
+    );
+    if (outcome.status === "success") {
+      messagePublished("已在默认浏览器中打开帮助。");
+    }
+  }
+
+  async function showLogFiles() {
+    if (!isTauriRuntime()) {
+      messagePublished("此功能仅在桌面版可用。");
+      return;
+    }
+    const outcome = await runOperation("help.openLogDirectory", () =>
+      invokeCommand("open_log_directory"),
+    );
+    if (outcome.status === "success") {
+      messagePublished("已打开日志文件夹。");
+    }
+  }
+
+  async function checkForUpdates() {
+    if (!isTauriRuntime()) {
+      messagePublished("此功能仅在桌面版可用。");
+      return;
+    }
+    if (updateChecking || updateInstallingRef.current) return;
+    const request = ++updateRequestRef.current;
+    updateDialogQueueRef.current = [];
+    startupDialogsOpenRef.current = false;
+    setUpdateChecking(true);
+    setUpdateDialogState(null);
+    messagePublished("正在检查更新；新版本下载完成后会通知你。");
+    try {
+      const result = await checkForUpdate();
+      if (updateRequestRef.current !== request) return;
+      const ignored =
+        result.status === "available" &&
+        (await loadUpdateStartup().catch(() => null))?.ignoredVersions.includes(
+          result.release.version,
+        );
+      if (updateRequestRef.current !== request) return;
+      setUpdateDialogState(
+        result.status === "available"
+          ? { status: "available", release: result.release, ignored: ignored || false }
+          : result.status === "manual"
+            ? { status: "manual", release: result.release }
+            : { status: "latest" },
+      );
+    } catch (error) {
+      captureOperationError("help.checkUpdates", error);
+      if (updateRequestRef.current === request) setUpdateDialogState({ status: "failed" });
+    } finally {
+      setUpdateChecking(false);
+    }
+  }
+
+  function closeUpdateDialog() {
+    if (updateInstallingRef.current) return;
+    const next = updateDialogQueueRef.current.shift() ?? null;
+    startupDialogsOpenRef.current = next !== null;
+    setUpdateDialogState(next);
+  }
+
+  async function ignoreUpdate(ignored: boolean) {
+    if (updateDialogState?.status !== "available") return;
+    const version = updateDialogState.release.version;
+    try {
+      await setUpdateIgnored(version, ignored);
+      setUpdateDialogState((state) =>
+        state?.status === "available" && state.release.version === version
+          ? { ...state, ignored }
+          : state,
+      );
+    } catch (error) {
+      captureOperationError("help.checkUpdates", error);
+      messagePublished("未能保存更新提醒设置，请重试。");
+    }
+  }
+
+  async function applyUpdate() {
+    if (
+      updateDialogState?.status !== "available" ||
+      updateInstallingRef.current ||
+      runningTasks.length > 0 ||
+      isBusy
+    )
+      return;
+    const { release, ignored } = updateDialogState;
+    updateInstallingRef.current = true;
+    setUpdateInstalling(true);
+    setUpdateDialogState({ status: "available", release, ignored });
+    try {
+      const result = await saveBeforeUpdate({
+        needsSave: projectDirty,
+        settle: async () => (await projectWrites.settle()) && hasProject,
+        save: saveProjectWithOutcome,
+        snapshot: () => JSON.stringify(getProjectWorkspaceSnapshot()),
+        install: async () => {
+          await installPreparedUpdate(release.version, savedUpdateProjectPathRef.current);
+          // A successful handoff closes this process. Returning while it is
+          // still alive must restore the manual update path.
+          throw clientError(
+            "UNEXPECTED_ERROR",
+            "The updater returned without closing the application",
+          );
+        },
+      });
+      if (result === "changed") {
+        setUpdateDialogState({
+          status: "available",
+          release,
+          ignored,
+          error: "保存期间工作区发生了变化，已取消更新。请确认并再次保存后更新。",
+        });
+      }
+    } catch (error) {
+      captureOperationError("help.installUpdate", error);
+      setUpdateDialogState({
+        status: "manual",
+        release,
+      });
+    } finally {
+      updateInstallingRef.current = false;
+      setUpdateInstalling(false);
+    }
+  }
+
+  async function newProject() {
+    if (!isTauriRuntime()) {
+      messagePublished("此功能仅在桌面版可用。");
+      return;
+    }
+    if (!(await confirmDiscardChanges("当前项目有尚未保存的更改，仍要新建项目吗？"))) {
+      return;
+    }
+
+    const outcome = await runOperation("project.new", async () => {
+      // A brand-new document gets its own identity, persisted on first save.
+      projectCreated(crypto.randomUUID());
+      setActiveWorkspace("import");
+      setProjectHomeMode(null);
+    });
+    if (outcome.status === "success") {
+      messagePublished("已新建项目。");
+    }
+  }
+
+  function rememberRecentProject(entry: RecentProjectEntry) {
+    setRecentProjects((current) =>
+      [
+        { ...entry, lastUsedAt: Date.now() },
+        ...current.filter((currentEntry) => currentEntry.path !== entry.path),
+      ].slice(0, recentPathsLimit),
+    );
+  }
+
+  function forgetRecentProject(path: string) {
+    setRecentProjects((current) => current.filter((currentEntry) => currentEntry.path !== path));
+  }
+
+  async function openProject(pathToOpen?: string) {
+    if (!isTauriRuntime()) {
+      messagePublished("此功能仅在桌面版可用。");
+      return;
+    }
+    if (!(await confirmDiscardChanges("当前项目有尚未保存的更改，仍要打开其他项目吗？"))) {
+      return;
+    }
+    const pickOutcome = pathToOpen
+      ? null
+      : await runOperation("project.open", () =>
+          open({
+            multiple: false,
+            title: "打开 Locution Pro 项目",
+            filters: projectFilters,
+          }),
+        );
+    if (pickOutcome && pickOutcome.status !== "success") {
+      return;
+    }
+    const picked = pathToOpen ?? (pickOutcome?.status === "success" ? pickOutcome.value : null);
+    const path = Array.isArray(picked) ? picked[0] : picked;
+    if (!path) {
+      return;
+    }
+
+    const outcome = await runOperation(
+      "project.open",
+      async () => {
+        if (!projectStatesLoaded()) {
+          await loadProjectStates().catch((error) =>
+            captureOperationError("project.panelState.load", error),
+          );
+        }
+        return invokeCommand<OpenProjectResult>("open_project_file", { path });
+      },
+      { displayName: fileName(path), resourceKind: "project" },
+    );
+    if (outcome.status === "success") {
+      const result = outcome.value;
+      setProjectHomeMode(null);
+      projectOpened(result.workspace, result.path, result.project_id);
+      warningsReplaced(result.warnings);
+      rememberRecentProject({ path: result.path, projectId: result.project_id });
+      messagePublished(`已打开项目 ${fileName(result.path)}。`);
+    } else if (outcome.status === "failed") {
+      if (pathToOpen) {
+        forgetRecentProject(pathToOpen);
+      }
+    }
+  }
+
+  async function closeProjectImmediately() {
+    const outcome = await runOperation("project.close", async () => {
+      projectClosed();
+    });
+    if (outcome.status === "success") {
+      messagePublished("已关闭项目。");
+    }
+  }
+
+  async function closeProject() {
+    if (projectDirty) {
+      setPendingCloseTarget("project");
+      return;
+    }
+    await closeProjectImmediately();
+  }
+
+  function closeFocusedPanel() {
+    if (activeWorkspace !== "edit" || !focusedPanelId) {
+      return;
+    }
+    closePanel(focusedPanelId);
+  }
+
+  async function writeProject(path: string, makeCurrent: boolean) {
+    // 另存为 of an already-saved project and 保存副本 write a brand-new file, so
+    // each gets a fresh document identity. The first save of an unsaved project
+    // keeps the id minted at 新建 (the file is its first materialization); a
+    // regular save keeps the current id.
+    const isNewFile = !makeCurrent || Boolean(projectFilePath && path !== projectFilePath);
+    const targetId = isNewFile ? crypto.randomUUID() : (projectId ?? crypto.randomUUID());
+    const previousId = projectId;
+    const workspace = getProjectWorkspaceSnapshot();
+    const snapshot = JSON.stringify(workspace);
+    const savedPath = await projectWrites.track(
+      invokeCommand<string>("save_project_file", {
+        path,
+        workspace,
+        projectId: targetId,
+      }),
+    );
+    if (makeCurrent && JSON.stringify(getProjectWorkspaceSnapshot()) !== snapshot) {
+      messagePublished("已写入保存时的项目快照，期间新增的更改仍需保存。");
+      return false;
+    }
+    if (makeCurrent) {
+      projectSaved(savedPath, targetId);
+      savedUpdateProjectPathRef.current = savedPath;
+      messagePublished(`已保存项目到 ${fileName(savedPath)}。`);
+    } else {
+      messagePublished(`已保存项目副本到 ${fileName(savedPath)}。`);
+    }
+    // A new document identity starts with the current export settings so the
+    // copy/另存为 behaves like the original. The file is already saved, so a
+    // settings-copy failure must not surface as a failed save.
+    if (previousId !== targetId && exportState) {
+      void persistExportState(targetId, exportState).catch((error) =>
+        captureOperationError("project.exportState.save", error),
+      );
+    }
+    rememberRecentProject({ path: savedPath, projectId: targetId });
+    return true;
+  }
+
+  function suggestedProjectName(makeCopy = false) {
+    const projectName =
+      projectFilePath ??
+      (() => {
+        const mediaName =
+          (activeMediaDisplayName || mediaItems[0]?.file_name)?.replace(/\.[^.]+$/, "") ||
+          "未命名项目";
+        return `${mediaName}.lcp`;
+      })();
+    if (!makeCopy) {
+      return projectName;
+    }
+    const extensionMatch = projectName.match(/(\.[^./\\]+)$/);
+    if (!extensionMatch) {
+      return `${projectName}_副本.lcp`;
+    }
+    return `${projectName.slice(0, -extensionMatch[1].length)}_副本${extensionMatch[1]}`;
+  }
+
+  async function saveProjectAsWithOutcome(makeCurrent = true) {
+    if (!isTauriRuntime()) {
+      messagePublished("此功能仅在桌面版可用。");
+      return false;
+    }
+    const pickOutcome = await runOperation("project.save", () =>
+      save({
+        title: makeCurrent ? "项目另存为" : "保存项目副本",
+        defaultPath: suggestedProjectName(!makeCurrent),
+        filters: projectFilters,
+      }),
+    );
+    if (pickOutcome.status !== "success" || !pickOutcome.value) {
+      return false;
+    }
+    const picked = pickOutcome.value;
+    const saveOutcome = await runOperation(
+      "project.save",
+      () => writeProject(picked, makeCurrent),
+      {
+        displayName: fileName(picked),
+        resourceKind: "project",
+      },
+    );
+    return saveOutcome.status === "success" && saveOutcome.value;
+  }
+
+  async function saveProjectAs(makeCurrent = true) {
+    await saveProjectAsWithOutcome(makeCurrent);
+  }
+
+  async function saveProjectWithOutcome() {
+    if (!projectFilePath) {
+      return saveProjectAsWithOutcome(true);
+    }
+    const saveOutcome = await runOperation(
+      "project.save",
+      () => writeProject(projectFilePath, true),
+      {
+        displayName: fileName(projectFilePath),
+        resourceKind: "project",
+      },
+    );
+    return saveOutcome.status === "success" && saveOutcome.value;
+  }
+
+  async function saveProject() {
+    await saveProjectWithOutcome();
+  }
+
+  async function restartForBeta() {
+    if (restartingBeta || runningTasks.length > 0 || isBusy) return;
+    setRestartingBeta(true);
+    try {
+      const outcome = await runOperation("app.restart", () =>
+        saveBeforeUpdate({
+          needsSave: projectDirty,
+          settle: async () => (await projectWrites.settle()) && hasProject,
+          save: saveProjectWithOutcome,
+          snapshot: () => JSON.stringify(getProjectWorkspaceSnapshot()),
+          install: async () => {
+            await invokeCommand("restart_application");
+          },
+        }),
+      );
+      if (outcome.status === "success" && outcome.value === "changed") {
+        messagePublished("保存期间项目发生变化，请确认并再次保存后重启。");
+      }
+    } finally {
+      setRestartingBeta(false);
+    }
+  }
+
+  function cancelPendingClose() {
+    if (!closeSavePending) {
+      setPendingCloseTarget(null);
+    }
+  }
+
+  async function completePendingClose(target: PendingCloseTarget) {
+    setPendingCloseTarget(null);
+    if (target === "project") {
+      await closeProjectImmediately();
+      return;
+    }
+
+    closingWindowRef.current = true;
+    const outcome = await runOperation("project.close", () =>
+      finishWindowClose(
+        () => cancelAllTaskProgress(),
+        () => getCurrentWindow().destroy(),
+      ),
+    );
+    if (outcome.status !== "success") {
+      closingWindowRef.current = false;
+      setPendingCloseTarget("window");
+    }
+  }
+
+  async function saveAndCompletePendingClose() {
+    const target = pendingCloseTarget;
+    if (!target || closeSavePending) {
+      return;
+    }
+
+    setCloseSavePending(true);
+    const saved = await saveProjectWithOutcome();
+    if (saved) {
+      await completePendingClose(target);
+    }
+    setCloseSavePending(false);
+  }
+
+  function discardAndCompletePendingClose() {
+    const target = pendingCloseTarget;
+    if (!target || closeSavePending) {
+      return;
+    }
+    void completePendingClose(target);
+  }
+
+  async function restoreProject() {
+    if (!canRestoreProject) {
+      return;
+    }
+    setHistoryNavigating(true);
+    const restored = projectRestored();
+    if (!restored) {
+      setHistoryNavigating(false);
+      return;
+    }
+
+    messagePublished("已还原到上次保存状态。");
+    setHistoryNavigating(false);
+  }
+
+  function copyInEditScope() {
+    void publishEvent("edit.copy.requested", {}, identity);
+  }
+
+  function pasteInEditScope() {
+    void publishEvent("edit.paste.requested", {}, identity);
+  }
+
+  function clearInEditScope() {
+    void publishEvent("edit.clear.requested", {}, identity);
+  }
+
+  function duplicateInEditScope() {
+    void publishEvent("edit.duplicate.requested", {}, identity);
+  }
+
+  function selectAllInEditScope() {
+    void publishEvent("edit.select-all.requested", {}, identity);
+  }
+
+  function clearSelectionInEditScope() {
+    void publishEvent("edit.clear-selection.requested", {}, identity);
+  }
+
+  function exportSelection() {
+    void publishEvent("export.configure-selection.requested", {}, identity);
+  }
+
+  function quickExportSelection() {
+    void publishEvent("export.quick-selection.requested", {}, identity);
+  }
+
+  function linkSelectedMedia() {
+    void publishEvent("media.link-selection.requested", {}, identity);
+  }
+
+  function replaceSelectedMedia() {
+    void publishEvent("media.replace-selection.requested", {}, identity);
+  }
+
+  function makeSelectedMediaOffline() {
+    void publishEvent("media.make-selection-offline.requested", {}, identity);
+  }
+
+  function rememberImportedMedia(paths: string[]) {
+    if (paths.length === 0) {
+      return;
+    }
+    setRecentMediaPaths((current) =>
+      Array.from(new Set([...paths, ...current])).slice(0, recentPathsLimit),
+    );
+  }
+
+  async function importMedia(
+    pathsToImport?: string[],
+    folderId: string | null = null,
+    { quietWarnings = [] }: { quietWarnings?: readonly string[] } = {},
+  ) {
+    if (isMediaBinReadOnly || isBusy) {
+      return;
+    }
+    if (!isTauriRuntime()) {
+      messagePublished("此功能仅在桌面版可用。");
+      return;
+    }
+    const pickOutcome = pathsToImport
+      ? null
+      : await runOperation("media.import", () =>
+          open({ multiple: true, title: "导入媒体", filters: mediaFilters }),
+        );
+    if (pickOutcome && pickOutcome.status !== "success") {
+      return;
+    }
+    const picked = pathsToImport ?? (pickOutcome?.status === "success" ? pickOutcome.value : null);
+    const paths = Array.isArray(picked) ? picked : picked ? [picked] : [];
+    if (paths.length === 0) {
+      return;
+    }
+
+    const subtitlePaths = paths.filter((path) => subtitleExtensions.has(fileExtension(path)));
+    const probePaths = paths.filter((path) => !subtitleExtensions.has(fileExtension(path)));
+    if (subtitlePaths.length > 0) {
+      const subtitleItems = subtitlePaths.map(standaloneSubtitleItem);
+      mediaItemsAdded(subtitleItems);
+      if (folderId) {
+        mediaItemsMovedToFolder(
+          subtitleItems.map((item) => item.id),
+          folderId,
+        );
+      }
+      rememberImportedMedia(subtitlePaths);
+    }
+
+    const outcome = await runMediaImportBatchTask({
+      paths: probePaths,
+      operation: "media.import",
+      taskIdPrefix: "media-import",
+      onSuccess: (results) => {
+        if (results.length === 0) {
+          return;
+        }
+        mediaProjectsAdded(results.map((result) => result.project));
+        if (folderId) {
+          mediaItemsMovedToFolder(
+            results.map((result) => result.project.asset.id),
+            folderId,
+          );
+        }
+        warningsAppended(
+          results
+            .flatMap((result) => result.warnings)
+            .filter((notice) => !quietWarnings.includes(notice.code)),
+        );
+        rememberImportedMedia(results.map((result) => result.project.asset.path));
+      },
+    });
+    const loaded = outcome.results;
+    const cancelledCount = outcome.status === "cancelled" ? probePaths.length - loaded.length : 0;
+
+    const importedCount = loaded.length + subtitlePaths.length;
+    const resultParts = [
+      importedCount > 0 ? `已导入 ${importedCount} 个媒体` : "未导入媒体",
+      ...(cancelledCount > 0 ? [`${cancelledCount} 个已取消`] : []),
+    ];
+    messagePublished(`${resultParts.join("，")}。`);
+  }
+
+  async function navigateProjectHistory(targetCursor: number): Promise<boolean> {
+    if (isBusy) {
+      return false;
+    }
+    const previousCursor = projectHistory.cursor;
+    setHistoryNavigating(true);
+    const changed = projectHistoryJumped(targetCursor);
+    if (!changed) {
+      setHistoryNavigating(false);
+      return false;
+    }
+
+    const target = Math.max(0, Math.min(targetCursor, projectHistory.entries.length));
+    if (Math.abs(target - previousCursor) > 1) {
+      messagePublished("已跳转到所选历史记录。");
+    } else if (target < previousCursor) {
+      messagePublished("已撤销上一步操作。");
+    } else {
+      messagePublished("已重做下一步操作。");
+    }
+    setHistoryNavigating(false);
+    return true;
+  }
+
+  async function undoProjectOperation() {
+    await navigateProjectHistory(projectHistory.cursor - 1);
+  }
+
+  async function redoProjectOperation() {
+    await navigateProjectHistory(projectHistory.cursor + 1);
+  }
+
+  function undoCurrentOperation() {
+    if (activeWorkspace === "export") {
+      exportWorkspaceStore.getState().undoClipRange();
+    } else {
+      void undoProjectOperation();
+    }
+  }
+
+  function redoCurrentOperation() {
+    if (activeWorkspace === "export") {
+      exportWorkspaceStore.getState().redoClipRange();
+    } else {
+      void redoProjectOperation();
+    }
+  }
+
+  async function deleteCurrentHistoryBranch(selectedCursor: number) {
+    if (isBusy || selectedCursor <= 0 || selectedCursor > projectHistory.entries.length) {
+      return;
+    }
+    const removedCount = projectHistory.entries.length - selectedCursor + 1;
+    if (!(await navigateProjectHistory(selectedCursor - 1))) {
+      return;
+    }
+    projectHistoryFutureDiscarded();
+    messagePublished(`已删除当前及其后的 ${removedCount} 条历史记录。`);
+  }
+
+  useBroadcastEvent(lifetime, identity, "media.import.requested", async ({ payload }) => {
+    await importMedia(payload.paths, payload.folderId ?? null);
+    return "handled" as const;
+  });
+
+  // The transcode queue runs in the background, so it always needs to know
+  // where the project lives to resolve the encoder bin folder.
+  lifetime.useAfterCommit(() => {
+    transcodeQueueStore
+      .getState()
+      .setProjectDirectory(projectFilePath ? parentDirectory(projectFilePath) : "");
+  }, [projectFilePath]);
+
+  useBroadcastEvent(lifetime, identity, "transcode.export.requested", async ({ payload }) => {
+    if (!betaTranscodeEnabled) return "handled" as const;
+    const plan = await sendExportToTranscode(payload.source, payload.settings);
+    setActiveWorkspace("transcode");
+    setProjectHomeMode(null);
+    messagePublished(
+      `已将 ${plan.clipCount} 个片段发送到转码队列。` +
+        (plan.audioChangedCount > 0
+          ? `其中 ${plan.audioChangedCount} 个片段绑定了其他音频，转码时使用源文件的第一条音轨。`
+          : ""),
+    );
+    return "handled" as const;
+  });
+
+  useBroadcastEvent(lifetime, identity, "transcode.enqueue.requested", async ({ payload }) => {
+    if (!betaTranscodeEnabled) return "handled" as const;
+    const added = enqueueTranscodeSources(payload.paths);
+    setActiveWorkspace("transcode");
+    setProjectHomeMode(null);
+    messagePublished(
+      added.length > 0 ? `已将 ${added.length} 个媒体添加到转码队列。` : "所选媒体已在转码队列中。",
+    );
+    return "handled" as const;
+  });
+
+  /** Files finished outputs into the media bin folder chosen as their destination. */
+  useBroadcastEvent(lifetime, identity, "transcode.output.completed", async ({ payload }) => {
+    if (payload.paths.length === 0 || isMediaBinReadOnly) {
+      return "handled" as const;
+    }
+    let folderId: string | null = null;
+    if (payload.folderId === encoderBinFolderId) {
+      // Outputs set up before bin folders could be chosen keep using the root `encoder` folder.
+      let folder = mediaFolders.find(
+        (candidate) =>
+          !candidate.parent_id &&
+          candidate.name.toLocaleLowerCase() === encoderFolderName.toLocaleLowerCase(),
+      );
+      if (!folder) {
+        folder = {
+          id: `media-bin:${crypto.randomUUID()}`,
+          name: encoderFolderName,
+          parent_id: null,
+          color: defaultMediaBinFolderColor(),
+          hidden: false,
+        };
+        mediaFolderAdded(folder);
+      }
+      folderId = folder.id;
+    } else if (mediaFolders.some((folder) => folder.id === payload.folderId)) {
+      folderId = payload.folderId;
+    }
+    // A folder deleted while the output was encoding falls back to the top level.
+    // Encoder outputs often carry no subtitles; that is not worth a notice here.
+    await importMedia(payload.paths, folderId, { quietWarnings: [subtitleStreamNotFoundCode] });
+    return "handled" as const;
+  });
+
+  useBroadcastEvent(lifetime, identity, "export.requested", async ({ payload }) => {
+    exportWorkspaceStore.getState().setSource(payload.source);
+    setActiveWorkspace("export");
+    return "handled" as const;
+  });
+
+  lifetime.useAfterCommit(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (event.repeat) {
+        return;
+      }
+      const primaryModifier = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
+
+      if (!primaryModifier) {
+        if (
+          !event.altKey &&
+          !event.shiftKey &&
+          !isEditableKeyboardTarget(event.target) &&
+          (event.key === "Backspace" || event.key === "Delete")
+        ) {
+          if (activeWorkspace === "edit") {
+            event.preventDefault();
+          }
+          if (!isBusy && canClear) {
+            clearInEditScope();
+          }
+        }
+        return;
+      }
+
+      if (key === "q" && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        void exitApplication();
+        return;
+      }
+      if (key === "e" && event.shiftKey) {
+        const canRun = event.altKey ? canQuickExportSelection : canExportSelection;
+        if (canRun) {
+          event.preventDefault();
+          if (event.altKey) {
+            quickExportSelection();
+          } else {
+            exportSelection();
+          }
+        }
+        return;
+      }
+      if (key === "z" && !event.altKey && !isEditableKeyboardTarget(event.target)) {
+        if (isBusy) {
+          return;
+        }
+        const action = event.shiftKey
+          ? canRedo
+            ? redoCurrentOperation
+            : undefined
+          : canUndo
+            ? undoCurrentOperation
+            : undefined;
+        if (action) {
+          event.preventDefault();
+          void action();
+        }
+        return;
+      }
+      if (!event.altKey && !isEditableKeyboardTarget(event.target)) {
+        if (key === "c" && !event.shiftKey) {
+          event.preventDefault();
+          if (!isBusy && canCopy) copyInEditScope();
+          return;
+        }
+        if (key === "v" && !event.shiftKey) {
+          event.preventDefault();
+          if (!isBusy && canPaste) pasteInEditScope();
+          return;
+        }
+        if (key === "a") {
+          event.preventDefault();
+          if (isBusy) {
+            return;
+          }
+          if (event.shiftKey) {
+            if (canClearSelection) clearSelectionInEditScope();
+          } else if (canSelectAll) {
+            selectAllInEditScope();
+          }
+          return;
+        }
+      }
+      if (isBusy) {
+        return;
+      }
+      let action: (() => void | Promise<void>) | undefined;
+      if (key === "n" && !event.shiftKey && !event.altKey) action = newProject;
+      if (key === "o" && !event.shiftKey && !event.altKey) action = openProject;
+      if (key === "i" && !event.shiftKey && !event.altKey) {
+        action = () => importMedia(undefined, focusedMediaFolderId);
+      }
+      if (key === "w" && !event.shiftKey && !event.altKey && canCloseFocusedPanel) {
+        action = closeFocusedPanel;
+      }
+      if (key === "w" && event.shiftKey && !event.altKey && hasProject) action = closeProject;
+      if (key === "s" && !event.shiftKey && !event.altKey && hasProject) action = saveProject;
+      if (key === "s" && event.shiftKey && !event.altKey && hasProject) {
+        action = () => saveProjectAs(true);
+      }
+      if (key === "s" && !event.shiftKey && event.altKey && hasProject) {
+        action = () => saveProjectAs(false);
+      }
+
+      if (!action) {
+        return;
+      }
+      event.preventDefault();
+      void action();
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  });
+
+  const workspaceContent: Record<AppWorkspace, ReactNode> = {
+    import: (
+      <ImportWorkspace
+        onImportCompleted={() => setActiveWorkspace("edit")}
+        onCancel={() => setActiveWorkspace("edit")}
+      />
+    ),
+    edit: <DockLayout />,
+    transcode: betaTranscodeEnabled ? (
+      <TranscodeWorkspace registry={transcodePanelRegistry} store={transcodePanelStore} />
+    ) : null,
+    export: (
+      <ExportWorkspace
+        sourcePanelType={sourcePanelType}
+        onExportStarted={() =>
+          setActiveWorkspace((workspace) => (workspace === "export" ? "edit" : workspace))
+        }
+      />
+    ),
+  };
+
+  function showPanel<Params>(request: OpenPanelRequest<Params>) {
+    setActiveWorkspace("edit");
+    openPanel(request);
+  }
+
+  function showSingletonPanel<Params>(
+    id: string,
+    type: string,
+    params: Params,
+    areaId: DockAreaId,
+  ) {
+    showPanel({ id, type, params, placement: { areaId } });
+  }
+
+  const mediaPanelIdsByFolder = new Map<string | null, string[]>();
+  for (const instance of Object.values(panelInstances)) {
+    if (instance.type !== mediaBinPanelType) {
+      continue;
+    }
+    const { rootFolderId } = instance.params as MediaBinPanelParams;
+    const panelIds = mediaPanelIdsByFolder.get(rootFolderId) ?? [];
+    panelIds.push(instance.id);
+    mediaPanelIdsByFolder.set(rootFolderId, panelIds);
+  }
+
+  function showMediaPanel(rootFolderId: string | null) {
+    const existingPanelId = mediaPanelIdsByFolder.get(rootFolderId)?.at(-1);
+    showPanel({
+      id: existingPanelId ?? (rootFolderId === null ? "media" : `window-media-bin:${rootFolderId}`),
+      type: mediaBinPanelType,
+      params: { rootFolderId },
+      placement: { areaId: "leftBottom" },
+    });
+  }
+
+  const projectPanelName = projectFilePath
+    ? fileName(projectFilePath).replace(/\.lcp$/i, "")
+    : "未命名项目";
+  const projectWindowItems = [
+    {
+      id: "media",
+      label: `项目：${projectPanelName}`,
+      checked: (mediaPanelIdsByFolder.get(null)?.length ?? 0) > 0,
+      enabled: true,
+      execute: () => showMediaPanel(null),
+    },
+    ...orderedMediaFolders(mediaFolders).map(({ folder, depth }) => ({
+      id: `media-folder:${folder.id}`,
+      label: `${"　".repeat(depth)}媒体箱：${folder.name}`,
+      checked: (mediaPanelIdsByFolder.get(folder.id)?.length ?? 0) > 0,
+      enabled: true,
+      execute: () => showMediaPanel(folder.id),
+    })),
+  ];
+
+  const applicationMenuModel: ApplicationMenuModel = {
+    file: {
+      newProject: { enabled: !isBusy, execute: newProject },
+      openProject: { enabled: !isBusy, execute: openProject },
+      recentProjects: {
+        enabled: recentProjects.length > 0 && !isBusy,
+        items: recentProjects.map((entry) => ({
+          id: entry.path,
+          label: fileName(entry.path),
+          title: entry.path,
+          execute: () => openProject(entry.path),
+        })),
+      },
+      closeFocusedPanel: {
+        enabled: canCloseFocusedPanel,
+        execute: closeFocusedPanel,
+      },
+      closeProject: { enabled: hasProject && !isBusy, execute: closeProject },
+      saveProject: {
+        enabled: hasProject && projectDirty && !isBusy,
+        execute: saveProject,
+      },
+      saveProjectAs: {
+        enabled: hasProject && !isBusy,
+        execute: () => saveProjectAs(true),
+      },
+      saveProjectCopy: {
+        enabled: hasProject && !isBusy,
+        execute: () => saveProjectAs(false),
+      },
+      restoreProject: {
+        enabled: canRestoreProject,
+        execute: restoreProject,
+      },
+      replaceMedia: {
+        enabled: canReplaceSelectedMedia,
+        execute: replaceSelectedMedia,
+      },
+      linkMedia: {
+        enabled: canLinkSelectedMedia,
+        execute: linkSelectedMedia,
+      },
+      makeMediaOffline: {
+        enabled: canMakeSelectedMediaOffline,
+        execute: makeSelectedMediaOffline,
+      },
+      importMedia: {
+        enabled: !isMediaBinReadOnly && !isBusy,
+        execute: () => importMedia(undefined, focusedMediaFolderId),
+      },
+      recentMedia: {
+        enabled: recentMediaPaths.length > 0 && !isMediaBinReadOnly && !isBusy,
+        items: recentMediaPaths.map((path) => ({
+          id: path,
+          label: fileName(path),
+          title: path,
+          execute: () => importMedia([path], focusedMediaFolderId),
+        })),
+      },
+      exportSelection: {
+        enabled: canExportSelection,
+        execute: exportSelection,
+      },
+      quickExportSelection: {
+        enabled: canQuickExportSelection,
+        execute: quickExportSelection,
+      },
+      exit: { enabled: true, execute: exitApplication },
+    },
+    edit: {
+      undo: { enabled: canUndo && !isBusy, execute: undoCurrentOperation },
+      redo: { enabled: canRedo && !isBusy, execute: redoCurrentOperation },
+      copy: { enabled: canCopy && !isBusy, execute: copyInEditScope },
+      paste: { enabled: canPaste && !isBusy, execute: pasteInEditScope },
+      clear: { enabled: canClear && !isBusy, execute: clearInEditScope },
+      duplicate: { enabled: canDuplicate && !isBusy, execute: duplicateInEditScope },
+      selectAll: { enabled: canSelectAll && !isBusy, execute: selectAllInEditScope },
+      clearSelection: {
+        enabled: canClearSelection && !isBusy,
+        execute: clearSelectionInEditScope,
+      },
+      preferences: {
+        enabled: !isBusy,
+        items: preferencesCategories.map((category) => ({
+          ...category,
+          execute: () => setPreferencesCategory(category.id),
+        })),
+      },
+    },
+    window: {
+      source: {
+        id: "source",
+        label: "源播放器",
+        checked: Boolean(panelInstances.source),
+        enabled: true,
+        execute: () => showSingletonPanel("source", sourcePanelType, {}, "leftTop"),
+      },
+      project: {
+        enabled: projectWindowItems.length > 0,
+        items: projectWindowItems,
+      },
+      subtitles: {
+        id: "subtitles",
+        label: "字幕",
+        checked: Boolean(panelInstances.subtitles),
+        enabled: true,
+        execute: () => showSingletonPanel("subtitles", subtitlePanelType, {}, "middle"),
+      },
+      storyboard: {
+        id: "storyboard",
+        label: "分镜",
+        checked: Boolean(panelInstances.storyboard),
+        enabled: true,
+        execute: () => showSingletonPanel("storyboard", storyboardPanelType, {}, "middle"),
+      },
+      assetLibrary: {
+        id: "asset-library",
+        label: "素材库",
+        checked: Boolean(panelInstances["asset-library"]),
+        enabled: true,
+        execute: () => showSingletonPanel("asset-library", assetLibraryPanelType, {}, "leftBottom"),
+      },
+      history: {
+        id: "history",
+        label: "历史记录",
+        checked: Boolean(panelInstances.history),
+        enabled: true,
+        execute: () => showSingletonPanel("history", historyPanelType, {}, "middle"),
+      },
+      transcode: {
+        enabled: betaTranscodeEnabled,
+        items: (betaTranscodeEnabled ? transcodePanels : []).map((panel) => ({
+          id: panel.id,
+          label: panel.label,
+          checked: Boolean(transcodePanelInstances[panel.id]),
+          enabled: true,
+          execute: () => {
+            if (!betaTranscodeEnabled) return;
+            setActiveWorkspace("transcode");
+            setProjectHomeMode(null);
+            showTranscodePanel(panel.id);
+          },
+        })),
+      },
+    },
+    beta: {
+      transcode: {
+        id: "transcode",
+        label: betaTranscodeEnabled ? "使用转码（Beta）" : "重启以使用转码（Beta）",
+        checked: preferences.beta_transcode_enabled === true,
+        enabled: preferencesLoaded && !savingBeta,
+        execute: async () => {
+          if (!preferencesLoaded || savingBeta) return;
+          setSavingBeta(true);
+          try {
+            const saved = await updatePreferences({
+              ...preferences,
+              beta_transcode_enabled: !preferences.beta_transcode_enabled,
+            });
+            if (saved) {
+              messagePublished("Beta 功能设置已保存，请重启软件后生效。");
+              if (saved.beta_transcode_enabled !== betaTranscodeEnabled) setBetaRestartOpen(true);
+            }
+          } finally {
+            setSavingBeta(false);
+          }
+        },
+      },
+    },
+    help: {
+      locutionProHelp: { enabled: true, execute: openLocutionProHelp },
+      showLogFiles: { enabled: true, execute: showLogFiles },
+      checkForUpdates: {
+        enabled: !updateChecking && !updateInstalling,
+        execute: checkForUpdates,
+      },
+      aboutLocutionPro: { enabled: true, execute: () => setAboutOpen(true) },
+    },
+  };
+
+  return lifetime.render(
+    <HistoryPanelServicesProvider
+      services={{
+        disabled: isBusy,
+        navigate: navigateProjectHistory,
+        deleteEntry: deleteCurrentHistoryBranch,
+      }}
+    >
+      <div className="app-shell">
+        {isMacOSRuntime() ? (
+          <NativeApplicationMenu model={applicationMenuModel} />
+        ) : (
+          <header className="application-menubar">
+            <ApplicationMenu model={applicationMenuModel} />
+          </header>
+        )}
+
+        <SecondaryTopbar
+          projectFilePath={projectFilePath}
+          hasProjectMedia={Boolean(project)}
+          isProjectDirty={projectDirty}
+          workspaces={appWorkspaces.filter(
+            (workspace) => workspace.id !== "transcode" || betaTranscodeEnabled,
+          )}
+          activeWorkspace={activeWorkspace}
+          isWorkspaceSwitchingDisabled={isBusy}
+          onHome={() => setProjectHomeMode("manual")}
+          onWorkspaceChange={(workspace) => {
+            if (workspace !== "transcode" || betaTranscodeEnabled) setActiveWorkspace(workspace);
+          }}
+        />
+
+        {workspaceContent[activeWorkspace]}
+
+        {betaRestartOpen && (
+          <BetaRestartDialog
+            enabling={preferences.beta_transcode_enabled}
+            needsSave={projectDirty}
+            restarting={restartingBeta}
+            blocked={runningTasks.length > 0 || isBusy}
+            onRestart={() => void restartForBeta()}
+            onLater={() => {
+              if (!restartingBeta) setBetaRestartOpen(false);
+            }}
+          />
+        )}
+
+        <footer className="statusbar">
+          <span className={runningTasks.length > 0 ? "busy-status" : ""}>
+            {runningTasks.length > 0 ? (
+              <>
+                <Loader2 className="spin" size={14} />
+                {activeStatusLabel}
+              </>
+            ) : (
+              message
+            )}
+          </span>
+          {warnings.length > 0 && <span>{warnings.length} 条导入提示</span>}
+        </footer>
+
+        {warnings.length > 0 && (
+          <aside className="event-drawer">
+            {warnings.map((warning) => (
+              <div key={`${warning.code}:${warning.message}`} className="event warning">
+                {warning.message}
+              </div>
+            ))}
+          </aside>
+        )}
+
+        {projectHomeMode && (
+          <ProjectHome
+            showWelcome={projectHomeMode === "startup"}
+            projects={recentProjects}
+            busy={isBusy}
+            suspended={Boolean(
+              pendingDiscardMessage ||
+              pendingCloseTarget ||
+              preferencesCategory !== null ||
+              aboutOpen ||
+              updateDialogState,
+            )}
+            onClose={() => setProjectHomeMode(null)}
+            onNew={newProject}
+            onOpen={openProject}
+          />
+        )}
+
+        {pendingCloseTarget && (
+          <ProjectSaveDialog
+            projectName={fileName(projectFilePath ?? suggestedProjectName())}
+            saving={closeSavePending}
+            onCancel={cancelPendingClose}
+            onDiscard={discardAndCompletePendingClose}
+            onSave={() => void saveAndCompletePendingClose()}
+          />
+        )}
+
+        {pendingDiscardMessage && (
+          <ProjectDiscardDialog
+            message={pendingDiscardMessage}
+            saving={discardSavePending}
+            onCancel={cancelDiscardConfirmation}
+            onDiscard={discardDiscardConfirmation}
+            onSave={() => void saveAndCompleteDiscardConfirmation()}
+          />
+        )}
+
+        <ProxyCreationDialog />
+        <ExportConflictDialog />
+        <PreferencesDialog
+          open={preferencesCategory !== null}
+          initialCategory={preferencesCategory ?? "general"}
+          onClose={() => setPreferencesCategory(null)}
+        />
+        {aboutOpen && <AboutDialog onClose={() => setAboutOpen(false)} />}
+        {updateDialogState && (
+          <UpdateDialog
+            state={updateDialogState}
+            needsSave={projectDirty}
+            installing={updateInstalling}
+            blocked={isBusy || runningTasks.length > 0}
+            onInstall={() => void applyUpdate()}
+            onClose={closeUpdateDialog}
+            onRetry={() => void checkForUpdates()}
+            onIgnore={(ignored) => void ignoreUpdate(ignored)}
+          />
+        )}
+      </div>
+    </HistoryPanelServicesProvider>,
+  );
+}
+
+function WorkspaceConfigAutoSave() {
+  const lifetime = new RenderLifetime();
+
+  const instances = usePanelManagerState((state) => state.instances);
+  const layout = usePanelManagerState((state) => state.layout);
+  const focusedPanelId = usePanelManagerState((state) => state.focusedPanelId);
+  const config = useMemo<PanelManagerInitialState>(
+    () => ({
+      instances: Object.values(instances),
+      layout,
+      focusedPanelId,
+    }),
+    [focusedPanelId, instances, layout],
+  );
+  const configRef = useRef(config);
+  const saveTimerRef = useRef<ScheduledTask | null>(null);
+  const savingRef = useRef(false);
+  const saveQueuedRef = useRef(false);
+
+  const saveLatestConfig = useMemo(
+    () =>
+      function saveLatestConfig() {
+        if (savingRef.current) {
+          saveQueuedRef.current = true;
+          return;
+        }
+        savingRef.current = true;
+        const latestConfig = configRef.current;
+        void runOperation("workspace.save", () =>
+          invokeCommand("save_workspace_config", { config: latestConfig }),
+        ).finally(() => {
+          savingRef.current = false;
+          if (saveQueuedRef.current) {
+            saveQueuedRef.current = false;
+            saveLatestConfig();
+          }
+        });
+      },
+    [],
+  );
+
+  lifetime.useAfterCommit(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    configRef.current = config;
+    if (saveTimerRef.current !== null) {
+      cancelTask(saveTimerRef.current);
+    }
+    saveTimerRef.current = scheduleAfter(() => {
+      saveTimerRef.current = null;
+      saveLatestConfig();
+    }, workspaceConfigSaveDelayMs);
+  }, [config, saveLatestConfig]);
+
+  lifetime.useAfterCommit(
+    () => () => {
+      if (saveTimerRef.current !== null) {
+        cancelTask(saveTimerRef.current);
+        saveTimerRef.current = null;
+        saveLatestConfig();
+      }
+    },
+    [saveLatestConfig],
+  );
+
+  return lifetime.render(null);
+}
+
+function RestoredPanelManager() {
+  const lifetime = new RenderLifetime();
+
+  const [initialState, setInitialState] = useState<PanelManagerInitialState | null>(() =>
+    isTauriRuntime() ? null : initialAppPanelState,
+  );
+
+  lifetime.useAfterCommit(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    let mounted = true;
+    void runOperation("workspace.load", () =>
+      invokeCommand<PanelManagerInitialState | null>("load_workspace_config"),
+    ).then((outcome) => {
+      if (!mounted) {
+        return;
+      }
+      const availableState =
+        outcome.status === "success" && outcome.value
+          ? withoutUnavailableAppPanels(outcome.value)
+          : null;
+      const restoredState =
+        availableState && availableState.instances.length > 0
+          ? restoreAppPanelDefaults(availableState)
+          : initialAppPanelState;
+      setInitialState(restoredState);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (!initialState) {
+    return lifetime.render(<div className="app-shell" />);
+  }
+
+  return lifetime.render(
+    <PanelManagerProvider initialState={initialState} defaultState={initialAppPanelState}>
+      <WorkspaceConfigAutoSave />
+      <AppContent />
+    </PanelManagerProvider>,
+  );
+}
+
+export default function App() {
+  return (
+    <PanelRegistryProvider registry={appPanelRegistry}>
+      <RestoredPanelManager />
+    </PanelRegistryProvider>
+  );
+}

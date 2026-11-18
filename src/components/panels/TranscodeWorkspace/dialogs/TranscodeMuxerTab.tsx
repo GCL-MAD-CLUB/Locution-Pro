@@ -1,4 +1,4 @@
-import { ExportField } from "../../ExportWorkspace";
+import { ExportField } from "../../../common/EncodingSettings";
 import { applyContainer, containerOptions } from "../../../../systems/TranscodeSystem";
 import { TranscodeCheck, TranscodeDropdown } from "../controls/TranscodeFields";
 import type { TranscodeTabProps } from "./transcodeSettingsTabs";

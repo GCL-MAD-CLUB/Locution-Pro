@@ -10,10 +10,10 @@ import {
 } from "react";
 import { useSourceMonitorState, type MonitorZoomLevel, type ZoomPan } from "../sourceMonitorState";
 import { TransientVideoPreview, type TransientVideoFrame } from "./TransientVideoPreview";
-import type { FrameHistogram } from "../../../../core/editor/frameHistogram";
+import type { FrameHistogram } from "../../../../core/editor/mediaAnalysis/frameHistogram";
 import { useVideoHistogram } from "../histogram/useVideoHistogram";
 import { useVideoFrameTrace } from "../histogram/useVideoFrameTrace";
-import { frameTraceCacheKey } from "../../../../application/media/frameTraceCache";
+import { frameTraceCacheKey } from "../../../../application/frameTrace/frameTraceCache";
 
 interface VideoDisplayProps {
   stageRef: RefObject<HTMLDivElement | null>;

@@ -20,15 +20,15 @@ import {
   sortedAssetLibraryNodes,
   type AssetLibraryLocation,
   type AssetLibraryPlace,
-} from "../../../../core/editor/assetLibrary";
+} from "../../../../core/editor/assetLibrary/assetLibrary";
 import {
   assetLibraryPlaceFromPath,
   assetLibraryPlacePathText,
-} from "../../../../core/editor/assetLibraryPlace";
-import { assetLibraryHomeLabel } from "../../../../core/editor/assetLibraryHome";
+} from "../../../../core/editor/assetLibrary/assetLibraryPlace";
+import { assetLibraryHomeLabel } from "../../../../core/editor/assetLibrary/assetLibraryHome";
 import type { AssetLibraryFolder, ProjectAssetLibraryState } from "../../../../types";
 import { PopupMenu, PopupMenuItem, useCloseOnOutsidePointer } from "../../../common/PopupMenu";
-import { assetLibraryDropTargetProps } from "../../../common/utils/assetLibraryDropTarget";
+import { assetLibraryDropTargetProps } from "../../../common/AssetLibraryDrag";
 import { assetLocationKey } from "../model/nodes";
 import {
   AssetLibraryHomeIcon,

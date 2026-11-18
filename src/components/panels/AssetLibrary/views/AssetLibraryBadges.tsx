@@ -1,10 +1,10 @@
 import { Star, Tags } from "lucide-react";
 import type { CSSProperties } from "react";
-import { assetLibraryEntryFlag } from "../../../../core/editor/assetLibrary";
+import { assetLibraryEntryFlag } from "../../../../core/editor/assetLibrary/assetLibrary";
 import { annotationColors } from "../../../../runtime/theme";
 import type { AssetLibraryColorLabel, AssetLibraryEntry } from "../../../../types";
 // Thumbnail flags and keyword indicators reuse the storyboard thumbnail marks.
-import "../../StoryboardPanel/StoryboardPanel.css";
+import "../../../common/StoryboardAnnotations";
 
 export const assetLibraryColorLabelNames: Record<AssetLibraryColorLabel, string> = {
   red: "红色",

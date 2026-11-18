@@ -4,8 +4,8 @@ import { SubtitlePanel } from "./SubtitlePanel";
 import {
   usePanelMediaSourceSelection,
   usePanelMediaWorkspaceMenu,
-} from "../../../application/media/panelMediaSources";
-import { mediaPanelTitle } from "../../../core/editor/panelSourceSelection";
+} from "../../common/PanelMediaSources";
+import { mediaPanelTitle } from "../../../core/editor/mediaSources/panelSourceSelection";
 
 export const subtitlePanelType = "subtitles";
 

@@ -14,7 +14,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { macosInstallerName, macosUpdaterName } from "../site/src/release-contract.js";
+import { macosInstallerName, macosUpdaterName } from "../site/src/release-contract.ts";
 import { bundleInUpdate, reusableRoots } from "./prepare-installer-manifest.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");

@@ -1,23 +1,23 @@
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { useScopedState } from "../../../runtime/state/useScopedState";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "../../../platform/tauri/media";
 import { useCallback, useMemo, useRef, useState, type DragEvent, type SyntheticEvent } from "react";
 import { flushSync } from "react-dom";
-import { useSourcePreviewRequest } from "../../../application/media/panelMediaSources";
-import { usePersistedProjectPanelState } from "../../../application/media/projectPanelPersistence";
-import type { StillExportRequest } from "../../../application/media/stillExportTask";
+import { useSourcePreviewRequest } from "../../common/PanelMediaSources";
+import { usePersistedProjectPanelState } from "../../../application/mediaSources/projectPanelPersistence";
+import type { StillExportRequest } from "../../../application/stillExport/stillExportTask";
 import { isMacOSRuntime, isTauriRuntime } from "../../../platform/tauri/runtime";
 import {
   defaultProxyOptions,
   isRemuxProxyPath,
   shouldAutoRemux,
   unplayableSourceMessage,
-} from "../../../application/media/proxyGeneration";
-import { runProxyGenerationTask } from "../../../application/media/proxyGenerationTask";
+} from "../../../application/proxy/proxyGeneration";
+import { runProxyGenerationTask } from "../../../application/proxy/proxyGenerationTask";
 import { usePreferencesPort } from "../../../systems/PreferencesSystem";
 import type { MediaDocument } from "../../../types";
 import { isPopupMenuOpen } from "../../common/PopupMenu";
-import { StillExportDialog } from "../../common/StillExportDialog/StillExportDialog";
+import { StillExportDialog } from "../../common/StillExportDialog";
 import {
   usePlaybackCapability,
   usePlaybackHistogramRequested,
@@ -25,7 +25,7 @@ import {
 } from "../../../runtime/capabilities/PlaybackCapability";
 import { publishEvent, useBroadcastEvent } from "../../../runtime/events/react";
 import type { ApplicationEventMap } from "../../../runtime/events/contracts";
-import { runBackgroundOperation, runOperation } from "../../../errors";
+import { runBackgroundOperation, runOperation } from "../../../runtime/errors";
 import { useStableIdentity } from "../../../runtime/state/react";
 import { usePanelActive, usePanelInstanceId } from "../../../runtime/systems/PanelState";
 import {
@@ -42,21 +42,26 @@ import {
   frameToTimeUs,
   normalizeFrameRate,
   timeUsToFrame,
-} from "../../../core/editor/timeline";
-import { MonitorRange } from "./timeline/MonitorRange";
-import { crossedStoryboardGap, storyboardGaps } from "../../../core/editor/storyboard";
-import { canAddStoryboardCut, resizeStoryboardShot } from "../../../core/editor/storyboardCuts";
-import { formatMonitorFrame } from "../../../core/editor/time";
-import { storyboardVideoContext } from "../../../core/editor/storyboardDetection";
-import { activeMediaDragVideoId, markMediaDragHandled } from "../MediaBin/mediaDrag";
+} from "../../../core/editor/playback/timeline";
+import { crossedStoryboardGap, storyboardGaps } from "../../../core/editor/storyboard/storyboard";
+import {
+  canAddStoryboardCut,
+  resizeStoryboardShot,
+} from "../../../core/editor/storyboard/storyboardCuts";
+import { formatMonitorFrame } from "../../../core/editor/playback/time";
+import { storyboardVideoContext } from "../../../core/editor/storyboard/storyboardDetection";
+import {
+  activeMediaDragVideoId,
+  markMediaDragHandled,
+} from "../../../application/mediaSources/mediaDrag";
 import { usePanelManagerState } from "../../common/DockLayout";
 import { canEditExportClipRange, useExportWorkspaceState } from "../../../systems/ExportSystem";
 import "./SourceMonitor.css";
-import { TimelineRuler } from "./timeline/TimelineRuler";
 import { StoryboardTimeline } from "./timeline/StoryboardTimeline";
-import { VideoControls } from "./video/VideoControls";
+import { MonitorRange, TimelineRuler, VideoControls } from "../../common/PlaybackControls";
+import { MonitorZoomSelect } from "./video/MonitorZoomSelect";
 import { VideoDisplay } from "./video/VideoDisplay";
-import type { FrameHistogram } from "../../../core/editor/frameHistogram";
+import type { FrameHistogram } from "../../../core/editor/mediaAnalysis/frameHistogram";
 import type { TransientVideoFrame } from "./video/TransientVideoPreview";
 import { RollingPcmAudioController, type RollingPcmAudioSource } from "./audio/rollingPcmAudio";
 import {
@@ -953,6 +958,18 @@ export function SourceMonitor() {
     applySeekRequestRef.current?.(pending);
   }
 
+  function handleSeekRequest(detail: Readonly<ApplicationEventMap["playback.seek.requested"]>) {
+    // The target can be selected while the monitor is still rendering its empty state.
+    if (
+      detail.videoId !== undefined &&
+      (detail.videoId !== activeVideoIdRef.current || !videoIsReadyForSeek())
+    ) {
+      pendingSourceSeekRef.current = detail;
+      return true;
+    }
+    return applySeekRequest(detail);
+  }
+
   const { isAuthority: isPlaybackShortcutAuthority } = usePlaybackCapability(lifetime, {
     videoSource: videoSrc,
     histogram: histogramFrame?.source === videoSrc ? histogramFrame.bins : null,
@@ -964,19 +981,7 @@ export function SourceMonitor() {
     videoId: panelMediaKey === mediaKey ? activeVideoId : "",
     sourcePanelId: isExportMonitor ? null : playbackPanelId,
     fallbackAuthority: identity.instanceId === "source",
-    onSeek: (detail) => {
-      if (!hasMedia) {
-        return false;
-      }
-      if (
-        detail.videoId !== undefined &&
-        (detail.videoId !== activeVideoIdRef.current || !videoIsReadyForSeek())
-      ) {
-        pendingSourceSeekRef.current = detail;
-        return true;
-      }
-      return applySeekRequest(detail);
-    },
+    onSeek: handleSeekRequest,
   });
 
   lifetime.useAfterCommit(() => {
@@ -1954,6 +1959,7 @@ export function SourceMonitor() {
       {isVideoDragOver && <div className="source-drop-overlay">释放以载入源预览</div>}
       <div className="source-controls">
         <VideoControls
+          zoomMenu={<MonitorZoomSelect />}
           mediaKey={mediaKey}
           hasMedia={hasMedia}
           currentFrame={currentFrame}

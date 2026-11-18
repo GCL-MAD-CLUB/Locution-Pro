@@ -2,7 +2,7 @@ import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { ModalDialog } from "../../../common/ModalDialog";
-import { ExportField } from "../../ExportWorkspace";
+import { ExportField } from "../../../common/EncodingSettings";
 import {
   allTranscodePresets,
   applyContainer,

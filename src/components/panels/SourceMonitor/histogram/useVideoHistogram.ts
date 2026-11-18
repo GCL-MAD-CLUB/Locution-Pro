@@ -1,7 +1,7 @@
 import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useRef, type RefObject } from "react";
-import { captureOperationError } from "../../../../errors";
-import type { FrameHistogram } from "../../../../core/editor/frameHistogram";
+import { captureOperationError } from "../../../../runtime/errors";
+import type { FrameHistogram } from "../../../../core/editor/mediaAnalysis/frameHistogram";
 import type { FrameHistogramWorkerResponse } from "./frameHistogramWorker";
 
 export function useVideoHistogram(

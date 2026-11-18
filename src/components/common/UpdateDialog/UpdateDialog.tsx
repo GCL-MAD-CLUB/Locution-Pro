@@ -1,14 +1,17 @@
+import { appIconUrl } from "../../../assets/appIcon";
 import { ArrowUpRight, CircleAlert, Loader2, RefreshCw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ComponentProps, MouseEvent } from "react";
-import { currentVersion, type ReleaseInfo, type UpdateFailure } from "../../../application/update";
-import { captureOperationError } from "../../../errors";
+import {
+  currentVersion,
+  type ReleaseInfo,
+  type UpdateFailure,
+} from "../../../application/update/update";
+import { captureOperationError } from "../../../runtime/errors";
 import { openExternalUrl, resolveExternalUrl } from "../../../platform/tauri/externalUrl";
 import { ModalDialog } from "../ModalDialog";
 import "./UpdateDialog.css";
-
-const appIconUrl = new URL("../../../../src-tauri/icons/icon.ico", import.meta.url).href;
 
 export type UpdateDialogState =
   | { status: "available"; release: ReleaseInfo; error?: string; ignored?: boolean }

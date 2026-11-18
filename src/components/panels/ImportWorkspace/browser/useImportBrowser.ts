@@ -1,6 +1,6 @@
 import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { invokeCommand, runOperation } from "../../../../errors";
+import { invokeCommand, runOperation } from "../../../../runtime/errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import {
   mediaKind,
@@ -9,7 +9,7 @@ import {
   type ImportFilter,
   type ImportLocation,
   type ImportSettings,
-} from "./importBrowserModel";
+} from "../../../../core/editor/import/importBrowserModel";
 import {
   defaultImportSettings,
   loadImportBrowserConfig,

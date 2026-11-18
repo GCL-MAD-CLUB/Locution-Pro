@@ -13,7 +13,6 @@ import {
 } from "../../common/DockLayout";
 import { eventSource } from "../../../runtime/events/EventHub";
 import { publishEvent } from "../../../runtime/events/react";
-import { sourcePanelType } from "../SourceMonitor";
 import { isMediaItemOffline, useProjectPort } from "../../../systems/ProjectSystem";
 import {
   dirname,
@@ -77,18 +76,17 @@ interface ColumnDragState {
  */
 const exportWorkspaceEventSource = eventSource("export-workspace");
 
-const exportSourcePanelState: PanelManagerInitialState = {
-  instances: [{ id: "export-source", type: sourcePanelType, params: {} }],
-  layout: {
-    root: { type: "area", areaId: "export-source-area" },
-    areas: {
-      "export-source-area": { tabs: ["export-source"], activePanelId: "export-source" },
+function ExportSourceZone({ sourcePanelType }: { sourcePanelType: string }) {
+  const exportSourcePanelState: PanelManagerInitialState = {
+    instances: [{ id: "export-source", type: sourcePanelType, params: {} }],
+    layout: {
+      root: { type: "area", areaId: "export-source-area" },
+      areas: {
+        "export-source-area": { tabs: ["export-source"], activePanelId: "export-source" },
+      },
     },
-  },
-  focusedPanelId: "export-source",
-};
-
-function ExportSourceZone() {
+    focusedPanelId: "export-source",
+  };
   return (
     <PanelManagerProvider initialState={exportSourcePanelState}>
       <header className="export-zone-header export-zone-header-preview">
@@ -103,9 +101,10 @@ function ExportSourceZone() {
 
 interface ExportWorkspaceProps {
   onExportStarted: () => void;
+  sourcePanelType: string;
 }
 
-export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
+export function ExportWorkspace({ onExportStarted, sourcePanelType }: ExportWorkspaceProps) {
   const lifetime = new RenderLifetime();
 
   const storedSource = useExportWorkspaceState((state) => state.source);
@@ -394,7 +393,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
 
         <section className="export-zone export-zone-stack">
           <div className="export-zone-sub">
-            <ExportSourceZone />
+            <ExportSourceZone sourcePanelType={sourcePanelType} />
           </div>
           <div className="export-zone-seam" aria-hidden="true" />
           <div className="export-zone-sub">

@@ -25,7 +25,7 @@ import {
   updaterName,
   isReleaseVersion,
   isReleaseRepository,
-} from "../site/src/release-contract.js";
+} from "../site/src/release-contract.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 

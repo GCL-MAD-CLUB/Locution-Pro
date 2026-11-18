@@ -13,7 +13,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { clientError } from "../../../errors";
+import { clientError } from "../../../runtime/errors";
 import { fallbackSelectionValue } from "./selectionValue";
 import type {
   CSSProperties,

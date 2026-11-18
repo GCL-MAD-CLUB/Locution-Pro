@@ -1,6 +1,6 @@
 # Locution Pro 官网
 
-官网页面为静态 HTML、CSS 和 JavaScript，部署在 Cloudflare Pages。页面设计和素材保存在 `site/`，下载入口由同一部署包内的 Pages Worker 提供，不依赖桌面程序或数据库。
+官网使用静态 HTML、CSS 和 TypeScript 源码，部署在 Cloudflare Pages。页面设计和素材保存在 `site/`，下载入口由同一部署包内的 Pages Worker 提供，不依赖桌面程序或数据库。
 
 | 站点     | 正式地址                          | 托管             |
 | -------- | --------------------------------- | ---------------- |
@@ -24,19 +24,19 @@ npm run site:build
 npm run site:preview
 ```
 
-`site:build` 先检查所有页面的本地文件、页内锚点、辅助技术标签引用、CSS 字体和脚本中的示例图片，再将公开文件和 Worker 复制到 `dist/site/` 并复查产物。无需运行桌面应用构建。`site:preview` 在 1422 端口预览这份产物；Vite 预览不模拟 Cloudflare 的安全头、API 或 404 状态。验证下载 API 时使用 `npx wrangler pages dev dist/site --port 1422`，完成后关闭进程。
+`site:build` 先检查所有页面的本地文件、页内锚点、辅助技术标签引用、CSS 字体和脚本中的示例图片，再将页面模块与 Worker 编译为 JavaScript，连同公开文件写入 `dist/site/` 并复查产物。无需运行桌面应用构建。`site:preview` 在 1422 端口预览这份产物；Vite 预览不模拟 Cloudflare 的安全头、API 或 404 状态。验证下载 API 时使用 `npx wrangler pages dev dist/site --port 1422`，完成后关闭进程。
 
 只上传 `dist/site/`，不要上传仓库根目录或整个 `dist/`。构建只替换 `dist/site/`，不删除桌面构建。说明文档、品牌规范和配置文件不会进入发布包。
 
 - `index.html`：官网首页。
 - `404.html`：未知路径的错误页，阻止 Pages 将未知路径回退到首页。
 - `src/`：样式和交互；字体通过独立 WOFF2 文件加载。
-- `src/scroll-motion.js`: 原生滚动驱动页面位移、缩放和显现，尊重减少动态效果设置。
-- `src/demo.js`：以真实应用截图为界面底稿，按脚本自动演示素材选择、分镜查找、关键字标注和输出设置。访客无需操作；视口外与后台暂停，减少动态效果时显示静态界面。不运行视频分析、模型或编码。
+- `src/scroll-motion.ts`: 原生滚动驱动页面位移、缩放和显现，尊重减少动态效果设置。
+- `src/demo.ts`：以真实应用截图为界面底稿，按脚本自动演示素材选择、分镜查找、关键字标注和输出设置。访客无需操作；视口外与后台暂停，减少动态效果时显示静态界面。不运行视频分析、模型或编码。
 - `assets/`：本地图标、应用截图、视觉示意和字体许可证。
 - `_headers`：安全头；使用 Pages 默认的 ETag 与重新验证缓存策略，避免未带哈希的资源更新后仍显示旧版本。
 - `_redirects`：原文档内页目录以 301 跳转到用户指南新子域名，保留后续路径。
-- `_worker.js` 和 `_routes.json`：仅让 `/api/release` 与 `/api/download` 进入 Worker，其他页面继续使用静态托管和现有安全头。
+- `_worker.ts` 和 `_routes.json` 负责下载 API。构建生成 Pages 要求的 `_worker.js`，仅在 `/api/release` 与 `/api/download` 路由运行。
 - `robots.txt`：抓取规则。构建会加入正式站点地图地址。
 - `DESIGN.md`: 视觉规范，不发布。
 - `brand-spec.md`：维护中的品牌约束，不发布。
@@ -95,7 +95,7 @@ npm run docs:build
 npm run format:check
 ```
 
-确定性网站构建与校验测试在 `tests/unit/tooling/site.test.ts`，下载回退测试在 `tests/unit/site/download.test.ts`，普通 CI 会构建官网。官网先读 OpenList 的 `latest.json`，失败再读 GitHub，均失败时直接使用固定 0.4.1 的 GitHub 地址，避免依赖 CDN 中已移除的旧版本文件；版本标签动态更新，所有安装按钮使用同源 `/api/download` 探测下载源（macOS 按钮附带 `?platform=macos`），可用时以 302 重定向让浏览器直连 CDN，探测失败时回退到同版本 GitHub。Worker 只读取安装包文件头，不转发安装包数据；清单没有 macOS 安装包时，macOS 按钮转到 GitHub 的最新 Release 页面。清单和发布同步契约见[发布流程](../docs/releasing.md)。不要在官网加入媒体编码、模型或 GPU 检查。
+确定性网站构建与校验测试在 `tests/unit/tooling/site/site.test.ts`，下载回退测试在 `tests/unit/site/download/download.test.ts`，普通 CI 会构建官网。官网先读 OpenList 的 `latest.json`，失败再读 GitHub，均失败时直接使用固定 0.4.1 的 GitHub 地址，避免依赖 CDN 中已移除的旧版本文件；版本标签动态更新，所有安装按钮使用同源 `/api/download` 探测下载源（macOS 按钮附带 `?platform=macos`），可用时以 302 重定向让浏览器直连 CDN，探测失败时回退到同版本 GitHub。Worker 只读取安装包文件头，不转发安装包数据；清单没有 macOS 安装包时，macOS 按钮转到 GitHub 的最新 Release 页面。清单和发布同步契约见[发布流程](../docs/releasing.md)。不要在官网加入媒体编码、模型或 GPU 检查。
 
 Cloudflare 参考：[Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/)、[CI 发布](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/)、[Worker 高级模式](https://developers.cloudflare.com/pages/functions/advanced-mode/)、[调用路由](https://developers.cloudflare.com/pages/functions/routing/)、[静态文件与缓存](https://developers.cloudflare.com/pages/configuration/serving-pages/)、[自定义域名](https://developers.cloudflare.com/pages/configuration/custom-domains/)。
 

@@ -1,10 +1,10 @@
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { useScopedState } from "../../../runtime/state/useScopedState";
-import { open as openDialog, type DialogFilter } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, type DialogFilter } from "../../../platform/tauri/dialogs";
 import { useMemo, useRef, useState } from "react";
-import { invokeCommand, runOperation } from "../../../errors";
+import { invokeCommand, runOperation } from "../../../runtime/errors";
 import { createFfmpegTaskId } from "../../../platform/tauri/ffmpegProgress";
-import { formatMonitorTime } from "../../../core/editor/time";
+import { formatMonitorTime } from "../../../core/editor/playback/time";
 import type { MediaBinItemKind } from "../../../types";
 import { MediaBrowserDialog } from "../MediaBrowserDialog";
 import { ModalDialog } from "../ModalDialog";

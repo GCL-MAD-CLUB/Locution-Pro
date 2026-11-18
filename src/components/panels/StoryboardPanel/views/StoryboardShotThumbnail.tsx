@@ -1,7 +1,8 @@
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "../../../../platform/tauri/media";
 import { Star, Tags } from "lucide-react";
-import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
+import { VideoGlyph } from "../../../common/MediaKindIcons";
+import "../../../common/StoryboardAnnotations";
 import {
   useMemo,
   useRef,
@@ -13,10 +14,10 @@ import {
 import {
   timelineThumbnails,
   type TimelineThumbnailResolution,
-} from "../../../../timelineThumbnail";
+} from "../../../../application/thumbnails/timeline";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
-import { formatDuration } from "../../../../core/editor/time";
-import { frameToTimeUs } from "../../../../core/editor/timeline";
+import { formatDuration } from "../../../../core/editor/playback/time";
+import { frameToTimeUs } from "../../../../core/editor/playback/timeline";
 import type { StoryboardShot } from "../../../../types";
 import type {
   StoryboardShotFlag,

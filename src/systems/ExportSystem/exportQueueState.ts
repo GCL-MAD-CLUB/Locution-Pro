@@ -1,6 +1,10 @@
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
-import type { ExportQueueEvent, ExportQueueEventStatus, ExportResult } from "./exportTypes";
+import type {
+  ExportQueueEvent,
+  ExportQueueEventStatus,
+  ExportResult,
+} from "../../core/editor/export/exportTypes";
 
 const completedEventHistoryLimit = 100;
 

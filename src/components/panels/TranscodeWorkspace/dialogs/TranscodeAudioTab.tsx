@@ -1,4 +1,4 @@
-import { ExportField } from "../../ExportWorkspace";
+import { ExportField } from "../../../common/EncodingSettings";
 import {
   audioBitrateOptions,
   audioEncoderOptions,

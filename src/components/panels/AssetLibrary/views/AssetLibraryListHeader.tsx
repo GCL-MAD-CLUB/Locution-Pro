@@ -1,7 +1,10 @@
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import type { AssetLibrarySort, AssetLibrarySortKey } from "../../../../core/editor/assetLibrary";
+import type {
+  AssetLibrarySort,
+  AssetLibrarySortKey,
+} from "../../../../core/editor/assetLibrary/assetLibrary";
 import {
   PopupMenu,
   PopupMenuItem,

@@ -1,6 +1,7 @@
 import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { checkSite, siteFiles } from "./check-site.ts";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -47,9 +48,33 @@ export async function buildSite({
   await mkdir(staging, { recursive: true });
   try {
     for (const file of await siteFiles(source)) {
-      const target = path.join(staging, file);
+      const target = path.join(staging, file.replace(/\.ts$/u, ".js"));
       await mkdir(path.dirname(target), { recursive: true });
-      await copyFile(path.join(source, file), target);
+      const input = path.join(source, file);
+      if (file.endsWith(".ts")) {
+        const result = ts.transpileModule(await readFile(input, "utf8"), {
+          fileName: file,
+          compilerOptions: {
+            target: ts.ScriptTarget.ES2022,
+            module: ts.ModuleKind.ESNext,
+            rewriteRelativeImportExtensions: true,
+          },
+          reportDiagnostics: true,
+        });
+        const error = result.diagnostics?.find(
+          (item) => item.category === ts.DiagnosticCategory.Error,
+        );
+        if (error)
+          throw new Error(`${file}: ${ts.flattenDiagnosticMessageText(error.messageText, "\n")}`);
+        await writeFile(target, result.outputText);
+      } else if (file.endsWith(".html")) {
+        await writeFile(
+          target,
+          (await readFile(input, "utf8")).replace(/(<script\b[^>]*\bsrc="[^"]+)\.ts"/gu, '$1.js"'),
+        );
+      } else {
+        await copyFile(input, target);
+      }
     }
     if (origin) {
       const indexPath = path.join(staging, "index.html");
@@ -72,7 +97,7 @@ export async function buildSite({
         `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${origin}/</loc></url></urlset>\n`,
       );
     }
-    const outputErrors = await checkSite(staging);
+    const outputErrors = await checkSite(staging, true);
     if (outputErrors.length)
       throw new Error(`Built site check failed:\n${outputErrors.join("\n")}`);
     await rm(output, { recursive: true, force: true });

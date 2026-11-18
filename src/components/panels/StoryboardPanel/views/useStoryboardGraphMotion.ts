@@ -1,6 +1,5 @@
 import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { forceCenter } from "d3-force";
 import {
   createStoryboardGraphAmbient,
   remapStoryboardGraphEdges,
@@ -234,11 +233,13 @@ export function useStoryboardGraphMotion(
           vx: (motion.current.get(node.id)?.vx ?? 0) / 60,
           vy: (motion.current.get(node.id)?.vy ?? 0) / 60,
         }));
-        const simulation = createStoryboardGraphSimulation(nodes, graph.edges, graph)
-          .alphaDecay(0.035)
-          // Full-strength centering translates instantly, especially for one
-          // node. Ease recentering too, so releasing never jumps the layout.
-          .force("center", forceCenter(0, 0).strength(0.035));
+        // Ease recentering too, so releasing never jumps the layout.
+        const simulation = createStoryboardGraphSimulation(
+          nodes,
+          graph.edges,
+          graph,
+          0.035,
+        ).alphaDecay(0.035);
         simulation.on("tick", () => {
           const next = nodes.map(
             ({ id, x, y, radius, cluster, thumbnailFrame, vx = 0, vy = 0 }) => {

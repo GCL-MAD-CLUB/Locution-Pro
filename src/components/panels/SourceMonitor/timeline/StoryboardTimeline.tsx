@@ -11,7 +11,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { formatMonitorFrame, parseMonitorFrame } from "../../../../core/editor/time";
+import { formatMonitorFrame, parseMonitorFrame } from "../../../../core/editor/playback/time";
 import {
   moveStoryboardCuts,
   canAddStoryboardCut,
@@ -20,7 +20,7 @@ import {
   splitStoryboardShot,
   storyboardCutDeltaBounds,
   storyboardSegments,
-} from "../../../../core/editor/storyboardCuts";
+} from "../../../../core/editor/storyboard/storyboardCuts";
 import { useProjectPort } from "../../../../systems/ProjectSystem";
 import type { StoryboardShot, StoryboardShotAnnotation } from "../../../../types";
 import { ModalDialog } from "../../../common/ModalDialog";
@@ -30,9 +30,12 @@ import {
   PopupMenuSeparator,
   useCloseOnOutsidePointer,
 } from "../../../common/PopupMenu";
-import { storyboardShotColorLabelValues } from "../../StoryboardPanel/annotations/StoryboardColorLabelButtons";
-import type { MonitorCueRange } from "../sourceMonitorState";
-import { TimelineRuler, type TimelineRulerProps } from "./TimelineRuler";
+import { storyboardShotColorLabelValues } from "../../../common/StoryboardAnnotations";
+import {
+  TimelineRuler,
+  type TimelineRulerProps,
+  type MonitorCueRange,
+} from "../../../common/PlaybackControls";
 
 interface StoryboardTimelineProps extends TimelineRulerProps {
   addCutRef?: RefObject<((frame: number) => void) | null>;

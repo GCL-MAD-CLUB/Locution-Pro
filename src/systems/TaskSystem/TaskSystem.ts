@@ -1,0 +1,392 @@
+import { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
+import { useMemo, useState } from "react";
+import { captureOperationError, type OperationKey, type PublicContext } from "../../runtime/errors";
+import type {
+  TaskProgressListener,
+  TaskProgressListenerCleanup,
+  TaskProgressUpdate,
+} from "../../core/taskProgress";
+export type {
+  TaskProgressListener,
+  TaskProgressListenerCleanup,
+  TaskProgressUpdate,
+} from "../../core/taskProgress";
+
+export interface CreateTaskProgressOptions {
+  resourceKey?: string;
+  operation: OperationKey;
+  label: string;
+  current: number;
+  total: number;
+  /** @deprecated All queued tasks are non-blocking. */
+  blocking?: boolean;
+  listener?: TaskProgressListener;
+  on_cancel?: () => void | Promise<void>;
+}
+
+export interface TaskProgressHandle {
+  readonly cancelled: boolean;
+  update: (update: TaskProgressUpdate) => void;
+  remove: () => void;
+  fail: (error: unknown, context?: PublicContext) => void;
+}
+
+export interface TaskProgressView {
+  id: string;
+  resourceKey?: string;
+  operation: OperationKey;
+  label: string;
+  current: number;
+  total: number;
+  percent: number;
+  state: "queued" | "running";
+  blocking: boolean;
+  cancellable: boolean;
+  isCancelling: boolean;
+  cancel: () => Promise<void>;
+}
+
+export interface TaskProgressStatus {
+  tasks: TaskProgressView[];
+  count: number;
+  isRunning: boolean;
+}
+
+interface TaskControl {
+  cancelled: boolean;
+  start: () => void;
+  done: Promise<void>;
+  finish: () => void;
+  /** Shared by every caller while a running cancellation is in flight. */
+  cancelRequest?: Promise<void>;
+}
+
+interface TaskProgressRecord {
+  control: TaskControl;
+  id: string;
+  resourceKey?: string;
+  operation: OperationKey;
+  label: string;
+  current: number;
+  total: number;
+  state: "queued" | "running";
+  blocking: boolean;
+  is_cancelling: boolean;
+  listener_cleanup?: TaskProgressListenerCleanup;
+  on_cancel?: () => void | Promise<void>;
+}
+
+interface TaskProgressSnapshot {
+  tasks: TaskProgressRecord[];
+}
+
+const listeners = new Set<() => void>();
+const TASK_PROGRESS_SLOTS = 3;
+let nextTaskId = 1;
+let schedulingPaused = 0;
+let snapshot: TaskProgressSnapshot = {
+  tasks: [],
+};
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function taskPercent(task: Pick<TaskProgressRecord, "current" | "total">) {
+  if (task.total <= 0) {
+    return 0;
+  }
+  return clamp(task.current / task.total, 0, 1) * 100;
+}
+
+function toViewTask(task: TaskProgressRecord): TaskProgressView {
+  return {
+    id: task.id,
+    resourceKey: task.resourceKey,
+    operation: task.operation,
+    state: task.state,
+    label: task.label,
+    current: task.current,
+    total: task.total,
+    percent: taskPercent(task),
+    blocking: task.blocking,
+    cancellable: Boolean(task.on_cancel),
+    isCancelling: task.is_cancelling,
+    cancel: () => runTaskCancel(task),
+  };
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function getSnapshot() {
+  return snapshot;
+}
+
+function setSnapshot(nextSnapshot: TaskProgressSnapshot) {
+  snapshot = nextSnapshot;
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
+// Not useSyncExternalStore: it re-renders synchronously whenever the snapshot
+// moved after render, and FFmpeg progress (several processes at 10 Hz during
+// import) moves it between nearly every commit. WKWebView delivers those events
+// between commits, so the forced renders chain until React aborts with
+// "Maximum update depth exceeded". Progress may trail by a frame instead.
+function useTaskProgressSnapshot(lifetime: RenderLifetime) {
+  const [current, setCurrent] = useState(getSnapshot);
+  lifetime.useAfterCommit(() => {
+    const update = () => setCurrent(getSnapshot());
+    update();
+    return subscribe(update);
+  }, []);
+  return current;
+}
+
+function startNextTasks() {
+  if (schedulingPaused) return;
+  const running = snapshot.tasks.filter((task) => task.state === "running");
+  if (running.some((task) => task.operation !== "storyboard.detect")) return;
+  const starting: TaskProgressRecord[] = [];
+  for (const task of snapshot.tasks) {
+    if (task.state !== "queued") continue;
+    if (running.length + starting.length >= TASK_PROGRESS_SLOTS) break;
+    // Other operations retain their exclusive slot and FIFO ordering.
+    if (task.operation !== "storyboard.detect") {
+      if (!running.length && !starting.length) starting.push(task);
+      break;
+    }
+    starting.push(task);
+  }
+  if (!starting.length) return;
+  const ids = new Set(starting.map((task) => task.id));
+  setSnapshot({
+    tasks: snapshot.tasks.map((task) => (ids.has(task.id) ? { ...task, state: "running" } : task)),
+  });
+  for (const task of starting) task.control.start();
+}
+
+function removeTask(id: string) {
+  const task = snapshot.tasks.find((currentTask) => currentTask.id === id);
+  if (!task) {
+    return;
+  }
+  void stopTaskListener(task);
+  setSnapshot({
+    ...snapshot,
+    tasks: snapshot.tasks.filter((task) => task.id !== id),
+  });
+  task.control.finish();
+  startNextTasks();
+}
+
+async function stopTaskListener(task: TaskProgressRecord) {
+  const cleanup = task.listener_cleanup;
+  task.listener_cleanup = undefined;
+  if (!cleanup) {
+    return;
+  }
+  try {
+    await cleanup();
+  } catch (error) {
+    captureOperationError("task.listener", error);
+  }
+}
+
+/** Queued work never reached the backend, so it is dropped here.
+ * A running cancel is one backend request. Every later caller awaits that
+ * same promise and resolves only after the backend confirms stop and cleanup.
+ * The backend owns the cancel flag, process termination and cleanup paths;
+ * this scheduler does not repeat them.
+ */
+async function runTaskCancel(task: TaskProgressRecord): Promise<void> {
+  const live = snapshot.tasks.find((current) => current.id === task.id);
+  if (!live) return;
+  task = live;
+  if (task.control.cancelRequest) return task.control.cancelRequest;
+  if (task.state === "queued") {
+    task.control.cancelled = true;
+    removeTask(task.id);
+    task.control.start();
+    return;
+  }
+  const label = task.label;
+  let resolveRequest!: () => void;
+  let rejectRequest!: (error: unknown) => void;
+  const request = new Promise<void>((resolve, reject) => {
+    resolveRequest = resolve;
+    rejectRequest = reject;
+  });
+  // Publish the promise before any await so a second caller cannot start
+  // another backend request or return before this one settles.
+  task.control.cancelRequest = request;
+  setSnapshot({
+    ...snapshot,
+    tasks: snapshot.tasks.map((currentTask) =>
+      currentTask.id === task.id
+        ? { ...currentTask, is_cancelling: true, label: "正在取消任务" }
+        : currentTask,
+    ),
+  });
+  task.control.cancelled = true;
+  void (async () => {
+    try {
+      await task.on_cancel?.();
+      task.control.cancelled = true;
+      resolveRequest();
+    } catch (error) {
+      if ((error as { code?: string } | null)?.code === "TASK_NOT_RUNNING") {
+        task.control.cancelled = true;
+        resolveRequest();
+        return;
+      }
+      task.control.cancelled = false;
+      task.control.cancelRequest = undefined;
+      setSnapshot({
+        ...snapshot,
+        tasks: snapshot.tasks.map((currentTask) =>
+          currentTask.id === task.id
+            ? { ...currentTask, is_cancelling: false, label }
+            : currentTask,
+        ),
+      });
+      captureOperationError("task.cancel", error);
+      rejectRequest(error);
+    }
+  })();
+  return request;
+}
+
+/** Registers immediately and resolves when the task owns an execution slot.
+ * Check cancelled before starting work; remove/fail only after work settles.
+ */
+export async function createTaskProgress({
+  operation,
+  resourceKey,
+  label,
+  current,
+  total,
+  listener,
+  on_cancel,
+}: CreateTaskProgressOptions): Promise<TaskProgressHandle> {
+  const normalizedTotal = Number.isFinite(total) ? Math.max(0, total) : 0;
+  const id = `task-progress:${nextTaskId++}`;
+  let start!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    start = resolve;
+  });
+  let finish!: () => void;
+  const done = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const control = { cancelled: false, start, done, finish };
+  const task: TaskProgressRecord = {
+    control,
+    resourceKey,
+    state: "queued",
+    id,
+    operation,
+    label,
+    current: clamp(Number.isFinite(current) ? current : 0, 0, normalizedTotal),
+    total: normalizedTotal,
+    blocking: false,
+    is_cancelling: false,
+    on_cancel,
+  };
+
+  const handle: TaskProgressHandle = {
+    get cancelled() {
+      return control.cancelled;
+    },
+    update: ({ current: nextCurrent, label: nextLabel }) => {
+      if (!snapshot.tasks.some((currentTask) => currentTask.id === id)) {
+        return;
+      }
+      setSnapshot({
+        ...snapshot,
+        tasks: snapshot.tasks.map((currentTask) =>
+          currentTask.id === id
+            ? {
+                ...currentTask,
+                label: nextLabel ?? currentTask.label,
+                current:
+                  nextCurrent === undefined
+                    ? currentTask.current
+                    : clamp(Number.isFinite(nextCurrent) ? nextCurrent : 0, 0, currentTask.total),
+              }
+            : currentTask,
+        ),
+      });
+    },
+    remove: () => removeTask(id),
+    fail: (error, context) => {
+      removeTask(id);
+      captureOperationError(operation, error, context);
+    },
+  };
+
+  setSnapshot({ tasks: [...snapshot.tasks, task] });
+  startNextTasks();
+  await ready;
+  if (control.cancelled) {
+    removeTask(id);
+    return handle;
+  }
+
+  if (listener) {
+    try {
+      const cleanup = await listener(handle.update);
+      if (cleanup) {
+        const live = snapshot.tasks.find((entry) => entry.id === id);
+        if (live) live.listener_cleanup = cleanup;
+        else await cleanup();
+      }
+    } catch (error) {
+      captureOperationError("task.listener", error);
+    }
+  }
+
+  if (control.cancelled) removeTask(id);
+  return handle;
+}
+
+export async function cancelAllTaskProgress() {
+  const tasks = snapshot.tasks;
+  if (tasks.length === 0) {
+    return;
+  }
+
+  schedulingPaused += 1;
+  try {
+    // Suppress refilling until cancellation settles, including newly submitted work.
+    await Promise.all(tasks.filter((task) => task.state === "queued").map(runTaskCancel));
+    await Promise.all(tasks.filter((task) => task.state === "running").map(runTaskCancel));
+    await Promise.all(tasks.map((task) => task.control.done));
+  } finally {
+    schedulingPaused -= 1;
+    startNextTasks();
+  }
+}
+
+export function useTaskProgressStatus(
+  lifetime: RenderLifetime,
+  operation?: OperationKey,
+): TaskProgressStatus {
+  const { tasks } = useTaskProgressSnapshot(lifetime);
+
+  return useMemo(() => {
+    const visibleTasks = operation ? tasks.filter((task) => task.operation === operation) : tasks;
+    const viewTasks = visibleTasks.map(toViewTask);
+    return {
+      tasks: viewTasks,
+      count: viewTasks.length,
+      isRunning: viewTasks.length > 0,
+    };
+  }, [operation, tasks]);
+}

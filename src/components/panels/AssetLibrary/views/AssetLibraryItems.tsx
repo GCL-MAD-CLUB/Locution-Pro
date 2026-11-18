@@ -1,7 +1,7 @@
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { SubtitleGlyph, VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
+import { SubtitleGlyph, VideoGlyph, OfflineFileIcon } from "../../../common/MediaKindIcons";
 import {
   Fragment,
   useRef,
@@ -18,9 +18,9 @@ import {
   type AssetLibraryLocation,
   type AssetLibrarySort,
   type AssetLibraryViewLayout,
-} from "../../../../core/editor/assetLibrary";
-import { formatMonitorTime } from "../../../../core/editor/time";
-import "../../MediaBin/MediaBin.css";
+} from "../../../../core/editor/assetLibrary/assetLibrary";
+import { formatMonitorTime } from "../../../../core/editor/playback/time";
+import "../../../common/MediaCollection";
 import "./AssetLibraryGroups.css";
 import {
   assetLibraryColumnsForRoot,
@@ -29,7 +29,7 @@ import {
   type AssetLibraryColumnScope,
   type AssetLibraryColumnWidths,
 } from "../model/columns";
-import { assetLibraryDropTargetProps } from "../../../common/utils/assetLibraryDropTarget";
+import { assetLibraryDropTargetProps } from "../../../common/AssetLibraryDrag";
 import { assetNodeTarget, type AssetLibraryNode } from "../model/nodes";
 import type { AssetLibraryNodeGroup } from "../model/useAssetLibraryNodes";
 import {
@@ -38,7 +38,6 @@ import {
   assetLibraryRootIcons,
 } from "./AssetLibraryIcons";
 import { AssetLibraryMarks, AssetLibraryThumbnailMarks } from "./AssetLibraryBadges";
-import { OfflineFileIcon } from "../../MediaBin/views/MediaBinFolderIcon";
 import { AssetLibraryHoverFrame, AssetLibraryThumbnail } from "./AssetLibraryPreview";
 import { AssetLibraryListHeader } from "./AssetLibraryListHeader";
 

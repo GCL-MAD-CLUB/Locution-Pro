@@ -1,7 +1,11 @@
 import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useMemo, useRef, useState } from "react";
-import { invokeCommand, runOperation } from "../../../../errors";
-import { pathKey, type ImportDirectory, type ImportEntry } from "../browser/importBrowserModel";
+import { invokeCommand, runOperation } from "../../../../runtime/errors";
+import {
+  pathKey,
+  type ImportDirectory,
+  type ImportEntry,
+} from "../../../../core/editor/import/importBrowserModel";
 import {
   collectSelectionFiles,
   scanImportFolder,

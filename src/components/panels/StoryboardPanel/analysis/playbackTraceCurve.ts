@@ -1,6 +1,8 @@
-import type { PlaybackTraceSample } from "../../../../core/editor/frameTrace";
+import type {
+  PlaybackTraceSample,
+  FrameTraceData,
+} from "../../../../core/editor/mediaAnalysis/frameTrace";
 import { normalizeMotion, pixelEnvelope, smoothMotionValues } from "./motionCurve";
-import type { FrameTraceData } from "../../../../application/media/browserFrameTrace";
 
 export function completeTraceSamples(
   data: FrameTraceData,

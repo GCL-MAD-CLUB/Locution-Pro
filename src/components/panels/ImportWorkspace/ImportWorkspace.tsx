@@ -5,8 +5,8 @@ import { usePreferencesPort } from "../../../systems/PreferencesSystem";
 import {
   scheduleMediaAnalysis,
   subtitleStreamNotFoundCode,
-} from "../../../application/media/mediaAnalysisTask";
-import { scheduleMediaAutoBinding } from "../../../application/media/mediaAutoBindTask";
+  scheduleMediaAutoBinding,
+} from "../../../systems/MediaImportSystem";
 import { defaultMediaBinFolderColor, useProjectPort } from "../../../systems/ProjectSystem";
 import { isTauriRuntime } from "../../../platform/tauri/runtime";
 import { publishEvent } from "../../../runtime/events/react";
@@ -17,7 +17,11 @@ import { ImportFileView } from "./browser/ImportFileView";
 import { ImportSettingsPanel } from "./controls/ImportSettingsPanel";
 import { ImportSelectionBar } from "./selection/ImportSelectionBar";
 import { registerImportSelection } from "./selection/importSelection";
-import { parentDirectory, pathKey, type ImportEntry } from "./browser/importBrowserModel";
+import {
+  parentDirectory,
+  pathKey,
+  type ImportEntry,
+} from "../../../core/editor/import/importBrowserModel";
 import { useImportBrowser } from "./browser/useImportBrowser";
 import { useImportSelection } from "./selection/useImportSelection";
 import "./ImportWorkspace.css";

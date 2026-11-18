@@ -1,5 +1,10 @@
 import { waitForDelay } from "../../../../runtime/scheduling";
-import { mediaKind, pathKey, type ImportDirectory, type ImportEntry } from "./importBrowserModel";
+import {
+  mediaKind,
+  pathKey,
+  type ImportDirectory,
+  type ImportEntry,
+} from "../../../../core/editor/import/importBrowserModel";
 
 export interface ImportSelectionItem {
   entry: ImportEntry;

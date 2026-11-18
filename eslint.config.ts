@@ -4,7 +4,9 @@ import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import { frontendArchitecture } from "./tooling/eslint/frontend-architecture.ts";
 import { reactLifecycle } from "./tooling/eslint/react-lifecycle.ts";
+import { testArchitecture } from "./tooling/eslint/test-architecture.ts";
 import { scheduling } from "./tooling/eslint/no-native-timers.ts";
 
 const effectNames = "^(useEffect|useLayoutEffect|useInsertionEffect)$";
@@ -105,6 +107,16 @@ export default tseslint.config(
   {
     files: [
       "src/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
+      "site/src/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
+      "site/_worker.ts",
+      "docs/user-guide/.vitepress/theme/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
+    ],
+    plugins: { "project-architecture": frontendArchitecture },
+    rules: { "project-architecture/boundaries": "error" },
+  },
+  {
+    files: [
+      "src/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
       "site/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
       "docs/user-guide/.vitepress/theme/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
     ],
@@ -113,13 +125,26 @@ export default tseslint.config(
     rules: { "project-scheduling/no-native-timers": "error" },
   },
   {
-    files: ["src/**/*.worklet.js"],
-    languageOptions: {
-      globals: {
-        AudioWorkletProcessor: "readonly",
-        sampleRate: "readonly",
-        registerProcessor: "readonly",
-      },
+    files: ["tests/**/*.{ts,tsx}"],
+    plugins: { "project-tests": testArchitecture },
+    linterOptions: { noInlineConfig: true },
+    rules: {
+      "project-tests/boundaries": "error",
+      "project-tests/behavior-assertions": "error",
+      "@typescript-eslint/ban-ts-comment": [
+        "error",
+        { "ts-ignore": true, "ts-expect-error": true, "ts-nocheck": true },
+      ],
+    },
+  },
+  {
+    files: ["**/*.{js,jsx,mjs,cjs,mts,cts}"],
+    linterOptions: { noInlineConfig: true },
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        { selector: "Program", message: "Authored frontend code must use .ts or .tsx." },
+      ],
     },
   },
 );

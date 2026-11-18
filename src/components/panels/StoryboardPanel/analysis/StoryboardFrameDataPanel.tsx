@@ -4,7 +4,7 @@ import { ChevronsUpDown } from "lucide-react";
 import { useState, type ComponentProps } from "react";
 import { createPortal } from "react-dom";
 import { PopupMenu, PopupMenuItem, useCloseOnOutsidePointer } from "../../../common/PopupMenu";
-import { StoryboardSidebarHeading } from "../StoryboardSidebarSection";
+import { StoryboardSidebarHeading } from "../../../common/StoryboardAnnotations";
 import { StoryboardHistogramPanel } from "./StoryboardHistogramPanel";
 import { frameTraceModes, StoryboardMotionPanel } from "./StoryboardMotionPanel";
 

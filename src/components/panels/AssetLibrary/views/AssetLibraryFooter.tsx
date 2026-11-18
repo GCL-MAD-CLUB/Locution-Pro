@@ -1,5 +1,5 @@
 import { Grid2X2, List } from "lucide-react";
-import { assetLibraryViewPresets } from "../../../../core/editor/assetLibrary";
+import { assetLibraryViewPresets } from "../../../../core/editor/assetLibrary/assetLibrary";
 
 export interface AssetLibraryFooterProps {
   size: number;

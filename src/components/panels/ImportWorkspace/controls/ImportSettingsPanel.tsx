@@ -1,11 +1,11 @@
 ﻿import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { usePreferencesPort } from "../../../../systems/PreferencesSystem";
-import { open } from "@tauri-apps/plugin-dialog";
-import { runOperation } from "../../../../errors";
+import { open } from "../../../../platform/tauri/dialogs";
+import { runOperation } from "../../../../runtime/errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import { SelectDropdown, selectDropdownItems } from "../../../common/SelectDropdown";
-import type { ImportSettings } from "../browser/importBrowserModel";
+import type { ImportSettings } from "../../../../core/editor/import/importBrowserModel";
 
 export function ImportSettingsPanel({
   settings,

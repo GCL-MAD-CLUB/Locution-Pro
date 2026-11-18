@@ -7,10 +7,11 @@ import {
   forceX,
   forceY,
   type SimulationLinkDatum,
-  type SimulationNodeDatum,
 } from "d3-force";
-import { clientError } from "../../../errors/model";
+import { clientError } from "../../errors";
 import { defaultStoryboardGraphOptions, type StoryboardGraphOptions } from "./options";
+import type { StoryboardGraphEdge, StoryboardGraphForceNode } from "./contracts";
+export type { StoryboardGraphEdge, StoryboardGraphForceNode } from "./contracts";
 import { clusterStoryboardGraph, storyboardGraphClusterForce } from "./clustering";
 
 export interface StoryboardGraphVector {
@@ -26,12 +27,6 @@ export interface StoryboardGraphNode {
   thumbnailFrame: number;
   radius: number;
   cluster?: number;
-}
-
-export interface StoryboardGraphEdge {
-  source: number;
-  target: number;
-  similarity: number;
 }
 
 export interface StoryboardGraph extends Omit<
@@ -344,12 +339,6 @@ function seededRandom() {
   };
 }
 
-export interface StoryboardGraphForceNode extends SimulationNodeDatum {
-  id: string;
-  radius: number;
-  cluster?: number;
-}
-
 interface ForceEdge<Node extends StoryboardGraphForceNode> extends SimulationLinkDatum<Node> {
   similarity: number;
 }
@@ -363,6 +352,7 @@ export function createStoryboardGraphSimulation<Node extends StoryboardGraphForc
     Partial<
       Pick<StoryboardGraphOptions, "clusterStrength" | "clusterEnabled">
     > = defaultStoryboardGraphOptions,
+  centerStrength = 1,
 ) {
   if (!Number.isFinite(options.collisionPadding) || options.collisionPadding <= 0)
     throw clientError("UNEXPECTED_ERROR", "Invalid storyboard graph collision padding");
@@ -409,7 +399,7 @@ export function createStoryboardGraphSimulation<Node extends StoryboardGraphForc
       "collision",
       forceCollide<Node>((node) => node.radius + options.collisionPadding).iterations(3),
     )
-    .force("center", forceCenter(0, 0))
+    .force("center", forceCenter(0, 0).strength(centerStrength))
     .force("x", forceX<Node>(0).strength(0.015))
     .force("y", forceY<Node>(0).strength(0.015));
 }

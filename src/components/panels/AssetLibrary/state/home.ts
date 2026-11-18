@@ -2,7 +2,7 @@ import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime
 
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
-import { usePersistedProjectPanelState } from "../../../../application/media/projectPanelPersistence";
+import { usePersistedProjectPanelState } from "../../../../application/mediaSources/projectPanelPersistence";
 import {
   assetLibraryPinnedPlaces,
   assetLibraryPinnedRootId,
@@ -14,9 +14,12 @@ import {
   withoutAssetLibraryRecent,
   type AssetLibraryHome,
   type AssetLibraryPinnedPlace,
-} from "../../../../core/editor/assetLibraryHome";
+} from "../../../../core/editor/assetLibrary/assetLibraryHome";
 import { useProjectPort } from "../../../../systems/ProjectSystem";
-import type { AssetLibraryLocation, AssetLibraryPlace } from "../../../../core/editor/assetLibrary";
+import type {
+  AssetLibraryLocation,
+  AssetLibraryPlace,
+} from "../../../../core/editor/assetLibrary/assetLibrary";
 import type { ProjectAssetLibraryState } from "../../../../types";
 import { assetNodeParent, type AssetLibraryNode } from "../model/nodes";
 

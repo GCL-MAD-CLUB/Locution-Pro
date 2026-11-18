@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { invokeCommand } from "../../errors";
+import { invokeCommand } from "../../runtime/errors";
 
 /** Standard AppKit editing actions, applied to the focused text field. */
 export type NativeEditAction = "undo" | "redo" | "cut" | "copy" | "paste" | "delete" | "selectAll";

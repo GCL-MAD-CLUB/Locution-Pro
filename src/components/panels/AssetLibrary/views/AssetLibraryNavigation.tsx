@@ -17,11 +17,11 @@ import {
   type AssetLibraryLocation,
   type AssetLibraryPlace,
   type AssetLibrarySort,
-} from "../../../../core/editor/assetLibrary";
+} from "../../../../core/editor/assetLibrary/assetLibrary";
 import {
   assetLibraryHomeLabel,
   type AssetLibraryPinnedPlace,
-} from "../../../../core/editor/assetLibraryHome";
+} from "../../../../core/editor/assetLibrary/assetLibraryHome";
 import type {
   AssetLibraryFolder,
   AssetLibraryRoot,
@@ -30,7 +30,7 @@ import type {
 import {
   assetLibraryDropTargetProps,
   assetLibraryTreeDropPrefix as treeDropPrefix,
-} from "../../../common/utils/assetLibraryDropTarget";
+} from "../../../common/AssetLibraryDrag";
 import { assetLocationKey } from "../model/nodes";
 import {
   assetLibraryFolderIcons,

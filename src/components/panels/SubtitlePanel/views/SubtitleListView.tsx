@@ -2,9 +2,8 @@ import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runti
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { annotationColors } from "../../../../runtime/theme";
-import type { PanelRowSource } from "../../../../core/editor/multiSource";
-import type { VirtualItem } from "@tanstack/react-virtual";
-import type { RowVirtualizer } from "../../../../runtime/state/useRowVirtualizer";
+import type { PanelRowSource } from "../../../../core/editor/mediaSources/multiSource";
+import type { RowVirtualizer, VirtualItem } from "../../../../runtime/state/useRowVirtualizer";
 import { Star } from "lucide-react";
 import {
   useRef,
@@ -16,17 +15,14 @@ import {
   type RefObject,
   type UIEvent as ReactUIEvent,
 } from "react";
-import { formatMonitorTime } from "../../../../core/editor/time";
+import { formatMonitorTime } from "../../../../core/editor/playback/time";
 import {
   timelineThumbnailWindowContains,
   type TimelineThumbnailResolution,
   type TimelineThumbnailWindowPlan,
-} from "../../../../timelineThumbnail";
+} from "../../../../application/thumbnails/timeline";
 import type { SubtitleCue } from "../../../../types";
-import {
-  SearchHighlight,
-  type SearchHighlightOptions,
-} from "../../../common/PanelSearch/PanelSearch";
+import { SearchHighlight, type SearchHighlightOptions } from "../../../common/PanelSearch";
 import { subtitleCueColorLabels } from "./SubtitleColorLabelButtons";
 import { SubtitleCueThumbnail } from "./SubtitleCueThumbnail";
 import { useSubtitlePanelState, type SubtitleCueVisualLabel } from "../subtitlePanelState";

@@ -1,5 +1,5 @@
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "../../../platform/tauri/dialogs";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -7,8 +7,8 @@ import {
   stillFormats,
   type StillExportRequest,
   type StillFormat,
-} from "../../../application/media/stillExportTask";
-import { invokeCommand, runBackgroundOperation, runOperation } from "../../../errors";
+} from "../../../application/stillExport/stillExportTask";
+import { invokeCommand, runBackgroundOperation, runOperation } from "../../../runtime/errors";
 import { ModalDialog } from "../ModalDialog";
 import { SelectDropdown, selectDropdownItems } from "../SelectDropdown";
 import "./StillExportDialog.css";

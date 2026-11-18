@@ -9,7 +9,7 @@ const lifetime = createModuleLoader(import.meta.url)<
   "../../../src/runtime/lifetime/RenderLifetime.ts",
   {
     react: React,
-    "../../errors/runtime": { normalizeError: (error: unknown) => error },
+    "../errors/runtime": { normalizeError: (error: unknown) => error },
   },
   { queueMicrotask, AggregateError },
 );

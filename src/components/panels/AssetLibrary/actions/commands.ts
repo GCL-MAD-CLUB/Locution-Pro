@@ -14,15 +14,15 @@ import {
   type AssetLibraryFlag,
   type AssetLibraryLocation,
   type AssetLibrarySelection,
-} from "../../../../core/editor/assetLibrary";
-import { withAssetLibraryNodesHidden } from "../../../../core/editor/assetLibraryVisibility";
+} from "../../../../core/editor/assetLibrary/assetLibrary";
+import { withAssetLibraryNodesHidden } from "../../../../core/editor/assetLibrary/assetLibraryVisibility";
 import type {
   AssetLibraryColorLabel,
   AssetLibraryEntry,
   AssetLibraryFolder,
   ProjectAssetLibraryState,
 } from "../../../../types";
-import type { AnnotationShortcutAction } from "../../../common/utils/annotationShortcuts";
+import type { AnnotationShortcutAction } from "../../../common/AnnotationTools";
 
 export type AssetLibraryUpdate = (
   historyLabel: string,

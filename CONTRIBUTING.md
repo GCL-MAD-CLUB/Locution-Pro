@@ -17,8 +17,8 @@ npm run tauri dev
 
 - 应用代码位于 `src/`，原生代码与缩略图提供程序位于 `src-tauri/`。
 - Rust 测试内联在被测实现文件的 `#[cfg(test)] mod tests` 中，禁止外置模块或独立测试目录。
-- `tests/unit/` 按搜索、媒体、项目、运行时和工具分域，保存不依赖浏览器、媒体工具或模型的确定性测试，通过 `npm test` 执行。
-- `tests/browser/` 分为 `workflows/`、`components/`、`state/`，分别验证应用流程、组件交互和状态集成；公共夹具放在 `support/`。
+- `tests/unit/` 按领域和功能划分，保存确定性测试。通过 `npm test` 执行并校验覆盖率。
+- `tests/browser/` 分为 `workflows/`、`components/`、`state/`，分别验证应用流程、组件交互和状态集成。测试与夹具放在各自的功能目录，公共夹具放在同一层的 `support/`。
 - `tests/integration/` 按外部工具分域，安装器夹具位于 `installer/`，按需运行。
 - `scripts/` 只放构建、资源准备、发布与仓库检查命令，每个脚本必须有 package 入口。
 

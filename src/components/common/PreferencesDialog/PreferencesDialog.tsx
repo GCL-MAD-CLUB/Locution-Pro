@@ -1,10 +1,10 @@
 import { useScopedState } from "../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open } from "../../../platform/tauri/dialogs";
 import { Loader2 } from "lucide-react";
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { applyAppearance, knownAppearances } from "../../../runtime/theme";
-import { runOperation } from "../../../errors";
+import { runOperation } from "../../../runtime/errors";
 import { isMacOSRuntime, isTauriRuntime } from "../../../platform/tauri/runtime";
 import { useProjectPort } from "../../../systems/ProjectSystem";
 import { defaultPreferences, usePreferencesPort } from "../../../systems/PreferencesSystem";

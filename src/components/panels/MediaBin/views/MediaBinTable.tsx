@@ -1,16 +1,18 @@
 import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { mediaGridLayout } from "../../../../application/media/mediaGridLayout";
-import { selectionFocusForVisibleIds } from "../../../../core/editor/selectionFocus";
+import { getCurrentWebview } from "../../../../platform/tauri/webview";
+import { mediaGridLayout } from "../../../../application/mediaPreviews/mediaGridLayout";
+import { selectionFocusForVisibleIds } from "../../../../core/editor/selection/selectionFocus";
 import { mediaDisplayColor } from "../../../../runtime/theme";
 import { ChevronRight, Link2, SplitSquareVertical } from "lucide-react";
 import {
   AudioGlyph,
   SubtitleGlyph,
   VideoGlyph,
-} from "../../../common/MediaKindIcons/MediaKindIcons";
+  MediaBinFolderIcon,
+  OfflineFileIcon,
+} from "../../../common/MediaKindIcons";
 import {
   useMemo,
   useRef,
@@ -22,7 +24,7 @@ import {
   type UIEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { invokeCommand, runBackgroundOperation, runOperation } from "../../../../errors";
+import { invokeCommand, runBackgroundOperation, runOperation } from "../../../../runtime/errors";
 import {
   isMediaItemEnabled,
   isMediaItemHidden,
@@ -32,13 +34,12 @@ import {
   visibleSubtitleTracks,
 } from "../../../../systems/ProjectSystem";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
-import { formatMonitorTime } from "../../../../core/editor/time";
-import { normalizeFrameRate } from "../../../../core/editor/timeline";
+import { formatMonitorTime } from "../../../../core/editor/playback/time";
+import { normalizeFrameRate } from "../../../../core/editor/playback/timeline";
 import type { MediaBinFolder, MediaBinItem, MediaDocument } from "../../../../types";
 import type { MediaBinViewMode } from "../mediaBinState";
 import { DragLabelPreview } from "../../../common/DragLabelPreview";
 import { MediaBinVideoThumbnail } from "./MediaBinVideoThumbnail";
-import { MediaBinFolderIcon, OfflineFileIcon } from "./MediaBinFolderIcon";
 
 export type MediaBinTableRow =
   | { type: "folder"; folder: MediaBinFolder; depth: number }

@@ -1,4 +1,4 @@
-import { invokeCommand } from "../../errors/runtime";
+import { invokeCommand } from "../../runtime/errors/runtime";
 import { isTauriRuntime } from "./runtime";
 
 const supportedProtocols = new Set(["http:", "https:"]);

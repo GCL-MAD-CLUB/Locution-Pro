@@ -1,7 +1,7 @@
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "../../../../platform/tauri/media";
 import { Star } from "lucide-react";
-import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
+import { VideoGlyph } from "../../../common/MediaKindIcons";
 import {
   useMemo,
   useRef,
@@ -13,9 +13,9 @@ import {
 import {
   timelineThumbnails,
   type TimelineThumbnailResolution,
-} from "../../../../timelineThumbnail";
+} from "../../../../application/thumbnails/timeline";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
-import { formatDuration } from "../../../../core/editor/time";
+import { formatDuration } from "../../../../core/editor/playback/time";
 import type { SubtitleCue } from "../../../../types";
 import type { SubtitleCueFlag, SubtitleCueVisualLabel } from "../subtitlePanelState";
 

@@ -1,8 +1,12 @@
 import { defaultThemeColor } from "../../../../runtime/theme";
-import { invokeCommand, runOperation } from "../../../../errors";
+import { invokeCommand, runOperation } from "../../../../runtime/errors";
 import { createFfmpegTaskId } from "../../../../platform/tauri/ffmpegProgress";
 import type { ImportResult, MediaBinItem } from "../../../../types";
-import { fileExtension, mediaKind, type ImportEntry } from "../browser/importBrowserModel";
+import {
+  fileExtension,
+  mediaKind,
+  type ImportEntry,
+} from "../../../../core/editor/import/importBrowserModel";
 
 function subtitleItem(path: string): MediaBinItem {
   return {

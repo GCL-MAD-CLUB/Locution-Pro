@@ -1,11 +1,11 @@
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "../../../../platform/tauri/media";
 import { useMemo, useRef, useState, type SyntheticEvent } from "react";
-import { runOperation } from "../../../../errors";
+import { runOperation } from "../../../../runtime/errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
-import { extractVideoCover } from "../../../../application/media/thumbnail";
-import { useMediaCoverDeferred } from "../../../../application/media/mediaAnalysisTask";
-import { frameDurationUs, normalizeFrameRate } from "../../../../core/editor/timeline";
+import { extractVideoCover } from "../../../../application/thumbnails/thumbnail";
+import { useMediaCoverDeferred } from "../../../../systems/MediaImportSystem";
+import { frameDurationUs, normalizeFrameRate } from "../../../../core/editor/playback/timeline";
 import type { MediaBinItem, MediaDocument } from "../../../../types";
 
 interface MediaBinVideoThumbnailProps {

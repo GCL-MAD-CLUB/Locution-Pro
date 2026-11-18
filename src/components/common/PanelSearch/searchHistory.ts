@@ -8,7 +8,7 @@ import {
   type AdvancedSearchOptions,
   type SearchMode,
   type SearchRule,
-} from "../../../core/editor/textSearch";
+} from "../../../core/editor/search/textSearch";
 import { searchRuleLabels } from "./searchRules";
 
 export type SearchHistoryKind = "subtitle" | "storyboard";

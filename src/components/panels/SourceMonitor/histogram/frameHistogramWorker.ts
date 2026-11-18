@@ -1,4 +1,7 @@
-import { frameHistogram, type FrameHistogram } from "../../../../core/editor/frameHistogram";
+import {
+  frameHistogram,
+  type FrameHistogram,
+} from "../../../../core/editor/mediaAnalysis/frameHistogram";
 
 export type FrameHistogramWorkerResponse =
   { kind: "result"; histogram: FrameHistogram } | { kind: "error"; message: string };

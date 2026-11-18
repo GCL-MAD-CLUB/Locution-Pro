@@ -1,4 +1,7 @@
-import { formatStoryboardKeywordPath, parseStoryboardKeywordInput } from "./storyboardKeywords";
+import {
+  formatStoryboardKeywordPath,
+  parseStoryboardKeywordInput,
+} from "../../../../core/editor/storyboard/storyboardKeywords";
 import { create } from "zustand";
 import { useMemo } from "react";
 import { readAppStorage } from "../../../../runtime/storage";
@@ -11,7 +14,7 @@ import {
   recentKeywordSet,
   restoreKeywordPresets,
   type KeywordPreset,
-} from "../../../../core/editor/keywordPresets";
+} from "../../../../core/editor/storyboard/keywordPresets";
 
 function normalizedKeywords(keywords: readonly string[]) {
   return keywordSlots(keywords).map((keyword) => {

@@ -1,6 +1,6 @@
-﻿import { parseFrameRate } from "../../core/editor/timeline";
-import { expandedStoryboardKeywordText } from "../../components/panels/StoryboardPanel/annotations/storyboardKeywords";
-import { storyboardShotDefaultTitle } from "../../core/editor/storyboard";
+﻿import { parseFrameRate } from "../../core/editor/playback/timeline";
+import { expandedStoryboardKeywordText } from "../../core/editor/storyboard/storyboardKeywords";
+import { storyboardShotDefaultTitle } from "../../core/editor/storyboard/storyboard";
 import type {
   AssetLibraryEntry,
   MediaBinItem,
@@ -21,7 +21,7 @@ import type {
   ExportClipAudioSource,
   ExportSource,
   ExportSourceMedia,
-} from "./exportTypes";
+} from "../../core/editor/export/exportTypes";
 
 function parseAspectRatio(value?: string | null) {
   if (!value) {

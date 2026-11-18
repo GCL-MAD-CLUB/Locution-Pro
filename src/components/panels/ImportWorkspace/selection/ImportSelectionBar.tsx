@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { PopupMenuItem } from "../../../common/PopupMenu";
 import { ImportMenu } from "../controls/ImportMenu";
 import { ImportMediaVisual } from "../preview/ImportMediaVisual";
-import { parentDirectory, pathKey } from "../browser/importBrowserModel";
+import { parentDirectory, pathKey } from "../../../../core/editor/import/importBrowserModel";
 import type { ImportSelectionItem } from "../browser/importFolderScan";
 import { ImportFolderBadge } from "../browser/ImportFolderBadge";
 import { useImportTraySelection } from "./useImportTraySelection";

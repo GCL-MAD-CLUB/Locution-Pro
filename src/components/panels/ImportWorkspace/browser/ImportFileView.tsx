@@ -8,7 +8,7 @@ import {
   pathKey,
   type ImportEntry,
   type ImportMetadata,
-} from "./importBrowserModel";
+} from "../../../../core/editor/import/importBrowserModel";
 
 function ImportFile({
   entry,

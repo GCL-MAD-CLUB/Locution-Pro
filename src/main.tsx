@@ -1,9 +1,10 @@
 import { initializeAppearance } from "./runtime/theme";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
-import { disableBrowserBehaviors } from "./disable-browser-behaviors";
-import { AppErrorBoundary, ErrorOutlet, installGlobalErrorHandlers } from "./errors";
+import App from "./app/App";
+import { disableBrowserBehaviors } from "./app/disable-browser-behaviors";
+import { AppErrorBoundary, ErrorOutlet } from "./app/ErrorUI";
+import { installGlobalErrorHandlers } from "./runtime/errors";
 import { isMacOSRuntime } from "./platform/tauri/runtime";
 import "./styles.css";
 

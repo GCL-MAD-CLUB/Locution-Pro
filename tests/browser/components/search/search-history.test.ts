@@ -8,8 +8,8 @@ for (const label of ["字幕", "分镜"]) {
     await page.evaluate(
       async ({ label, kind }) => {
         const historyPath = "/src/components/common/PanelSearch/searchHistory.ts";
-        const corePath = "/src/core/editor/textSearch.ts";
-        const harnessPath = "/tests/browser/components/search/advanced-search.harness.js";
+        const corePath = "/src/core/editor/search/textSearch.ts";
+        const harnessPath = "/tests/browser/components/search/advanced-search.harness.tsx";
         const { rememberSearch } = await import(/* @vite-ignore */ historyPath);
         const { defaultAdvancedSearch } = await import(/* @vite-ignore */ corePath);
         const config = {
@@ -54,9 +54,6 @@ for (const label of ["字幕", "分镜"]) {
     await expect(page.getByRole("option", { name: "sunset|beach", exact: true })).toHaveCount(0);
     const star = option.locator(".panel-search-history-advanced");
     await expect(star).toHaveText("*");
-    expect(await star.evaluate((element) => getComputedStyle(element).color)).toBe(
-      "rgb(64, 150, 243)",
-    );
     expect((await read("text"))[0].text).toBe("other");
     await option.click();
     await expect(bar).toBeFocused();

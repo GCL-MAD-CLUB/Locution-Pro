@@ -1,2 +1,2 @@
-export type { FrameTraceWorkerResponse } from "../../../../application/media/frameTraceWorker";
-import "../../../../application/media/frameTraceWorker";
+export type { FrameTraceWorkerResponse } from "../../../../application/frameTrace/frameTraceWorker";
+import "../../../../application/frameTrace/frameTraceWorker";

@@ -1,13 +1,12 @@
+import { appIconUrl } from "../../../assets/appIcon";
 import { scheduleAfter, cancelTask } from "../../../runtime/scheduling";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { useId, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
-import { version } from "../../../../package.json";
-import license from "../../../../LICENSE?raw";
-import thirdPartyNotices from "../../../../THIRD_PARTY_NOTICES?raw";
+import { applicationVersion as version } from "../../../assets/applicationVersion";
+import { license, thirdPartyNotices } from "../../../assets/legalNotices";
 import { openExternalUrl } from "../../../platform/tauri/externalUrl";
 import "./AboutDialog.css";
 
-const appIconUrl = new URL("../../../../src-tauri/icons/icon.ico", import.meta.url).href;
 const CREDITS_HOLD_MS = 3_000;
 const CREDITS_SCROLL_PX_PER_SECOND = 12;
 

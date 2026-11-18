@@ -1,9 +1,9 @@
 import type { NativeArguments, NativeCall, NativeImportConfig } from "./native-types";
-import type { UpdateStartup } from "../../../src/application/update";
+import type { UpdateStartup } from "../../../src/application/update/update";
 import type { ProjectWorkspace } from "../../../src/types";
-import type { ImportEntry } from "../../../src/components/panels/ImportWorkspace/browser/importBrowserModel";
+import type { ImportEntry } from "../../../src/core/editor/import/importBrowserModel";
 import type { MediaDocument, Preferences } from "../../../src/types";
-import type { ExportResult } from "../../../src/systems/ExportSystem/exportTypes";
+import type { ExportResult } from "../../../src/core/editor/export/exportTypes";
 
 export const mediaEntries: ImportEntry[] = (
   [

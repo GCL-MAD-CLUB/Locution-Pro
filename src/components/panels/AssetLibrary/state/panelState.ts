@@ -8,16 +8,16 @@ import {
   type AssetLibraryClipboard,
   type AssetLibraryPlace,
   type AssetLibrarySort,
-} from "../../../../core/editor/assetLibrary";
+} from "../../../../core/editor/assetLibrary/assetLibrary";
 import {
   emptyAssetLibraryFilter,
   type AssetLibraryFilter,
-} from "../../../../core/editor/assetLibraryFilter";
+} from "../../../../core/editor/assetLibrary/assetLibraryFilter";
 import {
   noAssetLibraryGrouping,
   type AssetLibraryGrouping,
-} from "../../../../core/editor/assetLibraryGroup";
-import type { AssetLibraryHomeTab } from "../../../../core/editor/assetLibraryHome";
+} from "../../../../core/editor/assetLibrary/assetLibraryGroup";
+import type { AssetLibraryHomeTab } from "../../../../core/editor/assetLibrary/assetLibraryHome";
 import {
   assetLibraryColumnScope,
   clampAssetLibraryColumnWidth,

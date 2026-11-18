@@ -1,6 +1,6 @@
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { createPortal } from "react-dom";
-import { invokeCommand, runOperation } from "../../../../errors";
+import { invokeCommand, runOperation } from "../../../../runtime/errors";
 import { publishEvent } from "../../../../runtime/events/react";
 import type { SystemIdentity } from "../../../../runtime/systems/identity";
 import {

@@ -1,4 +1,4 @@
-import type { ExportSettings, ExportSource } from "../../systems/ExportSystem/exportTypes";
+import type { ExportSettings, ExportSource } from "../../core/editor/export/exportTypes";
 
 export interface ApplicationEventMap {
   "media.import.requested": { paths?: string[]; folderId?: string };

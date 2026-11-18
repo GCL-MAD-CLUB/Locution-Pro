@@ -7,13 +7,13 @@ import {
   type AssetLibraryFlag,
   type AssetLibrarySort,
   type AssetLibrarySortKey,
-} from "../../../../core/editor/assetLibrary";
+} from "../../../../core/editor/assetLibrary/assetLibrary";
 import {
   assetLibraryGroupingFor,
   assetLibraryGroupKeyLabels,
   assetLibraryGroupKeys,
   type AssetLibraryGrouping,
-} from "../../../../core/editor/assetLibraryGroup";
+} from "../../../../core/editor/assetLibrary/assetLibraryGroup";
 import type { AssetLibraryColorLabel } from "../../../../types";
 import {
   PopupMenu,

@@ -21,8 +21,8 @@ import {
   type AssetLibraryLocation,
   type AssetLibraryPlace,
   type AssetLibrarySelection,
-} from "../../../../core/editor/assetLibrary";
-import type { AssetLibraryGroupItem } from "../../../../core/editor/assetLibraryGroup";
+} from "../../../../core/editor/assetLibrary/assetLibrary";
+import type { AssetLibraryGroupItem } from "../../../../core/editor/assetLibrary/assetLibraryGroup";
 
 export interface ResolvedAssetMedia {
   videoId: string;

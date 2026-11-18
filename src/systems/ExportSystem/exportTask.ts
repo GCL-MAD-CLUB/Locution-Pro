@@ -1,5 +1,5 @@
-﻿import { captureOperationError, invokeCommand } from "../../errors";
-import { normalizeError } from "../../errors/runtime";
+﻿import { captureOperationError, invokeCommand } from "../../runtime/errors";
+import { normalizeError } from "../../runtime/errors/runtime";
 import {
   cancelFfmpegTask,
   createFfmpegTaskId,
@@ -11,15 +11,15 @@ import {
   getProjectExportContext,
   getProjectWorkspaceSnapshot,
 } from "../ProjectSystem";
-import { runMediaImportBatchTask } from "../../application/media/mediaImportTask";
+import { runMediaImportBatchTask } from "../MediaImportSystem";
 import type {
   ExportClip,
   ExportOutput,
   ExportResult,
   ExportSettings,
   ExportSource,
-} from "./exportTypes";
-import { isAudioOnlyContainer } from "./exportTypes";
+} from "../../core/editor/export/exportTypes";
+import { isAudioOnlyContainer } from "../../core/editor/export/exportTypes";
 import { refreshExportClipAudioBindings } from "./exportResolvers";
 import { resolveExportDestinationDir } from "./exportDestination";
 import { computeExportFileNames } from "./exportRename";

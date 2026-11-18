@@ -1,7 +1,7 @@
-import { open } from "@tauri-apps/plugin-dialog";
+import { open } from "../../../../platform/tauri/dialogs";
 import { useState, type ReactNode } from "react";
-import { ExportField, ExportSettingsGroup } from "../../ExportWorkspace";
-import { runOperation } from "../../../../errors";
+import { ExportField, ExportSettingsGroup } from "../../../common/EncodingSettings";
+import { runOperation } from "../../../../runtime/errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import {
   effectAvailable,

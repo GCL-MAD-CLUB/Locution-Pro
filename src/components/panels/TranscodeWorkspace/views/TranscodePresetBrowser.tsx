@@ -1,5 +1,5 @@
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "../../../../platform/tauri/dialogs";
 import {
   ChevronDown,
   ChevronRight,
@@ -11,7 +11,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { invokeCommand, runOperation } from "../../../../errors";
+import { invokeCommand, runOperation } from "../../../../runtime/errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import {
   allTranscodePresets,

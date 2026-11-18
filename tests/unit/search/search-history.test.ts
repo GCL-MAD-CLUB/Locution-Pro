@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createModuleLoader } from "../support/module-loader.ts";
-import * as textSearch from "../../../src/core/editor/textSearch.ts";
+import * as textSearch from "../../../src/core/editor/search/textSearch.ts";
 import * as storageModule from "../../../src/runtime/storage.ts";
 import * as searchRules from "../../../src/components/common/PanelSearch/searchRules.ts";
 import type { SearchConfiguration } from "../../../src/components/common/PanelSearch/searchHistory.ts";
@@ -19,7 +19,7 @@ const {
 } = Object.fromEntries(
   Object.entries(
     load<SearchHistoryModule>("../../../src/components/common/PanelSearch/searchHistory.ts", {
-      "../../../core/editor/textSearch": textSearch,
+      "../../../core/editor/search/textSearch": textSearch,
       "../../../runtime/storage": storageModule,
       "./searchRules": searchRules,
     }),

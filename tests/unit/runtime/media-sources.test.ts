@@ -2,7 +2,7 @@ import { createModuleLoader } from "../support/module-loader.ts";
 import { readFileSync, readdirSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { SemanticShot } from "../../../src/application/media/storyboardSemanticSearch.ts";
+import type { SemanticShot } from "../../../src/application/semanticSearch/storyboardSemanticSearch.ts";
 
 const loadModule = createModuleLoader(import.meta.url);
 const modulePath = "../../../src/runtime/mediaSources.ts";
@@ -121,16 +121,16 @@ test("the real storyboard index dispatch includes current document media", async
   const requests: Array<{ command: string; request: MediaCommandRequest }> = [];
   const failures: unknown[] = [];
   const { ensureStoryboardSemanticIndex } = loadModule<
-    typeof import("../../../src/application/media/storyboardSemanticSearch.ts")
+    typeof import("../../../src/application/semanticSearch/storyboardSemanticSearch.ts")
   >(
-    "../../../src/application/media/storyboardSemanticSearch.ts",
+    "../../../src/application/semanticSearch/storyboardSemanticSearch.ts",
     {
-      "../../core/editor/semanticPrompts": {},
+      "../../core/editor/search/semanticPrompts": {},
       "../../runtime/scheduling": scheduling,
-      "../../core/editor/textSearch": {},
-      "@tauri-apps/api/core": { Channel: class {} },
+      "../../core/editor/search/textSearch": {},
+      "../../platform/tauri/media": { Channel: class {} },
       react: {},
-      "../../errors": {
+      "../../runtime/errors": {
         invokeCommand: async (command: string, args: Record<string, unknown>) => {
           const request = commandMediaSources(command, args);
           requests.push({ command, request });
@@ -139,7 +139,7 @@ test("the real storyboard index dispatch includes current document media", async
           }
         },
       },
-      "../../errors/runtime": {},
+      "../../runtime/errors/runtime": {},
       "../../systems/TaskSystem": {
         createTaskProgress: async () => ({
           cancelled: false,

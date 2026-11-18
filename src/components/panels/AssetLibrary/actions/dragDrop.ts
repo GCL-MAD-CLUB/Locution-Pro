@@ -1,4 +1,8 @@
-import { suppressReleaseClick } from "../../../common/utils/suppressReleaseClick";
+import {
+  suppressReleaseClick,
+  assetLibraryDropTargetAt,
+  assetLibraryTreeDropPrefix,
+} from "../../../common/AssetLibraryDrag";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   assetLibraryCanDropInto,
@@ -6,13 +10,9 @@ import {
   sameAssetLibraryLocation,
   type AssetLibraryLocation,
   type AssetLibraryPlace,
-} from "../../../../core/editor/assetLibrary";
+} from "../../../../core/editor/assetLibrary/assetLibrary";
 import type { AssetLibraryRoot, ProjectAssetLibraryState } from "../../../../types";
 import { maximumDragStackLayers } from "../../../common/DragStackPreview";
-import {
-  assetLibraryDropTargetAt,
-  assetLibraryTreeDropPrefix,
-} from "../../../common/utils/assetLibraryDropTarget";
 import type { AssetLibraryCommands } from "./commands";
 import { assetLibrarySelectionFromKeys, type AssetLibraryNode } from "../model/nodes";
 

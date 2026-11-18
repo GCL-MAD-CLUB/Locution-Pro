@@ -1,10 +1,12 @@
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 
 import {
-  transcodePanelRegistry,
-  transcodePanelStore,
-} from "../../../application/transcodePanelRegistry";
-import { DockLayout, PanelManagerProvider, PanelRegistryProvider } from "../../common/DockLayout";
+  DockLayout,
+  PanelManagerProvider,
+  PanelRegistryProvider,
+  type PanelRegistry,
+  type PanelManagerStore,
+} from "../../common/DockLayout";
 import { ensureTranscodeReady, useTranscodeQueueState } from "../../../systems/TranscodeSystem";
 import { TranscodeSettingsDialog } from "./dialogs/TranscodeSettingsDialog";
 import { useTranscodeEditor } from "./transcodeEditor";
@@ -14,7 +16,13 @@ import "./TranscodeWorkspace.css";
  * The transcode page: dockable panels like the edit page, with its own
  * registry and layout, plus the settings dialog the queue opens.
  */
-export function TranscodeWorkspace() {
+export function TranscodeWorkspace({
+  registry,
+  store,
+}: {
+  registry: PanelRegistry;
+  store: PanelManagerStore;
+}) {
   const lifetime = new RenderLifetime();
 
   const editing = useTranscodeEditor((state) => state.editing);
@@ -30,8 +38,8 @@ export function TranscodeWorkspace() {
   return lifetime.render(
     <>
       {configLoaded ? (
-        <PanelRegistryProvider registry={transcodePanelRegistry}>
-          <PanelManagerProvider store={transcodePanelStore}>
+        <PanelRegistryProvider registry={registry}>
+          <PanelManagerProvider store={store}>
             <DockLayout />
           </PanelManagerProvider>
         </PanelRegistryProvider>

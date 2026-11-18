@@ -1,7 +1,7 @@
 import { FolderOpen, Send } from "lucide-react";
 import { useState } from "react";
-import { exportToTranscodeBlocker } from "../../../../application/sendExportToTranscode";
-import { captureOperationError } from "../../../../errors";
+import { exportToTranscodeBlocker } from "../../../../application/transcode/sendExportToTranscode";
+import { captureOperationError } from "../../../../runtime/errors";
 import { publishEvent } from "../../../../runtime/events/react";
 import { useStableIdentity } from "../../../../runtime/state/react";
 import {

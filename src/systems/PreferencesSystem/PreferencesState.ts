@@ -1,4 +1,4 @@
-import { invokeCommand, runOperation } from "../../errors";
+import { invokeCommand, runOperation } from "../../runtime/errors";
 import { createFfmpegTaskId } from "../../platform/tauri/ffmpegProgress";
 import type { Preferences } from "../../types";
 import { useStore } from "zustand";

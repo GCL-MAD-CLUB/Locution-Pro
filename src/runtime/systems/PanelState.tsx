@@ -2,7 +2,7 @@ import type { RenderLifetime } from "../lifetime/RenderLifetime";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { createStore, type StateCreator, type StoreApi } from "zustand/vanilla";
-import { clientError } from "../../errors";
+import { clientError } from "../errors";
 import { useProjections } from "../state/StateHub";
 import { PANEL_TITLE_PROJECTION, type PanelTitleProjection } from "../state/contracts";
 import { usePublishProjection, useStableIdentity } from "../state/react";

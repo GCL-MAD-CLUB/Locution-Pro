@@ -1,5 +1,5 @@
 import { asyncScheduler } from "rxjs";
-import { clientError } from "../errors/model";
+import { clientError } from "../core/errors";
 
 /** A scheduled resource belongs to its caller. Cancel it on replacement or disposal. */
 export interface ScheduledTask {

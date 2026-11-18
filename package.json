@@ -46,6 +46,7 @@
     "release:draft": "node scripts/prepare-release-draft.ts",
     "check:errors": "node scripts/check-error-boundaries.ts",
     "check:architecture": "node scripts/check-system-architecture.ts",
+    "deps:frontend": "node scripts/check-system-architecture.ts --json",
     "check:media-sources": "node scripts/check-media-sources.ts",
     "check:versions": "node scripts/check-version-consistency.ts",
     "check": "npm run format:frontend:check && npm run lint && npm run check:layout && npm test && npm run check:versions && npm run build && npm run site:build && npm run docs:build",

@@ -5,8 +5,8 @@ import {
   subtitleGlyphPath,
   VideoGlyph,
   videoGlyphPath,
-} from "../../../common/MediaKindIcons/MediaKindIcons";
-import { OfflineFileIcon } from "../../MediaBin/views/MediaBinFolderIcon";
+  OfflineFileIcon,
+} from "../../../common/MediaKindIcons";
 import type { AssetLibraryNode } from "../model/nodes";
 
 // Flat glyphs drawn on the media bin folder icon's grid: the same 165 × 142 view box and

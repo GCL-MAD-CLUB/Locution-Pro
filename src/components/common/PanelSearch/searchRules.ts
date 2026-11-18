@@ -1,4 +1,4 @@
-import type { SearchRule } from "../../../core/editor/textSearch";
+import type { SearchRule } from "../../../core/editor/search/textSearch";
 
 export const searchRuleLabels: Record<SearchRule, string> = {
   contains: "包含",

@@ -14,9 +14,9 @@ Only allow-listed public fields cross the native boundary: `errorId`, `code`, `c
 
 `invokeCommand` is the application command boundary. It accepts categories only from the shared closed set. Malformed failures become the explicitly classified `UNEXPECTED_ERROR/runtime` fallback, without inspecting diagnostic text.
 
-Application failures use `clientError` with a typed entry in `src/errors/model.ts`. The application catalog also declares category and retryability. Do not throw raw `Error`, `DOMException` or unclassified values.
+Application failures use `clientError` with a typed entry in `src/core/errors.ts`. The application catalog also declares category and retryability. Do not throw raw `Error`, `DOMException` or unclassified values.
 
-`src/errors/runtime.ts` owns normalization, operation policy, incident state and global handling. `ErrorUI.tsx` provides the React boundary and shared modal outlet; the facade must not expose internal storage.
+`src/runtime/errors/runtime.ts` owns normalization, operation policy, incident state and global handling. `src/app/ErrorUI.tsx` provides the React boundary and shared modal outlet; the facade must not expose internal storage.
 
 ## Present safe recovery information
 

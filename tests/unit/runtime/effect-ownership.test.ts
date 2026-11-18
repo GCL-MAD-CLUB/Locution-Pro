@@ -1,98 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { focusedSearchHitId } from "../../../src/core/editor/searchFocus.ts";
-import { withoutEmptySelectionFilter } from "../../../src/core/editor/selectionFilter.ts";
-import { semanticSortDecision } from "../../../src/core/editor/semanticResultSort.ts";
-import type {
-  ExportSettings,
-  ExportSource,
-} from "../../../src/systems/ExportSystem/exportTypes.ts";
+import { focusedSearchHitId } from "../../../src/core/editor/search/searchFocus.ts";
+import { withoutEmptySelectionFilter } from "../../../src/core/editor/selection/selectionFilter.ts";
+import type { ExportSettings, ExportSource } from "../../../src/core/editor/export/exportTypes.ts";
 import { createModuleLoader } from "../support/module-loader.ts";
 
 const loadModule = createModuleLoader(import.meta.url);
-const exportTypes = loadModule<typeof import("../../../src/systems/ExportSystem/exportTypes.ts")>(
-  "../../../src/systems/ExportSystem/exportTypes.ts",
+const exportTypes = loadModule<typeof import("../../../src/core/editor/export/exportTypes.ts")>(
+  "../../../src/core/editor/export/exportTypes.ts",
 );
 const exportRename = loadModule<typeof import("../../../src/systems/ExportSystem/exportRename.ts")>(
   "../../../src/systems/ExportSystem/exportRename.ts",
   {
-    "../../core/editor/time": { formatMonitorTime: () => "00:00:00:00" },
-    "./exportTypes": exportTypes,
+    "../../core/editor/playback/time": { formatMonitorTime: () => "00:00:00:00" },
+    "../../core/editor/export/exportTypes": exportTypes,
   },
 );
 const { constrainExportSettings } = loadModule<
   typeof import("../../../src/systems/ExportSystem/exportSettingsConstraints.ts")
 >("../../../src/systems/ExportSystem/exportSettingsConstraints.ts", {
-  "./exportTypes": exportTypes,
+  "../../core/editor/export/exportTypes": exportTypes,
   "./exportRename": exportRename,
-});
-
-const userSort = { columnId: "start", direction: "ascending" };
-const similarity = { columnId: "similarity", direction: "descending" };
-
-test("semantic results take over the sort once, then leave the user's later choice alone", () => {
-  const applied = semanticSortDecision({
-    hasSemanticResults: true,
-    showSimilarity: true,
-    resultVersion: 4,
-    appliedVersion: 0,
-    sorts: [userSort],
-    ordinary: [userSort],
-    similarity,
-  });
-  assert.equal(applied?.appliedVersion, 4);
-  assert.equal(applied?.clearSourceDirection, true);
-  assert.equal(applied?.sorts?.[0], similarity);
-
-  assert.equal(
-    semanticSortDecision({
-      hasSemanticResults: true,
-      showSimilarity: true,
-      resultVersion: 4,
-      appliedVersion: 4,
-      sorts: [userSort],
-      ordinary: [userSort],
-      similarity,
-    }),
-    null,
-  );
-});
-
-test("a dropped semantic result can take over again, and leaving search restores the previous sort", () => {
-  const dropped = semanticSortDecision({
-    hasSemanticResults: false,
-    showSimilarity: true,
-    resultVersion: 4,
-    appliedVersion: 4,
-    sorts: [similarity],
-    ordinary: [userSort],
-    similarity,
-  });
-  assert.equal(dropped?.appliedVersion, 0);
-  assert.equal(dropped?.sorts, null);
-
-  const again = semanticSortDecision({
-    hasSemanticResults: true,
-    showSimilarity: true,
-    resultVersion: 4,
-    appliedVersion: 0,
-    sorts: [userSort],
-    ordinary: [userSort],
-    similarity,
-  });
-  assert.equal(again?.clearSourceDirection, true);
-
-  const restored = semanticSortDecision({
-    hasSemanticResults: false,
-    showSimilarity: false,
-    resultVersion: 4,
-    appliedVersion: 4,
-    sorts: [similarity, similarity],
-    ordinary: [userSort, { columnId: "name", direction: "descending" }],
-    similarity,
-  });
-  assert.equal(restored?.appliedVersion, 0);
-  assert.deepEqual(restored?.sorts, [userSort, { columnId: "name", direction: "descending" }]);
 });
 
 test("highlight focus follows a hit and keeps the previous hit when the active row is not one", () => {
@@ -293,7 +221,7 @@ test("project state subscribers hear load completion and not a later load after 
   const cache = loadModule<
     typeof import("../../../src/systems/ProjectSystem/ProjectStatesCache.ts")
   >("../../../src/systems/ProjectSystem/ProjectStatesCache.ts", {
-    "../../errors": {
+    "../../runtime/errors": {
       invokeCommand: async () => ({ "project-1": { exportState: null, panelStates: {} } }),
     },
   });

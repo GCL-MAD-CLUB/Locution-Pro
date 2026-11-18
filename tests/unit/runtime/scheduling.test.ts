@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { VirtualTimeScheduler } from "rxjs";
-import { clientError } from "../../../src/errors/model.ts";
+import { clientError } from "../../../src/core/errors.ts";
 import { createModuleLoader } from "../support/module-loader.ts";
 import { CommittedLifetime, RenderLifetime } from "../support/lifetime.ts";
 
@@ -11,7 +11,7 @@ function setup() {
   const clock = new VirtualTimeScheduler(undefined, 100);
   const scheduling = createModuleLoader(import.meta.url)<Scheduling>(
     "../../../src/runtime/scheduling.ts",
-    { rxjs: { asyncScheduler: clock }, "../errors/model": { clientError } },
+    { rxjs: { asyncScheduler: clock }, "../core/errors": { clientError } },
   );
   return { clock, ...scheduling };
 }

@@ -1,14 +1,17 @@
 import { useScopedState } from "../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { themeSvgDataUrl } from "../../../runtime/theme";
-import { matchesSearchDuration, type AdvancedSearchOptions } from "../../../core/editor/textSearch";
+import {
+  matchesSearchDuration,
+  type AdvancedSearchOptions,
+} from "../../../core/editor/search/textSearch";
 import {
   useSemanticSearchAvailable,
   useSubtitleSemanticSearch,
-} from "../../../application/media/subtitleSemanticSearch";
-import { focusedSearchHitId } from "../../../core/editor/searchFocus";
+} from "../../../application/semanticSearch/subtitleSemanticSearch";
+import { focusedSearchHitId } from "../../../core/editor/search/searchFocus";
 import { useSemanticSortState } from "../../../runtime/state/useSemanticSortState";
-import { panelSourceTitle } from "../../../core/editor/panelSourceSelection";
+import { panelSourceTitle } from "../../../core/editor/mediaSources/panelSourceSelection";
 import {
   sourceDraftIdentity,
   sourceScope,
@@ -17,20 +20,23 @@ import {
   sortBySource,
   nextSourceSortDirection,
   type SourceSortDirection,
-} from "../../../core/editor/multiSource";
-import { selectionFocusForVisibleIds } from "../../../core/editor/selectionFocus";
+} from "../../../core/editor/mediaSources/multiSource";
+import { selectionFocusForVisibleIds } from "../../../core/editor/selection/selectionFocus";
 import {
   matchesTextSearch,
   nextSearchMatchIndex,
   type SearchRule,
-} from "../../../core/editor/textSearch";
-import { PanelSearch, useSearchNavigation } from "../../common/PanelSearch/PanelSearch";
-import { SourceSelectionNavigation } from "../../common/PanelSearch/SourceSelectionNavigation";
+} from "../../../core/editor/search/textSearch";
+import {
+  PanelSearch,
+  useSearchNavigation,
+  SourceSelectionNavigation,
+} from "../../common/PanelSearch";
 import {
   animatePlaybackFollowScroll,
   playbackFollowScrollDuration,
-} from "../../common/utils/playbackFollowScroll";
-import { startAssetLibraryItemDrag } from "../../common/utils/assetLibraryItemDrag";
+} from "../../common/PlaybackFollow";
+import { startAssetLibraryItemDrag } from "../../common/AssetLibraryDrag";
 import { DragStackPreview, maximumDragStackLayers } from "../../common/DragStackPreview";
 import { useRowVirtualizer } from "../../../runtime/state/useRowVirtualizer";
 import {
@@ -41,7 +47,7 @@ import {
   ListFilter,
   Star,
 } from "lucide-react";
-import { SubtitleGlyph } from "../../common/MediaKindIcons/MediaKindIcons";
+import { SubtitleGlyph } from "../../common/MediaKindIcons";
 import {
   Fragment,
   useCallback,
@@ -70,35 +76,36 @@ import {
   enqueueQuickExport,
   requestExport,
 } from "../../../systems/ExportSystem";
-import { normalizeFrameRate, timeUsToFrame } from "../../../core/editor/timeline";
+import { normalizeFrameRate, timeUsToFrame } from "../../../core/editor/playback/timeline";
 import {
   assetLibraryMediaFromSource,
   createAssetLibraryId,
   subtitleAssetName,
   withAssetLibraryCaptures,
   type AssetLibraryCapture,
-} from "../../../core/editor/assetLibrary";
+} from "../../../core/editor/assetLibrary/assetLibrary";
 import {
   timelineThumbnails,
   timelineThumbnailVisibleRange,
   timelineThumbnailResolutionForDisplay,
   useTimelineThumbnailListResizeAnchor,
   useTimelineThumbnailWindow,
-} from "../../../timelineThumbnail";
+} from "../../../application/thumbnails/timeline";
 import type { SubtitleCue } from "../../../types";
 import {
   annotationShortcutAction,
   annotationShortcutAutoAdvances,
-} from "../../common/utils/annotationShortcuts";
-import { sprayEraserCursor, useSprayToolModifiers } from "../../common/utils/sprayToolModifiers";
+  sprayEraserCursor,
+  useSprayToolModifiers,
+} from "../../common/AnnotationTools";
 import { usePanelManagerState } from "../../common/DockLayout";
 import { MediaSourceMenu } from "../../common/MediaSourceMenu";
 import {
   panelMediaSources,
   subtitleTrackLabel,
   usePanelMediaSource,
-} from "../../../application/media/panelMediaSources";
-import { usePersistedMediaPanelState } from "../../../application/media/panelMediaPersistence";
+} from "../../common/PanelMediaSources";
+import { usePersistedMediaPanelState } from "../../../application/mediaSources/panelMediaPersistence";
 import {
   isPopupMenuEventTarget,
   PopupMenu,

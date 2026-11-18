@@ -1,4 +1,4 @@
-/* Stylesheet order is not guaranteed relative to MediaBin.css and StoryboardPanel.css, so
+/* Stylesheet order is not guaranteed relative to the shared collection and annotation styles, so
  * every override here is more specific than the rule it replaces.
  *
  * The asset library reuses the media bin panel (header rows, list rows, icon cards and

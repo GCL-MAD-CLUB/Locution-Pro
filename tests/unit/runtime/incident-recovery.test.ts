@@ -1,31 +1,31 @@
 import { createModuleLoader, deferred, flush } from "../support/module-loader.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { NormalizedError } from "../../../src/errors/model.ts";
+import type { NormalizedError } from "../../../src/core/errors.ts";
 
 const loadModule = createModuleLoader(import.meta.url);
 
-type RecoveryModule = typeof import("../../../src/errors/recovery.ts");
-type RuntimeModule = typeof import("../../../src/errors/runtime.ts");
+type RecoveryModule = typeof import("../../../src/runtime/errors/recovery.ts");
+type RuntimeModule = typeof import("../../../src/runtime/errors/runtime.ts");
 
 function loadRecovery(): RecoveryModule {
-  return loadModule<RecoveryModule>("../../../src/errors/recovery.ts");
+  return loadModule<RecoveryModule>("../../../src/runtime/errors/recovery.ts");
 }
 
 function loadRuntime(): RuntimeModule {
   const model = loadModule(
-    "../../../src/errors/model.ts",
+    "../../../src/core/errors.ts",
     {},
     { crypto: { randomUUID: () => "frontend-error-id" } },
   );
   return loadModule<RuntimeModule>(
-    "../../../src/errors/runtime.ts",
+    "../../../src/runtime/errors/runtime.ts",
     {
       "@tauri-apps/api/core": { invoke: async () => undefined },
-      "../runtime/mediaSources": loadModule("../../../src/runtime/mediaSources.ts"),
-      "./model": model,
+      "../mediaSources": loadModule("../../../src/runtime/mediaSources.ts"),
+      "../../core/errors": model,
       "./recovery": loadRecovery(),
-      "../runtime/scheduling": {
+      "../scheduling": {
         scheduleAfter: () => ({ cancel() {}, pending: true }),
       },
     },
@@ -172,7 +172,7 @@ function dialogHarness(
   let cursor = 0;
   const jsx = (type: unknown, props: TestProps): TestElement => ({ type, props });
   function ModalDialog() {}
-  const { ErrorOutlet } = loadModule<ErrorUiModule>("../../../src/errors/ErrorUI.tsx", {
+  const { ErrorOutlet } = loadModule<ErrorUiModule>("../../../src/app/ErrorUI.tsx", {
     "react/jsx-runtime": { jsx, jsxs: jsx },
     react: {
       Component: class {},
@@ -192,8 +192,8 @@ function dialogHarness(
     "lucide-react": {},
     "../components/common/ModalDialog": { ModalDialog },
     "../platform/tauri/externalUrl": { openExternalUrl },
-    "./recovery": loadRecovery(),
-    "./runtime": {
+    "../runtime/errors/recovery": loadRecovery(),
+    "../runtime/errors/runtime": {
       captureOperationError: (...args: unknown[]) => reported.push(args),
       dismissIncident: (id: string) => dismissed.push(id),
     },

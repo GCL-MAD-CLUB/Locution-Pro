@@ -13,22 +13,22 @@ import {
   sortedAssetLibraryNodes,
   type AssetLibraryPlace,
   type AssetLibrarySort,
-} from "../../../../core/editor/assetLibrary";
+} from "../../../../core/editor/assetLibrary/assetLibrary";
 import {
   assetLibraryEntryMatchesFilter,
   assetLibraryFilterActive,
   type AssetLibraryFilter,
-} from "../../../../core/editor/assetLibraryFilter";
+} from "../../../../core/editor/assetLibrary/assetLibraryFilter";
 import {
   groupedAssetLibraryItems,
   type AssetLibraryGrouping,
-} from "../../../../core/editor/assetLibraryGroup";
+} from "../../../../core/editor/assetLibrary/assetLibraryGroup";
 import {
   assetLibraryPinnedPlaces,
   type AssetLibraryHome,
   type AssetLibraryHomeTab,
-} from "../../../../core/editor/assetLibraryHome";
-import { withoutHiddenAssetLibraryNodes } from "../../../../core/editor/assetLibraryVisibility";
+} from "../../../../core/editor/assetLibrary/assetLibraryHome";
+import { withoutHiddenAssetLibraryNodes } from "../../../../core/editor/assetLibrary/assetLibraryVisibility";
 import type {
   AssetLibraryEntry,
   AssetLibraryFolder,

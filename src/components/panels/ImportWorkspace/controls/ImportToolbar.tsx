@@ -16,7 +16,11 @@ import {
 } from "../../../common/SelectDropdown";
 import { ImportFolderChevronIcon } from "../browser/ImportFolderIcon";
 import { ImportZoomControl } from "./ImportZoomControl";
-import { breadcrumbs, pathKey, type ImportFilter } from "../browser/importBrowserModel";
+import {
+  breadcrumbs,
+  pathKey,
+  type ImportFilter,
+} from "../../../../core/editor/import/importBrowserModel";
 import type { useImportBrowser } from "../browser/useImportBrowser";
 
 type ImportSortMenuValue =

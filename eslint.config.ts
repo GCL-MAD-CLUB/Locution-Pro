@@ -4,6 +4,7 @@ import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import { frontendArchitecture } from "./tooling/eslint/frontend-architecture.ts";
 import { reactLifecycle } from "./tooling/eslint/react-lifecycle.ts";
 import { scheduling } from "./tooling/eslint/no-native-timers.ts";
 
@@ -102,6 +103,16 @@ export default tseslint.config(
     },
   },
   prettier,
+  {
+    files: [
+      "src/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
+      "site/src/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
+      "site/_worker.js",
+      "docs/user-guide/.vitepress/theme/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
+    ],
+    plugins: { "project-architecture": frontendArchitecture },
+    rules: { "project-architecture/boundaries": "error" },
+  },
   {
     files: [
       "src/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",

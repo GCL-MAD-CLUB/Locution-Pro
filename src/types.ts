@@ -84,6 +84,9 @@ export interface StoryboardShot {
 }
 
 export type StoryboardShotColorLabel = "red" | "yellow" | "green" | "blue" | "purple";
+export type StoryboardShotFlag = "retained" | "none" | "excluded";
+export type StoryboardShotVisualLabel = StoryboardShotColorLabel | "custom";
+export type StoryboardShotColorLabelFilter = StoryboardShotVisualLabel | "none";
 
 export interface StoryboardKeywordNode {
   id: string;

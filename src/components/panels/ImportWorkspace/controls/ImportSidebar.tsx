@@ -12,7 +12,11 @@ import {
   Star,
 } from "lucide-react";
 import { useState } from "react";
-import { breadcrumbs, pathKey, type ImportLocation } from "../browser/importBrowserModel";
+import {
+  breadcrumbs,
+  pathKey,
+  type ImportLocation,
+} from "../../../../core/editor/import/importBrowserModel";
 
 const icons = {
   home: House,

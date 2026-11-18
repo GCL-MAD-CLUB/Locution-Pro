@@ -1,7 +1,7 @@
-import { open } from "@tauri-apps/plugin-dialog";
+import { open } from "../../../../platform/tauri/dialogs";
 import { ChevronDown } from "lucide-react";
 import type { CSSProperties } from "react";
-import { runOperation } from "../../../../errors";
+import { runOperation } from "../../../../runtime/errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import { useProjectPort } from "../../../../systems/ProjectSystem";
 import {
@@ -13,7 +13,7 @@ import {
   type TranscodeDestination,
 } from "../../../../systems/TranscodeSystem";
 import { SelectDropdown, type SelectDropdownItem } from "../../../common/SelectDropdown";
-import { MediaBinFolderIcon } from "../../MediaBin/views/MediaBinFolderIcon";
+import { MediaBinFolderIcon } from "../../../common/MediaKindIcons";
 
 const binValuePrefix = "bin:";
 const folderValuePrefix = "dir:";

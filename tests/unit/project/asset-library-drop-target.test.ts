@@ -4,7 +4,7 @@ import { createStore } from "zustand/vanilla";
 import { createModuleLoader } from "../support/module-loader.ts";
 
 type DropTargetModule =
-  typeof import("../../../src/components/common/utils/assetLibraryDropTarget.ts");
+  typeof import("../../../src/components/common/AssetLibraryDrag/assetLibraryDropTarget.ts");
 
 const load = createModuleLoader(import.meta.url);
 
@@ -21,7 +21,7 @@ function documentOver(dataset: Record<string, string> | null) {
 function loadDropTarget(dataset: Record<string, string> | null) {
   let published: unknown = "untouched";
   const dropTarget = load<DropTargetModule>(
-    "../../../src/components/common/utils/assetLibraryDropTarget.ts",
+    "../../../src/components/common/AssetLibraryDrag/assetLibraryDropTarget.ts",
     {
       zustand: { useStore: () => null },
       "zustand/vanilla": {

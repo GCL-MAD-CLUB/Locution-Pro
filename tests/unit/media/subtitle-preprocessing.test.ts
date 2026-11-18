@@ -4,7 +4,7 @@ import {
   preprocessSubtitleCues,
   preprocessProjectSubtitles,
   subtitleSourceCueIds,
-} from "../../../src/core/editor/subtitlePreprocessing.ts";
+} from "../../../src/core/editor/subtitles/subtitlePreprocessing.ts";
 import type { MediaDocument, SubtitleCue, SubtitleTrack } from "../../../src/types.ts";
 
 const cue = (

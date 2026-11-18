@@ -1,4 +1,4 @@
-import { invokeCommand } from "../../errors";
+import { invokeCommand } from "../../runtime/errors";
 import type { ProjectExportState, ProjectStateConfig } from "../../types";
 
 /** In-memory mirror of the per-project state persisted in WorkspaceConfig.xml, keyed by project document id, so the project open flow can read recorded export settings synchronously. */

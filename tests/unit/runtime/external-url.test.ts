@@ -25,7 +25,7 @@ function loadExternalUrl({
   return loadModule<ExternalUrlModule>(
     "../../../src/platform/tauri/externalUrl.ts",
     {
-      "../../errors/runtime": {
+      "../../runtime/errors/runtime": {
         invokeCommand: async (command: string, args: { url: string }) => {
           invocations.push([command, args]);
         },

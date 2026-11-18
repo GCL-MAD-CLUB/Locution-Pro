@@ -1,5 +1,5 @@
 import type { Force } from "d3-force";
-import type { StoryboardGraphEdge, StoryboardGraphForceNode } from "./graph";
+import type { StoryboardGraphEdge, StoryboardGraphForceNode } from "./contracts";
 
 // Weighted Louvain: local modularity gains followed by aggregation. Work on
 // the computed semantic topology, independently of the front-end display cap.

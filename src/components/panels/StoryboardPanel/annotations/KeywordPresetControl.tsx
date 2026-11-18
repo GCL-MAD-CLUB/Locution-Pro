@@ -15,8 +15,8 @@ import {
   keywordPresetNameError,
   keywordSlots,
   recentKeywordSet,
-} from "../../../../core/editor/keywordPresets";
-import { parseStoryboardKeywordInput } from "./storyboardKeywords";
+} from "../../../../core/editor/storyboard/keywordPresets";
+import { parseStoryboardKeywordInput } from "../../../../core/editor/storyboard/storyboardKeywords";
 import { useKeywordSet } from "./keywordPresetState";
 import "./KeywordPresetControl.css";
 

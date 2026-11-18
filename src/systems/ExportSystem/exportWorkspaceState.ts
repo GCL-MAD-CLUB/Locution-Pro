@@ -2,7 +2,12 @@ import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import { readAppStorage } from "../../runtime/storage";
 import { getProjectExportContext } from "../ProjectSystem";
-import type { ExportClip, ExportResult, ExportSettings, ExportSource } from "./exportTypes";
+import type {
+  ExportClip,
+  ExportResult,
+  ExportSettings,
+  ExportSource,
+} from "../../core/editor/export/exportTypes";
 import { constrainExportSettings } from "./exportSettingsConstraints";
 
 const exportDirStorageKey = "locution-pro:export-dir";

@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { createModuleLoader } from "../support/module-loader.ts";
-import { clientError } from "../../../src/errors/model.ts";
+import { clientError } from "../../../src/core/errors.ts";
 
 type ThemeModule = typeof import("../../../src/runtime/theme.ts");
-type SprayToolModule = typeof import("../../../src/components/common/utils/sprayToolModifiers.ts");
+type SprayToolModule =
+  typeof import("../../../src/components/common/AnnotationTools/sprayToolModifiers.ts");
 
 const sourceRoot = new URL("../../../src/", import.meta.url);
 const stylesheet = readFileSync(new URL("styles.css", sourceRoot), "utf8");
@@ -19,7 +20,7 @@ const colors = new Map<string, string>(
 const load = createModuleLoader(import.meta.url);
 const theme = load<ThemeModule>("../../../src/runtime/theme.ts", {
   "../styles.css?raw": stylesheet,
-  "../errors/model": { clientError },
+  "../core/errors": { clientError },
 });
 const references = (source: string): string[] =>
   Array.from(source.matchAll(/--(?:color|palette)-[\w-]+/g), ([token]) => token);
@@ -174,7 +175,7 @@ test("saved media defaults remain concrete colors and cursor SVGs contain resolv
   assert.equal(theme.mediaDisplayColor("#123456"), "#123456");
   assert.throws(() => theme.defaultThemeColor("--color-missing"), /Unknown theme color/);
   const cursors = load<SprayToolModule>(
-    "../../../src/components/common/utils/sprayToolModifiers.ts",
+    "../../../src/components/common/AnnotationTools/sprayToolModifiers.ts",
     {
       "../../../runtime/theme": theme,
       react: {},
@@ -219,7 +220,7 @@ function appearanceEnvironment(storage: Map<string, string>) {
       "../../../src/runtime/theme.ts",
       {
         "../styles.css?raw": stylesheet,
-        "../errors/model": { clientError },
+        "../core/errors": { clientError },
       },
       globals,
     );
@@ -269,7 +270,7 @@ test("index.html seeds the same appearance key and values as the runtime", () =>
 test("a stylesheet without :root fails at the point of use with a diagnostic", () => {
   const broken = load<ThemeModule>("../../../src/runtime/theme.ts", {
     "../styles.css?raw": "body { color: red; }",
-    "../errors/model": { clientError },
+    "../core/errors": { clientError },
   });
   assert.throws(() => broken.defaultThemeColor("--color-text"), /:root theme block/);
 });

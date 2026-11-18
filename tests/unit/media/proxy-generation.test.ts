@@ -3,12 +3,12 @@ import test from "node:test";
 import type { MediaDocument, MediaStream } from "../../../src/types.ts";
 import { createModuleLoader } from "../support/module-loader.ts";
 
-type ProxyGenerationModule = typeof import("../../../src/application/media/proxyGeneration.ts");
+type ProxyGenerationModule = typeof import("../../../src/application/proxy/proxyGeneration.ts");
 type ProxyGenerationTaskModule =
-  typeof import("../../../src/application/media/proxyGenerationTask.ts");
+  typeof import("../../../src/application/proxy/proxyGenerationTask.ts");
 
 const load = createModuleLoader(import.meta.url);
-const proxy = load<ProxyGenerationModule>("../../../src/application/media/proxyGeneration.ts");
+const proxy = load<ProxyGenerationModule>("../../../src/application/proxy/proxyGeneration.ts");
 
 function stream(index: number, codec_type: string, codec_name: string): MediaStream {
   return {
@@ -136,9 +136,9 @@ function taskModule(invoke: (command: string, args: unknown) => Promise<unknown>
   const events: string[] = [];
   let cancel: (() => Promise<void>) | undefined;
   const module = load<ProxyGenerationTaskModule>(
-    "../../../src/application/media/proxyGenerationTask.ts",
+    "../../../src/application/proxy/proxyGenerationTask.ts",
     {
-      "../../errors": { invokeCommand: invoke },
+      "../../runtime/errors": { invokeCommand: invoke },
       "../../platform/tauri/ffmpegProgress": {
         cancelFfmpegTask: async (id: string) => events.push(`cancel:${id}`),
         createFfmpegTaskId: (prefix: string) => `${prefix}-task`,

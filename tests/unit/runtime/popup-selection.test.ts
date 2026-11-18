@@ -17,7 +17,9 @@ const menu = createModuleLoader(import.meta.url)<
   "lucide-react": {},
   "../../../runtime/lifetime/RenderLifetime": { RenderLifetime },
   "../../../runtime/scheduling": scheduling,
-  "../../../errors": { clientError: (_code: string, message: string) => new Error(message) },
+  "../../../runtime/errors": {
+    clientError: (_code: string, message: string) => new Error(message),
+  },
   "./selectionValue": { fallbackSelectionValue },
   "./PopupMenu.css": {},
 });

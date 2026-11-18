@@ -1,7 +1,7 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { definePanel } from "../../common/DockLayout";
 import { HistoryPanel } from "./HistoryPanel";
-import { clientError } from "../../../errors";
+import { clientError } from "../../../runtime/errors";
 
 export const historyPanelType = "history";
 

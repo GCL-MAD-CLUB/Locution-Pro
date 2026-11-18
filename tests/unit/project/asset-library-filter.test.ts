@@ -7,17 +7,17 @@ import type {
   AssetLibraryRoot,
 } from "../../../src/types.ts";
 
-type FilterModule = typeof import("../../../src/core/editor/assetLibraryFilter.ts");
+type FilterModule = typeof import("../../../src/core/editor/assetLibrary/assetLibraryFilter.ts");
 
 const load = createModuleLoader(import.meta.url);
-const timeline = load<typeof import("../../../src/core/editor/timeline.ts")>(
-  "../../../src/core/editor/timeline.ts",
+const timeline = load<typeof import("../../../src/core/editor/playback/timeline.ts")>(
+  "../../../src/core/editor/playback/timeline.ts",
 );
-const assetLibrary = load<typeof import("../../../src/core/editor/assetLibrary.ts")>(
-  "../../../src/core/editor/assetLibrary.ts",
-  { "./timeline": timeline },
+const assetLibrary = load<typeof import("../../../src/core/editor/assetLibrary/assetLibrary.ts")>(
+  "../../../src/core/editor/assetLibrary/assetLibrary.ts",
+  { "../playback/timeline": timeline },
 );
-const filters = load<FilterModule>("../../../src/core/editor/assetLibraryFilter.ts", {
+const filters = load<FilterModule>("../../../src/core/editor/assetLibrary/assetLibraryFilter.ts", {
   "./assetLibrary": assetLibrary,
 });
 const empty = filters.emptyAssetLibraryFilter;

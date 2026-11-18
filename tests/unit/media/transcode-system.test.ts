@@ -407,20 +407,20 @@ test("the panel layout is saved and restored with the transcode config", () => {
   assert.deepEqual(JSON.parse(JSON.stringify(store.getState().panelLayout)), layout);
 });
 
-type SendModule = typeof import("../../../src/application/sendExportToTranscode.ts");
-type ExportClip = import("../../../src/systems/ExportSystem/exportTypes.ts").ExportClip;
+type SendModule = typeof import("../../../src/application/transcode/sendExportToTranscode.ts");
+type ExportClip = import("../../../src/core/editor/export/exportTypes.ts").ExportClip;
 
 function loadSendToTranscode() {
   const system = loadSystem();
-  const exportTypes = load<typeof import("../../../src/systems/ExportSystem/exportTypes.ts")>(
-    "../../../src/systems/ExportSystem/exportTypes.ts",
+  const exportTypes = load<typeof import("../../../src/core/editor/export/exportTypes.ts")>(
+    "../../../src/core/editor/export/exportTypes.ts",
     {},
   );
   const rename = load<typeof import("../../../src/systems/ExportSystem/exportRename.ts")>(
     "../../../src/systems/ExportSystem/exportRename.ts",
     {
-      "../../core/editor/time": { formatMonitorTime: () => "00:00:00:00" },
-      "./exportTypes": exportTypes,
+      "../../core/editor/playback/time": { formatMonitorTime: () => "00:00:00:00" },
+      "../../core/editor/export/exportTypes": exportTypes,
     },
   );
   const exportSystem = {
@@ -437,15 +437,18 @@ function loadSendToTranscode() {
     enqueueTranscodeJobs: system.queue.transcodeQueueStore.getState().addJobs,
   };
   const send = load<SendModule>(
-    "../../../src/application/sendExportToTranscode.ts",
-    { "../systems/ExportSystem": exportSystem, "../systems/TranscodeSystem": transcodeSystem },
+    "../../../src/application/transcode/sendExportToTranscode.ts",
+    {
+      "../../systems/ExportSystem": exportSystem,
+      "../../systems/TranscodeSystem": transcodeSystem,
+    },
     globals,
   );
   return { send, queue: system.queue };
 }
 
 function exportSettings(
-  patch: Partial<import("../../../src/systems/ExportSystem/exportTypes.ts").ExportSettings> = {},
+  patch: Partial<import("../../../src/core/editor/export/exportTypes.ts").ExportSettings> = {},
 ) {
   return {
     mode: "individual",

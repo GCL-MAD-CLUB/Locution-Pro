@@ -1,4 +1,4 @@
-export * from "./exportTypes";
+export * from "../../core/editor/export/exportTypes";
 export { dirname, resolveExportDestinationDir } from "./exportDestination";
 export {
   assignUniqueNames,

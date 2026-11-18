@@ -1,4 +1,4 @@
-import type { AssetLibrarySortKey } from "../../../../core/editor/assetLibrary";
+import type { AssetLibrarySortKey } from "../../../../core/editor/assetLibrary/assetLibrary";
 import type { AssetLibraryRoot } from "../../../../types";
 
 /** Resizable columns; the color marker and trailing filler stay fixed. */

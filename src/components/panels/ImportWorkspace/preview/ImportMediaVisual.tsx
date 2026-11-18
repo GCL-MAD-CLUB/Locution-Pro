@@ -2,10 +2,17 @@ import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { Captions, FileAudio2, FileVideo2, Image } from "lucide-react";
 import { useRef, useState } from "react";
 import { ImportFolderIcon } from "../browser/ImportFolderIcon";
-import { mediaKind, type ImportEntry, type ImportMetadata } from "../browser/importBrowserModel";
+import {
+  mediaKind,
+  type ImportEntry,
+  type ImportMetadata,
+} from "../../../../core/editor/import/importBrowserModel";
 import { importCover, importFrame, importMetadata, queuePreview } from "./importPreview";
-import { captureOperationError } from "../../../../errors";
-import { createLatestPreview, previewTimeUs } from "../../../../application/media/latestPreview";
+import { captureOperationError } from "../../../../runtime/errors";
+import {
+  createLatestPreview,
+  previewTimeUs,
+} from "../../../../application/mediaPreviews/latestPreview";
 
 export function ImportMediaVisual({
   entry,

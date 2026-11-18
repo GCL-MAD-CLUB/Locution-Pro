@@ -52,7 +52,7 @@ import {
   type StoryboardGraphSelectionMode,
   type StoryboardGraphTool,
 } from "../../../../core/editor/storyboardGraph/selection";
-import type { PanelRowSource } from "../../../../core/editor/multiSource";
+import type { PanelRowSource } from "../../../../core/editor/mediaSources/multiSource";
 import { annotationColors } from "../../../../runtime/theme";
 import { usePanelActive } from "../../../../runtime/systems/PanelState";
 import type { StoryboardShot, StoryboardShotAnnotation } from "../../../../types";

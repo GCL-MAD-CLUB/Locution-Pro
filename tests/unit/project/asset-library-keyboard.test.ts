@@ -10,11 +10,13 @@ type KeyContext =
   import("../../../src/components/panels/AssetLibrary/actions/selection.ts").AssetLibraryKeyContext;
 
 const load = createModuleLoader(import.meta.url);
-const timeline = load("../../../src/core/editor/timeline.ts");
-const library = load("../../../src/core/editor/assetLibrary.ts", { "./timeline": timeline });
+const timeline = load("../../../src/core/editor/playback/timeline.ts");
+const library = load("../../../src/core/editor/assetLibrary/assetLibrary.ts", {
+  "../playback/timeline": timeline,
+});
 const keyboard = load<KeyboardModule>(
   "../../../src/components/panels/AssetLibrary/actions/selection.ts",
-  { "../../../../core/editor/assetLibrary": library },
+  { "../../../../core/editor/assetLibrary/assetLibrary": library },
 );
 
 const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;

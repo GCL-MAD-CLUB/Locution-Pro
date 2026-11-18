@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   createLatestPreview,
   previewTimeUs,
-} from "../../../src/application/media/latestPreview.ts";
+} from "../../../src/application/mediaPreviews/latestPreview.ts";
 import { deferred, flush } from "../support/module-loader.ts";
 
 test("pointer movement coalesces pending frames and never publishes an obsolete request", async () => {

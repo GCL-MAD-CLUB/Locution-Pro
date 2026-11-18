@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import * as importBrowser from "../../../src/components/panels/ImportWorkspace/browser/importBrowserModel.ts";
+import * as importBrowser from "../../../src/core/editor/import/importBrowserModel.ts";
 
 test("fileExtension reads the extension after the final dot", () => {
   assert.equal(importBrowser.fileExtension("C:\\media\\clip.MP4"), "mp4");

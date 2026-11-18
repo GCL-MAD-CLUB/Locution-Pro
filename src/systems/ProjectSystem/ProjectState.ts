@@ -5,8 +5,11 @@ import {
   sourceContexts,
   updateScopedStoryboard,
   updateScopedSubtitles,
-} from "../../core/editor/multiSource";
-import { emptyAssetLibrary, normalizedAssetLibrary } from "../../core/editor/assetLibrary";
+} from "../../core/editor/mediaSources/multiSource";
+import {
+  emptyAssetLibrary,
+  normalizedAssetLibrary,
+} from "../../core/editor/assetLibrary/assetLibrary";
 import { useStore } from "zustand";
 import { useShallow } from "zustand/shallow";
 import { createStore } from "zustand/vanilla";
@@ -48,7 +51,7 @@ import {
   preprocessProjectsSubtitles,
   preprocessSubtitleCues,
   subtitleSourceCueIds,
-} from "../../core/editor/subtitlePreprocessing";
+} from "../../core/editor/subtitles/subtitlePreprocessing";
 
 interface ProjectCommands {
   projectImported: (project: MediaDocument) => void;

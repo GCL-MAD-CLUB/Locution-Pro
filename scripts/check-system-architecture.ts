@@ -1,19 +1,12 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { basename, extname, join, relative } from "node:path";
 import ts from "typescript";
+import { analyzeFrontend } from "../tooling/frontend/architecture.ts";
 
 const root = process.cwd();
 const sourceRoot = join(root, "src");
-const componentsRoot = join(sourceRoot, "components");
-const failures: string[] = [];
 
-const allowedRootSourceFiles = new Set([
-  "App.tsx",
-  "disable-browser-behaviors.ts",
-  "main.tsx",
-  "types.ts",
-  "vite-env.d.ts",
-]);
+const failures: string[] = [];
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -39,63 +32,10 @@ function sourceFile(path: string): ts.SourceFile {
   );
 }
 
-function componentOwner(path: string): string | undefined {
-  const relativePath = relative(componentsRoot, path);
-  if (relativePath.startsWith(`..${sep}`) || relativePath === "..") {
-    return undefined;
-  }
-  const [category, component] = relativePath.split(sep);
-  return component ? `${category}/${component}` : undefined;
-}
-
-function importedComponentOwner(
-  path: string,
-  specifier: string,
-): { owner: string; leaf: string } | undefined {
-  if (!specifier.startsWith(".")) {
-    return undefined;
-  }
-  const target = resolve(dirname(path), specifier);
-  const owner = componentOwner(target);
-  if (!owner) {
-    return undefined;
-  }
-  return {
-    owner,
-    leaf: basename(target),
-  };
-}
-
-const legacyFiles = [
-  "src/appEvents.ts",
-  "src/store.ts",
-  "src/projectHistory.ts",
-  "src/panelState.tsx",
-];
-for (const legacyFile of legacyFiles) {
-  const path = join(root, legacyFile);
-  if (existsSync(path)) {
-    fail(path, "legacy communication module must not be restored");
-  }
-}
-
-for (const entry of readdirSync(sourceRoot, { withFileTypes: true })) {
-  if (
-    entry.isFile() &&
-    [".ts", ".tsx"].includes(extname(entry.name)) &&
-    !allowedRootSourceFiles.has(entry.name)
-  ) {
-    fail(
-      join(sourceRoot, entry.name),
-      "src root is reserved for application entry points and global contracts",
-    );
-  }
-}
-
 for (const path of sourceFiles(sourceRoot)) {
   const source = readFileSync(path, "utf8");
   const parsed = sourceFile(path);
-  const owner = componentOwner(path);
+  const isComponent = path.startsWith(join(sourceRoot, "components"));
 
   if (/\b(?:emitAppEvent|useAppEvent|useAppStore|appStore)\b/u.test(source)) {
     fail(path, "legacy event/store API is forbidden");
@@ -103,7 +43,7 @@ for (const path of sourceFiles(sourceRoot)) {
   if (/\buse[A-Za-z0-9]*System\b/u.test(source)) {
     fail(path, "component system-composition hooks are forbidden; use lower-level APIs directly");
   }
-  if (owner && /System\.(?:ts|tsx)$/u.test(basename(path))) {
+  if (isComponent && /System\.(?:ts|tsx)$/u.test(basename(path))) {
     fail(
       path,
       "component system-composition modules are forbidden; compose lower-level APIs directly",
@@ -120,20 +60,6 @@ for (const path of sourceFiles(sourceRoot)) {
     const specifier = statement.moduleSpecifier.text;
     if (/(?:^|\/)(?:store|appEvents|projectHistory)$/u.test(specifier)) {
       fail(path, `legacy module import is forbidden: ${specifier}`);
-    }
-    if (specifier.includes("ProjectSystem/ProjectState")) {
-      fail(path, "ProjectSystem state is private; use the typed project port");
-    }
-    if (specifier.includes("PreferencesSystem/PreferencesState")) {
-      fail(path, "PreferencesSystem state is private; use the typed preferences port");
-    }
-
-    const imported = importedComponentOwner(path, specifier);
-    if (owner && imported && owner !== imported.owner && /(?:State|System)$/u.test(imported.leaf)) {
-      fail(
-        path,
-        `component-private module ${specifier} crosses from ${owner} to ${imported.owner}`,
-      );
     }
   }
 }
@@ -164,12 +90,25 @@ if (/\bpreferencesLoaded\b|^\s*preferences\s*:/mu.test(projectStateSource)) {
   fail(projectStatePath, "preferences belong to PreferencesSystem, not ProjectSystem");
 }
 
-if (failures.length > 0) {
+const frontend = analyzeFrontend(root);
+for (const { file, line, message } of frontend.issues)
+  failures.push(file + ":" + line + ": " + message);
+for (const file of frontend.unreachable)
+  failures.push(file + ": unreachable from a frontend entry point");
+for (const name of frontend.unusedPackages)
+  failures.push("package.json: unused production dependency " + name);
+
+if (process.argv.includes("--json")) {
+  console.log(JSON.stringify({ ...frontend, failures }, null, 2));
+  if (failures.length > 0) process.exitCode = 1;
+} else if (failures.length > 0) {
   console.error("System architecture check failed:");
   for (const failure of failures) {
     console.error(`- ${failure}`);
   }
   process.exitCode = 1;
 } else {
-  console.log("System architecture check passed.");
+  console.log(
+    "System architecture check passed (" + frontend.modules.length + " frontend modules).",
+  );
 }

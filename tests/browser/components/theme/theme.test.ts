@@ -13,6 +13,9 @@ for (const appearance of ["dark", "light"] as const) {
         "/src/components/common/ModalDialog/ModalDialog.css",
         "/src/components/common/UpdateDialog/UpdateDialog.css",
         "/src/components/common/MediaBrowserDialog/MediaBrowserDialog.css",
+        "/src/components/common/StoryboardAnnotations/StoryboardAnnotations.css",
+        "/src/components/common/PlaybackControls/PlaybackControls.css",
+        "/src/components/common/MediaCollection/MediaCollection.css",
         "/src/components/panels/SubtitlePanel/SubtitlePanel.css",
         "/src/components/panels/StoryboardPanel/StoryboardPanel.css",
         "/src/components/panels/SourceMonitor/SourceMonitor.css",
@@ -148,6 +151,7 @@ test("三种外观保持标签色块和缩略图标签的默认配色及状态",
   await page.goto("/tests/browser/support/blank.html");
   const snapshots = await page.evaluate(async () => {
     for (const url of [
+      "/src/components/common/StoryboardAnnotations/StoryboardAnnotations.css",
       "/src/components/panels/SubtitlePanel/SubtitlePanel.css",
       "/src/components/panels/StoryboardPanel/StoryboardPanel.css",
     ])
@@ -342,7 +346,7 @@ test("即时预览重新生成 SVG 并通知喷涂工具，取消恢复后的图
   await page.goto("/tests/browser/support/blank.html");
   const result = await page.evaluate(async () => {
     const themeUrl = "/src/runtime/theme.ts";
-    const cursorUrl = "/src/components/common/utils/sprayToolModifiers.ts";
+    const cursorUrl = "/src/components/common/AnnotationTools/sprayToolModifiers.ts";
     const theme = await import(/* @vite-ignore */ themeUrl);
     const cursors = await import(/* @vite-ignore */ cursorUrl);
     const notifications: string[] = [];
@@ -438,7 +442,7 @@ test("工作区语义颜色和 SVG 可独立替换，固定菜单保留自身配
   const result = await page.evaluate(async () => {
     const menuCss = "/src/components/common/PopupMenu/PopupMenu.css";
     const themeModule = "/src/runtime/theme.ts";
-    const cursorModule = "/src/components/common/utils/sprayToolModifiers.ts";
+    const cursorModule = "/src/components/common/AnnotationTools/sprayToolModifiers.ts";
     await import(/* @vite-ignore */ menuCss);
     const theme = await import(/* @vite-ignore */ themeModule);
     const cursors = await import(/* @vite-ignore */ cursorModule);

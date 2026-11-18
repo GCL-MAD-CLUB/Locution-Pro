@@ -6,7 +6,7 @@ import {
   isAudioOnlyContainer,
   type ExportSettings,
   type ExportSource,
-} from "./exportTypes";
+} from "../../core/editor/export/exportTypes";
 import { exportRenameRuleOptions } from "./exportRename";
 
 export interface ExportSettingsConstraintContext {

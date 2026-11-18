@@ -46,7 +46,7 @@ export interface MediaSelectionCapabilityProjection {
 
 export interface PlaybackStatusProjection {
   videoSource?: string | null;
-  histogram?: import("../../core/editor/frameHistogram").FrameHistogram | null;
+  histogram?: import("../../core/editor/mediaAnalysis/frameHistogram").FrameHistogram | null;
   active: boolean;
   lastFocusedAt: number;
   currentFrame: number;

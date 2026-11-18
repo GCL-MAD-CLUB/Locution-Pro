@@ -16,13 +16,13 @@ import {
 } from "lucide-react";
 import { useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import type { AssetLibrarySort } from "../../../../core/editor/assetLibrary";
+import type { AssetLibrarySort } from "../../../../core/editor/assetLibrary/assetLibrary";
 import {
   assetLibraryFilterActive,
   emptyAssetLibraryFilter,
   type AssetLibraryFilter,
-} from "../../../../core/editor/assetLibraryFilter";
-import type { AssetLibraryGrouping } from "../../../../core/editor/assetLibraryGroup";
+} from "../../../../core/editor/assetLibrary/assetLibraryFilter";
+import type { AssetLibraryGrouping } from "../../../../core/editor/assetLibrary/assetLibraryGroup";
 import {
   PopupMenu,
   PopupMenuItem,

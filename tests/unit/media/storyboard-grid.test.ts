@@ -5,7 +5,7 @@ import {
   storyboardGridHitIndices,
   storyboardGridRenderRange,
   storyboardGridScrollOffset,
-} from "../../../src/core/editor/storyboardGrid.ts";
+} from "../../../src/core/editor/storyboard/storyboardGrid.ts";
 
 test("direct grid fitting preserves the existing icon sizes and column thresholds", () => {
   function previousLayout(count: number, width: number, target: number) {

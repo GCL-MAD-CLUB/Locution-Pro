@@ -1,5 +1,5 @@
-﻿import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
-import { formatDuration } from "../../../../core/editor/time";
+﻿import { VideoGlyph } from "../../../common/MediaKindIcons";
+import { formatDuration } from "../../../../core/editor/playback/time";
 import { exportAudioChannelLabel } from "../../../../systems/ExportSystem";
 import type {
   ExportClip,

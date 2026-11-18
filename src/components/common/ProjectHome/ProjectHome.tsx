@@ -1,13 +1,13 @@
+import { appIconUrl } from "../../../assets/appIcon";
 import { repeatEvery, cancelTask } from "../../../runtime/scheduling";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { ChevronLeft, Search, X } from "lucide-react";
 import { useMemo, useRef, useState, type PointerEvent } from "react";
-import { invokeCommand, runOperation } from "../../../errors";
+import { invokeCommand, runOperation } from "../../../runtime/errors";
 import { isTauriRuntime } from "../../../platform/tauri/runtime";
 import type { RecentProjectEntry } from "../../../types";
 import "./ProjectHome.css";
 
-const appIconUrl = new URL("../../../../src-tauri/icons/icon.ico", import.meta.url).href;
 const columns = [
   ["name", "名称"],
   ["type", "类型"],

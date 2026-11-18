@@ -7,7 +7,7 @@ import {
   advancedSearchErrors,
   searchQueryToMultiline,
   searchQueryToSingleLine,
-} from "../../../src/core/editor/textSearch.ts";
+} from "../../../src/core/editor/search/textSearch.ts";
 
 test("text search converts whitespace runs between single-line and multiline inputs", () => {
   for (const mode of ["filter", "highlight"] as const) {

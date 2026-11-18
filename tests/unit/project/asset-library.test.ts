@@ -7,14 +7,14 @@ import type {
   ProjectAssetLibraryState,
 } from "../../../src/types.ts";
 
-type AssetLibraryModule = typeof import("../../../src/core/editor/assetLibrary.ts");
+type AssetLibraryModule = typeof import("../../../src/core/editor/assetLibrary/assetLibrary.ts");
 
 const load = createModuleLoader(import.meta.url);
-const timeline = load<typeof import("../../../src/core/editor/timeline.ts")>(
-  "../../../src/core/editor/timeline.ts",
+const timeline = load<typeof import("../../../src/core/editor/playback/timeline.ts")>(
+  "../../../src/core/editor/playback/timeline.ts",
 );
-const library = load<AssetLibraryModule>("../../../src/core/editor/assetLibrary.ts", {
-  "./timeline": timeline,
+const library = load<AssetLibraryModule>("../../../src/core/editor/assetLibrary/assetLibrary.ts", {
+  "../playback/timeline": timeline,
 });
 
 // Values from the VM-loaded module come from another realm; compare them as plain data.

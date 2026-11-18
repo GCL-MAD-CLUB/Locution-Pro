@@ -48,7 +48,7 @@ function fixture() {
       "react/jsx-runtime": { jsx, jsxs: jsx },
       "lucide-react": {},
       "./ModalDialog.css": {},
-      "../../../errors": {
+      "../../../runtime/errors": {
         invokeCommand: async () => false,
         captureOperationError: (operation: string, error: unknown) =>
           assert.fail(`${operation}: ${String(error)}`),

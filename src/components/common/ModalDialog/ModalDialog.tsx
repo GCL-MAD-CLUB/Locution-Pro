@@ -1,7 +1,11 @@
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { X } from "lucide-react";
 import { useId, useRef, useState, type ReactNode, type RefObject } from "react";
-import { captureOperationError, invokeCommand, runBackgroundOperation } from "../../../errors";
+import {
+  captureOperationError,
+  invokeCommand,
+  runBackgroundOperation,
+} from "../../../runtime/errors";
 import "./ModalDialog.css";
 
 export interface ModalDialogProps {

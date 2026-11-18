@@ -3,12 +3,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import * as scheduling from "../support/scheduling.ts";
 import { createModuleLoader, deferred, flush } from "../support/module-loader.ts";
-import { clientError } from "../../../src/errors/model.ts";
-import * as model from "../../../src/components/panels/ImportWorkspace/browser/importBrowserModel.ts";
+import { clientError } from "../../../src/core/errors.ts";
+import * as model from "../../../src/core/editor/import/importBrowserModel.ts";
 import type {
   ImportDirectory,
   ImportEntry,
-} from "../../../src/components/panels/ImportWorkspace/browser/importBrowserModel.ts";
+} from "../../../src/core/editor/import/importBrowserModel.ts";
 import type { ImportSelectionItem } from "../../../src/components/panels/ImportWorkspace/browser/importFolderScan.ts";
 
 type ThemeModule = typeof import("../../../src/runtime/theme.ts");
@@ -16,16 +16,20 @@ type ImportFolderScanModule =
   typeof import("../../../src/components/panels/ImportWorkspace/browser/importFolderScan.ts");
 type ImportSelectionModule =
   typeof import("../../../src/components/panels/ImportWorkspace/selection/importSelection.ts");
-type MediaImportTaskModule = typeof import("../../../src/application/media/mediaImportTask.ts");
+type MediaImportTaskModule =
+  typeof import("../../../src/systems/MediaImportSystem/mediaImportTask.ts");
 
 const load = createModuleLoader(import.meta.url);
 const theme = load<ThemeModule>("../../../src/runtime/theme.ts", {
   "../styles.css?raw": readFileSync(new URL("../../../src/styles.css", import.meta.url), "utf8"),
-  "../errors/model": { clientError },
+  "../core/errors": { clientError },
 });
 const scan = load<ImportFolderScanModule>(
   "../../../src/components/panels/ImportWorkspace/browser/importFolderScan.ts",
-  { "./importBrowserModel": model, "../../../../runtime/scheduling": scheduling },
+  {
+    "../../../../core/editor/import/importBrowserModel": model,
+    "../../../../runtime/scheduling": scheduling,
+  },
 );
 const entry = (path: string, is_directory = false): ImportEntry => ({
   path,
@@ -153,9 +157,9 @@ function registration({ failPath, cancelled = false, hold = false }: Registratio
     "../../../src/components/panels/ImportWorkspace/selection/importSelection.ts",
     {
       "../../../../runtime/theme": theme,
-      "../browser/importBrowserModel": model,
+      "../../../../core/editor/import/importBrowserModel": model,
       "../../../../platform/tauri/ffmpegProgress": { createFfmpegTaskId: () => "task" },
-      "../../../../errors": {
+      "../../../../runtime/errors": {
         invokeCommand: async (command: string, args: ImportInvokeArgs): Promise<unknown> => {
           calls.push({ command, args });
           if (args.path === failPath) throw new Error("registration failed");
@@ -284,16 +288,16 @@ for (const [failed, displayName] of failureCases) {
   test(`batch import failure identifies ${displayName} in the error context`, async () => {
     const reports: BatchFailureReport[] = [];
     const { runMediaImportBatchTask } = load<MediaImportTaskModule>(
-      "../../../src/application/media/mediaImportTask.ts",
+      "../../../src/systems/MediaImportSystem/mediaImportTask.ts",
       {
-        "../../systems/TaskSystem": {
+        "../TaskSystem": {
           createTaskProgress: async () => ({
             cancelled: false,
             fail: (error: unknown, context: BatchFailureContext) =>
               reports.push({ error, context }),
           }),
         },
-        "../../errors": {
+        "../../runtime/errors": {
           clientError,
           invokeCommand: async (_command: string, { path }: BatchImportInvokeArgs) => {
             if (failed.includes(path)) throw new Error("import failed");

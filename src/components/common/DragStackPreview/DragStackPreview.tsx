@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-// The preview reuses the storyboard shot drag classes, defined with the storyboard panel.
-import "../../panels/StoryboardPanel/StoryboardPanel.css";
+import "./DragStackPreview.css";
 
 // The storyboard's shot drag preview geometry: a 40px card with a 3px frame, stacked layers
 // 1.5px apart. It shows only while the pointer is over a place the items can drop.

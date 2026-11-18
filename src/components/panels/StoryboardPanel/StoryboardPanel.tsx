@@ -1,17 +1,21 @@
 import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../runtime/scheduling";
+import { renderStoryboardKeywordLabel } from "./annotations/renderStoryboardKeywordLabel";
 import { useScopedState } from "../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { themeSvgDataUrl } from "../../../runtime/theme";
-import { matchesSearchDuration, type AdvancedSearchOptions } from "../../../core/editor/textSearch";
+import {
+  matchesSearchDuration,
+  type AdvancedSearchOptions,
+} from "../../../core/editor/search/textSearch";
 import { KeywordPresetControl } from "./annotations/KeywordPresetControl";
 import { useKeywordSet } from "./annotations/keywordPresetState";
 import {
   useStoryboardSemanticSearch,
   useStoryboardSemanticSearchAvailable,
-} from "../../../application/media/storyboardSemanticSearch";
-import { focusedSearchHitId } from "../../../core/editor/searchFocus";
+} from "../../../application/semanticSearch/storyboardSemanticSearch";
+import { focusedSearchHitId } from "../../../core/editor/search/searchFocus";
 import { useSemanticSortState } from "../../../runtime/state/useSemanticSortState";
-import { panelSourceTitle } from "../../../core/editor/panelSourceSelection";
+import { panelSourceTitle } from "../../../core/editor/mediaSources/panelSourceSelection";
 import {
   sourceDraftIdentity,
   sourceScope,
@@ -21,15 +25,18 @@ import {
   sortBySource,
   nextSourceSortDirection,
   type SourceSortDirection,
-} from "../../../core/editor/multiSource";
-import { selectionFocusForVisibleIds } from "../../../core/editor/selectionFocus";
-import { matchesTextSearch, nextSearchMatchIndex } from "../../../core/editor/textSearch";
-import { PanelSearch, useSearchNavigation } from "../../common/PanelSearch/PanelSearch";
-import { SourceSelectionNavigation } from "../../common/PanelSearch/SourceSelectionNavigation";
+} from "../../../core/editor/mediaSources/multiSource";
+import { selectionFocusForVisibleIds } from "../../../core/editor/selection/selectionFocus";
+import { matchesTextSearch, nextSearchMatchIndex } from "../../../core/editor/search/textSearch";
+import {
+  PanelSearch,
+  useSearchNavigation,
+  SourceSelectionNavigation,
+} from "../../common/PanelSearch";
 import {
   animatePlaybackFollowScroll,
   playbackFollowScrollDuration,
-} from "../../common/utils/playbackFollowScroll";
+} from "../../common/PlaybackFollow";
 import { useRowVirtualizer } from "../../../runtime/state/useRowVirtualizer";
 import {
   ArrowDownAZ,
@@ -44,7 +51,7 @@ import {
   Star,
   Share2,
 } from "lucide-react";
-import { VideoGlyph } from "../../common/MediaKindIcons/MediaKindIcons";
+import { VideoGlyph } from "../../common/MediaKindIcons";
 import {
   Fragment,
   useCallback,
@@ -70,47 +77,42 @@ import {
   enqueueQuickExport,
   requestExport,
 } from "../../../systems/ExportSystem";
-import { frameToTimeUs, normalizeFrameRate } from "../../../core/editor/timeline";
-import { storyboardShotDefaultTitle } from "../../../core/editor/storyboard";
+import { frameToTimeUs, normalizeFrameRate } from "../../../core/editor/playback/timeline";
+import { storyboardShotDefaultTitle } from "../../../core/editor/storyboard/storyboard";
 import {
   assetLibraryMediaFromSource,
   createAssetLibraryId,
   storyboardAssetName,
   withAssetLibraryCaptures,
   type AssetLibraryCapture,
-} from "../../../core/editor/assetLibrary";
+} from "../../../core/editor/assetLibrary/assetLibrary";
 import {
   storyboardGridHitIndices,
   storyboardGridScrollOffset,
   type StoryboardGridLayout,
-} from "../../../core/editor/storyboardGrid";
+} from "../../../core/editor/storyboard/storyboardGrid";
 import {
   timelineThumbnails,
   timelineThumbnailVisibleRange,
   timelineThumbnailResolutionForDisplay,
   useTimelineThumbnailListResizeAnchor,
   useTimelineThumbnailWindow,
-} from "../../../timelineThumbnail";
+} from "../../../application/thumbnails/timeline";
 import type { StoryboardShot } from "../../../types";
 import { usePanelManagerState } from "../../common/DockLayout";
 import { MediaSourceMenu } from "../../common/MediaSourceMenu";
-import {
-  panelMediaSources,
-  usePanelMediaSource,
-} from "../../../application/media/panelMediaSources";
-import { usePersistedMediaPanelState } from "../../../application/media/panelMediaPersistence";
-import { canDetectStoryboard, useStoryboardDetection } from "./hooks/useStoryboardDetection";
+import { panelMediaSources, usePanelMediaSource } from "../../common/PanelMediaSources";
+import { usePersistedMediaPanelState } from "../../../application/mediaSources/panelMediaPersistence";
+import { canDetectStoryboard, useStoryboardDetection } from "../../common/StoryboardDetection";
 import {
   annotationShortcutAction,
   annotationShortcutAutoAdvances,
-} from "../../common/utils/annotationShortcuts";
-import {
   sprayEraserCursor,
   sprayEyedropperAddCursor,
   sprayEyedropperImageUrl,
   sprayEyedropperRemoveCursor,
   useSprayToolModifiers,
-} from "../../common/utils/sprayToolModifiers";
+} from "../../common/AnnotationTools";
 import {
   isPopupMenuEventTarget,
   PopupMenu,
@@ -126,28 +128,27 @@ import {
   storyboardShotColorLabelValues,
   storyboardShotColorFilterLabels,
   storyboardShotColorLabels,
-} from "./annotations/StoryboardColorLabelButtons";
-import { StoryboardFlagIcon } from "./annotations/StoryboardFlagIcon";
+  StoryboardFlagIcon,
+} from "../../common/StoryboardAnnotations";
 import { StoryboardIconView } from "./views/StoryboardIconView";
 import { StoryboardGraphView } from "./views/StoryboardGraphView";
 import { StoryboardKeywordPanel } from "./annotations/StoryboardKeywordPanel";
 import { StoryboardFrameDataPanel } from "./analysis/StoryboardFrameDataPanel";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "../../../platform/tauri/media";
 import {
   formatStoryboardKeywordPath,
   formatParsedStoryboardKeywords,
   parseStoryboardKeywordInput,
-  renderStoryboardKeywordLabel,
   storyboardKeywordLabel,
   storyboardKeywordSearchValues,
   storyboardMatchesQuickFilter,
-} from "./annotations/storyboardKeywords";
+} from "../../../core/editor/storyboard/storyboardKeywords";
 import { StoryboardListView } from "./views/StoryboardListView";
 import {
   setExternalAssetLibraryDropTarget,
   trackExternalAssetLibraryDrop,
-} from "../../common/utils/assetLibraryDropTarget";
-import { textEntrySelector } from "../../common/utils/assetLibraryItemDrag";
+} from "../../common/AssetLibraryDrag";
+import { textEntrySelector } from "../../common/EditorInput";
 import {
   formatStoryboardKeywords,
   useStoryboardPanelState,

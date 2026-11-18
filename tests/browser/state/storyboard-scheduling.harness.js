@@ -2,8 +2,8 @@ import { RenderLifetime } from "../../../src/runtime/lifetime/RenderLifetime.ts"
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
+import { TaskProgress } from "../../../src/components/common/TaskProgress/index.ts";
 import {
-  TaskProgress,
   cancelAllTaskProgress,
   createTaskProgress,
   useTaskProgressStatus,
@@ -12,8 +12,8 @@ import {
   useProjectPort,
   getProjectWorkspaceSnapshot,
 } from "../../../src/systems/ProjectSystem/index.ts";
-import { useStoryboardDetection } from "../../../src/components/panels/StoryboardPanel/hooks/useStoryboardDetection.tsx";
-import { emptyStoryboard } from "../../../src/core/editor/multiSource.ts";
+import { useStoryboardDetection } from "../../../src/components/common/StoryboardDetection/useStoryboardDetection.tsx";
+import { emptyStoryboard } from "../../../src/core/editor/mediaSources/multiSource.ts";
 
 const h = React.createElement;
 const VIDEO_IDS = ["a", "b", "c", "d", "e"];

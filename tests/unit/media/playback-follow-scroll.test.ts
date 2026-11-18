@@ -3,7 +3,7 @@ import { test } from "node:test";
 import {
   animatePlaybackFollowScroll,
   playbackFollowScrollDuration,
-} from "../../../src/components/common/utils/playbackFollowScroll.ts";
+} from "../../../src/components/common/PlaybackFollow/playbackFollowScroll.ts";
 
 interface AnimationClock {
   now: () => number;

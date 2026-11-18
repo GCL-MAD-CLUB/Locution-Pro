@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createModuleLoader } from "../support/module-loader.ts";
 
-type HomeModule = typeof import("../../../src/core/editor/assetLibraryHome.ts");
+type HomeModule = typeof import("../../../src/core/editor/assetLibrary/assetLibraryHome.ts");
 
 const load = createModuleLoader(import.meta.url);
-const timeline = load<typeof import("../../../src/core/editor/timeline.ts")>(
-  "../../../src/core/editor/timeline.ts",
+const timeline = load<typeof import("../../../src/core/editor/playback/timeline.ts")>(
+  "../../../src/core/editor/playback/timeline.ts",
 );
-const assetLibrary = load<typeof import("../../../src/core/editor/assetLibrary.ts")>(
-  "../../../src/core/editor/assetLibrary.ts",
-  { "./timeline": timeline },
+const assetLibrary = load<typeof import("../../../src/core/editor/assetLibrary/assetLibrary.ts")>(
+  "../../../src/core/editor/assetLibrary/assetLibrary.ts",
+  { "../playback/timeline": timeline },
 );
-const home = load<HomeModule>("../../../src/core/editor/assetLibraryHome.ts", {
+const home = load<HomeModule>("../../../src/core/editor/assetLibrary/assetLibraryHome.ts", {
   "./assetLibrary": assetLibrary,
 });
 const json = (value: unknown) => JSON.stringify(value);

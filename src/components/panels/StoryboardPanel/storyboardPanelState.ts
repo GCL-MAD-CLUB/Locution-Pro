@@ -3,31 +3,33 @@ import {
   defaultAdvancedSearch,
   defaultSemanticThreshold,
   type AdvancedSearchOptions,
-} from "../../../core/editor/textSearch";
+} from "../../../core/editor/search/textSearch";
 import {
   scopedStoryboard,
   sourceContexts,
   sourceRowParts,
   storyboardMergeGroups,
   transformStoryboardSources,
-} from "../../../core/editor/multiSource";
+} from "../../../core/editor/mediaSources/multiSource";
 import { useMemo, useRef } from "react";
-import { panelSessionForContext } from "../../../core/editor/panelSourceSelection";
-import { withoutEmptySelectionFilter } from "../../../core/editor/selectionFilter";
+import { panelSessionForContext } from "../../../core/editor/mediaSources/panelSourceSelection";
+import { withoutEmptySelectionFilter } from "../../../core/editor/selection/selectionFilter";
 import { createPanelState } from "../../../runtime/systems/PanelState";
 import {
   canHighlightSearchRule,
   type SearchMode,
   type SearchRule,
-} from "../../../core/editor/textSearch";
-import { removeStoryboardCuts } from "../../../core/editor/storyboardCuts";
+} from "../../../core/editor/search/textSearch";
+import { removeStoryboardCuts } from "../../../core/editor/storyboard/storyboardCuts";
 import { mediaItemProject, useProjectPort } from "../../../systems/ProjectSystem";
-import { storyboardVideoContext } from "../../../core/editor/storyboardDetection";
+import { storyboardVideoContext } from "../../../core/editor/storyboard/storyboardDetection";
 import type {
   StoryboardKeywordNode,
   StoryboardShot,
   StoryboardShotAnnotation,
   StoryboardShotColorLabel,
+  StoryboardShotFlag,
+  StoryboardShotColorLabelFilter,
   StoryboardShotStackState,
   StoryboardState,
 } from "../../../types";
@@ -41,10 +43,17 @@ import {
   storyboardKeywordDescendantIds,
   storyboardKeywordUsageCountersAfterUse,
   type StoryboardKeywordPath,
-} from "./annotations/storyboardKeywords";
+} from "../../../core/editor/storyboard/storyboardKeywords";
 
-export { formatStoryboardKeywords } from "./annotations/storyboardKeywords";
-export type { StoryboardKeywordNode, StoryboardShotAnnotation, StoryboardShotColorLabel };
+export { formatStoryboardKeywords } from "../../../core/editor/storyboard/storyboardKeywords";
+export type {
+  StoryboardKeywordNode,
+  StoryboardShotAnnotation,
+  StoryboardShotColorLabel,
+  StoryboardShotFlag,
+  StoryboardShotVisualLabel,
+  StoryboardShotColorLabelFilter,
+} from "../../../types";
 
 export interface StoryboardShotStack extends StoryboardShotStackState {
   expanded: boolean;
@@ -53,10 +62,7 @@ export interface StoryboardShotStack extends StoryboardShotStackState {
 export type StoryboardRatingComparator = "gte" | "lte" | "eq";
 export type StoryboardSearchScope = "any" | "title" | "keywords";
 export type StoryboardSearchRule = SearchRule;
-export type StoryboardShotFlag = "retained" | "none" | "excluded";
 export type StoryboardShotEditFilter = "edited" | "unedited";
-export type StoryboardShotVisualLabel = StoryboardShotColorLabel | "custom";
-export type StoryboardShotColorLabelFilter = StoryboardShotVisualLabel | "none";
 export type StoryboardViewMode = "list" | "grid" | "graph";
 export type StoryboardKeywordEditorMode = "plain" | "withParents";
 export type StoryboardIconMetadataMode =

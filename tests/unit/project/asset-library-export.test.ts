@@ -10,24 +10,27 @@ import type {
   ProjectAssetLibraryState,
 } from "../../../src/types.ts";
 
-type ExportModule = typeof import("../../../src/core/editor/assetLibraryExport.ts");
+type ExportModule = typeof import("../../../src/core/editor/assetLibrary/assetLibraryExport.ts");
 type ResolversModule = typeof import("../../../src/systems/ExportSystem/exportResolvers.ts");
 
 const load = createModuleLoader(import.meta.url);
-const timeline = load<typeof import("../../../src/core/editor/timeline.ts")>(
-  "../../../src/core/editor/timeline.ts",
+const timeline = load<typeof import("../../../src/core/editor/playback/timeline.ts")>(
+  "../../../src/core/editor/playback/timeline.ts",
 );
-const assetLibrary = load<typeof import("../../../src/core/editor/assetLibrary.ts")>(
-  "../../../src/core/editor/assetLibrary.ts",
-  { "./timeline": timeline },
+const assetLibrary = load<typeof import("../../../src/core/editor/assetLibrary/assetLibrary.ts")>(
+  "../../../src/core/editor/assetLibrary/assetLibrary.ts",
+  { "../playback/timeline": timeline },
 );
-const visibility = load<typeof import("../../../src/core/editor/assetLibraryVisibility.ts")>(
-  "../../../src/core/editor/assetLibraryVisibility.ts",
+const visibility = load<
+  typeof import("../../../src/core/editor/assetLibrary/assetLibraryVisibility.ts")
+>("../../../src/core/editor/assetLibrary/assetLibraryVisibility.ts");
+const exporting = load<ExportModule>(
+  "../../../src/core/editor/assetLibrary/assetLibraryExport.ts",
+  {
+    "./assetLibrary": assetLibrary,
+    "./assetLibraryVisibility": visibility,
+  },
 );
-const exporting = load<ExportModule>("../../../src/core/editor/assetLibraryExport.ts", {
-  "./assetLibrary": assetLibrary,
-  "./assetLibraryVisibility": visibility,
-});
 const json = (value: unknown) => JSON.stringify(value);
 
 function folder(
@@ -140,9 +143,9 @@ function resolvers() {
     { id: "v1", kind: "video", file_name: "访谈.mp4" },
   ] as unknown as MediaBinItem[];
   const module = load<ResolversModule>("../../../src/systems/ExportSystem/exportResolvers.ts", {
-    "../../core/editor/timeline": timeline,
-    "../../components/panels/StoryboardPanel/annotations/storyboardKeywords": {},
-    "../../core/editor/storyboard": {},
+    "../../core/editor/playback/timeline": timeline,
+    "../../core/editor/storyboard/storyboardKeywords": {},
+    "../../core/editor/storyboard/storyboard": {},
     "../../systems/ProjectSystem": {
       isMediaItemEnabled: () => true,
       isMediaItemOffline: () => false,
@@ -179,8 +182,8 @@ test("a mixed selection names files by material", () => {
   const rename = load<typeof import("../../../src/systems/ExportSystem/exportRename.ts")>(
     "../../../src/systems/ExportSystem/exportRename.ts",
     {
-      "../../core/editor/time": {},
-      "./exportTypes": {},
+      "../../core/editor/playback/time": {},
+      "../../core/editor/export/exportTypes": {},
     },
   );
   const options = rename.exportRenameRuleOptions("individual", "asset-library");

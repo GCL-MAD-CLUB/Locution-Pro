@@ -3,9 +3,7 @@ import test from "node:test";
 import { fallbackSelectionValue } from "../../../src/components/common/PopupMenu/selectionValue.ts";
 import { traySelectionForItems } from "../../../src/components/panels/ImportWorkspace/selection/traySelection.ts";
 import { mediaBinFolderNavigation } from "../../../src/components/panels/MediaBin/folderNavigation.ts";
-import { cellEditReset } from "../../../src/core/editor/cellEditReset.ts";
-import { sourceDraftIdentity } from "../../../src/core/editor/multiSource.ts";
-import { selectionFocusForVisibleIds } from "../../../src/core/editor/selectionFocus.ts";
+import { selectionFocusForVisibleIds } from "../../../src/core/editor/selection/selectionFocus.ts";
 
 test("keyboard focus stays on a visible row and falls back to the last visible row", () => {
   assert.equal(selectionFocusForVisibleIds(["a", "b"], "b"), null);
@@ -55,19 +53,6 @@ test("media bin folder navigation drops a folder that left the scope and keeps a
     mediaBinFolderNavigation("root", "root", scoped, new Set(["child"])).currentFolderId,
     "root",
   );
-});
-
-test("a subtitle track switch cancels the open edit and a 350ms delayed edit; a fingerprint change does not", () => {
-  const trackA = sourceDraftIdentity(["video:asset:old:track-a"]);
-  const sameTrackAfterAnalysis = sourceDraftIdentity(["video:asset:new:track-a"]);
-  const trackB = sourceDraftIdentity(["video:asset:old:track-b"]);
-  const bothTracks = sourceDraftIdentity(["video:asset:old:track-a", "video:asset:old:track-b"]);
-  const pendingDelay = 350;
-  assert.equal(cellEditReset(trackA, sameTrackAfterAnalysis, pendingDelay), null);
-  assert.deepEqual(cellEditReset(trackA, trackB, pendingDelay), { cancelPendingTimer: true });
-  assert.deepEqual(cellEditReset(trackA, trackB, null), { cancelPendingTimer: false });
-  assert.deepEqual(cellEditReset(trackA, bothTracks, pendingDelay), { cancelPendingTimer: true });
-  assert.deepEqual(cellEditReset(bothTracks, trackB, pendingDelay), { cancelPendingTimer: true });
 });
 
 test("import tray selection forgets paths that are no longer in the tray", () => {

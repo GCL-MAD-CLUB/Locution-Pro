@@ -6,7 +6,7 @@ import {
   advancedSearchErrors,
   promptCharacterCount,
   semanticPromptErrors,
-} from "../../../src/core/editor/textSearch.ts";
+} from "../../../src/core/editor/search/textSearch.ts";
 
 test("semantic prompt limits count nonempty entries and weighted Unicode characters", () => {
   const validate = (query: string, negativePrompts = "") =>

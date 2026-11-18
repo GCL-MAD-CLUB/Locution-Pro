@@ -21,6 +21,8 @@ interface RowSnapshot {
   readonly scrollOffset: number | null;
   readonly scrollRect: Readonly<{ width: number; height: number }> | null;
 }
+export type { VirtualItem };
+
 export interface RowVirtualizer extends RowSnapshot, Controls {}
 
 /** Own the mutable virtualizer outside render. Consumers observe immutable snapshots. */

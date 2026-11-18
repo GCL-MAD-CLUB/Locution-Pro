@@ -1,5 +1,5 @@
-import { invokeCommand } from "../../errors";
-import type { ExportDestination, ExportSource } from "./exportTypes";
+import { invokeCommand } from "../../runtime/errors";
+import type { ExportDestination, ExportSource } from "../../core/editor/export/exportTypes";
 
 export function dirname(path: string) {
   return path.replace(/[\\/][^\\/]*$/, "") || path;

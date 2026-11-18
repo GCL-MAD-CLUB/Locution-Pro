@@ -1,11 +1,11 @@
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { Play } from "lucide-react";
-import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
+import { VideoGlyph } from "../../../common/MediaKindIcons";
 import { useState } from "react";
 import {
   timelineThumbnails,
   timelineThumbnailResolutionForDisplay,
-} from "../../../../timelineThumbnail";
+} from "../../../../application/thumbnails/timeline";
 import type { ExportClip } from "../../../../systems/ExportSystem";
 
 interface ExportClipThumbnailProps {

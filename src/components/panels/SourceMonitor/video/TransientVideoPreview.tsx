@@ -1,7 +1,7 @@
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import type { FrameHistogram } from "../../../../core/editor/frameHistogram";
+import type { FrameHistogram } from "../../../../core/editor/mediaAnalysis/frameHistogram";
 import { useVideoHistogram } from "../histogram/useVideoHistogram";
 
 export interface TransientVideoFrame {

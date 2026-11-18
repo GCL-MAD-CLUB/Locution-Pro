@@ -6,9 +6,9 @@ function setup() {
   const events = new EventTarget();
   const listeners = new Map<string, EventListenerOrEventListenerObject>();
   const { suppressReleaseClick } = createModuleLoader(import.meta.url)<
-    typeof import("../../../src/components/common/utils/suppressReleaseClick.ts")
+    typeof import("../../../src/components/common/AssetLibraryDrag/suppressReleaseClick.ts")
   >(
-    "../../../src/components/common/utils/suppressReleaseClick.ts",
+    "../../../src/components/common/AssetLibraryDrag/suppressReleaseClick.ts",
     {},
     {
       window: {

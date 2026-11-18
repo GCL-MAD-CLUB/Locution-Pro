@@ -3,7 +3,7 @@ import { test } from "node:test";
 import * as d3 from "d3-force";
 import * as options from "../../../src/core/editor/storyboardGraph/options.ts";
 import * as clustering from "../../../src/core/editor/storyboardGraph/clustering.ts";
-import { clientError } from "../../../src/errors/model.ts";
+import { clientError } from "../../../src/core/errors.ts";
 import { createModuleLoader } from "../support/module-loader.ts";
 
 const load = createModuleLoader(import.meta.url);
@@ -13,7 +13,7 @@ const graph = load<typeof import("../../../src/core/editor/storyboardGraph/graph
     "d3-force": d3,
     "./options": options,
     "./clustering": clustering,
-    "../../../errors/model": { clientError },
+    "../../errors": { clientError },
   },
 );
 const { createStoryboardGraphAmbient: create, remapStoryboardGraphEdges: remap } = load<

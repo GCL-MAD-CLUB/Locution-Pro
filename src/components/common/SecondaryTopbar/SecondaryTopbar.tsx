@@ -1,8 +1,7 @@
+import { appIconUrl } from "../../../assets/appIcon";
 import { TaskProgress } from "../TaskProgress";
 import { WorkspaceSwitcher, type WorkspaceDefinition } from "../WorkspaceSwitcher";
 import "./SecondaryTopbar.css";
-
-const appIconUrl = new URL("../../../../src-tauri/icons/icon.ico", import.meta.url).href;
 
 function projectName(path: string) {
   const fileName = path.split(/[\\/]/).pop() ?? path;

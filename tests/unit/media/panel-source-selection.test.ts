@@ -7,8 +7,8 @@ import {
   recordPanelSourceHistory,
   maximumSourceHistorySteps,
   panelSessionForContext,
-} from "../../../src/core/editor/panelSourceSelection.ts";
-import type { PanelMediaWorkspaceState } from "../../../src/core/editor/panelSourceSelection.ts";
+} from "../../../src/core/editor/mediaSources/panelSourceSelection.ts";
+import type { PanelMediaWorkspaceState } from "../../../src/core/editor/mediaSources/panelSourceSelection.ts";
 
 const available = [
   { videoId: "a", tracks: [{ id: "a-1" }, { id: "a-2" }] },

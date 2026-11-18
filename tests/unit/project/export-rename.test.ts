@@ -1,19 +1,19 @@
 import { createModuleLoader } from "../support/module-loader.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { ExportClip, ExportSettings } from "../../../src/systems/ExportSystem/exportTypes.ts";
+import type { ExportClip, ExportSettings } from "../../../src/core/editor/export/exportTypes.ts";
 
 const loadModule = createModuleLoader(import.meta.url);
 
 const exportTypesModule = loadModule<
-  typeof import("../../../src/systems/ExportSystem/exportTypes.ts")
->("../../../src/systems/ExportSystem/exportTypes.ts", {});
+  typeof import("../../../src/core/editor/export/exportTypes.ts")
+>("../../../src/core/editor/export/exportTypes.ts", {});
 
 const rename = loadModule<typeof import("../../../src/systems/ExportSystem/exportRename.ts")>(
   "../../../src/systems/ExportSystem/exportRename.ts",
   {
-    "../../core/editor/time": { formatMonitorTime: () => "00:00:00:00" },
-    "./exportTypes": exportTypesModule,
+    "../../core/editor/playback/time": { formatMonitorTime: () => "00:00:00:00" },
+    "../../core/editor/export/exportTypes": exportTypesModule,
   },
 );
 

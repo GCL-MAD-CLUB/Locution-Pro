@@ -6,7 +6,7 @@ import type {
   AdvancedSearchOptions,
   SearchMode,
   SearchRule,
-} from "../../../src/core/editor/textSearch";
+} from "../../../src/core/editor/search/textSearch";
 import type { StoryboardShotAnnotation } from "../../../src/types";
 import type { installNative } from "./native";
 

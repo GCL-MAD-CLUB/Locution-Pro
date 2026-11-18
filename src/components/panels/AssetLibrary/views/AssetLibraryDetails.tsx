@@ -17,9 +17,9 @@ import {
   withAssetLibraryText,
   withAssetLibraryTitle,
   type AssetLibraryFlag,
-} from "../../../../core/editor/assetLibrary";
-import { formatMonitorTime, parseMonitorTime } from "../../../../core/editor/time";
-import { frameToTimeUs, timeUsToFrame } from "../../../../core/editor/timeline";
+} from "../../../../core/editor/assetLibrary/assetLibrary";
+import { formatMonitorTime, parseMonitorTime } from "../../../../core/editor/playback/time";
+import { frameToTimeUs, timeUsToFrame } from "../../../../core/editor/playback/timeline";
 import type {
   AssetLibraryColorLabel,
   AssetLibraryEntry,
@@ -27,13 +27,12 @@ import type {
   AssetLibraryRoot,
   ProjectAssetLibraryState,
 } from "../../../../types";
-import { StoryboardColorLabelButtons } from "../../StoryboardPanel/annotations/StoryboardColorLabelButtons";
-import { StoryboardFlagIcon } from "../../StoryboardPanel/annotations/StoryboardFlagIcon";
-import "../../StoryboardPanel/StoryboardPanel.css";
 import {
+  StoryboardColorLabelButtons,
+  StoryboardFlagIcon,
   StoryboardSidebarHeading,
   StoryboardSidebarSection,
-} from "../../StoryboardPanel/StoryboardSidebarSection";
+} from "../../../common/StoryboardAnnotations";
 import type { AssetLibraryContainer, ResolvedAssetMedia } from "../model/nodes";
 import { assetLibraryColorLabelNames, assetLibraryFlagNames } from "./AssetLibraryBadges";
 import { AssetLibraryThumbnail } from "./AssetLibraryPreview";

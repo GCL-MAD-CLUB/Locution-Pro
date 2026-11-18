@@ -61,7 +61,7 @@ jobs:
       - name: Check error boundaries
         run: npm run check:errors
 
-      - name: Check system architecture
+      - name: Check architecture and frontend dependency graph
         run: npm run check:architecture
 
       - name: Check media source injection

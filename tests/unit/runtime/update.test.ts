@@ -7,21 +7,21 @@ import type {
   UpdateCheckResult,
   UpdateFailure,
   UpdateStartup,
-} from "../../../src/application/update.ts";
+} from "../../../src/application/update/update.ts";
 
-type UpdateModule = typeof import("../../../src/application/update.ts");
+type UpdateModule = typeof import("../../../src/application/update/update.ts");
 
 const loadTestModule = createModuleLoader(import.meta.url);
 function loadModule<T>(path: string, imports: Record<string, unknown>): T {
-  return loadTestModule<T>(path, { ...imports, "../runtime/scheduling": scheduling });
+  return loadTestModule<T>(path, { ...imports, "../../runtime/scheduling": scheduling });
 }
 
 function loadUpdate(release?: ReleaseInfo) {
   const invocations: string[] = [];
   const pending = deferred<ReleaseInfo>();
-  const update = loadModule<UpdateModule>("../../../src/application/update.ts", {
-    "../../package.json": { version: "0.4.0" },
-    "../errors": {
+  const update = loadModule<UpdateModule>("../../../src/application/update/update.ts", {
+    "../../assets/applicationVersion": { applicationVersion: "0.4.0" },
+    "../../runtime/errors": {
       invokeCommand: (command: string) => {
         invocations.push(command);
         if (command === "download_update") return Promise.resolve();
@@ -138,9 +138,9 @@ test("failed startup checks are not retried by remounts and allow an explicit re
 
 test("update availability waits for the download and falls back to the release page on failure", async () => {
   const download = deferred<void>();
-  const update = loadModule<UpdateModule>("../../../src/application/update.ts", {
-    "../../package.json": { version: "0.4.0" },
-    "../errors": {
+  const update = loadModule<UpdateModule>("../../../src/application/update/update.ts", {
+    "../../assets/applicationVersion": { applicationVersion: "0.4.0" },
+    "../../runtime/errors": {
       captureOperationError: () => {},
       invokeCommand: (command: string) =>
         command === "fetch_latest_release"
@@ -169,9 +169,9 @@ test("missing update metadata and hash or cache failures preserve release notes 
     url: "https://github.com/releases",
   };
   for (const reason of ["No updater in legacy release", "SHA-256 mismatch", "Cache is read-only"]) {
-    const update = loadModule<UpdateModule>("../../../src/application/update.ts", {
-      "../../package.json": { version: "0.4.0" },
-      "../errors": {
+    const update = loadModule<UpdateModule>("../../../src/application/update/update.ts", {
+      "../../assets/applicationVersion": { applicationVersion: "0.4.0" },
+      "../../runtime/errors": {
         captureOperationError: () => {},
         invokeCommand: async (command: string) => {
           if (command === "fetch_latest_release") return release;
@@ -237,9 +237,9 @@ test("startup is read once per session and suppression is persisted for the sele
     ignored: false,
     ignoredVersions: ["0.5.0"],
   };
-  const update = loadModule<UpdateModule>("../../../src/application/update.ts", {
-    "../../package.json": { version: "0.4.0" },
-    "../errors": {
+  const update = loadModule<UpdateModule>("../../../src/application/update/update.ts", {
+    "../../assets/applicationVersion": { applicationVersion: "0.4.0" },
+    "../../runtime/errors": {
       invokeCommand: async (command: string, args: unknown) => {
         calls.push([command, args]);
         return command === "update_startup" ? state : undefined;

@@ -2,16 +2,16 @@ import { RenderLifetime } from "../../../src/runtime/lifetime/RenderLifetime.ts"
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
-import { useSubtitleSemanticSearch } from "../../../src/application/media/subtitleSemanticSearch.ts";
+import { useSubtitleSemanticSearch } from "../../../src/application/semanticSearch/subtitleSemanticSearch.ts";
 import { PanelSearch } from "../../../src/components/common/PanelSearch/PanelSearch.tsx";
-import { defaultAdvancedSearch } from "../../../src/core/editor/textSearch.ts";
+import { defaultAdvancedSearch } from "../../../src/core/editor/search/textSearch.ts";
 import { PanelInstanceProvider } from "../../../src/runtime/systems/PanelState.tsx";
 import { PanelManagerProvider } from "../../../src/components/common/DockLayout/index.ts";
 import { SubtitlePanel } from "../../../src/components/panels/SubtitlePanel/SubtitlePanel.tsx";
 import { useSubtitlePanelState } from "../../../src/components/panels/SubtitlePanel/subtitlePanelState.ts";
-import { usePanelMediaSourceSelection } from "../../../src/application/media/panelMediaSources.ts";
+import { usePanelMediaSourceSelection } from "../../../src/components/common/PanelMediaSources/index.ts";
+import { TaskProgress } from "../../../src/components/common/TaskProgress/index.ts";
 import {
-  TaskProgress,
   createTaskProgress,
   useTaskProgressStatus,
 } from "../../../src/systems/TaskSystem/index.ts";

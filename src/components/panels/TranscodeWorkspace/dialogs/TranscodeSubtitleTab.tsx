@@ -1,6 +1,6 @@
-import { open } from "@tauri-apps/plugin-dialog";
-import { ExportField } from "../../ExportWorkspace";
-import { runOperation } from "../../../../errors";
+import { open } from "../../../../platform/tauri/dialogs";
+import { ExportField } from "../../../common/EncodingSettings";
+import { runOperation } from "../../../../runtime/errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import {
   containerSupports,

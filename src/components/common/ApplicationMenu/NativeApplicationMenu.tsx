@@ -1,6 +1,6 @@
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { useMemo, useRef, useState } from "react";
-import { runBackgroundOperation } from "../../../errors";
+import { runBackgroundOperation } from "../../../runtime/errors";
 import {
   listenToNativeApplicationMenu,
   performNativeEditAction,

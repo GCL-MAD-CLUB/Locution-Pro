@@ -1,5 +1,5 @@
 import stylesheet from "../styles.css?raw";
-import { clientError } from "../errors/model";
+import { clientError } from "../core/errors";
 import type { Appearance } from "../types";
 
 // Non-DOM consumers (saved media defaults and standalone SVG images) read the

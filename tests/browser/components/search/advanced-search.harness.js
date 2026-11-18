@@ -2,7 +2,7 @@ import { RenderLifetime } from "../../../../src/runtime/lifetime/RenderLifetime.
 import React, { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { PanelSearch } from "../../../../src/components/common/PanelSearch/PanelSearch.tsx";
-import { defaultAdvancedSearch } from "../../../../src/core/editor/textSearch.ts";
+import { defaultAdvancedSearch } from "../../../../src/core/editor/search/textSearch.ts";
 import { useSubtitlePanelState } from "../../../../src/components/panels/SubtitlePanel/subtitlePanelState.ts";
 import { useStoryboardPanelState } from "../../../../src/components/panels/StoryboardPanel/storyboardPanelState.ts";
 import { PanelInstanceProvider } from "../../../../src/runtime/systems/PanelState.tsx";

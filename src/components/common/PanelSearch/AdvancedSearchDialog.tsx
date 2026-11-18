@@ -8,7 +8,7 @@ import {
   type AdvancedSearchOptions,
   type SearchMode,
   type SearchRule,
-} from "../../../core/editor/textSearch";
+} from "../../../core/editor/search/textSearch";
 import { ModalDialog } from "../ModalDialog";
 import { SelectDropdown, type SelectDropdownItem } from "../SelectDropdown";
 import "./AdvancedSearchDialog.css";

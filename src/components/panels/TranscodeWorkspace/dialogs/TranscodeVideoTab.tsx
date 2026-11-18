@@ -1,6 +1,6 @@
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useState } from "react";
-import { ExportField } from "../../ExportWorkspace";
+import { ExportField } from "../../../common/EncodingSettings";
 import {
   effectAvailable,
   frameRateOptions,

@@ -1,5 +1,8 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { mediaSourceTree, type MediaSourceNode } from "../../../core/editor/mediaSourceTree";
+import {
+  mediaSourceTree,
+  type MediaSourceNode,
+} from "../../../core/editor/mediaSources/mediaSourceTree";
 import { PopupMenuSubmenu } from "../PopupMenu";
 import type { MediaBinFolder, MediaBinItem } from "../../../types";
 

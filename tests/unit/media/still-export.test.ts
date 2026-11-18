@@ -2,10 +2,10 @@ import { createModuleLoader } from "../support/module-loader.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { StoryboardState } from "../../../src/types.ts";
-import type { StillExportSettings } from "../../../src/application/media/stillExportTask.ts";
+import type { StillExportSettings } from "../../../src/application/stillExport/stillExportTask.ts";
 
-type StoryboardCutsModule = typeof import("../../../src/core/editor/storyboardCuts.ts");
-type StillExportModule = typeof import("../../../src/application/media/stillExportTask.ts");
+type StoryboardCutsModule = typeof import("../../../src/core/editor/storyboard/storyboardCuts.ts");
+type StillExportModule = typeof import("../../../src/application/stillExport/stillExportTask.ts");
 
 interface StillExportCommandArgs {
   assetId: string;
@@ -32,12 +32,15 @@ interface MediaImportCallOptions {
 
 const loadModule = createModuleLoader(import.meta.url);
 
-const cuts = loadModule<StoryboardCutsModule>("../../../src/core/editor/storyboardCuts.ts", {
-  "./storyboard": loadModule("../../../src/core/editor/storyboard.ts", {}),
-  "./timeline": {
-    frameToTimeUs: (frame: number, rate: number) => Math.round((frame / rate) * 1_000_000),
+const cuts = loadModule<StoryboardCutsModule>(
+  "../../../src/core/editor/storyboard/storyboardCuts.ts",
+  {
+    "./storyboard": loadModule("../../../src/core/editor/storyboard/storyboard.ts", {}),
+    "../playback/timeline": {
+      frameToTimeUs: (frame: number, rate: number) => Math.round((frame / rate) * 1_000_000),
+    },
   },
-});
+);
 
 test("toolbar and timeline cuts reject endpoints, existing cuts and deleted gaps", () => {
   const empty: StoryboardState = {
@@ -87,9 +90,9 @@ function taskHarness({
     fail: () => calls.push("failed"),
   };
   const module = loadModule<StillExportModule>(
-    "../../../src/application/media/stillExportTask.ts",
+    "../../../src/application/stillExport/stillExportTask.ts",
     {
-      "../../errors": {
+      "../../runtime/errors": {
         invokeCommand: async (command: string, args: StillExportCommandArgs): Promise<string> => {
           calls.push({ command, args });
           if (failure) throw new Error("offline original");
@@ -97,7 +100,7 @@ function taskHarness({
           return "/output/still.png";
         },
       },
-      "../../errors/runtime": { normalizeError: (error: unknown) => error },
+      "../../runtime/errors/runtime": { normalizeError: (error: unknown) => error },
       "../../platform/tauri/ffmpegProgress": {
         cancelFfmpegTask: async () => {},
         createFfmpegTaskId: () => "still-task",
@@ -111,7 +114,7 @@ function taskHarness({
         applyImportedMediaResult: () => calls.push("applied"),
       },
       "../../systems/TaskSystem": { createTaskProgress: async () => task },
-      "./mediaImportTask": {
+      "../../systems/MediaImportSystem": {
         runMediaImportTask: async ({ path, onSuccess }: MediaImportCallOptions) => {
           calls.push({ importPath: path });
           if (switchDuringImport) projectId = "project-b";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as d3Force from "d3-force";
-import { clientError } from "../../../src/errors/model.ts";
+import { clientError } from "../../../src/core/errors.ts";
 import { defaultStoryboardGraphOptions } from "../../../src/core/editor/storyboardGraph/options.ts";
 import * as graphOptions from "../../../src/core/editor/storyboardGraph/options.ts";
 import * as clustering from "../../../src/core/editor/storyboardGraph/clustering.ts";
@@ -22,7 +22,7 @@ const graphModule = load<typeof import("../../../src/core/editor/storyboardGraph
   "../../../src/core/editor/storyboardGraph/graph.ts",
   {
     "d3-force": d3Force,
-    "../../../errors/model": { clientError },
+    "../../errors": { clientError },
     "./options": graphOptions,
     "./clustering": clustering,
   },

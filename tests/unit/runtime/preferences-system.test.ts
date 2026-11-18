@@ -27,7 +27,7 @@ function preferencesModule(
       zustand: { useStore: () => assert.fail("the test calls the store directly") },
       "zustand/shallow": { useShallow },
       "zustand/vanilla": { createStore },
-      "../../errors": {
+      "../../runtime/errors": {
         invokeCommand: invoke,
         async runOperation(_operation: string, action: () => Promise<unknown>) {
           try {

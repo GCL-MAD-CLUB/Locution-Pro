@@ -1,4 +1,5 @@
 import { scheduleAfter, cancelTask } from "../../../../runtime/scheduling";
+import { renderStoryboardKeywordLabel } from "./renderStoryboardKeywordLabel";
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { KeywordPresetControl } from "./KeywordPresetControl";
@@ -20,7 +21,6 @@ import {
   formatStoryboardKeywordPath,
   normalizeStoryboardKeywordIds,
   parseStoryboardKeywordInput,
-  renderStoryboardKeywordLabel,
   sanitizeStoryboardKeywordInput,
   sanitizeStoryboardKeywordName,
   storyboardEffectiveKeywordIds,
@@ -30,8 +30,11 @@ import {
   suggestedStoryboardKeywordIds,
   visibleStoryboardKeywordIds,
   type StoryboardKeywordPath,
-} from "./storyboardKeywords";
-import { StoryboardSidebarHeading, StoryboardSidebarSection } from "../StoryboardSidebarSection";
+} from "../../../../core/editor/storyboard/storyboardKeywords";
+import {
+  StoryboardSidebarHeading,
+  StoryboardSidebarSection,
+} from "../../../common/StoryboardAnnotations";
 import { useStoryboardPanelState } from "../storyboardPanelState";
 import { usePanelInstanceId } from "../../../../runtime/systems/PanelState";
 

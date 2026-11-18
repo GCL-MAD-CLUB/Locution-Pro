@@ -5,7 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 
 const source = readFileSync(
-  new URL("../../../src/application/media/panelMediaSources.ts", import.meta.url),
+  new URL("../../../src/components/common/PanelMediaSources/panelMediaSources.ts", import.meta.url),
   "utf8",
 );
 const start = source.indexOf("  const { videoId: selectedVideoId");

@@ -5,7 +5,7 @@ import type {
   ExportClip,
   ExportMode,
   ExportSettings,
-} from "../../../src/systems/ExportSystem/exportTypes.ts";
+} from "../../../src/core/editor/export/exportTypes.ts";
 import type { ExportTaskSubmission } from "../../../src/systems/ExportSystem/exportTask.ts";
 
 type ExportTaskModule = typeof import("../../../src/systems/ExportSystem/exportTask.ts");
@@ -50,14 +50,14 @@ function taskHarness({
     updateStatus: (_id: string, status: string) => calls.push(["status", status]),
   };
   const module = loadModule<ExportTaskModule>("../../../src/systems/ExportSystem/exportTask.ts", {
-    "../../errors": {
+    "../../runtime/errors": {
       captureOperationError: () => calls.push(["error"]),
       invokeCommand: (command: string, args: unknown) => {
         calls.push([command, args]);
         return backend.promise;
       },
     },
-    "../../errors/runtime": { normalizeError: (error: unknown) => error },
+    "../../runtime/errors/runtime": { normalizeError: (error: unknown) => error },
     "../../platform/tauri/ffmpegProgress": {
       createFfmpegTaskId: () => "export-task",
       listenToFfmpegTaskProgress: () => () => {},
@@ -70,8 +70,8 @@ function taskHarness({
       },
     },
     "../ProjectSystem": { getProjectExportContext: () => ({ projectId: null }) },
-    "../../application/media/mediaImportTask": {},
-    "./exportTypes": { isAudioOnlyContainer: () => false },
+    "../MediaImportSystem": {},
+    "../../core/editor/export/exportTypes": { isAudioOnlyContainer: () => false },
     "./exportResolvers": {},
     "./exportDestination": {},
     "./exportRename": {
@@ -225,8 +225,10 @@ function actionBarHarness(betaTranscodeEnabled = false) {
       "react/jsx-runtime": { jsx, jsxs: jsx },
       react: { useState: () => [false, () => {}] },
       "lucide-react": { FolderOpen: () => null, Send: () => null },
-      "../../../../application/sendExportToTranscode": { exportToTranscodeBlocker: () => null },
-      "../../../../errors": {},
+      "../../../../application/transcode/sendExportToTranscode": {
+        exportToTranscodeBlocker: () => null,
+      },
+      "../../../../runtime/errors": {},
       "../../../../runtime/events/react": {
         publishEvent: async (event: string) => {
           published.push(event);

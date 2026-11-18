@@ -2,8 +2,8 @@ import React from "react";
 import { RenderLifetime } from "../../../src/runtime/lifetime/RenderLifetime.ts";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
-import { useSubtitleSemanticSearch } from "../../../src/application/media/subtitleSemanticSearch.ts";
-import { useStoryboardSemanticSearch } from "../../../src/application/media/storyboardSemanticSearch.ts";
+import { useSubtitleSemanticSearch } from "../../../src/application/semanticSearch/subtitleSemanticSearch.ts";
+import { useStoryboardSemanticSearch } from "../../../src/application/semanticSearch/storyboardSemanticSearch.ts";
 
 const pause = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
 function check(value, message) {

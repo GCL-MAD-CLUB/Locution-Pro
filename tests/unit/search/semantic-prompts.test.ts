@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createModuleLoader } from "../support/module-loader.ts";
-import { clientError } from "../../../src/errors/model.ts";
-import type { PromptMatch } from "../../../src/core/editor/semanticPrompts.ts";
+import { clientError } from "../../../src/core/errors.ts";
+import type { PromptMatch } from "../../../src/core/editor/search/semanticPrompts.ts";
 
-type SemanticPromptsModule = typeof import("../../../src/core/editor/semanticPrompts.ts");
+type SemanticPromptsModule = typeof import("../../../src/core/editor/search/semanticPrompts.ts");
 
 const loadModule = createModuleLoader(import.meta.url);
 const semanticPrompts = loadModule<SemanticPromptsModule>(
-  "../../../src/core/editor/semanticPrompts.ts",
+  "../../../src/core/editor/search/semanticPrompts.ts",
   {
-    "../../errors/model": { clientError },
+    "../../errors": { clientError },
   },
 );
 const combinePromptMatches = (

@@ -1,7 +1,7 @@
 import { repeatEvery, cancelTask } from "../../../runtime/scheduling";
 import { useScopedState } from "../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog } from "../../../platform/tauri/dialogs";
 import {
   Grid2X2,
   FolderPlus,
@@ -32,7 +32,7 @@ import { useMediaSelectionCapability } from "../../../runtime/capabilities/Media
 import { publishEvent, useBroadcastEvent } from "../../../runtime/events/react";
 import { useStableIdentity } from "../../../runtime/state/react";
 import { usePanelActive, usePanelInstanceId } from "../../../runtime/systems/PanelState";
-import { invokeCommand, runOperation } from "../../../errors";
+import { invokeCommand, runOperation } from "../../../runtime/errors";
 import { createFfmpegTaskId } from "../../../platform/tauri/ffmpegProgress";
 import {
   defaultMediaBinFolderColor,
@@ -57,15 +57,14 @@ import type {
   MediaBinFolder,
   MediaBinItem,
 } from "../../../types";
-import { scheduleMediaAnalysis } from "../../../application/media/mediaAnalysisTask";
-import { runMediaImportTask } from "../../../application/media/mediaImportTask";
+import { scheduleMediaAnalysis, runMediaImportTask } from "../../../systems/MediaImportSystem";
 import {
   MediaLinkDialog,
   type MediaLinkCandidate,
   type MediaLinkMode,
 } from "../../common/MediaLinkDialog";
 import { ModalDialog } from "../../common/ModalDialog";
-import { useStoryboardDetection } from "../StoryboardPanel/hooks/useStoryboardDetection";
+import { useStoryboardDetection } from "../../common/StoryboardDetection";
 import {
   PopupMenu,
   PopupMenuItem,
@@ -75,6 +74,7 @@ import {
 } from "../../common/PopupMenu";
 import { SelectDropdown, selectDropdownItems } from "../../common/SelectDropdown";
 import { useTaskProgressStatus } from "../../../systems/TaskSystem";
+import "../../common/MediaCollection";
 import "./MediaBin.css";
 import { MediaBinTable, type MediaBinTableRow } from "./views/MediaBinTable";
 import {
@@ -82,7 +82,7 @@ import {
   markMediaDragHandled,
   mediaDragType,
   readMediaDragItemIds,
-} from "./mediaDrag";
+} from "../../../application/mediaSources/mediaDrag";
 import {
   setMediaBinClipboardItemCount,
   useMediaBinClipboardItemCount,

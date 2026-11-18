@@ -10,7 +10,7 @@ import {
 import {
   usePanelMediaSource,
   usePanelMediaSourceSelection,
-} from "../../../src/application/media/panelMediaSources.ts";
+} from "../../../src/components/common/PanelMediaSources/index.ts";
 import { StoryboardPanel } from "../../../src/components/panels/StoryboardPanel/StoryboardPanel.tsx";
 import { SubtitlePanel } from "../../../src/components/panels/SubtitlePanel/SubtitlePanel.tsx";
 import {
@@ -19,8 +19,12 @@ import {
 } from "../../../src/systems/ProjectSystem/index.ts";
 import { useStoryboardPanelState } from "../../../src/components/panels/StoryboardPanel/storyboardPanelState.ts";
 import { useSubtitlePanelState } from "../../../src/components/panels/SubtitlePanel/subtitlePanelState.ts";
-import { useStoryboardDetection } from "../../../src/components/panels/StoryboardPanel/hooks/useStoryboardDetection.tsx";
-import { emptyStoryboard, sourceScope, sourceRowId } from "../../../src/core/editor/multiSource.ts";
+import { useStoryboardDetection } from "../../../src/components/common/StoryboardDetection/useStoryboardDetection.tsx";
+import {
+  emptyStoryboard,
+  sourceScope,
+  sourceRowId,
+} from "../../../src/core/editor/mediaSources/multiSource.ts";
 import { stateHub } from "../../../src/runtime/state/StateHub.ts";
 import { PLAYBACK_STATUS_PROJECTION } from "../../../src/runtime/state/contracts.ts";
 

@@ -1,8 +1,11 @@
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { useRef, useState } from "react";
 import { File, Folder } from "lucide-react";
-import { captureOperationError, invokeCommand, runOperation } from "../../../errors";
-import { createLatestPreview, previewTimeUs } from "../../../application/media/latestPreview";
+import { captureOperationError, invokeCommand, runOperation } from "../../../runtime/errors";
+import {
+  createLatestPreview,
+  previewTimeUs,
+} from "../../../application/mediaPreviews/latestPreview";
 import { createFfmpegTaskId } from "../../../platform/tauri/ffmpegProgress";
 
 let active = 0;

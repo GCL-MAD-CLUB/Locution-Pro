@@ -7,10 +7,13 @@ import type {
   ProjectAssetLibraryState,
 } from "../../../src/types.ts";
 
-type VisibilityModule = typeof import("../../../src/core/editor/assetLibraryVisibility.ts");
+type VisibilityModule =
+  typeof import("../../../src/core/editor/assetLibrary/assetLibraryVisibility.ts");
 
 const load = createModuleLoader(import.meta.url);
-const visibility = load<VisibilityModule>("../../../src/core/editor/assetLibraryVisibility.ts");
+const visibility = load<VisibilityModule>(
+  "../../../src/core/editor/assetLibrary/assetLibraryVisibility.ts",
+);
 
 function folder(id: string, parentId: string | null, hidden = false): AssetLibraryFolder {
   return {

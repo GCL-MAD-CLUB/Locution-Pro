@@ -8,7 +8,7 @@ import {
   searchQueryToMultiline,
   searchQueryToSingleLine,
   type AdvancedSearchOptions,
-} from "../../../core/editor/textSearch";
+} from "../../../core/editor/search/textSearch";
 import { ChevronLeft, ChevronRight, ChevronsUpDown, SlidersHorizontal } from "lucide-react";
 import { Fragment, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
@@ -18,7 +18,7 @@ import {
   type SearchMode,
   type SearchRange,
   type SearchRule,
-} from "../../../core/editor/textSearch";
+} from "../../../core/editor/search/textSearch";
 import {
   PopupMenu,
   PopupMenuItem,

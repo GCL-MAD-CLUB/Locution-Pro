@@ -11,7 +11,7 @@ import {
   type AssetLibraryEditFilter,
   type AssetLibraryFilter,
   type AssetLibraryRatingComparator,
-} from "../../../../core/editor/assetLibraryFilter";
+} from "../../../../core/editor/assetLibrary/assetLibraryFilter";
 import { PopupMenuItem, PopupMenuSeparator, PopupMenuSubmenu } from "../../../common/PopupMenu";
 import { assetLibraryColorLabelNames, assetLibraryFlagNames } from "./AssetLibraryBadges";
 

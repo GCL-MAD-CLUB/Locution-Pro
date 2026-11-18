@@ -3,22 +3,23 @@ import test from "node:test";
 import { createModuleLoader } from "../support/module-loader.ts";
 import type { AssetLibraryAnnotation, AssetLibraryEntry } from "../../../src/types.ts";
 
-type GroupModule = typeof import("../../../src/core/editor/assetLibraryGroup.ts");
-type GroupItem = import("../../../src/core/editor/assetLibraryGroup.ts").AssetLibraryGroupItem;
+type GroupModule = typeof import("../../../src/core/editor/assetLibrary/assetLibraryGroup.ts");
+type GroupItem =
+  import("../../../src/core/editor/assetLibrary/assetLibraryGroup.ts").AssetLibraryGroupItem;
 
 const load = createModuleLoader(import.meta.url);
-const timeline = load<typeof import("../../../src/core/editor/timeline.ts")>(
-  "../../../src/core/editor/timeline.ts",
+const timeline = load<typeof import("../../../src/core/editor/playback/timeline.ts")>(
+  "../../../src/core/editor/playback/timeline.ts",
 );
-const assetLibrary = load<typeof import("../../../src/core/editor/assetLibrary.ts")>(
-  "../../../src/core/editor/assetLibrary.ts",
-  { "./timeline": timeline },
+const assetLibrary = load<typeof import("../../../src/core/editor/assetLibrary/assetLibrary.ts")>(
+  "../../../src/core/editor/assetLibrary/assetLibrary.ts",
+  { "../playback/timeline": timeline },
 );
-const filter = load<typeof import("../../../src/core/editor/assetLibraryFilter.ts")>(
-  "../../../src/core/editor/assetLibraryFilter.ts",
+const filter = load<typeof import("../../../src/core/editor/assetLibrary/assetLibraryFilter.ts")>(
+  "../../../src/core/editor/assetLibrary/assetLibraryFilter.ts",
   { "./assetLibrary": assetLibrary },
 );
-const groups = load<GroupModule>("../../../src/core/editor/assetLibraryGroup.ts", {
+const groups = load<GroupModule>("../../../src/core/editor/assetLibrary/assetLibraryGroup.ts", {
   "./assetLibrary": assetLibrary,
   "./assetLibraryFilter": filter,
 });

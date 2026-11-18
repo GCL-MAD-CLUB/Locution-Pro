@@ -8,7 +8,7 @@ for (const label of ["字幕", "分镜"]) {
     await page.evaluate(
       async ({ label, kind }) => {
         const historyPath = "/src/components/common/PanelSearch/searchHistory.ts";
-        const corePath = "/src/core/editor/textSearch.ts";
+        const corePath = "/src/core/editor/search/textSearch.ts";
         const harnessPath = "/tests/browser/components/search/advanced-search.harness.js";
         const { rememberSearch } = await import(/* @vite-ignore */ historyPath);
         const { defaultAdvancedSearch } = await import(/* @vite-ignore */ corePath);

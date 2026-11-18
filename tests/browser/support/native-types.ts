@@ -1,7 +1,7 @@
 import type { MediaDocument, Preferences, ProjectWorkspace } from "../../../src/types";
 import type { TranscodeSettings } from "../../../src/systems/TranscodeSystem/transcodeTypes";
 import type { ImportBrowserConfig } from "../../../src/components/panels/ImportWorkspace/browser/importBrowserConfig";
-import type { ImportSettings } from "../../../src/components/panels/ImportWorkspace/browser/importBrowserModel";
+import type { ImportSettings } from "../../../src/core/editor/import/importBrowserModel";
 
 /** Fields consumed by the native fixture; commands read only their own payload. */
 export interface NativeArguments {

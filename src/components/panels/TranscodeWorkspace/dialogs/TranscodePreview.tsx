@@ -1,23 +1,23 @@
 import { scheduleAfter, cancelTask } from "../../../../runtime/scheduling";
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc } from "../../../../platform/tauri/media";
 import { Loader2 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type PointerEvent } from "react";
-import { frameToTimeUs, timeUsToFrame } from "../../../../core/editor/timeline";
-import { invokeCommand, runBackgroundOperation, runOperation } from "../../../../errors";
+import { frameToTimeUs, timeUsToFrame } from "../../../../core/editor/playback/timeline";
+import { invokeCommand, runBackgroundOperation, runOperation } from "../../../../runtime/errors";
 import { createFfmpegTaskId } from "../../../../platform/tauri/ffmpegProgress";
 import { isMacOSRuntime, isTauriRuntime } from "../../../../platform/tauri/runtime";
 import {
   defaultProxyOptions,
   shouldAutoRemux,
-} from "../../../../application/media/proxyGeneration";
-import { runProxyGenerationTask } from "../../../../application/media/proxyGenerationTask";
+} from "../../../../application/proxy/proxyGeneration";
+import { runProxyGenerationTask } from "../../../../application/proxy/proxyGenerationTask";
 import { usePreferencesPort } from "../../../../systems/PreferencesSystem";
 import { useMediaDocumentAtPath, useProjectPort } from "../../../../systems/ProjectSystem";
 import type { TranscodeSettings, TranscodeSource } from "../../../../systems/TranscodeSystem";
 import { SelectDropdown } from "../../../common/SelectDropdown";
-import { MonitorRange, TimelineRuler, VideoControls } from "../../SourceMonitor";
+import { MonitorRange, TimelineRuler, VideoControls } from "../../../common/PlaybackControls";
 
 type PreviewMode = "source" | "output" | "split" | "sideBySide";
 

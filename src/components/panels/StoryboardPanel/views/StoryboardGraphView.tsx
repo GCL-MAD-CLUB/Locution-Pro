@@ -2,8 +2,8 @@ import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { Waypoints } from "lucide-react";
 import { useMemo, useState } from "react";
 import { defaultStoryboardGraphOptions } from "../../../../core/editor/storyboardGraph/options";
-import { useStoryboardGraph } from "../../../../application/media/storyboardGraph";
-import type { SemanticShot } from "../../../../application/media/storyboardSemanticSearch";
+import { useStoryboardGraph } from "../../../../application/storyboardGraph/storyboardGraph";
+import type { SemanticShot } from "../../../../application/semanticSearch/storyboardSemanticSearch";
 import { usePanelActive } from "../../../../runtime/systems/PanelState";
 import { StoryboardGraphCanvas, type StoryboardGraphCanvasProps } from "./StoryboardGraphCanvas";
 

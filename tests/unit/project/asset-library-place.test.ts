@@ -7,22 +7,22 @@ import type {
   ProjectAssetLibraryState,
 } from "../../../src/types.ts";
 
-type PlaceModule = typeof import("../../../src/core/editor/assetLibraryPlace.ts");
+type PlaceModule = typeof import("../../../src/core/editor/assetLibrary/assetLibraryPlace.ts");
 type ColumnsModule = typeof import("../../../src/components/panels/AssetLibrary/model/columns.ts");
 
 const load = createModuleLoader(import.meta.url);
-const timeline = load<typeof import("../../../src/core/editor/timeline.ts")>(
-  "../../../src/core/editor/timeline.ts",
+const timeline = load<typeof import("../../../src/core/editor/playback/timeline.ts")>(
+  "../../../src/core/editor/playback/timeline.ts",
 );
-const assetLibrary = load<typeof import("../../../src/core/editor/assetLibrary.ts")>(
-  "../../../src/core/editor/assetLibrary.ts",
-  { "./timeline": timeline },
+const assetLibrary = load<typeof import("../../../src/core/editor/assetLibrary/assetLibrary.ts")>(
+  "../../../src/core/editor/assetLibrary/assetLibrary.ts",
+  { "../playback/timeline": timeline },
 );
-const home = load<typeof import("../../../src/core/editor/assetLibraryHome.ts")>(
-  "../../../src/core/editor/assetLibraryHome.ts",
+const home = load<typeof import("../../../src/core/editor/assetLibrary/assetLibraryHome.ts")>(
+  "../../../src/core/editor/assetLibrary/assetLibraryHome.ts",
   { "./assetLibrary": assetLibrary },
 );
-const place = load<PlaceModule>("../../../src/core/editor/assetLibraryPlace.ts", {
+const place = load<PlaceModule>("../../../src/core/editor/assetLibrary/assetLibraryPlace.ts", {
   "./assetLibrary": assetLibrary,
   "./assetLibraryHome": home,
 });

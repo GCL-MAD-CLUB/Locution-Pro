@@ -7,12 +7,12 @@ import type {
   TaskProgressHandle,
   TaskProgressListener,
   TaskProgressUpdate,
-} from "../../../src/systems/TaskSystem/TaskSystem.tsx";
-import type { OperationKey } from "../../../src/errors/model.ts";
+} from "../../../src/systems/TaskSystem/TaskSystem.ts";
+import type { OperationKey } from "../../../src/core/errors.ts";
 
 const loadModule = createModuleLoader(import.meta.url);
 
-type TaskSystemModule = typeof import("../../../src/systems/TaskSystem/TaskSystem.tsx");
+type TaskSystemModule = typeof import("../../../src/systems/TaskSystem/TaskSystem.ts");
 
 // Exercise the actual TaskSystem API and promises; only rendering and reporting
 // are stubbed, so these tests require neither a browser nor a native backend.
@@ -20,7 +20,7 @@ function taskSystem() {
   const errors: unknown[][] = [];
   const jsx = (type: unknown, props: unknown) => ({ type, props });
   const exports = loadModule<TaskSystemModule>(
-    "../../../src/systems/TaskSystem/TaskSystem.tsx",
+    "../../../src/systems/TaskSystem/TaskSystem.ts",
     (name: string): unknown => {
       if (name === "../../runtime/lifetime/RenderLifetime") return { RenderLifetime };
       if (name === "react") {
@@ -36,13 +36,22 @@ function taskSystem() {
       }
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
       if (name === "lucide-react" || name.endsWith(".css")) return {};
-      if (name === "../../errors") {
+      if (name === "../../runtime/errors") {
         return { captureOperationError: (...args: unknown[]) => errors.push(args) };
       }
       assert.fail(`Unexpected dependency: ${name}`);
     },
   );
-  return { ...exports, errors };
+  const { TaskProgress } = loadModule<
+    typeof import("../../../src/components/common/TaskProgress/TaskProgress.tsx")
+  >("../../../src/components/common/TaskProgress/TaskProgress.tsx", {
+    "../../../runtime/lifetime/RenderLifetime": { RenderLifetime },
+    "../../../systems/TaskSystem": exports,
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    "lucide-react": {},
+    "./TaskProgress.css": {},
+  });
+  return { ...exports, TaskProgress, errors };
 }
 
 function options(

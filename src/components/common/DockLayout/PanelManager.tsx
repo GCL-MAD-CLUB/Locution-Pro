@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
-import { clientError } from "../../../errors";
+import { clientError } from "../../../runtime/errors";
 import { disposePanelInstanceState, usePanelInstanceId } from "../../../runtime/systems/PanelState";
 import type {
   DockAreaId,

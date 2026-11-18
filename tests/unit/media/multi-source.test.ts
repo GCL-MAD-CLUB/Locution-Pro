@@ -17,7 +17,7 @@ import {
   storyboardMergeGroups,
   updateScopedStoryboard,
   updateScopedSubtitles,
-} from "../../../src/core/editor/multiSource.ts";
+} from "../../../src/core/editor/mediaSources/multiSource.ts";
 import type { StoryboardShot, StoryboardState } from "../../../src/types.ts";
 
 function board(keywordId: string, name: string): StoryboardState {

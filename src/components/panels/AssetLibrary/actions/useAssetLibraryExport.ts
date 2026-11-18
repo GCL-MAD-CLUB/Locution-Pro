@@ -1,9 +1,9 @@
 import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
-import type { AssetLibraryLocation } from "../../../../core/editor/assetLibrary";
+import type { AssetLibraryLocation } from "../../../../core/editor/assetLibrary/assetLibrary";
 import {
   assetLibraryExportEntries,
   type AssetLibraryExportSelection,
-} from "../../../../core/editor/assetLibraryExport";
+} from "../../../../core/editor/assetLibrary/assetLibraryExport";
 import { useExportCapability } from "../../../../runtime/capabilities/ExportCapability";
 import type { SystemIdentity } from "../../../../runtime/systems/identity";
 import {

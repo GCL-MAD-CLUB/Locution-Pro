@@ -1,7 +1,7 @@
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { createContext, memo, useContext, useState, type ReactNode } from "react";
 import { PanelInstanceProvider, usePublishedPanelTitle } from "../../../runtime/systems/PanelState";
-import { clientError } from "../../../errors";
+import { clientError } from "../../../runtime/errors";
 import {
   PopupMenuItem,
   PopupMenuSelectionGroup,

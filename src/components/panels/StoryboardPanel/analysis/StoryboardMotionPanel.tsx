@@ -1,3 +1,4 @@
+import type { FrameTraceData } from "../../../../core/editor/mediaAnalysis/frameTrace";
 import { scheduleAfter, cancelTask } from "../../../../runtime/scheduling";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { RotateCw } from "lucide-react";
@@ -9,17 +10,14 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from "react";
-import { runOperation } from "../../../../errors";
-import {
-  decodeBrowserFrameTrace,
-  type FrameTraceData,
-} from "../../../../application/media/browserFrameTrace";
+import { runOperation } from "../../../../runtime/errors";
+import { decodeBrowserFrameTrace } from "../../../../application/frameTrace/browserFrameTrace";
 import {
   frameTraceCacheKey,
   getFrameTraceCache,
-} from "../../../../application/media/frameTraceCache";
-import { NativeFrameTraceSession } from "../../../../application/media/nativeFrameTrace";
-import { DEFAULT_FRAME_RATE } from "../../../../core/editor/timeline";
+} from "../../../../application/frameTrace/frameTraceCache";
+import { NativeFrameTraceSession } from "../../../../application/frameTrace/nativeFrameTrace";
+import { DEFAULT_FRAME_RATE } from "../../../../core/editor/playback/timeline";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import type { StoryboardShot } from "../../../../types";
 import { eventSource } from "../../../../runtime/events/EventHub";

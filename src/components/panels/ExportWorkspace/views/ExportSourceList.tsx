@@ -1,5 +1,5 @@
 import {} from "react";
-import { formatDuration } from "../../../../core/editor/time";
+import { formatDuration } from "../../../../core/editor/playback/time";
 import type { ExportClip, ExportSource } from "../../../../systems/ExportSystem";
 import { ExportClipThumbnail } from "./ExportClipThumbnail";
 import "./ExportSourceList.css";

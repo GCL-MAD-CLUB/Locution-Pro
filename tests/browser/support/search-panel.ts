@@ -3,7 +3,7 @@ import type {
   AdvancedSearchOptions,
   SearchMode,
   SearchRule,
-} from "../../../src/core/editor/textSearch";
+} from "../../../src/core/editor/search/textSearch";
 
 export type SearchPanelLabel = "字幕" | "分镜";
 export interface SearchSnapshot {

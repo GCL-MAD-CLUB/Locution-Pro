@@ -1,12 +1,33 @@
 # 系统维护契约
 
-本文面向维护者，以 Locution Pro 0.4.2 为基线。产品介绍位于根 README，使用说明位于用户指南；本页的技术契约不得移入这两类文档。
+本文面向 Locution Pro 维护者。产品介绍位于根 README，使用说明位于用户指南。
 
 ## 产品与数据边界
 
 应用支持独立的媒体管理、画面检索、分镜整理和导出。字幕是可选来源，不应成为视频导入、检测、分镜检索或导出的前置条件。
 
 应用标识为 `com.locutionpro.desktop`，项目扩展名为 `.lcp`，默认 Windows 数据目录为 `%LOCALAPPDATA%\Locution Pro`，浏览器键使用 `locution-pro:` 前缀。与 LineCut 的安装、卸载、快捷方式和可写数据隔离，项目读取兼容由项目文件层维护。
+
+## 前端目录与依赖
+
+先确定代码的功能所有者。面板内的视图、交互、状态、样式和 Worker 随面板放置，并按职责使用子目录，例如 `AssetLibrary/{actions,model,state,views}`。跨面板复用的 UI 或交互放入 `components/common/<Owner>/`。需要被 UI 下层使用的规则、任务或适配器放入对应的功能目录。目录名描述实际职责，例如 `assetLibrary`、`frameTrace`、`semanticSearch`。避免用通用工具目录收纳多个功能。
+
+| 目录                                             | 职责                                                     |
+| ------------------------------------------------ | -------------------------------------------------------- |
+| `src/app`                                        | 应用外壳、工作区装配和面板注册                           |
+| `src/components/panels`、`src/components/common` | 面板私有实现、跨面板共享的 UI 与交互                     |
+| `src/application/<feature>`                      | 跨系统流程和共享媒体服务                                 |
+| `src/systems`                                    | 项目、首选项、任务、导入、导出和转码等系统               |
+| `src/platform`                                   | Tauri 及其他宿主接口适配                                 |
+| `src/runtime`                                    | 生命周期、事件、投影、调度和错误运行时                   |
+| `src/core`                                       | 底层契约与纯业务规则，编辑功能按 `editor/<feature>` 归类 |
+| `src/assets`                                     | 图标、字体、版本和随包声明的资源入口                     |
+
+表中各层可引用自身及下方的层。启动入口、共享 DTO、Vite 声明和全局样式保留在 `src/` 根目录。组件和系统目录使用 PascalCase 命名，目录内部直接引用实现，外部通过 `index.ts` 使用公开接口。面板通过应用装配、类型化端口、EventHub 或 StateHub 协作。Worker 和 AudioWorklet 与使用它们的功能放在一起，通过显式相对路径加载。
+
+第三方库按职责接入。Tauri SDK 由适配器和命令网关接入，RxJS 由调度模块持有，虚拟列表通过行虚拟化模块复用，d3-force 留在分镜图引擎。新增生产包须直接声明在 `package.json` 并通过依赖检查。官网脚本和用户指南主题各自独立。官网浏览器与边缘 Worker 通过发布契约共享逻辑。
+
+`npm run lint` 检查单文件归属和依赖边界。`npm run check:architecture` 在构建和 CI 中检查文件与组件／系统循环、从入口不可达的模块和未使用的生产依赖。分析覆盖类型导入、静态导入、重新导出、字面量动态导入和通过 `import.meta.url` 加载的模块资源。运行 `npm run --silent deps:frontend` 可输出 JSON，其中 `modules` 给出文件及连边，`groups` 按功能汇总依赖，`packages` 列出第三方包的引用文件。
 
 ## 组件通信
 
@@ -38,13 +59,13 @@
 
 来源上下文只组织视图和编辑分发，不将多个视频变为共享媒体。显示行可以包装来源身份，但持久化条目保留原身份。合并镜头、删除与堆叠在各视频内执行；关键字目录按项目协调。
 
-字幕自动整理集中在 `core/editor/subtitlePreprocessing.ts`。同轨、纯文本完全相同且相接或重叠的连续 cue 可合并为缓存读取视图，原始 cue 不变。所有显示、计数、搜索、预览和导出使用该视图；删除等显式编辑通过来源 cue 映射作用于原数据。位图轨不参与文本预处理。
+字幕自动整理集中在 `core/editor/subtitles/subtitlePreprocessing.ts`。同轨、纯文本完全相同且相接或重叠的连续 cue 可合并为缓存读取视图，原始 cue 不变。所有显示、计数、搜索、预览和导出使用该视图；删除等显式编辑通过来源 cue 映射作用于原数据。位图轨不参与文本预处理。
 
-素材库是项目内容 `asset_library`，纯规则位于 `core/editor/assetLibrary.ts`，面板只通过 `assetLibraryUpdated` 提交整库替换，形成一条 `library` 历史。条目在加入时复制媒体身份、入出点、文本与标注（关键字按名称），此后不读取也不写回字幕、分镜状态；字幕与分镜面板只负责构造快照。播放时按视频 id、再按指纹解析项目媒体，解析不到即离线，条目保留。素材库的“主文件夹”（快速访问固定的文件夹、收藏夹、最近使用的素材）属于用户而非项目内容：它按项目 id 存在 WorkspaceConfig.xml 的面板状态中（`core/editor/assetLibraryHome.ts`），不进入项目文件和撤销历史，只列出仍存在的 id。导出时，所选文件夹与素材库展开为其中的素材（隐藏内容遵循“查看隐藏内容”），按素材自身的名称、入出点和关键字生成片段；同时含字幕与分镜素材时使用“素材”命名规则，媒体离线的素材跳过。
+素材库是项目内容 `asset_library`，纯规则位于 `core/editor/assetLibrary/assetLibrary.ts`，面板只通过 `assetLibraryUpdated` 提交整库替换，形成一条 `library` 历史。条目在加入时复制媒体身份、入出点、文本与标注（关键字按名称），此后不读取也不写回字幕、分镜状态；字幕与分镜面板只负责构造快照。播放时按视频 id、再按指纹解析项目媒体，解析不到即离线，条目保留。素材库的“主文件夹”（快速访问固定的文件夹、收藏夹、最近使用的素材）属于用户而非项目内容：它按项目 id 存在 WorkspaceConfig.xml 的面板状态中（`core/editor/assetLibrary/assetLibraryHome.ts`），不进入项目文件和撤销历史，只列出仍存在的 id。导出时，所选文件夹与素材库展开为其中的素材（隐藏内容遵循“查看隐藏内容”），按素材自身的名称、入出点和关键字生成片段；同时含字幕与分镜素材时使用“素材”命名规则，媒体离线的素材跳过。
 
 ## 面板来源与播放
 
-`application/media/panelMediaSources.ts` 组织来源，`panelMediaPersistence.ts` 与 `projectPanelPersistence.ts` 负责本机恢复和顺序写入。
+`components/common/PanelMediaSources/panelMediaSources.ts` 组织来源，`panelMediaPersistence.ts` 与 `projectPanelPersistence.ts` 负责本机恢复和顺序写入。
 
 来源工作区保存来源集合、活动源、字幕轨、播放位置和有界来源历史。相同媒体与轨道集合只保留一个工作区；项目与面板实例共同限定本机配置。来源锁分别属于字幕与分镜面板，阻止手动及自动来源变化，仍允许切换既有工作区。
 
@@ -52,7 +73,7 @@
 
 ## 搜索与大列表
 
-共享搜索控件位于 `components/common/PanelSearch`，纯文本规则位于 `core/editor/textSearch.ts`。查询实时更新，最近搜索在退出输入时记录最终非空查询，并在应用高级搜索或修改快捷设置后更新。字幕与分镜各自维护语义、过滤／高亮两个历史空间，每个空间最多 6 项 LRU；以 `searchQueryToSingleLine` 生成的文本判重，保存并恢复完整搜索配置。同名配置覆盖旧项，高级条件的蓝色星号仅用于历史列表展示。
+共享搜索控件位于 `components/common/PanelSearch`，纯文本规则位于 `core/editor/search/textSearch.ts`。查询实时更新，最近搜索在退出输入时记录最终非空查询，并在应用高级搜索或修改快捷设置后更新。字幕与分镜各自维护语义、过滤／高亮两个历史空间，每个空间最多 6 项 LRU；以 `searchQueryToSingleLine` 生成的文本判重，保存并恢复完整搜索配置。同名配置覆盖旧项，高级条件的蓝色星号仅用于历史列表展示。
 
 分镜语义结果携带最高得分帧位置；列表补充只读预览，图标视图使用命中帧并保留缩略图操作。排序和过滤使用原始分数，显示精度不能改变结果。
 
@@ -68,7 +89,7 @@
 
 ## 帮助与发布信息
 
-“关于”从应用清单读取版本，提供署名与随包第三方声明；仅 Escape 关闭，焦点与应用快捷键必须隔离。检查更新由 `application/update.ts` 协调，后端 `backend/update.rs` 汇总 CDN、GitHub 清单与最新正式 Release，选择最高有效正式版本。预发布构建跳过检测，预发布结果不参与提示或下载。关闭对话框后忽略迟到结果。发布说明中的链接只允许 HTTP(S)，由系统浏览器打开，不导航应用 WebView。
+“关于”从应用清单读取版本，提供署名与随包第三方声明；仅 Escape 关闭，焦点与应用快捷键必须隔离。检查更新由 `application/update/update.ts` 协调，后端 `backend/update.rs` 汇总 CDN、GitHub 清单与最新正式 Release，选择最高有效正式版本。预发布构建跳过检测，预发布结果不参与提示或下载。关闭对话框后忽略迟到结果。发布说明中的链接只允许 HTTP(S)，由系统浏览器打开，不导航应用 WebView。
 
 自动更新仅使用更新专用安装包。CDN 不能独立授权执行：摘要须由固定 GitHub 仓库确认，启动前再次验证版本和本地文件。缓存元数据、忽略版本及已展示说明在本机持久化，重启后复验缓存；更新失败通知先于其他更新通知。所有来源均失败时，手动检查报告错误，后台检查保持静默；有版本信息但不能自动安装时保留发布页入口。
 

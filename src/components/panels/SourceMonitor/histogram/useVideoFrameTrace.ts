@@ -1,17 +1,17 @@
 import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useRef, type RefObject } from "react";
-import { captureOperationError } from "../../../../errors";
-import { type PlaybackTraceSample } from "../../../../core/editor/frameTrace";
-import { timeUsToFrame } from "../../../../core/editor/timeline";
+import { captureOperationError } from "../../../../runtime/errors";
+import { type PlaybackTraceSample } from "../../../../core/editor/mediaAnalysis/frameTrace";
+import { timeUsToFrame } from "../../../../core/editor/playback/timeline";
 import type {
   FrameTraceWorkerResponse,
   FrameTraceWorkerRequest,
-} from "../../../../application/media/frameTraceWorker";
+} from "../../../../application/frameTrace/frameTraceWorker";
 import {
   createTraceCanvas,
   readTracePixels,
-} from "../../../../application/media/browserFrameTrace";
-import { getFrameTraceCache } from "../../../../application/media/frameTraceCache";
+} from "../../../../application/frameTrace/browserFrameTrace";
+import { getFrameTraceCache } from "../../../../application/frameTrace/frameTraceCache";
 
 export function useVideoFrameTrace(
   lifetime: RenderLifetime,

@@ -1,6 +1,6 @@
-﻿import { invokeCommand, runOperation } from "../../../../errors";
+﻿import { invokeCommand, runOperation } from "../../../../runtime/errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
-import type { ImportMetadata } from "../browser/importBrowserModel";
+import type { ImportMetadata } from "../../../../core/editor/import/importBrowserModel";
 
 let active = 0;
 const waiting: Array<() => void> = [];

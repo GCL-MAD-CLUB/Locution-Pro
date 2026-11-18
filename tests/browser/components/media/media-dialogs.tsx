@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { MediaBrowserDialog } from "../../../../src/components/common/MediaBrowserDialog/MediaBrowserDialog";
 import { MediaLinkDialog } from "../../../../src/components/common/MediaLinkDialog/MediaLinkDialog";
-import { ErrorOutlet } from "../../../../src/errors";
+import { ErrorOutlet } from "../../../../src/app/ErrorUI";
 import "../../../../src/styles.css";
 
 function Harness() {

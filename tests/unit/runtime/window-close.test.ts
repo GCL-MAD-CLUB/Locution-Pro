@@ -1,17 +1,17 @@
 import { createModuleLoader, deferred, flush } from "../support/module-loader.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { WindowCloseAction } from "../../../src/application/windowClose.ts";
+import type { WindowCloseAction } from "../../../src/application/window/windowClose.ts";
 import * as scheduling from "../support/scheduling.ts";
 
 const loadModule = createModuleLoader(import.meta.url);
 
-type WindowCloseModule = typeof import("../../../src/application/windowClose.ts");
+type WindowCloseModule = typeof import("../../../src/application/window/windowClose.ts");
 
 function windowClose() {
-  return loadModule<WindowCloseModule>("../../../src/application/windowClose.ts", {
-    "../errors/runtime": { normalizeError: (error: unknown) => error },
-    "../runtime/scheduling": scheduling,
+  return loadModule<WindowCloseModule>("../../../src/application/window/windowClose.ts", {
+    "../../runtime/errors/runtime": { normalizeError: (error: unknown) => error },
+    "../../runtime/scheduling": scheduling,
   });
 }
 

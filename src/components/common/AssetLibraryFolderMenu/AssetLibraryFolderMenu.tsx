@@ -3,7 +3,7 @@ import {
   assetLibraryFolderOutline,
   assetLibraryPathText,
   assetLibraryRootLabels,
-} from "../../../core/editor/assetLibrary";
+} from "../../../core/editor/assetLibrary/assetLibrary";
 import type { AssetLibraryRoot, ProjectAssetLibraryState } from "../../../types";
 import { PopupMenuItem } from "../PopupMenu";
 import "./AssetLibraryFolderMenu.css";

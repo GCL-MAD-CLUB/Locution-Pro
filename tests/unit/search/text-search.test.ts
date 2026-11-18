@@ -9,7 +9,7 @@ import {
   matchesSearchDuration,
   searchPatternError,
   searchLines,
-} from "../../../src/core/editor/textSearch.ts";
+} from "../../../src/core/editor/search/textSearch.ts";
 
 test("advanced text rules combine inclusion, exclusion and case sensitivity", () => {
   const options = { ...defaultAdvancedSearch, excludedText: "draft\nrough cut" };

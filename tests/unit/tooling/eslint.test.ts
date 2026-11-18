@@ -4,14 +4,14 @@ import { ESLint } from "eslint";
 
 const eslint = new ESLint();
 
-async function rules(source: string, filePath = "src/LintFixture.tsx") {
+async function rules(source: string, filePath = "src/app/LintFixture.tsx") {
   const [result] = await eslint.lintText(source, { filePath });
   assert.equal(result.fatalErrorCount, 0, JSON.stringify(result.messages));
   return result.messages.map((message) => message.ruleId);
 }
 
 test("React compiler and hooks diagnostics are errors", async () => {
-  const config = await eslint.calculateConfigForFile("src/LintFixture.tsx");
+  const config = await eslint.calculateConfigForFile("src/app/LintFixture.tsx");
   for (const name of [
     "rules-of-hooks",
     "exhaustive-deps",
@@ -46,7 +46,7 @@ test("effect hooks cannot be imported, aliased, re-exported, wrapped, or read fr
       `export { ${name} as run } from 'react';`,
       `export function useWrapper() { ${name}(() => {}, []); }`,
     ]) {
-      for (const file of ["src/LintFixture.tsx", "tests/browser/components/lint.harness.js"]) {
+      for (const file of ["src/app/LintFixture.tsx", "tests/browser/components/lint.harness.js"]) {
         assert((await rules(source, file)).includes("no-restricted-syntax"), source);
       }
     }

@@ -6,7 +6,7 @@ import { dirname, resolve } from "node:path";
 import test from "node:test";
 import ts from "typescript";
 import { runInNewContext } from "node:vm";
-import type { ExportSource } from "../../../src/systems/ExportSystem/exportTypes.ts";
+import type { ExportSource } from "../../../src/core/editor/export/exportTypes.ts";
 import type { MediaBinItem, MediaDocument, MediaStream } from "../../../src/types.ts";
 
 const nodeRequire = createRequire(import.meta.url);

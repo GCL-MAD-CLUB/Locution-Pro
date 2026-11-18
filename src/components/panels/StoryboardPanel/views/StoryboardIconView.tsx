@@ -1,7 +1,7 @@
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { annotationColors } from "../../../../runtime/theme";
-import type { PanelRowSource } from "../../../../core/editor/multiSource";
+import type { PanelRowSource } from "../../../../core/editor/mediaSources/multiSource";
 import { Star } from "lucide-react";
 import {
   useMemo,
@@ -13,13 +13,13 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
-import { formatMonitorFrame, formatMonitorTime } from "../../../../core/editor/time";
-import { frameToTimeUs } from "../../../../core/editor/timeline";
+import { formatMonitorFrame, formatMonitorTime } from "../../../../core/editor/playback/time";
+import { frameToTimeUs } from "../../../../core/editor/playback/timeline";
 import {
   fitStoryboardGrid,
   storyboardGridRenderRange,
   type StoryboardGridLayout,
-} from "../../../../core/editor/storyboardGrid";
+} from "../../../../core/editor/storyboard/storyboardGrid";
 import { usePanelActive } from "../../../../runtime/systems/PanelState";
 import {
   timelineThumbnails,
@@ -27,12 +27,9 @@ import {
   timelineThumbnailWindowContains,
   useTimelineThumbnailWindow,
   type TimelineThumbnailVisibleRange,
-} from "../../../../timelineThumbnail";
+} from "../../../../application/thumbnails/timeline";
 import type { StoryboardShot } from "../../../../types";
-import {
-  SearchHighlight,
-  type SearchHighlightOptions,
-} from "../../../common/PanelSearch/PanelSearch";
+import { SearchHighlight, type SearchHighlightOptions } from "../../../common/PanelSearch";
 import {
   PopupMenu,
   PopupMenuItem,

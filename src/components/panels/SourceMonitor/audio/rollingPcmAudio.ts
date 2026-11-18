@@ -1,4 +1,4 @@
-import { clientError, invokeCommand, runOperation } from "../../../../errors";
+import { clientError, invokeCommand, runOperation } from "../../../../runtime/errors";
 
 const PCM_MAGIC = "LPCM";
 const PCM_HEADER_BYTES = 24;

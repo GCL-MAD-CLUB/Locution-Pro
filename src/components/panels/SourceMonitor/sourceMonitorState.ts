@@ -1,16 +1,13 @@
 ﻿import { createPanelState } from "../../../runtime/systems/PanelState";
-import { DEFAULT_FRAME_RATE } from "../../../core/editor/timeline";
+import { DEFAULT_FRAME_RATE } from "../../../core/editor/playback/timeline";
+
+import type { MonitorCueRange } from "../../common/PlaybackControls";
 
 export type MonitorZoomLevel = "fit" | number;
 
 export interface ZoomPan {
   x: number;
   y: number;
-}
-
-export interface MonitorCueRange {
-  startFrame: number;
-  endFrame: number;
 }
 
 export const shuttlePlaybackRates = [-16, -8, -4, -2, -1, 1, 2, 4, 8, 16] as const;

@@ -10,7 +10,7 @@ import {
   defaultKeywordPresets,
   keywordPresetNameError,
   type KeywordPreset,
-} from "../../../src/core/editor/keywordPresets.ts";
+} from "../../../src/core/editor/storyboard/keywordPresets.ts";
 
 interface KeywordPresetStoreState {
   presets: KeywordPreset[];

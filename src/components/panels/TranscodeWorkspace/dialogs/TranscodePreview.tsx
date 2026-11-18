@@ -16,16 +16,20 @@ import { runProxyGenerationTask } from "../../../../application/media/proxyGener
 import { usePreferencesPort } from "../../../../systems/PreferencesSystem";
 import { useMediaDocumentAtPath, useProjectPort } from "../../../../systems/ProjectSystem";
 import type { TranscodeSettings, TranscodeSource } from "../../../../systems/TranscodeSystem";
+import { SelectDropdown } from "../../../common/SelectDropdown";
 import { MonitorRange, TimelineRuler, VideoControls } from "../../SourceMonitor";
 
 type PreviewMode = "source" | "output" | "split" | "sideBySide";
 
-const modes: Array<{ id: PreviewMode; label: string }> = [
-  { id: "source", label: "源" },
-  { id: "output", label: "输出" },
-  { id: "split", label: "分屏对比" },
-  { id: "sideBySide", label: "并排" },
-];
+const previewModes: readonly PreviewMode[] = ["source", "output", "split", "sideBySide"];
+const previewModeLabels: Record<PreviewMode, string> = {
+  source: "源",
+  output: "输出",
+  split: "分屏对比",
+  sideBySide: "并排",
+};
+const fitValue = "fit";
+const actualSizeValue = "100";
 
 interface PreviewFrames {
   sourcePath: string;
@@ -431,56 +435,6 @@ export function TranscodePreview({
   return lifetime.render(
     <section className="transcode-preview" aria-label="预览">
       <div className="transcode-preview-toolbar">
-        <div className="transcode-segmented" role="tablist" aria-label="预览方式">
-          {modes.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={mode === item.id}
-              className={mode === item.id ? "active" : ""}
-              onClick={() => setMode(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-        <div className="transcode-preview-range" role="group" aria-label="源范围">
-          <button
-            type="button"
-            className="toolbar-button"
-            disabled={!hasVideo}
-            title="把当前帧设为源范围的入点"
-            onClick={() =>
-              changeRange({
-                startFrame: frame,
-                endFrame: Math.max(frame, rangeEndFrame ?? lastFrame),
-              })
-            }
-          >
-            设为入点
-          </button>
-          <button
-            type="button"
-            className="toolbar-button"
-            disabled={!hasVideo}
-            title="把当前帧设为源范围的出点"
-            onClick={() =>
-              changeRange({ startFrame: Math.min(frame, rangeStartFrame ?? 0), endFrame: frame })
-            }
-          >
-            设为出点
-          </button>
-          <button
-            type="button"
-            className="toolbar-button"
-            disabled={!cueRange}
-            onClick={() => onRangeChange(null, null)}
-          >
-            清除范围
-          </button>
-        </div>
-        <span className="transcode-toolbar-spacer" />
         {loading && (
           <Loader2 className="spin transcode-preview-busy" size={14} aria-label="正在生成预览" />
         )}
@@ -494,14 +448,6 @@ export function TranscodePreview({
             onChange={(event) => setEncoded(event.currentTarget.checked)}
           />
           按实际编码画质
-        </label>
-        <label className="export-check-label">
-          <input
-            type="checkbox"
-            checked={actualSize}
-            onChange={(event) => setActualSize(event.currentTarget.checked)}
-          />
-          100%
         </label>
       </div>
       <div className={`transcode-preview-stage ${sizeClass}`}>
@@ -546,7 +492,33 @@ export function TranscodePreview({
           timelineSpanFrames={timelineSpanFrames}
           minTimelineSpanFrames={minTimelineSpanFrames}
           isPlaying={isPlaying}
-          showZoom={false}
+          zoomMenu={
+            <SelectDropdown
+              className="monitor-select"
+              menuClassName="monitor-select-menu"
+              ariaLabel="预览缩放"
+              value={actualSize ? actualSizeValue : fitValue}
+              items={[
+                { type: "option", value: fitValue, label: "适合" },
+                { type: "option", value: actualSizeValue, label: "100%" },
+              ]}
+              onChange={(value) => setActualSize(value === actualSizeValue)}
+            />
+          }
+          previewMode={mode}
+          previewModeOptions={previewModes}
+          previewModeLabels={previewModeLabels}
+          onPreviewModeChange={setMode}
+          rangeActions={{
+            canMark: hasVideo,
+            onMarkIn: () =>
+              changeRange({
+                startFrame: frame,
+                endFrame: Math.max(frame, rangeEndFrame ?? lastFrame),
+              }),
+            onMarkOut: () =>
+              changeRange({ startFrame: Math.min(frame, rangeStartFrame ?? 0), endFrame: frame }),
+          }}
           onSeekFrame={seekFrame}
           onPlaybackFrameRequest={() => frame}
           onPauseForPreciseSeek={pause}
@@ -583,6 +555,9 @@ export function TranscodePreview({
         <p className="transcode-note">
           macOS 无法直接播放 MKV，正在无损重封装（不重新编码），完成后自动播放。
         </p>
+      )}
+      {noOutputVideo && !isPlaying && (
+        <p className="transcode-note">当前设置不导出视频，只显示源画面。</p>
       )}
       {playbackFailed && (
         <p className="transcode-note">

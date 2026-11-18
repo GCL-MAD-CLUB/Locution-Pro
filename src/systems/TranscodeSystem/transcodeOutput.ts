@@ -7,8 +7,61 @@ import type {
   TranscodeSourceInfo,
 } from "./transcodeTypes";
 
-/** Media-bin folder, and on-disk folder name, that receives project outputs. */
-export const encoderBinName = "encoder";
+/** On-disk folder, beside the project file, that receives media bin outputs. */
+export const encoderFolderName = "encoder";
+
+/**
+ * Stands for the root `encoder` media bin folder, found or created when the
+ * output finishes. Configs saved before bin folders could be chosen restore
+ * to it, so their outputs keep landing where they used to.
+ */
+export const encoderBinFolderId = "transcode:encoder-bin";
+
+/** The part of a media bin folder that names it and places it in the tree. */
+export interface TranscodeBinFolder {
+  id: string;
+  name: string;
+  parent_id: string | null;
+}
+
+/** Folder names from the top of the media bin down to the folder; empty when it is gone. */
+export function mediaBinFolderPath(folders: readonly TranscodeBinFolder[], folderId: string) {
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  const names: string[] = [];
+  const seen = new Set<string>();
+  let current = byId.get(folderId);
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    names.unshift(current.name);
+    current = current.parent_id ? byId.get(current.parent_id) : undefined;
+  }
+  return names;
+}
+
+/** Media bin folders depth-first in sibling order, with their nesting depth (0 at the top). */
+export function mediaBinFolderOutline<Folder extends TranscodeBinFolder>(
+  folders: readonly Folder[],
+) {
+  const children = new Map<string | null, Folder[]>();
+  const known = new Set(folders.map((folder) => folder.id));
+  for (const folder of folders) {
+    // A folder whose parent is missing is shown at the top level.
+    const parent = folder.parent_id && known.has(folder.parent_id) ? folder.parent_id : null;
+    children.set(parent, [...(children.get(parent) ?? []), folder]);
+  }
+  const outline: Array<{ folder: Folder; depth: number }> = [];
+  const visited = new Set<string>();
+  const visit = (parent: string | null, depth: number) => {
+    for (const folder of children.get(parent) ?? []) {
+      if (visited.has(folder.id)) continue;
+      visited.add(folder.id);
+      outline.push({ folder, depth });
+      visit(folder.id, depth + 1);
+    }
+  };
+  visit(null, 0);
+  return outline;
+}
 
 export function fileName(path: string) {
   return path.split(/[\\/]/).pop() ?? path;
@@ -49,7 +102,7 @@ export function resolveOutputDirectory(
   if (!destination) return null;
   if (destination.kind === "folder") return destination.directory.trim() || null;
   const base = projectDirectory || parentDirectory(sourcePath);
-  return base ? joinPath(base, encoderBinName) : null;
+  return base ? joinPath(base, encoderFolderName) : null;
 }
 
 /** Why an output cannot be encoded yet; null when it is ready to run. */
@@ -64,11 +117,17 @@ export function outputBlocker(output: TranscodeOutput): string | null {
   return null;
 }
 
-export function destinationLabel(destination: TranscodeDestination | null) {
-  if (!destination) return "未选择输出位置";
-  return destination.kind === "mediaBin"
-    ? `项目媒体箱 / ${encoderBinName}`
-    : destination.directory || "未选择输出文件夹";
+/** "媒体箱 / 素材 / 转码" for a bin folder, the directory for a disk folder. */
+export function destinationLabel(
+  destination: TranscodeDestination | null,
+  folders: readonly TranscodeBinFolder[],
+) {
+  if (!destination) return "未设置";
+  if (destination.kind === "folder") return destination.directory || "未设置";
+  if (!destination.folderId) return "媒体箱";
+  if (destination.folderId === encoderBinFolderId) return `媒体箱 / ${encoderFolderName}`;
+  const path = mediaBinFolderPath(folders, destination.folderId);
+  return path.length > 0 ? ["媒体箱", ...path].join(" / ") : "媒体箱（文件夹已删除）";
 }
 
 export function plannedOutputPath(

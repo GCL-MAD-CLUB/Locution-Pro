@@ -71,9 +71,7 @@ export function TranscodeWatchFolders() {
       </div>
       <div className="transcode-watch-list">
         {folders.length === 0 && (
-          <p className="transcode-empty">
-            添加监视文件夹后，放入其中的媒体文件会按所选预设自动加入队列；勾选“自动对监视文件夹编码”后会立即开始编码。
-          </p>
+          <p className="transcode-empty">放入监视文件夹的媒体会按预设加入队列。</p>
         )}
         {folders.map((folder) => (
           <section key={folder.id} className="transcode-watch-folder">

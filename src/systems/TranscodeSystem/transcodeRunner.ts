@@ -227,7 +227,10 @@ async function runOutput(source: TranscodeSource, output: TranscodeOutput) {
     if (output.destination?.kind === "mediaBin") {
       void publishEvent(
         "transcode.output.completed",
-        { paths: [result.outputPath, ...result.sidecarPaths] },
+        {
+          paths: [result.outputPath, ...result.sidecarPaths],
+          folderId: output.destination.folderId,
+        },
         transcodeIdentity,
       );
     }

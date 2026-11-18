@@ -182,7 +182,7 @@ export function TranscodeSubtitleTab({
             <div className="transcode-inline">
               <button
                 type="button"
-                className="toolbar-button"
+                className="transcode-button"
                 onClick={() => void chooseExternal()}
               >
                 选择…
@@ -190,7 +190,7 @@ export function TranscodeSubtitleTab({
               {subtitles.externalPath && (
                 <button
                   type="button"
-                  className="toolbar-button"
+                  className="transcode-button"
                   onClick={() => update((draft) => void (draft.subtitles.externalPath = ""))}
                 >
                   清除
@@ -206,11 +206,6 @@ export function TranscodeSubtitleTab({
       {burnTextUnavailable && (
         <p className="transcode-note is-warning">
           当前 FFmpeg 不含文本字幕渲染组件，只能录制位图字幕（如 PGS、DVD 字幕）。
-        </p>
-      )}
-      {subtitles.mode === "sidecar" && (
-        <p className="transcode-note">
-          每条文本字幕会在输出文件旁生成一个独立文件，文件名带有字幕序号与语言。
         </p>
       )}
     </div>

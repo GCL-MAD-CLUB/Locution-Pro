@@ -1,5 +1,6 @@
 import { useScopedState } from "../../../../runtime/state/useScopedState";
-import { useMemo, useState } from "react";
+import { X } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { ModalDialog } from "../../../common/ModalDialog";
 import { ExportField } from "../../ExportWorkspace";
 import {
@@ -14,7 +15,6 @@ import {
   formatTimecode,
   outputSummary,
   parseTimecode,
-  resolveOutputDirectory,
   resolvePresetSettings,
   sourceSummary,
   transcodeQueueStore,
@@ -27,6 +27,7 @@ import {
 } from "../../../../systems/TranscodeSystem";
 import { TranscodeDestinationField } from "../controls/TranscodeDestinationField";
 import { TranscodeCheck, TranscodeDropdown } from "../controls/TranscodeFields";
+import { TranscodeSeam } from "../controls/TranscodeSeam";
 import { TranscodeAudioTab } from "./TranscodeAudioTab";
 import { TranscodeEffectsTab } from "./TranscodeEffectsTab";
 import { TranscodeMuxerTab } from "./TranscodeMuxerTab";
@@ -46,6 +47,18 @@ const tabs: Array<{ id: TabId; label: string }> = [
 
 const customPresetValue = "__custom__";
 
+interface DialogLayout {
+  /** Share of the width given to the preview and main settings. */
+  left: number;
+  /** Share of the left column given to the preview. */
+  preview: number;
+}
+
+const layoutLimits = { left: [0.3, 0.75], preview: [0.25, 0.8] } as const;
+
+/** Kept for the session, so the dialog reopens with the sizes it was left at. */
+let lastLayout: DialogLayout = { left: 0.55, preview: 0.52 };
+
 interface TranscodeSettingsDialogProps {
   source: TranscodeSource;
   output: TranscodeOutput;
@@ -62,7 +75,6 @@ export function TranscodeSettingsDialog({
 }: TranscodeSettingsDialogProps) {
   const capabilities = useTranscodeQueueState((state) => state.capabilities);
   const userPresets = useTranscodeQueueState((state) => state.userPresets);
-  const projectDirectory = useTranscodeQueueState((state) => state.projectDirectory);
   const [settings, setSettings] = useScopedState<TranscodeSettings>(
     null,
     (() => cloneTranscodeSettings(output.settings))(),
@@ -75,6 +87,9 @@ export function TranscodeSettingsDialog({
   );
   const [outputName, setOutputName] = useScopedState(null, output.outputName);
   const [tab, setTab] = useState<TabId>("video");
+  const [layout, setLayout] = useState<DialogLayout>(lastLayout);
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const leftRef = useRef<HTMLDivElement>(null);
   const [savingPreset, setSavingPreset] = useState(false);
   const [newPresetName, setNewPresetName] = useState("");
   const [rangeDraft, setRangeDraft] = useScopedState(null, {
@@ -144,6 +159,13 @@ export function TranscodeSettingsDialog({
     setRangeDraft({ start: formatTimecode(startUs), end: formatTimecode(endUs) });
   }
 
+  function resize(patch: Partial<DialogLayout>) {
+    // Each seam changes its own share only, so the other one is never stale.
+    const next = { ...layout, ...patch };
+    lastLayout = next;
+    setLayout(next);
+  }
+
   function savePreset() {
     const name = newPresetName.trim();
     if (!name) return;
@@ -187,11 +209,6 @@ export function TranscodeSettingsDialog({
   }
 
   const estimated = estimatedOutputBytes(settings, source.info);
-  const mediaBinDirectory = resolveOutputDirectory(
-    { kind: "mediaBin" },
-    source.path,
-    projectDirectory,
-  );
   const tabProps = { settings, capabilities, sourceInfo: source.info, update };
 
   return (
@@ -204,13 +221,34 @@ export function TranscodeSettingsDialog({
       onCancel={onClose}
       onConfirm={confirm}
     >
-      <div className="transcode-settings-layout export-settings-panel">
-        <div className="transcode-settings-left">
+      <div
+        ref={layoutRef}
+        className="transcode-settings-layout export-settings-panel"
+        style={{
+          gridTemplateColumns: `minmax(320px, ${layout.left}fr) var(--resizer-size) minmax(320px, ${1 - layout.left}fr)`,
+        }}
+      >
+        <div
+          ref={leftRef}
+          className="transcode-settings-left"
+          style={{
+            gridTemplateRows: `minmax(180px, ${layout.preview}fr) var(--resizer-size) minmax(120px, ${1 - layout.preview}fr)`,
+          }}
+        >
           <TranscodePreview
             source={source}
             settings={settings}
             outputName={outputName}
             onRangeChange={changeRangeFromTimeline}
+          />
+          <TranscodeSeam
+            axis="rows"
+            containerRef={leftRef}
+            ratio={layout.preview}
+            min={layoutLimits.preview[0]}
+            max={layoutLimits.preview[1]}
+            label="调整预览高度"
+            onChange={(preview) => resize({ preview })}
           />
           <section className="transcode-settings-main">
             <ExportField label="格式">
@@ -222,7 +260,7 @@ export function TranscodeSettingsDialog({
               />
             </ExportField>
             <ExportField label="预设">
-              <div className="transcode-inline transcode-preset-row">
+              <div className="transcode-inline">
                 <TranscodeDropdown
                   ariaLabel="预设"
                   value={presetId ?? customPresetValue}
@@ -232,8 +270,7 @@ export function TranscodeSettingsDialog({
                 />
                 <button
                   type="button"
-                  className="toolbar-button"
-                  title="保存为预设"
+                  className="transcode-button"
                   onClick={() => {
                     setSavingPreset(true);
                     setNewPresetName(presetId ? `${presetName} 副本` : "");
@@ -262,7 +299,7 @@ export function TranscodeSettingsDialog({
                   />
                   <button
                     type="button"
-                    className="accent-button"
+                    className="transcode-button"
                     disabled={!newPresetName.trim()}
                     onClick={savePreset}
                   >
@@ -270,7 +307,7 @@ export function TranscodeSettingsDialog({
                   </button>
                   <button
                     type="button"
-                    className="toolbar-button"
+                    className="transcode-button"
                     onClick={() => setSavingPreset(false)}
                   >
                     取消
@@ -300,12 +337,8 @@ export function TranscodeSettingsDialog({
                 <span className="transcode-hint">.{settings.extension}</span>
               </div>
             </ExportField>
-            <ExportField label="输出位置" stacked>
-              <TranscodeDestinationField
-                destination={destination}
-                mediaBinDirectory={mediaBinDirectory}
-                onChange={setDestination}
-              />
+            <ExportField label="输出位置">
+              <TranscodeDestinationField destination={destination} onChange={setDestination} />
             </ExportField>
             <div className="export-settings-checks transcode-stream-checks">
               <TranscodeCheck
@@ -356,7 +389,19 @@ export function TranscodeSettingsDialog({
               </dd>
             </dl>
 
-            <h3 className="export-settings-subheading">源范围</h3>
+            <div className="transcode-subheading-row">
+              <h3 className="export-settings-subheading">源范围</h3>
+              <button
+                type="button"
+                className="transcode-icon-button"
+                title="清除范围"
+                aria-label="清除范围"
+                disabled={settings.rangeStartUs === null && settings.rangeEndUs === null}
+                onClick={() => changeRangeFromTimeline(null, null)}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
             <ExportField label="入点">
               <input
                 className="export-text-input"
@@ -386,7 +431,15 @@ export function TranscodeSettingsDialog({
             </p>
           </section>
         </div>
-
+        <TranscodeSeam
+          axis="columns"
+          containerRef={layoutRef}
+          ratio={layout.left}
+          min={layoutLimits.left[0]}
+          max={layoutLimits.left[1]}
+          label="调整设置分栏宽度"
+          onChange={(left) => resize({ left })}
+        />
         <section className="transcode-settings-tabs">
           <div className="transcode-tab-strip" role="tablist" aria-label="导出设置分类">
             {tabs.map((item) => (

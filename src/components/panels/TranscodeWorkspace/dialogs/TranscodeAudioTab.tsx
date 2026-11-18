@@ -42,7 +42,7 @@ export function TranscodeAudioTab({
       <div className="transcode-tab-actions">
         <button
           type="button"
-          className="toolbar-button"
+          className="transcode-button"
           disabled={copy}
           onClick={() =>
             update((draft) => {
@@ -70,7 +70,7 @@ export function TranscodeAudioTab({
         />
       </ExportField>
       {copy ? (
-        <p className="transcode-note">流复制直接保留源音频流；响度标准化等效果需要重新编码。</p>
+        <p className="transcode-note">流复制不重新编码，音频效果不可用。</p>
       ) : (
         <>
           <ExportField label="采样速率">

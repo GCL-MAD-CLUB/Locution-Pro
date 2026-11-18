@@ -29,3 +29,11 @@ export {
   startTranscodeQueue,
   stopTranscodeQueue,
 } from "./transcodeRunner";
+export {
+  clickQueueRow,
+  moveQueueCursor,
+  presetDropOutputIds,
+  toggleQueueFocus,
+  type TranscodeQueueCursor,
+  type TranscodeQueueMove,
+} from "./transcodeQueueNavigation";

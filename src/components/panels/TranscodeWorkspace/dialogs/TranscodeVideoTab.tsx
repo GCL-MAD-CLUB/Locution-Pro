@@ -28,6 +28,8 @@ const scalingItems: TranscodeOptionItem[] = [
 ];
 
 const automatic: TranscodeOptionItem = { value: "", label: "自动" };
+const matchSourceValue = "source";
+const customSizeValue = "custom";
 
 export function TranscodeVideoTab({
   settings,
@@ -53,8 +55,8 @@ export function TranscodeVideoTab({
   }, [video.codec]);
 
   const source = sourceInfo?.video[0];
-  const matchWidth = video.width === null;
-  const matchHeight = video.height === null;
+  // A custom size may leave one side empty; it then follows the source aspect ratio.
+  const customSize = video.width !== null || video.height !== null;
   const bitrateMode =
     video.rateControl === "vbr" || video.rateControl === "cbr" || video.rateControl === "twoPass";
 
@@ -74,56 +76,56 @@ export function TranscodeVideoTab({
         />
       </ExportField>
       {copy ? (
-        <p className="transcode-note">
-          流复制直接保留源视频流，速度最快且不损失画质；缩放、效果与录制字幕需要重新编码。
-        </p>
+        <p className="transcode-note">流复制不重新编码，缩放、效果与录制字幕不可用。</p>
       ) : (
         <>
-          <ExportField label="宽度">
-            <div className="transcode-inline">
-              <TranscodeNumberField
-                ariaLabel="宽度"
-                value={video.width}
-                min={2}
-                max={16384}
-                disabled={matchWidth}
-                placeholder={source?.width ? String(source.width) : "匹配源"}
-                onChange={(width) => update((draft) => void (draft.video.width = width))}
-              />
-              <TranscodeCheck
-                label="匹配源"
-                checked={matchWidth}
-                onChange={(checked) =>
+          <ExportField label="帧大小" stacked={customSize}>
+            <div className="export-resolution-control">
+              <TranscodeDropdown
+                ariaLabel="帧大小"
+                value={customSize ? customSizeValue : matchSourceValue}
+                items={[
+                  {
+                    value: matchSourceValue,
+                    label:
+                      source?.width && source.height
+                        ? `匹配源（${source.width}×${source.height}）`
+                        : "匹配源",
+                  },
+                  { value: customSizeValue, label: "自定义" },
+                ]}
+                onChange={(value) =>
                   update((draft) => {
-                    draft.video.width = checked ? null : (source?.width ?? 1920);
+                    const custom = value === customSizeValue;
+                    draft.video.width = custom ? (source?.width ?? 1920) : null;
+                    draft.video.height = custom ? (source?.height ?? 1080) : null;
                   })
                 }
               />
+              {customSize && (
+                <div className="export-custom-resolution">
+                  <TranscodeNumberField
+                    ariaLabel="宽度"
+                    value={video.width}
+                    min={2}
+                    max={16384}
+                    placeholder="自动"
+                    onChange={(width) => update((draft) => void (draft.video.width = width))}
+                  />
+                  <span>×</span>
+                  <TranscodeNumberField
+                    ariaLabel="高度"
+                    value={video.height}
+                    min={2}
+                    max={16384}
+                    placeholder="自动"
+                    onChange={(height) => update((draft) => void (draft.video.height = height))}
+                  />
+                </div>
+              )}
             </div>
           </ExportField>
-          <ExportField label="高度">
-            <div className="transcode-inline">
-              <TranscodeNumberField
-                ariaLabel="高度"
-                value={video.height}
-                min={2}
-                max={16384}
-                disabled={matchHeight}
-                placeholder={source?.height ? String(source.height) : "匹配源"}
-                onChange={(height) => update((draft) => void (draft.video.height = height))}
-              />
-              <TranscodeCheck
-                label="匹配源"
-                checked={matchHeight}
-                onChange={(checked) =>
-                  update((draft) => {
-                    draft.video.height = checked ? null : (source?.height ?? 1080);
-                  })
-                }
-              />
-            </div>
-          </ExportField>
-          {!matchWidth && !matchHeight && (
+          {video.width !== null && video.height !== null && (
             <ExportField label="源缩放">
               <TranscodeDropdown
                 ariaLabel="源缩放"

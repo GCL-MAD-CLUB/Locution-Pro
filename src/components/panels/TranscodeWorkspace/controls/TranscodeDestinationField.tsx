@@ -1,17 +1,23 @@
 import { open } from "@tauri-apps/plugin-dialog";
+import { ChevronDown } from "lucide-react";
+import type { CSSProperties } from "react";
 import { runOperation } from "../../../../errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
+import { useProjectPort } from "../../../../systems/ProjectSystem";
 import {
-  encoderBinName,
+  destinationLabel,
+  encoderBinFolderId,
+  encoderFolderName,
+  mediaBinFolderOutline,
+  type TranscodeBinFolder,
   type TranscodeDestination,
-  type TranscodeOptionItem,
 } from "../../../../systems/TranscodeSystem";
-import { TranscodeDropdown } from "./TranscodeFields";
+import { SelectDropdown, type SelectDropdownItem } from "../../../common/SelectDropdown";
+import { MediaBinFolderIcon } from "../../MediaBin/views/MediaBinFolderIcon";
 
-const destinationItems: TranscodeOptionItem[] = [
-  { value: "folder", label: "文件夹（文件管理器 / Finder）" },
-  { value: "mediaBin", label: `项目媒体箱中的 ${encoderBinName} 文件夹` },
-];
+const binValuePrefix = "bin:";
+const folderValuePrefix = "dir:";
+const chooseFolderValue = "choose";
 
 export async function chooseTranscodeFolder(title: string, current?: string) {
   if (!isTauriRuntime()) return null;
@@ -21,78 +27,114 @@ export async function chooseTranscodeFolder(title: string, current?: string) {
   return outcome.status === "success" && typeof outcome.value === "string" ? outcome.value : null;
 }
 
+function destinationValue(destination: TranscodeDestination | null) {
+  if (!destination) return "";
+  return destination.kind === "mediaBin"
+    ? `${binValuePrefix}${destination.folderId ?? ""}`
+    : `${folderValuePrefix}${destination.directory}`;
+}
+
+/** The media bin outline first, then the current disk folder and a folder picker. */
+function destinationItems(
+  folders: readonly TranscodeBinFolder[],
+  destination: TranscodeDestination | null,
+): Array<SelectDropdownItem<string>> {
+  const items: Array<SelectDropdownItem<string>> = [
+    { type: "option", value: binValuePrefix, label: "媒体箱" },
+    ...mediaBinFolderOutline(folders).map(({ folder }): SelectDropdownItem<string> => ({
+      type: "option",
+      value: `${binValuePrefix}${folder.id}`,
+      label: folder.name,
+    })),
+  ];
+  // A restored older config targets the root `encoder` folder; keep that choice listed.
+  if (destination?.kind === "mediaBin" && destination.folderId === encoderBinFolderId) {
+    items.push({ type: "option", value: destinationValue(destination), label: encoderFolderName });
+  }
+  items.push({ type: "separator" });
+  if (destination?.kind === "folder" && destination.directory) {
+    items.push({
+      type: "option",
+      value: destinationValue(destination),
+      label: destination.directory,
+    });
+  }
+  items.push({ type: "option", value: chooseFolderValue, label: "选择文件夹…" });
+  return items;
+}
+
 interface TranscodeDestinationFieldProps {
   destination: TranscodeDestination | null;
   disabled?: boolean;
-  /** Resolved folder shown for the media-bin choice. */
-  mediaBinDirectory?: string | null;
   onChange: (destination: TranscodeDestination) => void;
 }
 
-/** The required output-location choice: a folder on disk or the project's encoder bin. */
+/** The required output location: a media bin folder or a folder on disk. */
 export function TranscodeDestinationField({
   destination,
   disabled = false,
-  mediaBinDirectory,
   onChange,
 }: TranscodeDestinationFieldProps) {
-  async function chooseFolder() {
-    const directory = await chooseTranscodeFolder(
-      "选择输出文件夹",
-      destination?.kind === "folder" ? destination.directory : undefined,
-    );
-    if (directory) onChange({ kind: "folder", directory });
+  const { mediaFolders } = useProjectPort(["mediaFolders"], []);
+  const depths = new Map(
+    mediaBinFolderOutline(mediaFolders).map(({ folder, depth }) => [folder.id, depth + 1]),
+  );
+  depths.set(encoderBinFolderId, 1);
+  const label = destinationLabel(destination, mediaFolders);
+  const missing = !destination || (destination.kind === "folder" && !destination.directory.trim());
+
+  async function select(value: string) {
+    if (value === chooseFolderValue) {
+      const directory = await chooseTranscodeFolder(
+        "选择输出文件夹",
+        destination?.kind === "folder" ? destination.directory : undefined,
+      );
+      if (directory) onChange({ kind: "folder", directory });
+    } else if (value.startsWith(binValuePrefix)) {
+      onChange({ kind: "mediaBin", folderId: value.slice(binValuePrefix.length) || null });
+    } else if (value.startsWith(folderValuePrefix)) {
+      onChange({ kind: "folder", directory: value.slice(folderValuePrefix.length) });
+    }
   }
 
-  const missing = !destination || (destination.kind === "folder" && !destination.directory.trim());
   return (
-    <div className="transcode-destination">
-      <div className="export-output-location">
-        <TranscodeDropdown
-          ariaLabel="输出位置"
-          className={missing ? "is-required" : ""}
-          disabled={disabled}
-          value={destination?.kind ?? ""}
-          fallbackLabel="请选择输出位置（必填）"
-          items={destinationItems}
-          onChange={(kind) => {
-            if (kind === "mediaBin") {
-              onChange({ kind: "mediaBin" });
-            } else if (destination?.kind === "folder" && destination.directory) {
-              onChange(destination);
-            } else {
-              void chooseFolder();
-            }
-          }}
-        />
-        <button
-          type="button"
-          className="toolbar-button"
-          disabled={disabled || destination?.kind === "mediaBin"}
-          onClick={() => void chooseFolder()}
-        >
-          选择…
-        </button>
-      </div>
-      {destination?.kind === "folder" && destination.directory && (
-        <p className="transcode-destination-path" title={destination.directory}>
-          {destination.directory}
-        </p>
-      )}
-      {destination?.kind === "mediaBin" && (
+    <SelectDropdown
+      className={`transcode-destination export-select ${missing ? "is-missing" : ""}`}
+      menuClassName="transcode-dropdown-menu transcode-destination-menu"
+      menuMinWidth={200}
+      menuWidth="content"
+      ariaLabel="输出位置"
+      disabled={disabled}
+      title={label}
+      value={destinationValue(destination)}
+      selectedLabel={label}
+      items={destinationItems(mediaFolders, destination)}
+      trigger={
         <>
-          <p className="transcode-destination-note">
-            完成后自动放入项目媒体箱的 {encoderBinName} 文件夹
-            {mediaBinDirectory ? "，文件写入：" : ""}
-          </p>
-          {mediaBinDirectory && (
-            <p className="transcode-destination-path" title={mediaBinDirectory}>
-              {mediaBinDirectory}
-            </p>
-          )}
+          <span>{label}</span>
+          <ChevronDown size={18} />
         </>
-      )}
-      {missing && <p className="transcode-required-note">必须选择输出位置后才能开始编码。</p>}
-    </div>
+      }
+      renderOptionLabel={(item) =>
+        item.value.startsWith(binValuePrefix) ? (
+          <span
+            className="transcode-destination-bin-option"
+            style={
+              {
+                "--transcode-destination-depth": depths.get(
+                  item.value.slice(binValuePrefix.length),
+                ),
+              } as CSSProperties
+            }
+          >
+            <MediaBinFolderIcon aria-hidden="true" />
+            {item.label}
+          </span>
+        ) : (
+          item.label
+        )
+      }
+      onChange={(value) => void select(value)}
+    />
   );
 }

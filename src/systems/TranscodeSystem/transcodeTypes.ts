@@ -104,9 +104,11 @@ export interface TranscodeSettings {
 
 /**
  * Where a finished output goes. The choice is required and made by the user:
- * a folder on disk, or the project's `encoder` media bin.
+ * a folder on disk, or a media bin folder (null is the bin's top level). Media
+ * bin outputs are written to an `encoder` folder beside the project file.
  */
-export type TranscodeDestination = { kind: "folder"; directory: string } | { kind: "mediaBin" };
+export type TranscodeDestination =
+  { kind: "folder"; directory: string } | { kind: "mediaBin"; folderId: string | null };
 
 export interface TranscodeCodecEntry {
   name: string;

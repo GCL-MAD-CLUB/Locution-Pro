@@ -35,57 +35,87 @@
   flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 4px 10px;
-  border-bottom: 1px solid var(--color-border-workspace-section);
+  gap: 5px;
+  min-height: 32px;
+  padding: 5px 8px;
 }
 
 .transcode-toolbar-spacer {
   flex: 1 1 auto;
 }
 
+/* Same flat 24x22 buttons as the media bin footer. */
 .transcode-icon-button {
-  display: inline-grid;
+  display: grid;
+  flex: 0 0 auto;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  color: var(--color-text);
-  background: none;
-  border-radius: var(--radius-sm);
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  color: var(--color-text-field);
+  background: var(--color-transparent);
+  border-radius: 4px;
   cursor: pointer;
 }
 
 .transcode-icon-button svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .transcode-icon-button:hover:not(:disabled) {
-  color: var(--color-text-highlight);
+  color: var(--color-text-control-hover);
+  background: var(--color-footer-control-hover-background);
+}
+
+/* Applying a preset: the light outline of the dialogs' 取消 buttons, with the project's square corners. */
+.transcode-apply-button {
+  flex: none;
+  min-height: 22px;
+  padding: 0 12px;
+  color: var(--color-text-dialog);
+  font-size: 12px;
+  white-space: nowrap;
+  background: var(--color-transparent);
+  border: 2px solid var(--color-border-control-hover);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.transcode-apply-button:hover:not(:disabled) {
   background: var(--color-surface-hover);
 }
 
-.transcode-icon-button:disabled {
+.transcode-apply-button:disabled {
   cursor: not-allowed;
-  opacity: var(--opacity-control-disabled);
+  opacity: var(--opacity-dialog-disabled);
 }
 
-.transcode-start:not(:disabled) {
-  color: var(--color-accent);
-}
-
-.transcode-panel-toolbar .toolbar-button {
+/* Text buttons inside forms, like 浏览… in the preferences dialog. */
+.transcode-button {
+  flex: none;
   min-height: 24px;
+  padding: 0 10px;
+  color: var(--color-text);
+  font-size: 12px;
+  white-space: nowrap;
+  background: var(--color-surface-input-inset);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
 }
 
-.transcode-panel-toolbar .toolbar-button:disabled {
+.transcode-button:hover:not(:disabled) {
+  border-color: var(--color-border-control-hover);
+}
+
+.transcode-button:disabled {
   cursor: not-allowed;
   opacity: var(--opacity-control-disabled);
 }
 
 .transcode-queue-count {
-  color: var(--color-text);
+  color: var(--color-text-field);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -100,20 +130,20 @@
   padding: 0 8px;
   background: var(--color-surface-input-inset);
   border: 1px solid var(--color-border-input);
-  border-radius: var(--radius-md);
+  border-radius: 4px;
 }
 
 .transcode-search svg {
   flex: 0 0 auto;
   width: 14px;
   height: 14px;
-  color: var(--color-text);
+  color: var(--color-icon-search);
 }
 
 .transcode-search input {
   flex: 1 1 auto;
   min-width: 0;
-  color: var(--color-text-highlight);
+  color: var(--color-text-emphasis);
   font: inherit;
   font-size: 12px;
   background: none;
@@ -142,22 +172,6 @@
   min-height: 0;
 }
 
-.transcode-queue-destination {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--color-border-workspace-section);
-}
-
-.transcode-queue-destination-label {
-  padding-top: 4px;
-  color: var(--color-text);
-  font-size: 12px;
-  text-align: right;
-}
-
 .transcode-queue-table,
 .transcode-preset-table,
 .transcode-watch-list {
@@ -167,7 +181,78 @@
   min-height: 0;
   overflow: auto;
   outline: none;
+}
+
+/* The output location of the selected outputs, above the queue. */
+.transcode-queue-destination {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 6px;
+}
+
+.transcode-queue-destination-label {
+  color: var(--color-text);
+  font-size: 12px;
+  text-align: right;
+}
+
+/* The queue and presets sit in the media bin's rounded table frame. */
+.transcode-queue-table,
+.transcode-preset-table {
+  margin: 0 8px 8px;
+  padding-bottom: 5px;
+  border: 1px solid var(--color-border-frame);
+  border-radius: 5px;
+}
+
+.transcode-queue-table:focus-visible {
+  border-color: var(--color-border-control-active);
+}
+
+/* Every scrolling transcode surface uses the media bin's scrollbar. */
+.transcode-queue-table,
+.transcode-preset-table,
+.transcode-watch-list,
+.transcode-encoding,
+.transcode-settings-main,
+.transcode-tab-body,
+.transcode-preview-stage.is-actual-size {
   scrollbar-color: var(--color-border-overlay-default) var(--color-surface-canvas);
+  scrollbar-gutter: stable;
+}
+
+.transcode-queue-table::-webkit-scrollbar,
+.transcode-preset-table::-webkit-scrollbar,
+.transcode-watch-list::-webkit-scrollbar,
+.transcode-encoding::-webkit-scrollbar,
+.transcode-settings-main::-webkit-scrollbar,
+.transcode-tab-body::-webkit-scrollbar,
+.transcode-preview-stage.is-actual-size::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.transcode-queue-table::-webkit-scrollbar-thumb,
+.transcode-preset-table::-webkit-scrollbar-thumb,
+.transcode-watch-list::-webkit-scrollbar-thumb,
+.transcode-encoding::-webkit-scrollbar-thumb,
+.transcode-settings-main::-webkit-scrollbar-thumb,
+.transcode-tab-body::-webkit-scrollbar-thumb,
+.transcode-preview-stage.is-actual-size::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+}
+
+.transcode-queue-table::-webkit-scrollbar-corner,
+.transcode-preset-table::-webkit-scrollbar-corner,
+.transcode-watch-list::-webkit-scrollbar-corner,
+.transcode-encoding::-webkit-scrollbar-corner,
+.transcode-settings-main::-webkit-scrollbar-corner,
+.transcode-tab-body::-webkit-scrollbar-corner,
+.transcode-preview-stage.is-actual-size::-webkit-scrollbar-corner {
+  background: var(--color-surface-canvas);
 }
 
 .transcode-queue-row,
@@ -175,13 +260,15 @@
   display: grid;
   align-items: center;
   gap: 12px;
-  min-height: 28px;
+  min-height: 24px;
   padding: 0 12px 0 36px;
-  color: var(--color-text);
+  color: var(--color-text-table-row);
   font-size: 12px;
   text-align: left;
   background: none;
+  border-bottom: 1px solid var(--color-border-divider);
   cursor: default;
+  user-select: none;
 }
 
 .transcode-queue-row {
@@ -193,21 +280,24 @@
   position: sticky;
   top: 0;
   z-index: 1;
+  flex: 0 0 auto;
   padding-left: 36px;
   color: var(--color-text-table-header);
+  font-size: 12.5px;
   background: var(--color-surface-canvas);
-  border-bottom: 1px solid var(--color-border-workspace-section);
+  border-bottom: 1px solid var(--color-border-frame);
 }
 
 .transcode-queue-source {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 28px;
+  min-height: 24px;
   padding: 0 12px;
-  color: var(--color-text-highlight);
+  color: var(--color-text-table-row);
   font-size: 12px;
-  border-top: 1px solid var(--color-border-workspace-section);
+  border-bottom: 1px solid var(--color-border-divider);
+  user-select: none;
 }
 
 .transcode-queue-source svg {
@@ -224,33 +314,77 @@
   white-space: nowrap;
 }
 
-.transcode-queue-row:hover,
-.transcode-queue-source:hover,
-.transcode-preset-row:hover:not(.is-heading) {
-  background: var(--color-surface-hover);
-}
-
 .transcode-queue-row.selected,
 .transcode-queue-source.selected,
 .transcode-preset-row.selected {
-  background: var(--color-selection-muted);
-  box-shadow: inset 2px 0 0 var(--color-accent);
+  background: var(--color-surface-row-selected);
 }
 
-.is-drop-target {
+/* The keyboard row, outlined only while the queue has focus. */
+.transcode-queue-table:focus .is-focused {
+  box-shadow: inset 0 0 0 1px var(--color-border-control-active);
+}
+
+/* Rows a dragged preset would change, outlined as one block. The rule is
+   listed after the selection and keyboard outlines so it wins over them. */
+.transcode-queue-table .is-drop-target,
+.transcode-queue-table:focus .is-drop-target {
+  background: var(--color-selection-muted);
+  box-shadow:
+    inset 1px 0 0 var(--color-accent),
+    inset -1px 0 0 var(--color-accent);
+}
+
+.transcode-queue-table .is-drop-target.is-drop-start,
+.transcode-queue-table:focus .is-drop-target.is-drop-start {
+  box-shadow:
+    inset 1px 0 0 var(--color-accent),
+    inset -1px 0 0 var(--color-accent),
+    inset 0 1px 0 var(--color-accent);
+}
+
+.transcode-queue-table .is-drop-target.is-drop-end,
+.transcode-queue-table:focus .is-drop-target.is-drop-end {
+  box-shadow:
+    inset 1px 0 0 var(--color-accent),
+    inset -1px 0 0 var(--color-accent),
+    inset 0 -1px 0 var(--color-accent);
+}
+
+.transcode-queue-table .is-drop-target.is-drop-start.is-drop-end,
+.transcode-queue-table:focus .is-drop-target.is-drop-start.is-drop-end {
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
+/* While a preset is dragged the pointer refuses everything but queue rows. */
+body.is-dragging-transcode-preset,
+body.is-dragging-transcode-preset * {
+  cursor: not-allowed !important;
+  user-select: none !important;
+}
+
+body.is-dragging-transcode-preset.is-transcode-preset-drop-allowed,
+body.is-dragging-transcode-preset.is-transcode-preset-drop-allowed * {
+  cursor: copy !important;
+}
+
+/* Media dragged over the queue. The table scrolls, so an inset shadow would
+   sit under the sticky header and the rows; the frame and an outer ring do not. */
 .transcode-queue-table.is-media-drop-target {
   background: var(--color-selection-muted);
-  box-shadow: inset 0 0 0 2px var(--color-accent);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 0.5px var(--color-accent);
+}
+
+.transcode-queue-row > span {
+  min-width: 0;
 }
 
 .transcode-link {
   justify-self: start;
   max-width: 100%;
   overflow: hidden;
-  color: var(--color-accent);
+  color: inherit;
   font-size: 12px;
   text-align: left;
   text-overflow: ellipsis;
@@ -260,6 +394,7 @@
 }
 
 .transcode-link:hover:not(:disabled) {
+  color: var(--color-text-highlight);
   text-decoration: underline;
 }
 
@@ -329,12 +464,12 @@
   align-items: center;
   gap: 6px;
   width: 100%;
-  min-height: 28px;
+  min-height: 24px;
   padding: 0 12px;
-  color: var(--color-text-highlight);
+  color: var(--color-text-table-row);
   font-size: 12px;
   background: none;
-  border-top: 1px solid var(--color-border-workspace-section);
+  border-bottom: 1px solid var(--color-border-divider);
   cursor: pointer;
 }
 
@@ -476,31 +611,27 @@
   padding: 6px 0 6px 86px;
 }
 
-.transcode-destination {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.transcode-destination .select-dropdown.is-required {
+.transcode-destination.is-missing {
   border-color: var(--color-warning);
 }
 
-.transcode-destination-path,
-.transcode-destination-note {
-  margin: 0;
-  color: var(--color-text);
-  font-size: 11.5px;
-  /* Long paths wrap anywhere instead of being cut off. */
-  overflow-wrap: anywhere;
+/* Media bin folders indent under 媒体箱 like the bin's own tree. */
+.transcode-destination-bin-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: calc(var(--transcode-destination-depth, 0) * 14px);
 }
 
-.transcode-destination-note {
-  color: var(--color-text-muted);
+.transcode-destination-bin-option svg {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 18px;
+  margin: 0 -2px;
 }
 
-.transcode-destination .transcode-required-note {
-  margin: 0;
+.transcode-destination-menu {
+  max-height: min(360px, calc(100vh - 16px));
 }
 
 .export-check-label.is-disabled {
@@ -508,10 +639,44 @@
   opacity: var(--opacity-control-disabled);
 }
 
+/* The export workspace's flat square checkbox. */
 .transcode-panel .export-check-label input[type="checkbox"],
 .transcode-settings-dialog .export-check-label input[type="checkbox"] {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 1em;
+  height: 1em;
+  aspect-ratio: 1;
   margin: 0;
-  accent-color: var(--color-accent);
+  padding: 0;
+  appearance: none;
+  background-color: var(--color-transparent);
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 2px solid var(--color-checkbox-border);
+  cursor: pointer;
+}
+
+.transcode-panel .export-check-label input[type="checkbox"]:hover:not(:disabled),
+.transcode-settings-dialog .export-check-label input[type="checkbox"]:hover:not(:disabled) {
+  border-color: var(--color-checkbox-hover-border);
+}
+
+.transcode-panel .export-check-label input[type="checkbox"]:checked,
+.transcode-settings-dialog .export-check-label input[type="checkbox"]:checked {
+  background-color: var(--color-checkbox-checked-background);
+  background-image: var(--image-checkbox-check);
+}
+
+.transcode-panel .export-check-label input[type="checkbox"]:checked:hover:not(:disabled),
+.transcode-settings-dialog .export-check-label input[type="checkbox"]:checked:hover:not(:disabled) {
+  background-color: var(--color-checkbox-checked-hover-background);
+  border-color: var(--color-checkbox-hover-border);
+}
+
+.transcode-panel .export-check-label input[type="checkbox"]:disabled,
+.transcode-settings-dialog .export-check-label input[type="checkbox"]:disabled {
+  cursor: not-allowed;
 }
 
 /* ---- Export settings dialog ---- */
@@ -527,18 +692,42 @@
   background: var(--color-surface-canvas);
 }
 
+/* Both splits follow the seams; the dialog sets the grid tracks inline. */
 .transcode-settings-layout.export-settings-panel {
   display: grid;
-  grid-template-columns: minmax(360px, 1.2fr) minmax(380px, 1fr);
   flex-direction: row;
 }
 
 .transcode-settings-left {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   min-width: 0;
   min-height: 0;
-  border-right: var(--resizer-size) solid var(--color-border-divider);
+}
+
+.transcode-seam {
+  background: var(--color-border-divider);
+  outline: none;
+  touch-action: none;
+}
+
+.transcode-seam.is-columns {
+  cursor: col-resize;
+}
+
+.transcode-seam.is-rows {
+  cursor: row-resize;
+}
+
+.transcode-seam:hover,
+.transcode-seam:focus-visible {
+  background: var(--color-border-resizer);
+}
+
+.transcode-subheading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .transcode-settings-main {
@@ -552,43 +741,19 @@
 
 .transcode-preview {
   display: flex;
-  flex: 0 0 52%;
   flex-direction: column;
   gap: 6px;
-  min-height: 220px;
+  min-width: 0;
+  min-height: 0;
   padding: 8px 12px;
-  border-bottom: var(--resizer-size) solid var(--color-border-divider);
 }
 
 .transcode-preview-toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
-}
-
-.transcode-segmented {
-  display: inline-flex;
-  overflow: hidden;
-  border: 1px solid var(--color-border-panel);
-  border-radius: var(--radius-sm);
-}
-
-.transcode-segmented button {
-  padding: 3px 10px;
-  color: var(--color-text);
-  font-size: 12px;
-  background: none;
-  cursor: pointer;
-}
-
-.transcode-segmented button + button {
-  border-left: 1px solid var(--color-border-panel);
-}
-
-.transcode-segmented button.active {
-  color: var(--color-text-highlight);
-  background: var(--color-surface-hover);
 }
 
 .transcode-preview-busy {
@@ -750,11 +915,6 @@
 .transcode-preview-timeline.source-controls {
   flex: 0 0 auto;
   padding-top: 0;
-}
-
-.transcode-preview-range {
-  display: inline-flex;
-  gap: 4px;
 }
 
 .transcode-settings-tabs {

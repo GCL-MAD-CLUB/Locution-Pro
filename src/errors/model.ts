@@ -65,6 +65,7 @@ export type OperationKey =
   | "transcode.prepare"
   | "transcode.run"
   | "transcode.preview"
+  | "transcode.reveal"
   | "window.closeListener"
   | "window.title"
   | "workspace.load"

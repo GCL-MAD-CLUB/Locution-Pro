@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 import { formatMonitorFrame, parseMonitorFrame } from "../../../../core/editor/time";
 import { clampTimelineStartFrame } from "../../../../core/editor/timeline";
@@ -22,7 +23,7 @@ const WHEEL_PAGE_DELTA_PX = 800;
 const MONITOR_RANGE_ZOOM_SENSITIVITY = 0.00035;
 const MONITOR_RANGE_SCROLL_SENSITIVITY = 1 / 5000;
 
-type PreviewMode = "source" | "proxy";
+type MonitorPreviewMode = "source" | "proxy";
 
 interface TimecodeScrubState {
   pointerId: number;
@@ -34,7 +35,7 @@ interface TimecodeScrubState {
   suppressClick: boolean;
 }
 
-interface VideoControlsProps {
+interface VideoControlsProps<PreviewMode extends string> {
   mediaKey: string;
   hasMedia: boolean;
   currentFrame: number;
@@ -46,6 +47,8 @@ interface VideoControlsProps {
   isPlaying: boolean;
   /** Hides the viewer zoom menu, for timelines that drive something other than this monitor. */
   showZoom?: boolean;
+  /** Replaces the monitor zoom menu, for timelines that drive another viewer. */
+  zoomMenu?: ReactNode;
   previewMode?: PreviewMode;
   /** No options hides the preview-mode menu. */
   previewModeOptions?: readonly PreviewMode[];
@@ -55,6 +58,12 @@ interface VideoControlsProps {
     canExportFrame: boolean;
     onAddCut: () => void;
     onExportFrame: () => void;
+  };
+  /** Marks the current frame as the start or end of a range, beside the step buttons. */
+  rangeActions?: {
+    canMark: boolean;
+    onMarkIn: () => void;
+    onMarkOut: () => void;
   };
   onSeekFrame: (frame: number) => number;
   onPlaybackFrameRequest: () => number;
@@ -123,7 +132,7 @@ function MonitorZoomSelect() {
   );
 }
 
-export function VideoControls({
+export function VideoControls<PreviewMode extends string = MonitorPreviewMode>({
   mediaKey,
   hasMedia,
   currentFrame,
@@ -134,10 +143,12 @@ export function VideoControls({
   minTimelineSpanFrames,
   isPlaying,
   showZoom = true,
-  previewMode = "source",
+  zoomMenu,
+  previewMode,
   previewModeOptions = [],
   previewModeLabels,
   storyboardActions,
+  rangeActions,
   onSeekFrame,
   onPlaybackFrameRequest,
   onPauseForPreciseSeek,
@@ -146,9 +157,8 @@ export function VideoControls({
   onStepFrame,
   onTogglePlayback,
   onPreviewModeChange,
-}: VideoControlsProps) {
+}: VideoControlsProps<PreviewMode>) {
   const lifetime = new RenderLifetime();
-
   const rowRef = useRef<HTMLDivElement | null>(null);
   const timeEditorRef = useRef<HTMLSpanElement | null>(null);
   const timecodeScrubRef = useRef<TimecodeScrubState | null>(null);
@@ -441,7 +451,7 @@ export function VideoControls({
   return lifetime.render(
     <div
       ref={rowRef}
-      className={`source-control-row ${hasMedia ? "" : "empty-state"} ${storyboardActions ? "with-storyboard-actions" : ""} ${showZoom || previewModeOptions.length > 0 ? "" : "without-menus"}`}
+      className={`source-control-row ${hasMedia ? "" : "empty-state"} ${storyboardActions || rangeActions ? "with-storyboard-actions" : ""} ${showZoom || zoomMenu || previewModeOptions.length > 0 ? "" : "without-menus"}`}
       style={monitorTimeStyle}
     >
       {editingTime && hasMedia ? (
@@ -475,7 +485,7 @@ export function VideoControls({
           {monitorTimeText}
         </button>
       )}
-      {hasMedia && showZoom && <MonitorZoomSelect />}
+      {hasMedia && (zoomMenu ?? (showZoom && <MonitorZoomSelect />))}
       <div className="transport-controls">
         {storyboardActions && (
           <button
@@ -491,6 +501,19 @@ export function VideoControls({
               aria-hidden="true"
             >
               <path d="M22 18 H40 V29 L31 38 L22 29 Z" fill="var(--color-monitor-action-icon)" />
+            </svg>
+          </button>
+        )}
+        {rangeActions && (
+          <button
+            type="button"
+            onClick={rangeActions.onMarkIn}
+            title="标记入点"
+            aria-label="标记入点"
+            disabled={!rangeActions.canMark}
+          >
+            <svg className="range-mark-icon" viewBox="0 0 8 14" aria-hidden="true">
+              <path d="M7 1 H2 V13 H7" />
             </svg>
           </button>
         )}
@@ -534,12 +557,26 @@ export function VideoControls({
             </svg>
           </button>
         )}
+        {rangeActions && (
+          <button
+            type="button"
+            onClick={rangeActions.onMarkOut}
+            title="标记出点"
+            aria-label="标记出点"
+            disabled={!rangeActions.canMark}
+          >
+            <svg className="range-mark-icon" viewBox="0 0 8 14" aria-hidden="true">
+              <path d="M1 1 H6 V13 H1" />
+            </svg>
+          </button>
+        )}
       </div>
       {hasMedia && previewModeOptions.length > 0 && onPreviewModeChange && (
         <SelectDropdown
           className="monitor-select"
           menuClassName="monitor-select-menu"
-          value={previewMode}
+          ariaLabel="预览方式"
+          value={previewMode ?? previewModeOptions[0]}
           items={previewModeItems}
           onChange={onPreviewModeChange}
         />

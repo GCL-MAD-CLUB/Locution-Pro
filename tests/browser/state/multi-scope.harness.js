@@ -11,6 +11,9 @@ import {
   usePanelMediaSource,
   usePanelMediaSourceSelection,
 } from "../../../src/components/common/PanelMediaSources/index.ts";
+import { AssetLibrary } from "../../../src/components/panels/AssetLibrary/index.ts";
+import { assetEntryKey } from "../../../src/components/panels/AssetLibrary/model/nodes.ts";
+import { useAssetLibraryState } from "../../../src/components/panels/AssetLibrary/state/panelState.ts";
 import { StoryboardPanel } from "../../../src/components/panels/StoryboardPanel/StoryboardPanel.tsx";
 import { SubtitlePanel } from "../../../src/components/panels/SubtitlePanel/SubtitlePanel.tsx";
 import {
@@ -27,6 +30,8 @@ import {
 } from "../../../src/core/editor/mediaSources/multiSource.ts";
 import { stateHub } from "../../../src/runtime/state/StateHub.ts";
 import { PLAYBACK_STATUS_PROJECTION } from "../../../src/runtime/state/contracts.ts";
+import { eventHub } from "../../../src/runtime/events/EventHub.ts";
+import { emptyAssetLibraryAnnotation } from "../../../src/core/editor/assetLibrary/assetLibrary.ts";
 
 const h = React.createElement;
 const pause = () => new Promise((resolve) => setTimeout(resolve, 50));
@@ -190,12 +195,16 @@ export async function runMultiScopeTests(fullUi = false) {
       ),
     );
   }
+  function Assets() {
+    snapshots.assets = useAssetLibraryState((state) => state);
+    return h(AssetLibrary);
+  }
   const initial = {
-    instances: ["board", "sub"].map((id) => ({
-      id,
-      type: id === "board" ? "storyboard" : "subtitles",
-      params: {},
-    })),
+    instances: [
+      { id: "board", type: "storyboard", params: {} },
+      { id: "sub", type: "subtitles", params: {} },
+      ...(fullUi ? [{ id: "assets", type: "asset-library", params: {} }] : []),
+    ],
     layout: {
       root: {
         type: "split",
@@ -239,6 +248,7 @@ export async function runMultiScopeTests(fullUi = false) {
               h(Panel, { id, kind: id === "board" ? "storyboard" : "subtitles" }),
             ),
           ),
+          fullUi && h(PanelInstanceProvider, { instanceId: "assets" }, h(Assets)),
         ),
       ),
     );
@@ -258,6 +268,73 @@ export async function runMultiScopeTests(fullUi = false) {
     equal(historySize(), 1, "initial preview creates no extra history");
     results.push("first media import initializes panel sources without extra history");
     if (fullUi) {
+      await reset();
+      const clipWorkspace = workspace();
+      clipWorkspace.asset_library = {
+        folders: [],
+        entries: clipWorkspace.projects.map(({ asset }) => ({
+          id: `clip-${asset.id}`,
+          root: "storyboards",
+          folder_id: null,
+          name: `Clip ${asset.id}`,
+          created_at: 1,
+          media: {
+            video_id: asset.id,
+            path: asset.path,
+            file_name: asset.file_name,
+            fingerprint: asset.fingerprint,
+            frame_rate: 24,
+            duration_us: asset.duration_us,
+          },
+          start_us: 1_000_000,
+          end_us: 2_000_000,
+          text: "",
+          annotation: emptyAssetLibraryAnnotation(),
+        })),
+      };
+      await act(() => snapshots.port.projectOpened(clipWorkspace, "/clips.lcut", "clips"));
+      await act(() => {
+        snapshots.board.source.toggleSource("b");
+        snapshots.board.board.setViewMode("graph");
+        snapshots.manager.focusPanel("assets");
+        snapshots.assets.navigate({ root: "storyboards", folderId: null });
+        snapshots.assets.setDetailsVisible(true);
+      });
+      const storyboardWorkspace = snapshots.board.source.selection.workspaceId;
+      const graph = document.querySelector(".storyboard-graph-view");
+      equal(Boolean(graph), true, "storyboard graph is mounted");
+      for (const videoId of ["a", "b"]) {
+        await act(() => snapshots.assets.select([assetEntryKey(`clip-${videoId}`)]));
+        const play = document.querySelector(".asset-library-preview-play");
+        equal(play?.disabled, false, "the selected clip can play from its properties");
+        await act(() => play.click());
+        const request = eventHub
+          .recentEvents()
+          .findLast(
+            (event) =>
+              event.type === "playback.seek.requested" && event.source.instanceId === "assets",
+          );
+        equal(
+          request?.payload,
+          { videoId, timeUs: 1_000_000, focusEndUs: 2_000_000, play: true },
+          "asset playback sends a bounded seek to the source monitor",
+        );
+        equal(snapshots.port.activeVideoId, videoId, "the source monitor switches to the clip");
+        equal(sourceIds("board"), ["a", "b"], "asset playback preserves graph sources");
+        equal(
+          snapshots.board.source.selection.workspaceId,
+          storyboardWorkspace,
+          "asset playback preserves the storyboard workspace",
+        );
+        equal(
+          document.querySelector(".storyboard-graph-view") === graph,
+          true,
+          "asset playback preserves the mounted graph",
+        );
+      }
+      await act(() => snapshots.board.board.setViewMode("list"));
+      results.push("asset properties playback preserves the storyboard graph and its sources");
+
       await reset();
       const differentRates = workspace();
       differentRates.projects[1].streams[0].avg_frame_rate = "60/1";

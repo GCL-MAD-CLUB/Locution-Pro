@@ -234,7 +234,6 @@ export function AssetLibrary() {
     }
     homeActions.recordUse(entry.id);
     activeVideoChanged(media.videoId);
-    void publishEvent("media.video.opened", { videoId: media.videoId }, identity);
     void publishEvent(
       "playback.seek.requested",
       { videoId: media.videoId, timeUs: entry.start_us, focusEndUs: entry.end_us, play: true },

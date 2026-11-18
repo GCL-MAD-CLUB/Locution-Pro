@@ -18,7 +18,9 @@ function collect(node: ts.Node) {
 }
 collect(syntax);
 const compiled = ts.transpileModule(
-  ["applyPlaybackMode", "startManualPlaybackTicker"].map((name) => functions.get(name)).join("\n"),
+  ["applyPlaybackMode", "startManualPlaybackTicker", "handleSeekRequest", "flushPendingSourceSeek"]
+    .map((name) => functions.get(name))
+    .join("\n"),
   { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
 ).outputText;
 
@@ -188,4 +190,29 @@ test("editor source monitor keeps its ordinary playback behavior inside brackets
       assert.deepEqual(stopped, []);
     }
   }
+});
+
+test("a clip requested while the monitor is empty starts when its target video is ready", () => {
+  const request = { videoId: "clip-video", timeUs: 1_000_000, focusEndUs: 2_000_000, play: true };
+  const applied: (typeof request)[] = [];
+  let ready = false;
+  const state = {
+    activeVideoIdRef: { current: "" },
+    pendingSourceSeekRef: { current: null as typeof request | null },
+    videoIsReadyForSeek: () => ready,
+    applySeekRequest: () => false,
+    applySeekRequestRef: { current: (pending: typeof request) => applied.push(pending) },
+    handleSeekRequest: (_request: typeof request) => false,
+    flushPendingSourceSeek: () => {},
+  };
+  runInNewContext(compiled, state);
+
+  assert.equal(state.handleSeekRequest(request), true);
+  state.activeVideoIdRef.current = request.videoId;
+  state.flushPendingSourceSeek();
+  assert.deepEqual(applied, []);
+  ready = true;
+  state.flushPendingSourceSeek();
+  state.flushPendingSourceSeek();
+  assert.deepEqual(applied, [request]);
 });

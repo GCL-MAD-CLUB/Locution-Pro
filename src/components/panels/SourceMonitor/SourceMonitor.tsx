@@ -958,6 +958,18 @@ export function SourceMonitor() {
     applySeekRequestRef.current?.(pending);
   }
 
+  function handleSeekRequest(detail: Readonly<ApplicationEventMap["playback.seek.requested"]>) {
+    // The target can be selected while the monitor is still rendering its empty state.
+    if (
+      detail.videoId !== undefined &&
+      (detail.videoId !== activeVideoIdRef.current || !videoIsReadyForSeek())
+    ) {
+      pendingSourceSeekRef.current = detail;
+      return true;
+    }
+    return applySeekRequest(detail);
+  }
+
   const { isAuthority: isPlaybackShortcutAuthority } = usePlaybackCapability(lifetime, {
     videoSource: videoSrc,
     histogram: histogramFrame?.source === videoSrc ? histogramFrame.bins : null,
@@ -969,19 +981,7 @@ export function SourceMonitor() {
     videoId: panelMediaKey === mediaKey ? activeVideoId : "",
     sourcePanelId: isExportMonitor ? null : playbackPanelId,
     fallbackAuthority: identity.instanceId === "source",
-    onSeek: (detail) => {
-      if (!hasMedia) {
-        return false;
-      }
-      if (
-        detail.videoId !== undefined &&
-        (detail.videoId !== activeVideoIdRef.current || !videoIsReadyForSeek())
-      ) {
-        pendingSourceSeekRef.current = detail;
-        return true;
-      }
-      return applySeekRequest(detail);
-    },
+    onSeek: handleSeekRequest,
   });
 
   lifetime.useAfterCommit(() => {

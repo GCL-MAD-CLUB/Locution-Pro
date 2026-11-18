@@ -105,7 +105,7 @@ test("cluster boundaries enclose singleton, repeated, collinear and polygonal me
   }
   assert.deepEqual(
     storyboardGraphClusterBoundaries(
-      nodes.map(({ cluster, ...node }) => node),
+      nodes.map(({ cluster: _cluster, ...node }) => node),
       18,
     ),
     [],

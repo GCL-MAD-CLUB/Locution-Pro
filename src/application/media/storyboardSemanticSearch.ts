@@ -1,3 +1,5 @@
+import { scheduleAfter, cancelTask } from "../../runtime/scheduling";
+import type { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
 import { searchSemanticPrompts } from "../../core/editor/semanticPrompts";
 import {
   searchLines,
@@ -5,15 +7,15 @@ import {
   semanticPromptErrors,
 } from "../../core/editor/textSearch";
 import { Channel } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { invokeCommand, runOperation } from "../../errors";
 import { normalizeError } from "../../errors/runtime";
 import { createTaskProgress } from "../../systems/TaskSystem";
 import { isTauriRuntime } from "../../platform/tauri/runtime";
 
-export function useStoryboardSemanticSearchAvailable() {
+export function useStoryboardSemanticSearchAvailable(lifetime: RenderLifetime) {
   const [available, setAvailable] = useState(false);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) return;
     let active = true;
     void runOperation("storyboard.semanticAvailability", () =>
@@ -105,22 +107,13 @@ export function initializeStoryboardSemanticSearch(): Promise<boolean> {
       operation: "storyboard.semanticSearch",
       label: "正在初始化语义检索...",
       current: 0,
-      total: 1,
+      total: 0,
     });
-    let timer: ReturnType<typeof setInterval> | undefined;
     try {
       if (task.cancelled) return false;
-      let percent = 0;
-      timer = setInterval(() => {
-        // Estimated loading feedback; reserve completion for the native result.
-        if (percent >= 95) return;
-        percent = percent < 70 ? Math.min(70, percent + 15) : Math.min(95, percent + 5);
-        task.update({ current: percent / 100 });
-      }, 1000);
       await invokeCommand("initialize_storyboard_semantic_search");
       return true;
     } finally {
-      if (timer !== undefined) clearInterval(timer);
       task.remove();
     }
   })().then(
@@ -219,6 +212,7 @@ export function ensureStoryboardSemanticIndex(shots: readonly SemanticShot[], sc
 }
 
 export function useStoryboardSemanticSearch(
+  lifetime: RenderLifetime,
   enabled: boolean,
   query: string,
   shots: readonly SemanticShot[],
@@ -247,16 +241,18 @@ export function useStoryboardSemanticSearch(
     requestKey,
     clearQuery,
   });
-  latest.current = {
-    negativePrompts,
-    enabled,
-    query,
-    scope,
-    shots,
-    indexKey,
-    requestKey,
-    clearQuery,
-  };
+  lifetime.useBeforePaint(() => {
+    latest.current = {
+      negativePrompts,
+      enabled,
+      query,
+      scope,
+      shots,
+      indexKey,
+      requestKey,
+      clearQuery,
+    };
+  });
   const mounted = useRef(true);
   const busy = useRef(false);
   const indexed = useRef(new Set<string>());
@@ -283,14 +279,14 @@ export function useStoryboardSemanticSearch(
     };
   }, [requestKey, result, scope, query, negativePrompts, shots]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (reusable) {
       completedRequest.current = requestKey;
       return;
@@ -303,7 +299,7 @@ export function useStoryboardSemanticSearch(
       cancelledRequest.current === requestKey
     )
       return;
-    const timer = window.setTimeout(() => {
+    const timer = scheduleAfter(() => {
       busy.current = true;
       void (async () => {
         const start = latest.current;
@@ -416,7 +412,7 @@ export function useStoryboardSemanticSearch(
     }, 350);
     // Only the debounce is tied to view changes. A started index keeps its
     // background task and queue slot until native work settles.
-    return () => window.clearTimeout(timer);
+    return () => cancelTask(timer);
   }, [requestKey, tick, reusable]);
 
   const current = requestKey && result?.key === requestKey ? result : reusable;

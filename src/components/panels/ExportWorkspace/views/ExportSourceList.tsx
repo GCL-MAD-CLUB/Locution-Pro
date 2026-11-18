@@ -1,4 +1,4 @@
-﻿import { useLayoutEffect, useRef } from "react";
+import {} from "react";
 import { formatDuration } from "../../../../core/editor/time";
 import type { ExportClip, ExportSource } from "../../../../systems/ExportSystem";
 import { ExportClipThumbnail } from "./ExportClipThumbnail";
@@ -35,13 +35,11 @@ function SelectAllCheckbox({
   mixed: boolean;
   onChange: (checked: boolean) => void;
 }) {
-  const ref = useRef<HTMLInputElement | null>(null);
-  useLayoutEffect(() => {
-    if (ref.current) ref.current.indeterminate = mixed;
-  }, [mixed]);
   return (
     <input
-      ref={ref}
+      ref={(input) => {
+        if (input) input.indeterminate = mixed;
+      }}
       type="checkbox"
       checked={checked}
       onChange={(event) => onChange(event.target.checked)}

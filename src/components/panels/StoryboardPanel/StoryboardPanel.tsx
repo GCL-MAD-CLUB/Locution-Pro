@@ -1,3 +1,6 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../runtime/scheduling";
+import { useScopedState } from "../../../runtime/state/useScopedState";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { themeSvgDataUrl } from "../../../runtime/theme";
 import { matchesSearchDuration, type AdvancedSearchOptions } from "../../../core/editor/textSearch";
 import { KeywordPresetControl } from "./annotations/KeywordPresetControl";
@@ -7,7 +10,7 @@ import {
   useStoryboardSemanticSearchAvailable,
 } from "../../../application/media/storyboardSemanticSearch";
 import { focusedSearchHitId } from "../../../core/editor/searchFocus";
-import { semanticSortDecision } from "../../../core/editor/semanticResultSort";
+import { useSemanticSortState } from "../../../runtime/state/useSemanticSortState";
 import { panelSourceTitle } from "../../../core/editor/panelSourceSelection";
 import {
   sourceDraftIdentity,
@@ -27,7 +30,7 @@ import {
   animatePlaybackFollowScroll,
   playbackFollowScrollDuration,
 } from "../../common/utils/playbackFollowScroll";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useRowVirtualizer } from "../../../runtime/state/useRowVirtualizer";
 import {
   ArrowDownAZ,
   ArrowDownZA,
@@ -44,7 +47,6 @@ import {
 import { VideoGlyph } from "../../common/MediaKindIcons/MediaKindIcons";
 import {
   Fragment,
-  useEffect,
   useCallback,
   useMemo,
   useRef,
@@ -1118,6 +1120,8 @@ function sortStoryboardShots(
 }
 
 export function StoryboardPanel() {
+  const lifetime = new RenderLifetime();
+
   const panelInstanceId = usePanelInstanceId();
   const panelActive = usePanelActive();
   const panelFocused = usePanelManagerState((state) => state.focusedPanelId === panelInstanceId);
@@ -1131,7 +1135,7 @@ export function StoryboardPanel() {
     toggleSource,
     previewSource,
     selection,
-  } = usePanelMediaSource("storyboard");
+  } = usePanelMediaSource(lifetime, "storyboard");
   const sourceContexts = sources.map((source) => source.context);
   const videoContext = sourceScope(sourceContexts);
   const draftIdentity = sourceDraftIdentity(sourceContexts);
@@ -1217,12 +1221,12 @@ export function StoryboardPanel() {
     setExpandedStackIds,
     shotSelectionCleared,
     shotSelectionReplaced,
-  } = useStoryboardPanelState((state) => state, videoContext, selection.workspaceId);
-  const semanticSearchAvailable = useStoryboardSemanticSearchAvailable();
+  } = useStoryboardPanelState(lifetime, (state) => state, videoContext, selection.workspaceId);
+  const semanticSearchAvailable = useStoryboardSemanticSearchAvailable(lifetime);
   const searchMode =
     storedSearchMode === "semantic" && !semanticSearchAvailable ? "filter" : storedSearchMode;
   const { requestDetection, canRequestDetection, detectionDialog, detectionTasks } =
-    useStoryboardDetection();
+    useStoryboardDetection(lifetime);
   const tracePlaybackStatus = usePlaybackTraceStatus();
   const panelRef = useRef<HTMLElement | null>(null);
   const contentLayoutRef = useRef<HTMLDivElement | null>(null);
@@ -1236,17 +1240,31 @@ export function StoryboardPanel() {
   const lastPointerPositionRef = useRef<StoryboardMenuAnchor | null>(null);
   const shotKeywordDragCleanupRef = useRef<(() => void) | null>(null);
   const suppressShotClickRef = useRef(false);
+  const releaseClickTaskRef = useRef<ScheduledTask | null>(null);
   const keywordResizeCleanupRef = useRef<(() => void) | null>(null);
-  const [shotSort, setShotSort] = useState<StoryboardSort>(defaultStoryboardSort);
-  const [gridShotSort, setGridShotSort] = useState<StoryboardSort>(defaultStoryboardGridSort);
-  const [appliedSemanticVersion, setAppliedSemanticVersion] = useState(0);
-  const [ratingComparatorMenu, setRatingComparatorMenu] = useState<StoryboardMenuAnchor | null>(
+
+  const [ratingComparatorMenu, setRatingComparatorMenu] =
+    useScopedState<StoryboardMenuAnchor | null>(draftIdentity, null);
+  const [sprayActive, setSprayActive] = useScopedState(draftIdentity, false);
+  lifetime.useBeforePaint(
+    () => () => {
+      sprayGestureCleanupRef.current?.();
+    },
+    [draftIdentity, sprayActive],
+  );
+  const [footerSortMenu, setFooterSortMenu] = useScopedState<StoryboardMenuAnchor | null>(
+    JSON.stringify([draftIdentity, viewMode]),
     null,
   );
-  const [footerSortMenu, setFooterSortMenu] = useState<StoryboardMenuAnchor | null>(null);
-  const [footerSprayMenu, setFooterSprayMenu] = useState<StoryboardMenuAnchor | null>(null);
-  const [footerOptionsMenu, setFooterOptionsMenu] = useState<StoryboardMenuAnchor | null>(null);
-  const [sprayActive, setSprayActive] = useState(false);
+  const [footerSprayMenu, setFooterSprayMenu] = useScopedState<StoryboardMenuAnchor | null>(
+    JSON.stringify([draftIdentity, viewMode, sprayActive]),
+    null,
+  );
+  const [footerOptionsMenu, setFooterOptionsMenu] = useScopedState<StoryboardMenuAnchor | null>(
+    draftIdentity,
+    null,
+  );
+
   const [sprayMode, setSprayMode] = useState<StoryboardSprayMode>("keywords");
   const [sprayKeywordInput, setSprayKeywordInput] = useState("");
   const [sprayColorLabel, setSprayColorLabel] = useState<StoryboardShotColorLabel | null>(null);
@@ -1257,14 +1275,38 @@ export function StoryboardPanel() {
     useState<StoryboardMenuAnchor | null>(null);
   const [storyboardViewRatio, setStoryboardViewRatio] = useState(2 / 3);
   const [keywordPanelOpen, setKeywordPanelOpen] = useState(true);
-  const [footerAreaVisibility, setFooterAreaVisibility] = useState(
+  const [ordinaryFooterVisibility, setOrdinaryFooterVisibility] = useState(
     defaultStoryboardFooterAreaVisibility,
   );
+  const [graphFooterVisibility, setGraphFooterVisibility] =
+    useScopedState<StoryboardFooterAreaVisibility>(viewMode, {
+      ...ordinaryFooterVisibility,
+      flag: true,
+      rating: true,
+      colorLabel: true,
+    });
+  const footerAreaVisibility =
+    viewMode === "graph" ? graphFooterVisibility : ordinaryFooterVisibility;
+  const setFooterAreaVisibility = (
+    action:
+      | StoryboardFooterAreaVisibility
+      | ((value: StoryboardFooterAreaVisibility) => StoryboardFooterAreaVisibility),
+  ) => {
+    const next = typeof action === "function" ? action(footerAreaVisibility) : action;
+    setOrdinaryFooterVisibility(next);
+    if (viewMode === "graph") setGraphFooterVisibility(next);
+  };
   const [marqueeSelection, setMarqueeSelection] = useState<StoryboardMarqueeSelection | null>(null);
   const [shotKeywordDragPreview, setShotKeywordDragPreview] =
     useState<StoryboardShotKeywordDragPreview | null>(null);
-  const [contextMenu, setContextMenu] = useState<StoryboardContextMenuState | null>(null);
-  const [annotationMenu, setAnnotationMenu] = useState<StoryboardAnnotationMenuState | null>(null);
+  const [contextMenu, setContextMenu] = useScopedState<StoryboardContextMenuState | null>(
+    draftIdentity,
+    null,
+  );
+  const [annotationMenu, setAnnotationMenu] = useScopedState<StoryboardAnnotationMenuState | null>(
+    draftIdentity,
+    null,
+  );
   const [videoMenu, setVideoMenu] = useState<StoryboardMenuAnchor | null>(null);
   const [storyboardColumnWidths, setStoryboardColumnWidths] = useState(
     initialStoryboardColumnWidths,
@@ -1276,19 +1318,12 @@ export function StoryboardPanel() {
     pointerId: number;
   } | null>(null);
   const multipleSources = sources.length > 1;
-  const [sourceDirection, setSourceDirection] = useState<SourceSortDirection>("ascending");
-  usePersistedMediaPanelState({
-    selection,
-    onRestoreWorkspaces: selection.hydrateWorkspaces,
-    sourceDirection,
-    sourceWidth: storyboardColumnWidths.source,
-    onRestoreSources: selection.setSources,
-    onRestoreSourceDirection: setSourceDirection,
-    onRestoreSourceWidth: (width) =>
-      setStoryboardColumnWidths((current) => ({ ...current, source: width })),
-  });
-  const sourceForShot = (shot: StoryboardShot) =>
-    sources.find((source) => source.context === sourceRowParts(shot.id)?.[0]) ?? sources[0];
+
+  const sourceForShot = useCallback(
+    (shot: StoryboardShot) =>
+      sources.find((source) => source.context === sourceRowParts(shot.id)?.[0]) ?? sources[0],
+    [sources],
+  );
   const selectedMotionShot =
     shots.find((shot) => shot.id === activeShotId && selectedShotIds.has(shot.id)) ??
     shots.find((shot) => selectedShotIds.has(shot.id));
@@ -1325,8 +1360,8 @@ export function StoryboardPanel() {
     [videoSources],
   );
   const selectableVideos = useMemo(() => videoSources.map((source) => source.item), [videoSources]);
-  useCloseOnOutsidePointer(Boolean(videoMenu), () => setVideoMenu(null));
-  useBroadcastEvent(identity, "storyboard.detection.completed", ({ payload }) => {
+  useCloseOnOutsidePointer(lifetime, Boolean(videoMenu), () => setVideoMenu(null));
+  useBroadcastEvent(lifetime, identity, "storyboard.detection.completed", ({ payload }) => {
     if (!sources.some((source) => source.context === payload.videoContext)) return "ignored";
     if (multipleSources) return "handled";
     shotSelectionReplaced(payload.firstShotId ? [payload.firstShotId] : [], payload.firstShotId);
@@ -1364,9 +1399,10 @@ export function StoryboardPanel() {
             ]
           : [];
       }),
-    [shots, sources],
+    [shots, sourceForShot],
   );
   const semantic = useStoryboardSemanticSearch(
+    lifetime,
     searchMode === "semantic",
     query,
     semanticShots,
@@ -1377,33 +1413,45 @@ export function StoryboardPanel() {
   const showSimilarity = searchMode === "semantic" && Boolean(query.trim());
   const hasSemanticResults =
     showSimilarity && semantic.status === "ready" && semantic.scores.size > 0;
-  const ordinaryShotSort = useRef<StoryboardSort>(defaultStoryboardSort);
-  const ordinaryGridShotSort = useRef<StoryboardSort>(defaultStoryboardGridSort);
-  if (shotSort.columnId !== "similarity") ordinaryShotSort.current = shotSort;
-  if (gridShotSort.columnId !== "similarity") ordinaryGridShotSort.current = gridShotSort;
-  const effectiveShotSort =
-    shotSort.columnId === "similarity" && !hasSemanticResults ? ordinaryShotSort.current : shotSort;
-  const effectiveGridShotSort =
-    gridShotSort.columnId === "similarity" && !hasSemanticResults
-      ? ordinaryGridShotSort.current
-      : gridShotSort;
-  const semanticSort = semanticSortDecision<StoryboardSort>({
-    hasSemanticResults,
-    showSimilarity,
-    resultVersion: semantic.resultVersion,
-    appliedVersion: appliedSemanticVersion,
-    sorts: [shotSort, gridShotSort],
-    ordinary: [ordinaryShotSort.current, ordinaryGridShotSort.current],
-    similarity: { columnId: "similarity", direction: "descending" },
+  const semanticVersion = hasSemanticResults ? semantic.resultVersion : null;
+  const similaritySort = useMemo<StoryboardSort>(
+    () => ({ columnId: "similarity", direction: "descending" }),
+    [],
+  );
+
+  const {
+    sort: shotSort,
+    setSort: setShotSort,
+    ordinary: ordinaryShotSort,
+  } = useSemanticSortState<StoryboardSort>(
+    JSON.stringify([draftIdentity, displayShots.length > 0]),
+    semanticVersion,
+    defaultStoryboardSort,
+    similaritySort,
+  );
+  const { sort: gridShotSort, setSort: setGridShotSort } = useSemanticSortState<StoryboardSort>(
+    draftIdentity,
+    semanticVersion,
+    defaultStoryboardGridSort,
+    similaritySort,
+  );
+  const effectiveShotSort = shotSort;
+  const effectiveGridShotSort = gridShotSort;
+
+  const [sourceDirection, setSourceDirection] = useScopedState<SourceSortDirection>(
+    semanticVersion,
+    semanticVersion === null ? "ascending" : "none",
+  );
+  usePersistedMediaPanelState(lifetime, {
+    selection,
+    onRestoreWorkspaces: selection.hydrateWorkspaces,
+    sourceDirection,
+    sourceWidth: storyboardColumnWidths.source,
+    onRestoreSources: selection.setSources,
+    onRestoreSourceDirection: setSourceDirection,
+    onRestoreSourceWidth: (width) =>
+      setStoryboardColumnWidths((current) => ({ ...current, source: width })),
   });
-  if (semanticSort) {
-    setAppliedSemanticVersion(semanticSort.appliedVersion);
-    if (semanticSort.clearSourceDirection) setSourceDirection("none");
-    if (semanticSort.sorts) {
-      setShotSort(semanticSort.sorts[0]);
-      setGridShotSort(semanticSort.sorts[1]);
-    }
-  }
   const filteredShots = useMemo(
     () =>
       displayShots.filter(
@@ -1492,14 +1540,14 @@ export function StoryboardPanel() {
         sourceDirection,
       ),
     [
-      activeShotSort,
       filteredShots,
-      keywordNodes,
+      activeShotSort,
       shotAnnotations,
+      keywordNodes,
       shotCount,
       sortShotsById,
       semantic.scores,
-      sources,
+      sourceForShot,
       sourceDirection,
     ],
   );
@@ -1582,6 +1630,7 @@ export function StoryboardPanel() {
   const sprayKeywordsDisplay = formatParsedStoryboardKeywords(sprayKeywords);
   const sprayUsesCustomLabel = sprayMode === "colorLabel" && sprayCustomLabel.trim().length > 0;
   const { altPressed: sprayAltPressed, shiftPressed: sprayPickingKeywords } = useSprayToolModifiers(
+    lifetime,
     sprayActive,
     sprayMode === "keywords",
   );
@@ -1614,7 +1663,7 @@ export function StoryboardPanel() {
       filteredShots
         .filter((shot) => playbackSource && sourceForShot(shot)?.videoId === playbackSource.videoId)
         .sort((a, b) => a.start_frame - b.start_frame),
-    [filteredShots, sources, playbackSource],
+    [filteredShots, playbackSource, sourceForShot],
   );
   const chronologicalCurrentShotIndex = useMemo(
     () => shotIndexAtFrame(playbackShots, currentFrame),
@@ -1724,7 +1773,7 @@ export function StoryboardPanel() {
   const getRowKey = useCallback((index: number) => sortedShots[index].id, [sortedShots]);
   const getRowHeight = useCallback(() => storyboardRowHeight, [storyboardRowHeight]);
   const getScrollElement = useCallback(() => listRef.current, []);
-  const rowVirtualizer = useVirtualizer({
+  const rowVirtualizer = useRowVirtualizer(lifetime, {
     count: viewMode === "list" ? sortedShots.length : 0,
     getScrollElement,
     estimateSize: getRowHeight,
@@ -1732,7 +1781,7 @@ export function StoryboardPanel() {
     measureElement: getRowHeight,
     overscan: 4,
   });
-  useBroadcastEvent(identity, "storyboard.reveal-shot.requested", ({ payload }) => {
+  useBroadcastEvent(lifetime, identity, "storyboard.reveal-shot.requested", ({ payload }) => {
     if (!panelActive || !sources.some((source) => source.context === payload.videoContext)) {
       return "ignored";
     }
@@ -1756,7 +1805,7 @@ export function StoryboardPanel() {
     }
     return "handled";
   });
-  const captureThumbnailResizeCenter = useTimelineThumbnailListResizeAnchor({
+  const captureThumbnailResizeCenter = useTimelineThumbnailListResizeAnchor(lifetime, {
     enabled: viewMode === "list",
     itemCount: sortedShots.length,
     itemHeight: storyboardRowHeight,
@@ -1787,12 +1836,13 @@ export function StoryboardPanel() {
     scrollToIconShot(listRef.current, targetIndex, "center");
   }
   useSearchNavigation(
+    lifetime,
     panelRef,
     searchMode === "highlight" && Boolean(query.trim()),
     navigateSearch,
   );
   const searchFocusKey = `${searchMode}\u0000${searchRule}\u0000${searchScope}\u0000${query}`;
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (searchMode !== "highlight" || !query.trim()) return;
     const firstMatchIndex = matchingShotIndices[0];
     if (firstMatchIndex === undefined) return;
@@ -1807,13 +1857,13 @@ export function StoryboardPanel() {
     if (targetIndex === undefined) return;
     focusSearchMatch(targetIndex);
   }
-  const virtualRows = rowVirtualizer.getVirtualItems();
+  const virtualRows = rowVirtualizer.items;
   const thumbnailVisibleRange = timelineThumbnailVisibleRange(
     virtualRows,
     rowVirtualizer.scrollOffset ?? 0,
     rowVirtualizer.scrollRect?.height ?? 0,
   );
-  const thumbnailWindow = useTimelineThumbnailWindow({
+  const thumbnailWindow = useTimelineThumbnailWindow(lifetime, {
     enabled: viewMode === "list" && Boolean(thumbnailVideoPath),
     sourceKey: videoContext,
     items: sortedShots,
@@ -2013,7 +2063,7 @@ export function StoryboardPanel() {
     footerOptionsMenu,
   );
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const rememberPointerPosition = (event: PointerEvent) => {
       lastPointerPositionRef.current = { x: event.clientX, y: event.clientY };
     };
@@ -2025,7 +2075,7 @@ export function StoryboardPanel() {
     };
   }, []);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!sprayPickingKeywords) {
       setSprayKeywordPickerAnchor(null);
       return;
@@ -2039,27 +2089,13 @@ export function StoryboardPanel() {
     );
   }, [sprayPickingKeywords]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (viewMode === "list") {
       rowVirtualizer.measure();
     }
-  }, [rowVirtualizer, storyboardRowHeight, viewMode]);
+  }, [rowVirtualizer.measure, storyboardRowHeight, viewMode]);
 
-  const [seenDraftIdentity, setSeenDraftIdentity] = useState(draftIdentity);
-  if (seenDraftIdentity !== draftIdentity) {
-    setSeenDraftIdentity(draftIdentity);
-    sprayGestureCleanupRef.current?.();
-    setSprayActive(false);
-    setContextMenu(null);
-    setAnnotationMenu(null);
-    setRatingComparatorMenu(null);
-    setFooterSortMenu(null);
-    setFooterSprayMenu(null);
-    setFooterOptionsMenu(null);
-    setGridShotSort(defaultStoryboardGridSort);
-  }
-
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!contextMenu) {
       return;
     }
@@ -2086,7 +2122,7 @@ export function StoryboardPanel() {
     };
   }, [contextMenu]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!annotationMenu) {
       return;
     }
@@ -2113,7 +2149,7 @@ export function StoryboardPanel() {
     };
   }, [annotationMenu]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!ratingComparatorMenu) {
       return;
     }
@@ -2135,7 +2171,7 @@ export function StoryboardPanel() {
     };
   }, [ratingComparatorMenu]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!footerSortMenu) {
       return;
     }
@@ -2157,7 +2193,7 @@ export function StoryboardPanel() {
     };
   }, [footerSortMenu]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!footerSprayMenu) {
       return;
     }
@@ -2179,7 +2215,7 @@ export function StoryboardPanel() {
     };
   }, [footerSprayMenu]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!footerOptionsMenu) {
       return;
     }
@@ -2201,39 +2237,6 @@ export function StoryboardPanel() {
     };
   }, [footerOptionsMenu]);
 
-  const [seenViewMode, setSeenViewMode] = useState<StoryboardViewMode | null>(null);
-  if (seenViewMode !== viewMode) {
-    setSeenViewMode(viewMode);
-    setFooterSortMenu(null);
-    setFooterSprayMenu(null);
-    // Graph nodes have no annotation columns, so expose these controls on entry.
-    // Only react to view changes so the footer menu can still hide them afterwards.
-    if (viewMode === "graph") {
-      setFooterAreaVisibility((current) => ({
-        ...current,
-        flag: true,
-        rating: true,
-        colorLabel: true,
-      }));
-    }
-  }
-
-  const [sprayWasActive, setSprayWasActive] = useState(sprayActive);
-  if (sprayWasActive !== sprayActive) {
-    setSprayWasActive(sprayActive);
-    if (!sprayActive) {
-      sprayGestureCleanupRef.current?.();
-      setFooterSprayMenu(null);
-    }
-  }
-
-  const hasShots = displayShots.length > 0;
-  const [sawShots, setSawShots] = useState(() => shots.length > 0);
-  if (sawShots !== hasShots) {
-    setSawShots(hasShots);
-    if (!sawShots && hasShots) setShotSort(defaultStoryboardSort);
-  }
-
   const visibleSelectedIds = sortedShots
     .map((shot) => shot.id)
     .filter((shotId) => selectedShotIds.has(shotId));
@@ -2246,7 +2249,7 @@ export function StoryboardPanel() {
     selectionAnchorRef.current = nextSelectionFocus.anchorId;
   }
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const panel = panelRef.current;
     if (!panel) {
       return;
@@ -2335,7 +2338,7 @@ export function StoryboardPanel() {
     return () => panel.removeEventListener("keydown", handleSelectionKeyDown);
   }, [activeShotId, rowVirtualizer, selectedShotIds, shotSelectionReplaced, sortedShots, viewMode]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const handleRippleDeleteKey = (event: KeyboardEvent) => {
       if (
         !isEditAuthority ||
@@ -2357,7 +2360,7 @@ export function StoryboardPanel() {
     return () => window.removeEventListener("keydown", handleRippleDeleteKey);
   });
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const handleAnnotationShortcut = (event: KeyboardEvent) => {
       if (
         !isEditAuthority ||
@@ -2407,7 +2410,7 @@ export function StoryboardPanel() {
     annotationShortcutMenuOpen,
     contextMenu,
     isEditAuthority,
-    rowVirtualizer,
+    rowVirtualizer.scrollToIndex,
     selectedAnnotationShotIds,
     selectedShotIds,
     selectedShotIds.size,
@@ -2419,7 +2422,7 @@ export function StoryboardPanel() {
     viewMode,
   ]);
 
-  useEffect(
+  lifetime.useAfterCommit(
     () => () => {
       if (scrollAnimationRef.current !== null) {
         scrollAnimationRef.current();
@@ -2429,13 +2432,14 @@ export function StoryboardPanel() {
       shotKeywordDragCleanupRef.current?.();
       keywordResizeCleanupRef.current?.();
       suppressShotClickRef.current = false;
+      cancelTask(releaseClickTaskRef.current);
       document.body.classList.remove("is-resizing-storyboard-column");
       document.body.classList.remove("is-resizing-storyboard-keyword-panel");
     },
     [],
   );
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!isPlaying || !panelActive) {
       return;
     }
@@ -2450,7 +2454,6 @@ export function StoryboardPanel() {
       return;
     }
     // A row-height change can invalidate measurements earlier in this effect pass.
-    rowVirtualizer.getTotalSize();
     const offsetInfo = rowVirtualizer.getOffsetForIndex(followShotIndex, "center");
     if (!offsetInfo) {
       return;
@@ -2488,7 +2491,7 @@ export function StoryboardPanel() {
     playbackSource?.frameRate,
     isPlaying,
     panelActive,
-    rowVirtualizer,
+    rowVirtualizer.getOffsetForIndex,
     rowVirtualizer.scrollRect?.height,
     storyboardRowHeight,
     sortedShots,
@@ -2825,7 +2828,9 @@ export function StoryboardPanel() {
         } else if (!cancelled && target.libraryLocation) {
           addShotsToAssetLibrary(Array.from(dragShotIds), target.libraryLocation.folderId);
         }
-        window.setTimeout(() => {
+        cancelTask(releaseClickTaskRef.current);
+        releaseClickTaskRef.current = scheduleAfter(() => {
+          releaseClickTaskRef.current = null;
           suppressShotClickRef.current = false;
         }, 0);
       }
@@ -3096,13 +3101,14 @@ export function StoryboardPanel() {
         </header>
         <div className="storyboard-spray-keyword-picker-grid">
           {cells.map((label, index) => {
+            const shortcutNumber = `shortcut-${label || index + 1}`;
             if (!label) {
-              return <span key={`empty-${index}`} aria-hidden="true" />;
+              return <span key={shortcutNumber} aria-hidden="true" />;
             }
             const selected = selectedLabels.has(label);
             return (
               <button
-                key={`${index}:${label}`}
+                key={shortcutNumber}
                 type="button"
                 className={selected ? "is-active" : ""}
                 style={
@@ -3314,7 +3320,7 @@ export function StoryboardPanel() {
     }
   }
 
-  useExportCapability({
+  useExportCapability(lifetime, {
     identity,
     active: isEditAuthority,
     selectedCount: buildCurrentStoryboardSource()?.clips.length ?? 0,
@@ -3459,7 +3465,7 @@ export function StoryboardPanel() {
     }
     setShotSort((stored) => {
       const current =
-        stored.columnId === "similarity" && !hasSemanticResults ? ordinaryShotSort.current : stored;
+        stored.columnId === "similarity" && !hasSemanticResults ? ordinaryShotSort : stored;
       return current.columnId === columnId
         ? {
             columnId,
@@ -3557,7 +3563,7 @@ export function StoryboardPanel() {
     }));
   }
 
-  useEditCapability({
+  useEditCapability(lifetime, {
     identity,
     active: isEditAuthority,
     selectedCount,
@@ -3646,7 +3652,7 @@ export function StoryboardPanel() {
     );
   }
 
-  return (
+  return lifetime.render(
     <section ref={panelRef} className="storyboard-panel" style={panelStyle} tabIndex={-1}>
       <div className="storyboard-project-row">
         <VideoGlyph aria-hidden="true" />
@@ -4080,7 +4086,15 @@ export function StoryboardPanel() {
               <button
                 type="button"
                 className={viewMode === "graph" ? "active" : ""}
-                onClick={() => setViewMode("graph")}
+                onClick={() => {
+                  setFooterAreaVisibility((current) => ({
+                    ...current,
+                    flag: true,
+                    rating: true,
+                    colorLabel: true,
+                  }));
+                  setViewMode("graph");
+                }}
                 title="图谱视图"
                 aria-label="图谱视图"
                 aria-pressed={viewMode === "graph"}
@@ -5136,6 +5150,6 @@ export function StoryboardPanel() {
           document.body,
         )}
       {detectionDialog}
-    </section>
+    </section>,
   );
 }

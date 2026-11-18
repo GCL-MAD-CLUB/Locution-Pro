@@ -1,6 +1,7 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
   useCallback,
-  useEffect,
   useRef,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -29,19 +30,21 @@ function isNameTarget(target: EventTarget | null) {
  * Clicking the only selected item's name again renames it after a pause. Any further
  * press or key before then, including the second click of a double-click, cancels the rename.
  */
-export function useSlowClickRename(startRename: (key: string) => void) {
+export function useSlowClickRename(lifetime: RenderLifetime, startRename: (key: string) => void) {
   const armedRef = useRef<ArmedPress | null>(null);
-  const timerRef = useRef<number | null>(null);
+  const timerRef = useRef<ScheduledTask | null>(null);
   const startRenameRef = useRef(startRename);
-  startRenameRef.current = startRename;
+  lifetime.useBeforePaint(() => {
+    startRenameRef.current = startRename;
+  });
 
   const cancel = useCallback(() => {
     armedRef.current = null;
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    if (timerRef.current !== null) cancelTask(timerRef.current);
     timerRef.current = null;
   }, []);
 
-  useEffect(() => cancel, [cancel]);
+  lifetime.useAfterCommit(() => cancel, [cancel]);
 
   /** Arms the rename only on the name text of the sole selected item. */
   const armOnPointerDown = useCallback(
@@ -60,7 +63,7 @@ export function useSlowClickRename(startRename: (key: string) => void) {
     armedRef.current = null;
     if (!armed || armed.key !== key || event.detail > 1 || !isNameTarget(event.target)) return;
     if (Math.hypot(event.clientX - armed.x, event.clientY - armed.y) >= clickSlopPx) return;
-    timerRef.current = window.setTimeout(() => {
+    timerRef.current = scheduleAfter(() => {
       timerRef.current = null;
       startRenameRef.current(key);
     }, renameDelayMs);

@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../support/lifetime.ts";
 import { createModuleLoader, deferred, flush } from "../support/module-loader.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -21,6 +22,7 @@ function taskSystem() {
   const exports = loadModule<TaskSystemModule>(
     "../../../src/systems/TaskSystem/TaskSystem.tsx",
     (name: string): unknown => {
+      if (name === "../../runtime/lifetime/RenderLifetime") return { RenderLifetime };
       if (name === "react") {
         return {
           useMemo: (build: () => unknown) => build(),
@@ -28,7 +30,6 @@ function taskSystem() {
             typeof initial === "function" ? (initial as () => unknown)() : initial,
             () => {},
           ],
-          useEffect: () => {},
           // Forced synchronous re-renders overflow React's update depth on macOS.
           useSyncExternalStore: () => assert.fail("progress must not use useSyncExternalStore"),
         };
@@ -54,7 +55,9 @@ function options(
 }
 function states(system: TaskSystemModule) {
   return Object.fromEntries(
-    system.useTaskProgressStatus().tasks.map((task) => [task.label, task.state] as const),
+    system
+      .useTaskProgressStatus(new RenderLifetime())
+      .tasks.map((task) => [task.label, task.state] as const),
   );
 }
 
@@ -87,7 +90,7 @@ test("starts three native owners concurrently and refills on out-of-order comple
   const first = await Promise.all(jobs.slice(0, 3));
   publishers[0]({ current: 0.25 });
   publishers[2]({ current: 0.75 });
-  const views = system.useTaskProgressStatus().tasks;
+  const views = system.useTaskProgressStatus(new RenderLifetime()).tasks;
   assert.equal(views[0].percent, 25);
   assert.equal(views[1].percent, 0);
   assert.equal(views[2].percent, 75);
@@ -107,7 +110,7 @@ test("starts three native owners concurrently and refills on out-of-order comple
   fifth.remove();
   sixth.remove();
   await flush();
-  assert.equal(system.useTaskProgressStatus().count, 0);
+  assert.equal(system.useTaskProgressStatus(new RenderLifetime()).count, 0);
   assert.deepEqual(cleaned.sort(), [0, 1, 2, 3, 4, 5]);
 });
 
@@ -127,7 +130,7 @@ test("cancelling a running detection holds its slot until its backend settles", 
     ),
   );
   const handles = await Promise.all(jobs.slice(0, 3));
-  const cancelling = system.useTaskProgressStatus().tasks[1].cancel();
+  const cancelling = system.useTaskProgressStatus(new RenderLifetime()).tasks[1].cancel();
   await flush();
   assert.equal(handles[1].cancelled, true);
   assert.deepEqual(started, [0, 1, 2]);
@@ -160,7 +163,7 @@ test("queued cancellation never starts native work and does not disturb running 
     ),
   );
   const first = await Promise.all(jobs.slice(0, 3));
-  await system.useTaskProgressStatus().tasks[3].cancel();
+  await system.useTaskProgressStatus(new RenderLifetime()).tasks[3].cancel();
   assert.equal((await jobs[3]).cancelled, true);
   assert.equal(backendCancels, 0);
   assert.deepEqual(started, [0, 1, 2]);
@@ -246,7 +249,6 @@ test("a second cancel and cancel-all wait for the same in-flight backend request
   const system = taskSystem();
   const gate = deferred<void>();
   let requests = 0;
-  let handle!: TaskProgressHandle;
   const created = system.createTaskProgress(
     options(
       "export",
@@ -258,8 +260,8 @@ test("a second cancel and cancel-all wait for the same in-flight backend request
       },
     ),
   );
-  handle = await created;
-  const view = () => system.useTaskProgressStatus().tasks[0];
+  const handle = await created;
+  const view = () => system.useTaskProgressStatus(new RenderLifetime()).tasks[0];
   let firstSettled = false;
   let secondSettled = false;
   let allSettled = false;
@@ -307,7 +309,7 @@ test("a failed running cancel rejects every waiter and a real retry can run", as
       },
     ),
   );
-  const view = () => system.useTaskProgressStatus().tasks[0];
+  const view = () => system.useTaskProgressStatus(new RenderLifetime()).tasks[0];
   const first = view().cancel();
   let secondState = "pending";
   const second = view()
@@ -337,6 +339,31 @@ test("a failed running cancel rejects every waiter and a real retry can run", as
   handle.remove();
 });
 
+test("unknown totals show indeterminate progress without inventing a percentage", async () => {
+  const system = taskSystem();
+  const handle = await system.createTaskProgress({
+    operation: "storyboard.semanticSearch",
+    label: "Loading model",
+    current: 0,
+    total: 0,
+  });
+  function descendants(value: unknown): { props: Record<string, unknown> }[] {
+    if (Array.isArray(value)) return value.flatMap(descendants);
+    if (!value || typeof value !== "object" || !("props" in value)) return [];
+    const element = value as { props: Record<string, unknown> };
+    return [element, ...descendants(element.props.children)];
+  }
+  const elements = descendants(system.TaskProgress({ children: null }));
+  const track = elements.find((element) => element.props.role === "progressbar");
+  assert.equal(track?.props["aria-label"], "Loading model");
+  assert.equal(track?.props["aria-valuenow"], undefined);
+  assert.ok(
+    elements.some((element) => element.props.className === "topbar-progress-fill is-indeterminate"),
+  );
+  assert.ok(!elements.some((element) => String(element.props.title).includes("0%")));
+  handle.remove();
+});
+
 test("a cancel that finds the task already finished resolves every waiter", async () => {
   const system = taskSystem();
   const handle = await system.createTaskProgress(
@@ -348,7 +375,7 @@ test("a cancel that finds the task already finished resolves every waiter", asyn
       },
     ),
   );
-  const view = () => system.useTaskProgressStatus().tasks[0];
+  const view = () => system.useTaskProgressStatus(new RenderLifetime()).tasks[0];
   await Promise.all([view().cancel(), view().cancel()]);
   assert.equal(handle.cancelled, true);
   assert.equal(system.errors.length, 0);

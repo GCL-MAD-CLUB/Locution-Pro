@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import type { RenderLifetime } from "../lifetime/RenderLifetime";
+import { useRef } from "react";
 import { runOperation } from "../../errors";
 import type { ApplicationEventMap, ApplicationEventType } from "./contracts";
 import {
@@ -10,14 +11,17 @@ import {
 import type { SystemIdentity } from "../systems/identity";
 
 export function useBroadcastEvent<Type extends ApplicationEventType>(
+  lifetime: RenderLifetime,
   identity: SystemIdentity,
   type: Type,
   handler: (event: EventEnvelope<Type>) => EventHandlingResult | Promise<EventHandlingResult>,
 ) {
   const handlerRef = useRef(handler);
-  handlerRef.current = handler;
+  lifetime.useBeforePaint(() => {
+    handlerRef.current = handler;
+  });
 
-  useEffect(
+  lifetime.useAfterCommit(
     () =>
       eventHub.subscribe({
         id: eventSubscriberId(identity, type),

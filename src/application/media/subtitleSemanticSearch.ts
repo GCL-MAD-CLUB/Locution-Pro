@@ -1,3 +1,5 @@
+import { scheduleAfter, cancelTask } from "../../runtime/scheduling";
+import type { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
 import { searchSemanticPrompts } from "../../core/editor/semanticPrompts";
 import {
   searchLines,
@@ -5,14 +7,14 @@ import {
   semanticPromptErrors,
 } from "../../core/editor/textSearch";
 import { Channel } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { invokeCommand, runOperation } from "../../errors";
 import { createTaskProgress } from "../../systems/TaskSystem";
 import { isTauriRuntime } from "../../platform/tauri/runtime";
 
-export function useSemanticSearchAvailable() {
+export function useSemanticSearchAvailable(lifetime: RenderLifetime) {
   const [available, setAvailable] = useState(false);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) return;
     let active = true;
     void runOperation("subtitle.semanticAvailability", () =>
@@ -133,6 +135,7 @@ function indexSubtitles(state: SearchState): IndexJob {
 }
 
 export function useSubtitleSemanticSearch(
+  lifetime: RenderLifetime,
   enabled: boolean,
   query: string,
   subtitles: readonly SemanticSubtitle[],
@@ -161,16 +164,18 @@ export function useSubtitleSemanticSearch(
     requestKey,
     clearQuery,
   });
-  latest.current = {
-    negativePrompts,
-    enabled,
-    query,
-    scope,
-    subtitles,
-    indexKey,
-    requestKey,
-    clearQuery,
-  };
+  lifetime.useBeforePaint(() => {
+    latest.current = {
+      negativePrompts,
+      enabled,
+      query,
+      scope,
+      subtitles,
+      indexKey,
+      requestKey,
+      clearQuery,
+    };
+  });
   const mounted = useRef(true);
   const busy = useRef(false);
   const indexed = useRef(new Set<string>());
@@ -180,14 +185,14 @@ export function useSubtitleSemanticSearch(
   const [tick, setTick] = useState(0);
   const [result, setResult] = useState<SearchResult | null>(null);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (cancelledRequest.current !== requestKey) cancelledRequest.current = null;
     if (
       !requestKey ||
@@ -196,7 +201,7 @@ export function useSubtitleSemanticSearch(
       cancelledRequest.current === requestKey
     )
       return;
-    const timer = window.setTimeout(() => {
+    const timer = scheduleAfter(() => {
       busy.current = true;
       void (async () => {
         const start = latest.current;
@@ -283,7 +288,7 @@ export function useSubtitleSemanticSearch(
     }, 350);
     // Only the debounce is tied to view changes. A started index keeps its
     // background task and queue slot until native work settles.
-    return () => window.clearTimeout(timer);
+    return () => cancelTask(timer);
   }, [requestKey, tick]);
 
   const current = requestKey && result?.key === requestKey ? result : null;

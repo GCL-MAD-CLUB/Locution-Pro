@@ -1,3 +1,5 @@
+import { useScopedState } from "../../../../runtime/state/useScopedState";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight, Search } from "lucide-react";
 import {
   useState,
@@ -73,7 +75,7 @@ function AddressInput({
   onSubmit: (value: string) => boolean;
   onCancel: () => void;
 }) {
-  const [value, setValue] = useState(initialValue);
+  const [value, setValue] = useScopedState(null, initialValue);
   return (
     <input
       className="asset-library-address-input"
@@ -99,9 +101,12 @@ function AddressInput({
 }
 
 export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
-  const { library, location, path, backStack, forwardStack, dropTargetKey } = props;
+  const lifetime = new RenderLifetime();
+
+  const { library, location, path, backStack, forwardStack, dropTargetKey, searchRef, query } =
+    props;
   const [menu, setMenu] = useState<AddressMenu | null>(null);
-  useCloseOnOutsidePointer(Boolean(menu), () => setMenu(null), {
+  useCloseOnOutsidePointer(lifetime, Boolean(menu), () => setMenu(null), {
     capturePointerdown: true,
     ignorePopupMenuTargets: true,
   });
@@ -263,7 +268,7 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
 
   const hasChildren = libraryPlace !== null && childFolders(libraryPlace).length > 0;
 
-  return (
+  return lifetime.render(
     <div className="asset-library-location-row">
       <div className="asset-library-history" aria-label="位置历史">
         <button
@@ -357,8 +362,8 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
       <label className="media-bin-search asset-library-search">
         <Search aria-hidden="true" />
         <input
-          ref={props.searchRef}
-          value={props.query}
+          ref={searchRef}
+          value={query}
           placeholder={`在“${placeLabel}”中搜索`}
           aria-label="搜索素材"
           onChange={(event) => props.onQueryChange(event.currentTarget.value)}
@@ -368,6 +373,6 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
         />
       </label>
       {renderMenu()}
-    </div>
+    </div>,
   );
 }

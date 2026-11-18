@@ -48,7 +48,7 @@
     "check:architecture": "node scripts/check-system-architecture.ts",
     "check:media-sources": "node scripts/check-media-sources.ts",
     "check:versions": "node scripts/check-version-consistency.ts",
-    "check": "npm run format:frontend:check && npm run check:layout && npm test && npm run check:versions && npm run build && npm run site:build && npm run docs:build",
+    "check": "npm run format:frontend:check && npm run lint && npm run check:layout && npm test && npm run check:versions && npm run build && npm run site:build && npm run docs:build",
     "format": "prettier --write . && npm run format:rust",
     "format:frontend:check": "prettier --check .",
     "format:check": "npm run format:frontend:check && npm run format:rust:check",
@@ -70,7 +70,9 @@
     "test:browser:components": "playwright test tests/browser/components",
     "test:browser:state": "playwright test tests/browser/state",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml --locked",
-    "test:rust:thumbnail": "cargo test --manifest-path src-tauri/thumbnail-provider/Cargo.toml --locked"
+    "test:rust:thumbnail": "cargo test --manifest-path src-tauri/thumbnail-provider/Cargo.toml --locked",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "npm run lint -- --fix"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.26",
@@ -82,18 +84,28 @@
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "rxjs": "^7.8.2",
     "zustand": "^5.1.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@playwright/test": "^1.65.0",
     "@tauri-apps/cli": "^2.12.4",
     "@types/d3-force": "^3.0.10",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@typescript-eslint/utils": "^8.73.0",
     "@vitejs/plugin-react": "^6.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "jiti": "^2.7.0",
     "prettier": "^3.10.1",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.73.0",
     "vite": "^8.3.8",
     "vitepress": "^1.6.4"
   },

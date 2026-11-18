@@ -1,3 +1,4 @@
+import { waitForDelay } from "../../../../runtime/scheduling";
 import { mediaKind, pathKey, type ImportDirectory, type ImportEntry } from "./importBrowserModel";
 
 export interface ImportSelectionItem {
@@ -42,7 +43,7 @@ export async function scanImportFolder(
     }
     onProgress([...files.values()], [...unreadable]);
     // Yield between directories even when listings come from a fast local cache.
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await waitForDelay(0);
   }
 }
 

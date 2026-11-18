@@ -1,10 +1,5 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import type { AssetLibrarySort, AssetLibrarySortKey } from "../../../../core/editor/assetLibrary";
 import {
@@ -56,13 +51,11 @@ function SelectAllCheckbox({
   disabled: boolean;
   onToggle: () => void;
 }) {
-  const ref = useRef<HTMLInputElement | null>(null);
-  useLayoutEffect(() => {
-    if (ref.current) ref.current.indeterminate = mixed;
-  }, [mixed]);
   return (
     <input
-      ref={ref}
+      ref={(input) => {
+        if (input) input.indeterminate = mixed;
+      }}
       type="checkbox"
       className="asset-library-check"
       checked={checked}
@@ -94,12 +87,14 @@ function SortArrow({ direction }: { direction: AssetLibrarySort["direction"] }) 
 
 /** Media bin column header with sorting, resizable detail columns and a column menu. */
 export function AssetLibraryListHeader(props: AssetLibraryListHeaderProps) {
+  const lifetime = new RenderLifetime();
+
   const { columns, columnWidths, visibleColumns, sort, itemCount, selectedCount, itemCheckboxes } =
     props;
   const columnResizeRef = useRef<ColumnResize | null>(null);
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number } | null>(null);
 
-  useCloseOnOutsidePointer(Boolean(headerMenu), () => setHeaderMenu(null), {
+  useCloseOnOutsidePointer(lifetime, Boolean(headerMenu), () => setHeaderMenu(null), {
     capturePointerdown: true,
     ignorePopupMenuTargets: true,
   });
@@ -145,7 +140,10 @@ export function AssetLibraryListHeader(props: AssetLibraryListHeaderProps) {
     document.body.classList.remove("is-resizing-media-column");
   }
 
-  useEffect(() => () => document.body.classList.remove("is-resizing-media-column"), []);
+  lifetime.useAfterCommit(
+    () => () => document.body.classList.remove("is-resizing-media-column"),
+    [],
+  );
 
   function renderResizer(id: AssetLibraryColumnId) {
     const column = assetLibraryColumns.find((candidate) => candidate.id === id)!;
@@ -248,7 +246,7 @@ export function AssetLibraryListHeader(props: AssetLibraryListHeaderProps) {
     );
   }
 
-  return (
+  return lifetime.render(
     <>
       {renderHeader()}
       {headerMenu &&
@@ -288,6 +286,6 @@ export function AssetLibraryListHeader(props: AssetLibraryListHeaderProps) {
           </PopupMenu>,
           document.body,
         )}
-    </>
+    </>,
   );
 }

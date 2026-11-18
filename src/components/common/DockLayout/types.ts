@@ -1,3 +1,4 @@
+import type { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import type { ComponentType, ReactNode } from "react";
 
 export type DockAreaId = string;
@@ -111,18 +112,20 @@ export interface PanelDefinition<Params = unknown> {
   type: PanelTypeId;
   Component: ComponentType<PanelComponentProps<Params>>;
   /** Reactive panel title hook. It runs in the current panel instance context. */
-  useTitle: (params: Params) => string;
+  useTitle: (params: Params, lifetime: RenderLifetime) => string;
   useActions?: (params: Params) => ReactNode;
   /**
    * Panel-owned entries appended below the built-in three-line menu commands.
    * This hook runs in the current panel instance context, so panel-local state is available.
    */
-  useMenuItems?: (params: Params) => PanelMenuEntryDefinition[];
+  useMenuItems?: (params: Params, lifetime: RenderLifetime) => PanelMenuEntryDefinition[];
   useAvailable?: (params: Params) => boolean;
 }
 
-export type AnyPanelDefinition = PanelDefinition<any>;
+export type AnyPanelDefinition = PanelDefinition<unknown>;
 
-export function definePanel<Params>(definition: PanelDefinition<Params>) {
-  return definition;
+export function definePanel<Params>(definition: PanelDefinition<Params>): AnyPanelDefinition {
+  // Parameters remain paired with their component and hooks. Erase the generic
+  // only at this boundary so a registry can hold different panel contracts.
+  return definition as unknown as AnyPanelDefinition;
 }

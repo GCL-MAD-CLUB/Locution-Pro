@@ -1,4 +1,5 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useRef, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { StoryboardGraphSelectionMode } from "../../../../core/editor/storyboardGraph/selection";
 
@@ -21,10 +22,12 @@ export function StoryboardGraphSelectionCursor({
   mode: StoryboardGraphSelectionMode;
   enabled: boolean;
 }) {
+  const lifetime = new RenderLifetime();
+
   const markerRef = useRef<HTMLSpanElement>(null);
   const pointRef = useRef<{ x: number; y: number; target: EventTarget | null } | null>(null);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const stage = stageRef.current;
     const marker = markerRef.current;
     if (!stage || !marker) return;
@@ -73,19 +76,21 @@ export function StoryboardGraphSelectionCursor({
     };
   }, [stageRef, mode, enabled]);
 
-  return createPortal(
-    <span
-      ref={markerRef}
-      className="storyboard-graph-selection-cursor"
-      data-selection-mode={mode}
-      hidden
-      aria-hidden="true"
-    >
-      <svg viewBox="0 0 10 10" fill="none" strokeLinecap="square">
-        <path className="storyboard-graph-selection-cursor-outline" d={markers[mode]} />
-        <path className="storyboard-graph-selection-cursor-mark" d={markers[mode]} />
-      </svg>
-    </span>,
-    document.body,
+  return lifetime.render(
+    createPortal(
+      <span
+        ref={markerRef}
+        className="storyboard-graph-selection-cursor"
+        data-selection-mode={mode}
+        hidden
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 10 10" fill="none" strokeLinecap="square">
+          <path className="storyboard-graph-selection-cursor-outline" d={markers[mode]} />
+          <path className="storyboard-graph-selection-cursor-mark" d={markers[mode]} />
+        </svg>
+      </span>,
+      document.body,
+    ),
   );
 }

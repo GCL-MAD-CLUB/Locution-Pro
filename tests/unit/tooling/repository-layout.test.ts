@@ -62,6 +62,21 @@ test("layout check accepts the separate static website JavaScript", (t) => {
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("layout syntax-checks declaration files without trying to emit JavaScript", (t) => {
+  const valid = fixture(t, {
+    "tests/browser/support/window.d.ts":
+      "export {}; declare global { interface Window { fixtureId: string; } }",
+  });
+  assert.equal(valid.status, 0, valid.stderr);
+  const invalid = fixture(t, {
+    "tests/browser/support/window.d.ts":
+      "export {}; declare global { interface Window { fixtureId: ; } }",
+  });
+  assert.equal(invalid.status, 1);
+  assert.match(invalid.stderr, /error TS\d+/);
+  assert.doesNotMatch(invalid.stderr, /Debug Failure/);
+});
+
 for (const name of [
   "src-tauri/tests/contract.rs",
   "src-tauri/src/onnx_tests.rs",

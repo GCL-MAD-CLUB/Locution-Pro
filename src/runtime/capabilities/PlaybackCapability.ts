@@ -1,3 +1,4 @@
+import type { RenderLifetime } from "../lifetime/RenderLifetime";
 import { useMemo } from "react";
 import type { ApplicationEventMap } from "../events/contracts";
 import { useBroadcastEvent } from "../events/react";
@@ -61,7 +62,10 @@ export interface PlaybackCapabilityOptions extends PlaybackStatusProjection {
   ) => boolean | void | Promise<boolean | void>;
 }
 
-export function usePlaybackCapability(options: PlaybackCapabilityOptions) {
+export function usePlaybackCapability(
+  lifetime: RenderLifetime,
+  options: PlaybackCapabilityOptions,
+) {
   const {
     identity,
     active,
@@ -97,13 +101,13 @@ export function usePlaybackCapability(options: PlaybackCapabilityOptions) {
       videoSource,
     ],
   );
-  usePublishProjection(PLAYBACK_STATUS_PROJECTION, identity, projection);
+  usePublishProjection(lifetime, PLAYBACK_STATUS_PROJECTION, identity, projection);
 
   const authority = useActivePlaybackProjection();
   const isAuthority = authority
     ? systemIdentityKey(authority.owner) === systemIdentityKey(identity)
     : fallbackAuthority;
-  useBroadcastEvent(identity, "playback.seek.requested", async ({ payload }) => {
+  useBroadcastEvent(lifetime, identity, "playback.seek.requested", async ({ payload }) => {
     if (!isAuthority) {
       return "ignored";
     }

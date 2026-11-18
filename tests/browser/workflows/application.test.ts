@@ -5,7 +5,7 @@ const prerelease = packageJson.version.includes("-");
 
 test("启动时先展示安装错误，再展示新版本说明，确认后不重复", async ({ page, native }) => {
   await page.addInitScript(() => {
-    (window as any).__nativeTest.updateStartup = {
+    window.__nativeTest.updateStartup = {
       pending: null,
       ignored: false,
       ignoredVersions: [],
@@ -37,9 +37,9 @@ test("启动时先展示安装错误，再展示新版本说明，确认后不�
 test.describe("正式版更新", () => {
   test("自动更新不可用时展示发布说明和原有发布页入口", async ({ page, native }) => {
     await page.addInitScript(() => {
-      (window as any).__nativeTest.failures.download_update = "No updater in legacy release";
-      (window as any).__nativeTest.expectedFailures.push("tauri:download_update");
-      (window as any).__nativeTest.latestRelease = {
+      window.__nativeTest.failures.download_update = "No updater in legacy release";
+      window.__nativeTest.expectedFailures.push("tauri:download_update");
+      window.__nativeTest.latestRelease = {
         version: "v999.0.0",
         title: "Locution Pro 999.0.0",
         body: "## 本次更新\n- 更快的媒体导入\n- [完整说明](https://example.com/notes)",
@@ -72,7 +72,7 @@ test.describe("正式版更新", () => {
 
   test("启动检查失败保持静默", async ({ page, native }) => {
     await page.addInitScript(() => {
-      const state = (window as any).__nativeTest;
+      const state = window.__nativeTest;
       state.failures.fetch_latest_release = "offline";
       state.expectedFailures.push("tauri:fetch_latest_release");
     });
@@ -83,7 +83,7 @@ test.describe("正式版更新", () => {
 
   test("更新包就绪后允许更新并可忽略此版本", async ({ page, native }) => {
     await page.addInitScript(() => {
-      (window as any).__nativeTest.latestRelease = {
+      window.__nativeTest.latestRelease = {
         version: "999.0.0",
         title: "Locution Pro 999.0.0",
         body: "## 更新内容\n- 改进更新体验",
@@ -100,7 +100,7 @@ test.describe("正式版更新", () => {
 
   test("更新包无法启动时回退发布页，继续保留当前应用", async ({ page, native }) => {
     await page.addInitScript(() => {
-      const state = (window as any).__nativeTest;
+      const state = window.__nativeTest;
       state.latestRelease = {
         version: "999.0.0",
         title: "New release",
@@ -204,9 +204,7 @@ test("导入、保存、关闭及重新打开项目保留媒体且恢复最近�
   await app.keyboard.press("Control+Shift+s");
   await expect.poll(async () => (await native.calls("save_project_file")).length).toBe(1);
   const [save] = await native.calls("save_project_file");
-  expect(save.args.workspace.media_bin.items.map((item: any) => item.file_name)).toContain(
-    "clip.MP4",
-  );
+  expect(save.args.workspace.media_bin.items.map((item) => item.file_name)).toContain("clip.MP4");
   await app.getByRole("button", { name: "文件(F)", exact: true }).click();
   await app.getByRole("menuitem", { name: /关闭项目/ }).click();
   await expect(app.locator(".media-bin-panel").getByText("clip.MP4", { exact: true })).toHaveCount(

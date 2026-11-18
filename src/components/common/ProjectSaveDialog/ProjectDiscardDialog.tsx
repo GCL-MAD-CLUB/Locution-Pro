@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+
 import { ModalDialog } from "../ModalDialog";
 import "./ProjectSaveDialog.css";
 
@@ -17,7 +18,9 @@ export function ProjectDiscardDialog({
   onDiscard,
   onSave,
 }: ProjectDiscardDialogProps) {
-  useEffect(() => {
+  const lifetime = new RenderLifetime();
+
+  lifetime.useAfterCommit(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (
         saving ||
@@ -40,7 +43,7 @@ export function ProjectDiscardDialog({
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [onDiscard, onSave, saving]);
 
-  return (
+  return lifetime.render(
     <ModalDialog
       title=""
       className="project-save-dialog"
@@ -80,6 +83,6 @@ export function ProjectDiscardDialog({
       <h3 className="project-save-dialog-title">尚未保存的更改</h3>
       <div className="project-save-dialog-divider" />
       <p className="project-save-dialog-message">{message}</p>
-    </ModalDialog>
+    </ModalDialog>,
   );
 }

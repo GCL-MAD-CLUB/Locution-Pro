@@ -38,6 +38,7 @@ export function ImportSettingsPanel({
       <h2>导入设置</h2>
       <section>
         <button
+          type="button"
           className="import-settings-heading"
           aria-expanded={organizeOpen}
           onClick={() => setOrganizeOpen(!organizeOpen)}
@@ -79,6 +80,7 @@ export function ImportSettingsPanel({
       <section>
         <div className="import-settings-heading-row">
           <button
+            type="button"
             className="import-settings-heading"
             aria-expanded={copyOpen}
             onClick={() => setCopyOpen(!copyOpen)}
@@ -86,6 +88,7 @@ export function ImportSettingsPanel({
             {copyOpen ? <ChevronDown /> : <ChevronRight />}复制媒体
           </button>
           <button
+            type="button"
             className="import-switch"
             role="switch"
             aria-label="复制媒体"
@@ -135,6 +138,7 @@ export function ImportSettingsPanel({
             </div>
             {settings.destination === "custom" ? (
               <button
+                type="button"
                 className="import-destination"
                 title={settings.customDirectory}
                 onClick={() => void chooseDirectory()}
@@ -154,6 +158,7 @@ export function ImportSettingsPanel({
       <section>
         <div className="import-settings-heading-row">
           <button
+            type="button"
             className="import-settings-heading"
             aria-expanded={autoBindOpen}
             onClick={() => setAutoBindOpen(!autoBindOpen)}
@@ -161,6 +166,7 @@ export function ImportSettingsPanel({
             {autoBindOpen ? <ChevronDown /> : <ChevronRight />}自动绑定
           </button>
           <button
+            type="button"
             className="import-switch"
             role="switch"
             aria-label="自动绑定"

@@ -1,6 +1,6 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../runtime/scheduling";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import {
-  useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -8,7 +8,7 @@ import {
   type WheelEvent,
 } from "react";
 import "./DockLayout.css";
-import { isPopupMenuEventTarget, PopupMenu, PopupMenuItem, PopupMenuSeparator } from "../PopupMenu";
+import { isPopupMenuEventTarget, PopupMenu, PopupMenuItem } from "../PopupMenu";
 import { dockAreaIds, normalizeArea, usePanelManagerState } from "./PanelManager";
 import { PanelActions, PanelHost, PanelMenuItems, PanelTitle } from "./PanelRegistry";
 import type { DockAreaId, DockDropPosition, DockLayoutNode, DockSplitNode } from "./types";
@@ -29,11 +29,12 @@ function readCssPixelVariable(name: string, fallback: number): number {
 interface DockDragState {
   panelId: string;
   sourceAreaId: DockAreaId;
-  timer: number | null;
+  timer: ScheduledTask | null;
   dragging: boolean;
 }
 
 interface DockDragPreview {
+  sourceAreaId: DockAreaId;
   panelId: string;
   x: number;
   y: number;
@@ -158,6 +159,8 @@ function DockSelfDropZone({ className, active = true }: { className: string; act
 }
 
 export function DockLayout() {
+  const lifetime = new RenderLifetime();
+
   const instances = usePanelManagerState((state) => state.instances);
   const layout = usePanelManagerState((state) => state.layout);
   const activatePanel = usePanelManagerState((state) => state.activatePanel);
@@ -169,7 +172,7 @@ export function DockLayout() {
   const areaIds = dockAreaIds(layout.root);
   const dragRef = useRef<DockDragState | null>(null);
   const dropTargetRef = useRef<DockDropTarget | null>(null);
-  const draggedTabWidthRef = useRef(0);
+  const [draggedTabWidth, setDraggedTabWidth] = useState(0);
   const pendingTabPositionsRef = useRef<Map<string, DOMRect> | null>(null);
   const tabAnimationFrameRef = useRef<number | null>(null);
   const tabViewportRefs = useRef(new Map<DockAreaId, HTMLDivElement>());
@@ -218,7 +221,7 @@ export function DockLayout() {
     });
   }
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     function measureOverflow() {
       const nextOverflow = areaIds.reduce(
         (result, areaId) => {
@@ -269,11 +272,11 @@ export function DockLayout() {
     };
   }, [layout, instances]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     revealActiveTabs();
   }, [layout, instances, tabsOverflow]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!overflowMenu && !panelMenu) {
       return;
     }
@@ -360,7 +363,7 @@ export function DockLayout() {
     setDropTarget(nextTarget);
   }
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     const previousPositions = pendingTabPositionsRef.current;
     pendingTabPositionsRef.current = null;
     if (!previousPositions || !dragRef.current?.dragging) {
@@ -399,7 +402,7 @@ export function DockLayout() {
     });
   }, [dropTarget]);
 
-  useEffect(
+  lifetime.useAfterCommit(
     () => () => {
       clearTabAnimations();
     },
@@ -453,17 +456,18 @@ export function DockLayout() {
     window.addEventListener("pointercancel", onUp, { once: true });
   }
 
-  function clearDockDragTimer(state = dragRef.current) {
+  function clearDockDragTimer() {
+    const state = dragRef.current;
     if (!state?.timer) {
       return;
     }
-    window.clearTimeout(state.timer);
+    cancelTask(state.timer);
     state.timer = null;
   }
 
   function finishDockDrag() {
     const state = dragRef.current;
-    clearDockDragTimer(state);
+    clearDockDragTimer();
     const target = dropTargetRef.current;
     if (state?.dragging && target) {
       movePanel(state.panelId, target.areaId, target.insertionIndex, target.position);
@@ -486,7 +490,12 @@ export function DockLayout() {
       return;
     }
     event.preventDefault();
-    setDragPreview({ panelId: state.panelId, x: event.clientX, y: event.clientY });
+    setDragPreview({
+      sourceAreaId: state.sourceAreaId,
+      panelId: state.panelId,
+      x: event.clientX,
+      y: event.clientY,
+    });
     setDockDropTarget(dockDropTargetFromPoint(state.panelId, event.clientX, event.clientY));
   }
 
@@ -582,16 +591,17 @@ export function DockLayout() {
     };
     dragRef.current = state;
 
-    state.timer = window.setTimeout(() => {
+    state.timer = scheduleAfter(() => {
       if (dragRef.current !== state) {
         return;
       }
       state.dragging = true;
       document.body.classList.add("is-docking-panel");
       setActivePanel(areaId, panelId);
-      setDragPreview({ panelId, x: event.clientX, y: event.clientY });
-      draggedTabWidthRef.current =
-        tabElementRefs.current.get(areaId)?.get(panelId)?.getBoundingClientRect().width ?? 0;
+      setDragPreview({ sourceAreaId: areaId, panelId, x: event.clientX, y: event.clientY });
+      setDraggedTabWidth(
+        tabElementRefs.current.get(areaId)?.get(panelId)?.getBoundingClientRect().width ?? 0,
+      );
       const sourceTabs = normalizeArea(layout.areas[areaId]).tabs;
       setDockDropTarget({
         areaId: state.sourceAreaId,
@@ -700,7 +710,7 @@ export function DockLayout() {
     const tabsWithoutDragged = draggedPanelId
       ? areaTabs.filter((panelId) => panelId !== draggedPanelId)
       : areaTabs;
-    const isSourceArea = dragRef.current?.sourceAreaId === areaId;
+    const isSourceArea = dragPreview?.sourceAreaId === areaId;
     const targetShowsDraggedTitle =
       Boolean(draggedPanelId) && dropTarget?.areaId === areaId && dropTarget.showDraggedTitle;
     const sourceRetainsDraggedTitle =
@@ -758,7 +768,7 @@ export function DockLayout() {
                             className={`dock-tab dock-tab-placeholder ${
                               showDraggedTitleControls ? "active" : ""
                             }`}
-                            style={{ width: draggedTabWidthRef.current }}
+                            style={{ width: draggedTabWidth }}
                             aria-hidden="true"
                           >
                             {shouldDisplayDraggedTitle && (
@@ -925,7 +935,7 @@ export function DockLayout() {
     );
   }
 
-  return (
+  return lifetime.render(
     <>
       <main className="workspace dock-workspace">{renderDockNode(layout.root)}</main>
 
@@ -1011,6 +1021,6 @@ export function DockLayout() {
           })}
         </div>
       )}
-    </>
+    </>,
   );
 }

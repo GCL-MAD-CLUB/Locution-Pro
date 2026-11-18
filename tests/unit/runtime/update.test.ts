@@ -1,6 +1,7 @@
 import { createModuleLoader, deferred, flush } from "../support/module-loader.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as scheduling from "../support/scheduling.ts";
 import type {
   ReleaseInfo,
   UpdateCheckResult,
@@ -12,7 +13,7 @@ type UpdateModule = typeof import("../../../src/application/update.ts");
 
 const loadTestModule = createModuleLoader(import.meta.url);
 function loadModule<T>(path: string, imports: Record<string, unknown>): T {
-  return loadTestModule<T>(path, imports, { setTimeout, clearTimeout });
+  return loadTestModule<T>(path, { ...imports, "../runtime/scheduling": scheduling });
 }
 
 function loadUpdate(release?: ReleaseInfo) {
@@ -109,6 +110,30 @@ test("update checks expose only newer releases and share an active request", asy
   const next = update.checkForUpdate();
   assert.notEqual(next, first);
   assert.equal(JSON.stringify(await next), JSON.stringify({ status: "available", release }));
+});
+
+test("startup checks survive remounts after settling while manual checks remain fresh", async () => {
+  const { update, invocations } = loadUpdate({ version: "0.4.0" } as ReleaseInfo);
+  const first = update.checkForStartupUpdate();
+  assert.equal(update.checkForStartupUpdate(), first);
+  await first;
+  assert.equal(update.checkForStartupUpdate(), first);
+  assert.deepEqual(invocations, ["fetch_latest_release"]);
+  await update.checkForUpdate();
+  assert.deepEqual(invocations, ["fetch_latest_release", "fetch_latest_release"]);
+});
+
+test("failed startup checks are not retried by remounts and allow an explicit retry", async () => {
+  const { update, invocations, pending } = loadUpdate();
+  const first = update.checkForStartupUpdate();
+  pending.reject(new Error("offline"));
+  await assert.rejects(first, /offline/);
+  assert.equal(update.checkForStartupUpdate(), first);
+  assert.deepEqual(invocations, ["fetch_latest_release"]);
+  const retry = update.checkForUpdate();
+  assert.notEqual(retry, first);
+  await assert.rejects(retry, /offline/);
+  assert.deepEqual(invocations, ["fetch_latest_release", "fetch_latest_release"]);
 });
 
 test("update availability waits for the download and falls back to the release page on failure", async () => {

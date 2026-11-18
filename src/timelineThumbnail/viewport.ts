@@ -1,4 +1,5 @@
-import { useCallback, useLayoutEffect, useRef, type RefObject } from "react";
+import type { RenderLifetime } from "../runtime/lifetime/RenderLifetime";
+import { useCallback, useRef, type RefObject } from "react";
 
 const virtualListTrailingSpace = 8;
 
@@ -12,14 +13,17 @@ interface TimelineThumbnailListResizeAnchorOptions<Element extends HTMLElement> 
 }
 
 /** Keeps the item under the viewport center fixed while fixed-height rows resize. */
-export function useTimelineThumbnailListResizeAnchor<Element extends HTMLElement>({
-  enabled = true,
-  itemCount,
-  itemHeight,
-  measure,
-  scrollRef,
-  scrollToOffset,
-}: TimelineThumbnailListResizeAnchorOptions<Element>) {
+export function useTimelineThumbnailListResizeAnchor<Element extends HTMLElement>(
+  lifetime: RenderLifetime,
+  {
+    enabled = true,
+    itemCount,
+    itemHeight,
+    measure,
+    scrollRef,
+    scrollToOffset,
+  }: TimelineThumbnailListResizeAnchorOptions<Element>,
+) {
   const pendingCenterPositionRef = useRef<number | null>(null);
 
   const captureCenter = useCallback(() => {
@@ -36,7 +40,7 @@ export function useTimelineThumbnailListResizeAnchor<Element extends HTMLElement
     );
   }, [enabled, itemCount, itemHeight, scrollRef]);
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     const centerPosition = pendingCenterPositionRef.current;
     const scrollContainer = scrollRef.current;
     if (centerPosition === null) {

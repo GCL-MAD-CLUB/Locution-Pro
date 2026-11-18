@@ -1,6 +1,8 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { useRef, useState } from "react";
 import { File, Folder } from "lucide-react";
-import { invokeCommand, runOperation } from "../../../errors";
+import { captureOperationError, invokeCommand, runOperation } from "../../../errors";
+import { createLatestPreview, previewTimeUs } from "../../../application/media/latestPreview";
 import { createFfmpegTaskId } from "../../../platform/tauri/ffmpegProgress";
 
 let active = 0;
@@ -48,8 +50,10 @@ export function BrowserSystemIcon({
   path: string;
   directory?: boolean;
 }) {
+  const lifetime = new RenderLifetime();
+
   const [src, setSrc] = useState("");
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     let live = true;
     void iconSource(path).then((value) => {
       if (live) setSrc(value);
@@ -58,12 +62,14 @@ export function BrowserSystemIcon({
       live = false;
     };
   }, [path]);
-  return src ? (
-    <img className="media-browser-system-icon" src={src} alt="" draggable={false} />
-  ) : directory ? (
-    <Folder aria-hidden="true" />
-  ) : (
-    <File aria-hidden="true" />
+  return lifetime.render(
+    src ? (
+      <img className="media-browser-system-icon" src={src} alt="" draggable={false} />
+    ) : directory ? (
+      <Folder aria-hidden="true" />
+    ) : (
+      <File aria-hidden="true" />
+    ),
   );
 }
 
@@ -76,6 +82,8 @@ export function BrowserVisual({
   directory: boolean;
   preview: boolean;
 }) {
+  const lifetime = new RenderLifetime();
+
   const host = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
   const [cover, setCover] = useState("");
@@ -83,57 +91,56 @@ export function BrowserVisual({
   const [progress, setProgress] = useState<number | null>(null);
   const [duration, setDuration] = useState(0);
   const hoverTimeRef = useRef<number | null>(null);
-  hoverTimeRef.current =
-    progress === null
-      ? null
-      : Math.min(Math.round(duration * progress), Math.max(0, duration - 40_000));
-  useEffect(() => {
+  const previewRequest = useRef<{ request(timeUs: number): void } | null>(null);
+  lifetime.useBeforePaint(() => {
+    hoverTimeRef.current = previewTimeUs(duration, progress, 40_000);
+  });
+  lifetime.useAfterCommit(() => {
     if (progress === null || !duration || !preview || !visible) {
       setFrame("");
       return;
     }
     let live = true;
     let url = "";
-    let timer = 0;
-    let previousTime = -1;
-    async function update() {
-      const timeUs = hoverTimeRef.current;
-      if (!live || timeUs === null) return;
-      if (Math.abs(timeUs - previousTime) >= 40_000 || previousTime < 0) {
-        previousTime = timeUs;
-        await queued(async () => {
+    const request = createLatestPreview(
+      (timeUs: number) =>
+        queued(async () => {
           if (!live) return;
-          const outcome = await runOperation("thumbnail.video", () =>
+          return runOperation("thumbnail.video", () =>
             invokeCommand<number[]>("media_browser_frame", { path, timeUs }),
           );
-          if (live && outcome.status === "success") {
-            const next = URL.createObjectURL(
-              new Blob([new Uint8Array(outcome.value)], { type: "image/jpeg" }),
-            );
-            const old = url;
-            url = next;
-            setFrame(next);
-            URL.revokeObjectURL(old);
-          }
-        });
-      }
-      if (live) timer = window.setTimeout(() => void update(), 70);
-    }
-    void update();
+        }),
+      (outcome) => {
+        if (outcome?.status === "success") {
+          const next = URL.createObjectURL(
+            new Blob([new Uint8Array(outcome.value)], { type: "image/jpeg" }),
+          );
+          const old = url;
+          url = next;
+          setFrame(next);
+          URL.revokeObjectURL(old);
+        }
+      },
+      (error) => captureOperationError("thumbnail.video", error),
+    );
+    previewRequest.current = request;
+    if (hoverTimeRef.current !== null) request.request(hoverTimeRef.current);
     return () => {
       live = false;
-      window.clearTimeout(timer);
+      request.dispose();
+      previewRequest.current = null;
       URL.revokeObjectURL(url);
+      setFrame("");
     };
   }, [progress !== null, duration, path, preview, visible]);
   const isVideo =
     preview && !directory && /\.(mp4|mov|mkv|avi|webm|m4v|mts|m2ts|ts|mpeg|mpg)$/i.test(path);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting));
     if (host.current) observer.observe(host.current);
     return () => observer.disconnect();
   }, []);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!visible || !isVideo) return;
     let live = true;
     let url = "";
@@ -155,7 +162,7 @@ export function BrowserVisual({
       setCover("");
     };
   }, [visible, isVideo, path]);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (progress === null || duration > 0 || !isVideo) return;
     let live = true;
     void queued(async () => {
@@ -172,14 +179,18 @@ export function BrowserVisual({
       live = false;
     };
   }, [progress !== null, duration, isVideo, path]);
-  return (
+  return lifetime.render(
     <span
       ref={host}
       className="media-browser-file-visual is-icon"
       onPointerMove={(event) => {
         if (!isVideo || event.buttons) return;
         const rect = event.currentTarget.getBoundingClientRect();
-        setProgress(Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)));
+        const next = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+        const time = previewTimeUs(duration, next, 40_000);
+        if (time !== null && time !== hoverTimeRef.current) previewRequest.current?.request(time);
+        hoverTimeRef.current = time;
+        setProgress(next);
       }}
       onPointerLeave={() => setProgress(null)}
     >
@@ -193,6 +204,6 @@ export function BrowserVisual({
       ) : (
         visible && <BrowserSystemIcon path={path} directory={directory} />
       )}
-    </span>
+    </span>,
   );
 }

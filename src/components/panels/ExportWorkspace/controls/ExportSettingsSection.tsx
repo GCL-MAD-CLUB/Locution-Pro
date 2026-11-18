@@ -12,7 +12,6 @@ import type {
   ExportDestination,
   ExportContainer,
   ExportExistingFileMode,
-  ExportRenameRule,
   ExportSettings,
   ExportSource,
 } from "../../../../systems/ExportSystem";

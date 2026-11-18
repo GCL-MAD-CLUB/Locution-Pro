@@ -1,9 +1,11 @@
-import { cellEditReset } from "../../../../core/editor/cellEditReset";
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
+import { useScopedState } from "../../../../runtime/state/useScopedState";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { annotationColors } from "../../../../runtime/theme";
 import type { PanelRowSource } from "../../../../core/editor/multiSource";
-import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
+import type { VirtualItem } from "@tanstack/react-virtual";
+import type { RowVirtualizer } from "../../../../runtime/state/useRowVirtualizer";
 import {
-  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -71,7 +73,7 @@ interface StoryboardListViewProps {
   currentShotIndex: number;
   tableStyle: CSSProperties;
   headerContent: ReactNode;
-  rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
+  rowVirtualizer: RowVirtualizer;
   virtualRows: VirtualItem[];
   thumbnailWindow: TimelineThumbnailWindowPlan;
   thumbnailTargetResolution: TimelineThumbnailResolution;
@@ -165,6 +167,8 @@ export function StoryboardListView({
   shotTitle,
   shotLabel,
 }: StoryboardListViewProps) {
+  const lifetime = new RenderLifetime();
+
   const {
     activeShotId,
     selectedShotIds,
@@ -178,40 +182,28 @@ export function StoryboardListView({
     setShotFlags,
     setShotColorLabels,
     setShotStackExpanded,
-  } = useStoryboardPanelState((state) => state);
-  const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
-  const [editingCell, setEditingCell] = useState<ActiveCell | null>(null);
+  } = useStoryboardPanelState(lifetime, (state) => state);
+  const [activeCell, setActiveCell] = useScopedState<ActiveCell | null>(resetKey, null);
+  const [editingCell, setEditingCell] = useScopedState<ActiveCell | null>(resetKey, null);
   const [editValue, setEditValue] = useState("");
-  const [editError, setEditError] = useState<string | null>(null);
-  const pendingCellEditRef = useRef<number | null>(null);
-  const [seenResetKey, setSeenResetKey] = useState(resetKey);
-  const editReset = cellEditReset(seenResetKey, resetKey, pendingCellEditRef.current);
-  if (editReset) {
-    setSeenResetKey(resetKey);
-    if (editReset.cancelPendingTimer && pendingCellEditRef.current !== null) {
-      window.clearTimeout(pendingCellEditRef.current);
-      pendingCellEditRef.current = null;
-    }
-    setEditingCell(null);
-    setEditError(null);
-    setActiveCell(null);
-  }
-  const stackMap = stacksByShotId(shotStacks);
+  const [editError, setEditError] = useScopedState<string | null>(resetKey, null);
+  const pendingCellEditRef = useRef<ScheduledTask | null>(null);
 
-  useEffect(
-    () => () => {
-      cancelPendingCellEdit();
-    },
-    [],
-  );
+  const stackMap = stacksByShotId(shotStacks);
 
   function cancelPendingCellEdit() {
     if (pendingCellEditRef.current === null) {
       return;
     }
-    window.clearTimeout(pendingCellEditRef.current);
+    cancelTask(pendingCellEditRef.current);
     pendingCellEditRef.current = null;
   }
+  lifetime.useAfterCommit(
+    () => () => {
+      cancelPendingCellEdit();
+    },
+    [resetKey],
+  );
 
   function activateCell(shotId: string, columnId: ActiveColumn) {
     cancelPendingCellEdit();
@@ -253,7 +245,7 @@ export function StoryboardListView({
 
   function scheduleCellEdit(shot: StoryboardShot, columnId: EditableColumn) {
     cancelPendingCellEdit();
-    pendingCellEditRef.current = window.setTimeout(() => {
+    pendingCellEditRef.current = scheduleAfter(() => {
       pendingCellEditRef.current = null;
       beginCellEdit(shot, columnId);
     }, cellEditDelayMs);
@@ -384,7 +376,7 @@ export function StoryboardListView({
     );
   }
 
-  return (
+  return lifetime.render(
     <div className="storyboard-list-frame" role="table" aria-label="分镜列表" style={tableStyle}>
       <div className="storyboard-list-header-viewport">
         <div ref={headerRef} className="storyboard-list-header" role="row">
@@ -411,7 +403,7 @@ export function StoryboardListView({
           <div
             className="virtual-spacer"
             role="rowgroup"
-            style={{ height: `${rowVirtualizer.getTotalSize() + 8}px` }}
+            style={{ height: `${rowVirtualizer.totalSize + 8}px` }}
           >
             {virtualRows.map((virtualRow) => {
               const shot = shots[virtualRow.index];
@@ -643,6 +635,6 @@ export function StoryboardListView({
           </div>
         )}
       </div>
-    </div>
+    </div>,
   );
 }

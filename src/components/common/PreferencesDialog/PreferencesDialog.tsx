@@ -1,6 +1,8 @@
+import { useScopedState } from "../../../runtime/state/useScopedState";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Loader2 } from "lucide-react";
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
 import { applyAppearance, knownAppearances } from "../../../runtime/theme";
 import { runOperation } from "../../../errors";
 import { isMacOSRuntime, isTauriRuntime } from "../../../platform/tauri/runtime";
@@ -57,6 +59,8 @@ function PreferencesEditor({
   initialCategory: PreferencesCategory;
   onClose: () => void;
 }) {
+  const lifetime = new RenderLifetime();
+
   const { messagePublished } = useProjectPort([], ["messagePublished"]);
   const { preferences, updatePreferences } = usePreferencesPort(
     ["preferences"],
@@ -64,7 +68,7 @@ function PreferencesEditor({
   );
   const [draft, setDraft] = useState(() => createDraft(preferences));
   const savedAppearance = useRef(preferences.appearance ?? "darkest");
-  const [category, setCategory] = useState<PreferencesCategory>(initialCategory);
+  const [category, setCategory] = useScopedState<PreferencesCategory>(null, initialCategory);
   const [isSaving, setIsSaving] = useState(false);
   const [isChoosingPath, setIsChoosingPath] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -74,14 +78,14 @@ function PreferencesEditor({
   const snapshotsValid = validInteger(draft.auto_save_max_snapshots, 1000);
   const valid = intervalValid && snapshotsValid;
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     // Preview the draft without seeding the next start until it is saved.
     applyAppearance(draft.appearance, false);
   }, [draft.appearance]);
 
-  useLayoutEffect(() => () => applyAppearance(savedAppearance.current), []);
+  lifetime.useBeforePaint(() => () => applyAppearance(savedAppearance.current), []);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const previousFocus = document.activeElement;
     dialogRef.current
       ?.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')
@@ -184,7 +188,7 @@ function PreferencesEditor({
     }
   }
 
-  return (
+  return lifetime.render(
     <div ref={dialogRef} onKeyDown={trapFocus}>
       <ModalDialog
         title="首选项"
@@ -499,7 +503,7 @@ function PreferencesEditor({
           </div>
         ))}
       </ModalDialog>
-    </div>
+    </div>,
   );
 }
 

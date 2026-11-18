@@ -8,7 +8,7 @@ for (const label of ["字幕", "分镜"] as const) {
     const bar = page.getByRole("combobox");
     const entry = page.getByRole("button", { name: `${label}高级搜索` });
     const dialog = page.getByRole("dialog");
-    const options = () => page.evaluate(() => (window as any).searchSnapshot.advanced);
+    const options = () => page.evaluate(() => window.searchSnapshot.advanced);
     const defaults = {
       caseSensitive: false,
       excludedText: "",
@@ -144,7 +144,7 @@ for (const label of ["字幕", "分镜"] as const) {
         await expect(page.getByLabel("语义匹配度阈值，范围 0 到 1", { exact: true })).toHaveValue(
           label === "字幕" ? "0.01" : "0.001",
         );
-      expect(await page.evaluate(() => (window as any).searchSnapshot.query)).toBe("保留搜索|内容");
+      expect(await page.evaluate(() => window.searchSnapshot.query)).toBe("保留搜索|内容");
     }
     await page.getByRole("button", { name: `${label}高级搜索` }).click();
     const dialog = page.getByRole("dialog");

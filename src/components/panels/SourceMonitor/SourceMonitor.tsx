@@ -1,14 +1,7 @@
-﻿import { convertFileSrc } from "@tauri-apps/api/core";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type DragEvent,
-  type SyntheticEvent,
-} from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { useScopedState } from "../../../runtime/state/useScopedState";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { useCallback, useMemo, useRef, useState, type DragEvent, type SyntheticEvent } from "react";
 import { flushSync } from "react-dom";
 import { useSourcePreviewRequest } from "../../../application/media/panelMediaSources";
 import { usePersistedProjectPanelState } from "../../../application/media/projectPanelPersistence";
@@ -203,6 +196,8 @@ function isEditableKeyboardTarget(target: EventTarget | null) {
 }
 
 export function SourceMonitor() {
+  const lifetime = new RenderLifetime();
+
   const panelInstanceId = usePanelInstanceId();
   const isExportMonitor = panelInstanceId === "export-source";
   const exportSource = useExportWorkspaceState((state) => state.source);
@@ -219,14 +214,10 @@ export function SourceMonitor() {
   const focusedPanelId = usePanelManagerState((state) => state.focusedPanelId);
   const identity = useStableIdentity("source-monitor", panelInstanceId);
   const [lastFocusedAt, setLastFocusedAt] = useState(panelInstanceId === "source" ? 1 : 0);
-  const [seenFocusedPanelId, setSeenFocusedPanelId] = useState<string | null>(null);
   const focusedHere = focusedPanelId === panelInstanceId;
-  if (focusedHere && seenFocusedPanelId !== focusedPanelId) {
-    setSeenFocusedPanelId(focusedPanelId);
-    setLastFocusedAt(Date.now());
-  } else if (!focusedHere && seenFocusedPanelId !== null) {
-    setSeenFocusedPanelId(null);
-  }
+  lifetime.useBeforePaint(() => {
+    if (focusedHere) setLastFocusedAt(Date.now());
+  }, [focusedHere]);
   const {
     project,
     projectId,
@@ -296,6 +287,7 @@ export function SourceMonitor() {
     restorePanelFrame,
   } = useSourceMonitorState((state) => state);
   const playbackHistoryReady = usePersistedProjectPanelState<{ playbackHistoryVideoIds: string[] }>(
+    lifetime,
     playbackHistoryProjectId === projectId ? { playbackHistoryVideoIds } : null,
     (saved, restoredProjectId) => {
       const ids = Array.isArray(saved?.playbackHistoryVideoIds)
@@ -348,7 +340,6 @@ export function SourceMonitor() {
   > | null>(null);
   const cueRangeDragGroupRef = useRef<string | undefined>(undefined);
   const transientFramePreviewRestoreRef = useRef<number | null>(null);
-  const [hoverPreview, setHoverPreview] = useState<TransientVideoFrame | null>(null);
   const hoverPreviewRestoreRef = useRef<{
     sessionId: string;
     mediaKey: string;
@@ -408,7 +399,7 @@ export function SourceMonitor() {
     ? isMediaVideoDetached(activeVideoItem, detachedVideoIds)
     : false;
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (
       playbackHistoryReady &&
       playbackHistoryProjectId === projectId &&
@@ -493,18 +484,125 @@ export function SourceMonitor() {
     }
     return sources;
   }, [
-    activeVideoOffline,
     boundAudioSources,
-    primaryVirtualAudioEnabled,
-    project?.asset.id,
-    project?.asset.path,
-    primaryAudioSource,
+    activeVideoOffline,
     proxyPath,
+    project,
+    primaryAudioSource,
     sourceAudioDetached,
+    primaryVirtualAudioEnabled,
   ]);
   const mediaKey = project
     ? `${activeVideoId}:${project.asset.id}:${durationUs}:${frameRate}`
     : `empty:${frameRate}`;
+  const [hoverPreview, setHoverPreview] = useScopedState<TransientVideoFrame | null>(
+    JSON.stringify([mediaKey, isPlaying]),
+    null,
+  );
+  lifetime.useBeforePaint(() => {
+    hoverPreviewRestoreRef.current = null;
+  }, [mediaKey, isPlaying]);
+  function applyPlaybackMode(
+    nextMode: PlaybackMode,
+    preserveCuePlaybackEnd = false,
+    centerPausedFrame = true,
+  ) {
+    const video = videoRef.current;
+    if (!hasMedia || !video) {
+      commitPlaybackMode(0);
+      stopRollingPcmAudio();
+      return;
+    }
+
+    if (!preserveCuePlaybackEnd) {
+      stopCuePlaybackFrameMonitor();
+      cuePlaybackPauseFrameRef.current = null;
+      const pointerFrame = currentFrameRef.current;
+      cuePlaybackEndFrameRef.current =
+        isExportMonitor &&
+        effectivePlaybackRate(nextMode, frameRate) > 0 &&
+        cueRange &&
+        pointerFrame >= cueRange.startFrame &&
+        pointerFrame <= cueRange.endFrame
+          ? cueRange.endFrame
+          : null;
+      preserveCuePlaybackEnd = cuePlaybackEndFrameRef.current !== null;
+    }
+
+    const currentMode = playbackModeRef.current;
+    if (nextMode === 0) {
+      const pausedAtFrame = playbackFrame();
+      commitPlaybackMode(0);
+      stopPlaybackTicker();
+      manualPlaybackTickAtRef.current = null;
+      if (!video.paused) {
+        video.pause();
+      }
+      pauseBoundAudio();
+      stopRollingPcmAudio();
+      if (centerPausedFrame) {
+        centerTimelineIfFrameHidden(pausedAtFrame);
+      }
+      return;
+    }
+
+    if (usesManualPlaybackClock(nextMode)) {
+      const manualOriginFrame = usesManualPlaybackClock(currentMode)
+        ? manualPlaybackFrameRef.current
+        : playbackFrame();
+      commitPlaybackMode(nextMode);
+      manualPlaybackFrameRef.current = manualOriginFrame;
+      if (!video.paused) {
+        video.pause();
+      }
+      video.muted = true;
+      pauseBoundAudio();
+      if (pcmPlaybackConfig(nextMode, frameRate)) {
+        playRollingPcmAudio(nextMode);
+      } else {
+        stopRollingPcmAudio();
+      }
+      startManualPlaybackTicker(video);
+      return;
+    }
+
+    if (typeof nextMode !== "number" || nextMode <= 0) {
+      return;
+    }
+    commitPlaybackMode(nextMode);
+    manualPlaybackTickAtRef.current = null;
+    if (usesManualPlaybackClock(currentMode)) {
+      stopPlaybackTicker();
+      seekToFrame(manualPlaybackFrameRef.current, preserveCuePlaybackEnd);
+    }
+    if (video.ended && durationFrames > 0) {
+      seekToFrame(0, preserveCuePlaybackEnd);
+    }
+    video.preservesPitch = true;
+    video.playbackRate = nextMode;
+    video.muted = shouldMuteVideo(nextMode);
+    if (pcmPlaybackConfig(nextMode, frameRate)) {
+      pauseBoundAudio();
+      playRollingPcmAudio(nextMode);
+    } else if (nextMode > 4) {
+      pauseBoundAudio();
+      stopRollingPcmAudio();
+    } else if (video.paused) {
+      stopRollingPcmAudio();
+      syncBoundAudio(video, true);
+    } else {
+      stopRollingPcmAudio();
+      playBoundAudio(video);
+    }
+    if (isExportMonitor) startCuePlaybackFrameMonitor(video);
+    void runOperation("media.playback", () => video.play()).then((outcome) => {
+      if (outcome.status !== "success" && playbackModeRef.current === nextMode && video.paused) {
+        commitPlaybackMode(0);
+        pauseBoundAudio();
+        stopRollingPcmAudio();
+      }
+    });
+  }
   function finishHoverPreview() {
     const restore = hoverPreviewRestoreRef.current;
     hoverPreviewRestoreRef.current = null;
@@ -518,7 +616,7 @@ export function SourceMonitor() {
     }
   }
 
-  useBroadcastEvent(identity, "playback.frame-preview.requested", ({ payload }) => {
+  useBroadcastEvent(lifetime, identity, "playback.frame-preview.requested", ({ payload }) => {
     if (payload.frame === null) {
       if (hoverPreviewRestoreRef.current?.sessionId !== payload.sessionId) return "ignored";
       finishHoverPreview();
@@ -559,22 +657,8 @@ export function SourceMonitor() {
   });
 
   // Source changes invalidate the snapshot; a later hover-end must not resume another source.
-  const [seenHoverMediaKey, setSeenHoverMediaKey] = useState(mediaKey);
-  if (seenHoverMediaKey !== mediaKey) {
-    setSeenHoverMediaKey(mediaKey);
-    hoverPreviewRestoreRef.current = null;
-    setHoverPreview(null);
-  }
-  const [clearedHoverForPlayback, setClearedHoverForPlayback] = useState(false);
-  if (isPlaying && !clearedHoverForPlayback) {
-    setClearedHoverForPlayback(true);
-    hoverPreviewRestoreRef.current = null;
-    setHoverPreview(null);
-  } else if (!isPlaying && clearedHoverForPlayback) {
-    setClearedHoverForPlayback(false);
-  }
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     if (!panelActive) finishHoverPreview();
   }, [panelActive]);
   const videoContext = storyboardVideoContext(activeVideoId, project);
@@ -647,7 +731,7 @@ export function SourceMonitor() {
   const exportRangeStartFrame = exportRange?.startFrame;
   const exportRangeEndFrame = exportRange?.endFrame;
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!isExportMonitor) return;
     const range =
       exportRangeStartFrame === undefined || exportRangeEndFrame === undefined
@@ -660,7 +744,7 @@ export function SourceMonitor() {
     cuePlaybackEndFrameRef.current = range?.endFrame ?? null;
   }, [isExportMonitor, exportRangeStartFrame, exportRangeEndFrame, setCueRange]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!isExportMonitor || durationFrames <= 0) return;
     const clip = exportClipRef.current;
     if (!clip) return;
@@ -689,7 +773,7 @@ export function SourceMonitor() {
     updateTimelineStartFrame,
   ]);
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     const mediaChanged = panelMediaKey !== mediaKey;
     const nextSpan = durationFrames > 0 ? durationFrames : defaultTimelineSpanFrames;
     syncMedia(mediaKey, durationFrames);
@@ -711,7 +795,7 @@ export function SourceMonitor() {
     setPlaybackMode(0);
   }, [mediaKey]);
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     if (
       isExportMonitor ||
       !panelActive ||
@@ -747,7 +831,7 @@ export function SourceMonitor() {
     sourceRequest,
   ]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const pendingSeek = pendingSourceSeekRef.current;
     if (pendingSeek?.videoId !== undefined && pendingSeek.videoId !== activeVideoId) {
       pendingSourceSeekRef.current = null;
@@ -756,7 +840,7 @@ export function SourceMonitor() {
     flushPendingSourceSeek();
   }, [activeVideoId, mediaKey]);
 
-  useEffect(
+  lifetime.useAfterCommit(
     () => () => {
       if (playbackTickRef.current !== null) {
         cancelAnimationFrame(playbackTickRef.current);
@@ -768,7 +852,7 @@ export function SourceMonitor() {
     [],
   );
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (durationFrames <= 0) {
       return;
     }
@@ -869,7 +953,7 @@ export function SourceMonitor() {
     applySeekRequestRef.current?.(pending);
   }
 
-  const { isAuthority: isPlaybackShortcutAuthority } = usePlaybackCapability({
+  const { isAuthority: isPlaybackShortcutAuthority } = usePlaybackCapability(lifetime, {
     videoSource: videoSrc,
     histogram: histogramFrame?.source === videoSrc ? histogramFrame.bins : null,
     identity,
@@ -895,7 +979,7 @@ export function SourceMonitor() {
     },
   });
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const isShortcutScopeActive = (target?: EventTarget | null) => {
       if (!panelActive || !isPlaybackShortcutAuthority || isPopupMenuOpen()) {
         return false;
@@ -1621,108 +1705,6 @@ export function SourceMonitor() {
     setPlaybackMode(nextMode);
   }
 
-  function applyPlaybackMode(
-    nextMode: PlaybackMode,
-    preserveCuePlaybackEnd = false,
-    centerPausedFrame = true,
-  ) {
-    const video = videoRef.current;
-    if (!hasMedia || !video) {
-      commitPlaybackMode(0);
-      stopRollingPcmAudio();
-      return;
-    }
-
-    if (!preserveCuePlaybackEnd) {
-      stopCuePlaybackFrameMonitor();
-      cuePlaybackPauseFrameRef.current = null;
-      const pointerFrame = currentFrameRef.current;
-      cuePlaybackEndFrameRef.current =
-        isExportMonitor &&
-        effectivePlaybackRate(nextMode, frameRate) > 0 &&
-        cueRange &&
-        pointerFrame >= cueRange.startFrame &&
-        pointerFrame <= cueRange.endFrame
-          ? cueRange.endFrame
-          : null;
-      preserveCuePlaybackEnd = cuePlaybackEndFrameRef.current !== null;
-    }
-
-    const currentMode = playbackModeRef.current;
-    if (nextMode === 0) {
-      const pausedAtFrame = playbackFrame();
-      commitPlaybackMode(0);
-      stopPlaybackTicker();
-      manualPlaybackTickAtRef.current = null;
-      if (!video.paused) {
-        video.pause();
-      }
-      pauseBoundAudio();
-      stopRollingPcmAudio();
-      if (centerPausedFrame) {
-        centerTimelineIfFrameHidden(pausedAtFrame);
-      }
-      return;
-    }
-
-    if (usesManualPlaybackClock(nextMode)) {
-      const manualOriginFrame = usesManualPlaybackClock(currentMode)
-        ? manualPlaybackFrameRef.current
-        : playbackFrame();
-      commitPlaybackMode(nextMode);
-      manualPlaybackFrameRef.current = manualOriginFrame;
-      if (!video.paused) {
-        video.pause();
-      }
-      video.muted = true;
-      pauseBoundAudio();
-      if (pcmPlaybackConfig(nextMode, frameRate)) {
-        playRollingPcmAudio(nextMode);
-      } else {
-        stopRollingPcmAudio();
-      }
-      startManualPlaybackTicker(video);
-      return;
-    }
-
-    if (typeof nextMode !== "number" || nextMode <= 0) {
-      return;
-    }
-    commitPlaybackMode(nextMode);
-    manualPlaybackTickAtRef.current = null;
-    if (usesManualPlaybackClock(currentMode)) {
-      stopPlaybackTicker();
-      seekToFrame(manualPlaybackFrameRef.current, preserveCuePlaybackEnd);
-    }
-    if (video.ended && durationFrames > 0) {
-      seekToFrame(0, preserveCuePlaybackEnd);
-    }
-    video.preservesPitch = true;
-    video.playbackRate = nextMode;
-    video.muted = shouldMuteVideo(nextMode);
-    if (pcmPlaybackConfig(nextMode, frameRate)) {
-      pauseBoundAudio();
-      playRollingPcmAudio(nextMode);
-    } else if (nextMode > 4) {
-      pauseBoundAudio();
-      stopRollingPcmAudio();
-    } else if (video.paused) {
-      stopRollingPcmAudio();
-      syncBoundAudio(video, true);
-    } else {
-      stopRollingPcmAudio();
-      playBoundAudio(video);
-    }
-    if (isExportMonitor) startCuePlaybackFrameMonitor(video);
-    void runOperation("media.playback", () => video.play()).then((outcome) => {
-      if (outcome.status !== "success" && playbackModeRef.current === nextMode && video.paused) {
-        commitPlaybackMode(0);
-        pauseBoundAudio();
-        stopRollingPcmAudio();
-      }
-    });
-  }
-
   function handleLoadedMetadata(element: HTMLVideoElement) {
     element.preservesPitch = true;
     element.muted = shouldMuteVideo(playbackModeRef.current);
@@ -1864,7 +1846,7 @@ export function SourceMonitor() {
     );
   }
 
-  return (
+  return lifetime.render(
     <div
       ref={sourceMonitorRef}
       className={`source-monitor ${hasMedia ? "" : "empty-state"} ${
@@ -2061,6 +2043,6 @@ export function SourceMonitor() {
           onClose={() => setStillExportRequest(null)}
         />
       )}
-    </div>
+    </div>,
   );
 }

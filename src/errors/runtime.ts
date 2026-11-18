@@ -1,3 +1,4 @@
+import { scheduleAfter, type ScheduledTask } from "../runtime/scheduling";
 import { commandMediaSources } from "../runtime/mediaSources";
 import { invoke } from "@tauri-apps/api/core";
 import { clientError, ERROR_CATEGORIES, errorDiagnostic } from "./model";
@@ -138,7 +139,7 @@ interface IncidentLogWindow {
   latestError: NormalizedError;
   suppressedCount: number;
   lastSeenAtMs: number;
-  timer: ReturnType<typeof globalThis.setTimeout>;
+  timer: ScheduledTask;
 }
 
 const incidentLogWindows = new Map<string, IncidentLogWindow>();
@@ -176,7 +177,7 @@ function recordFrontendIncidentRateLimited(operation: OperationKey, error: Norma
     latestError: error,
     suppressedCount: 0,
     lastSeenAtMs: now,
-    timer: globalThis.setTimeout(() => {
+    timer: scheduleAfter(() => {
       const completedWindow = incidentLogWindows.get(key);
       if (!completedWindow) {
         return;

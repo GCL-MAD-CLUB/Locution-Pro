@@ -25,7 +25,7 @@
 /* The address field looks like the search field; a click on its blank space starts typing. */
 .asset-library-address {
   display: flex;
-  flex: 1 1 auto;
+  flex: 3 1 0;
   align-items: center;
   gap: 6px;
   height: 24px;
@@ -41,9 +41,10 @@
 }
 
 .media-bin-search.asset-library-search {
-  flex: 0 1 240px;
+  flex: 2 1 0;
   width: auto;
-  min-width: 120px;
+  min-width: 0;
+  max-width: 240px;
 }
 
 .asset-library-breadcrumb {

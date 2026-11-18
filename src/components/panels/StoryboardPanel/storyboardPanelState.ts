@@ -1,3 +1,4 @@
+import type { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import {
   defaultAdvancedSearch,
   defaultSemanticThreshold,
@@ -10,7 +11,7 @@ import {
   storyboardMergeGroups,
   transformStoryboardSources,
 } from "../../../core/editor/multiSource";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import { panelSessionForContext } from "../../../core/editor/panelSourceSelection";
 import { withoutEmptySelectionFilter } from "../../../core/editor/selectionFilter";
 import { createPanelState } from "../../../runtime/systems/PanelState";
@@ -457,6 +458,7 @@ const useStoryboardPanelUiState = createPanelState<StoryboardPanelUiState>(() =>
 }));
 
 export function useStoryboardPanelState<Selection>(
+  lifetime: RenderLifetime,
   selector: (state: StoryboardPanelState) => Selection,
   videoContext?: string,
   workspaceId?: number | null,
@@ -476,7 +478,7 @@ export function useStoryboardPanelState<Selection>(
     videoContext: context,
     workspaceId: nextWorkspaceId,
   };
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     if (videoContext !== undefined) storedUiState.syncVideoContext(videoContext, nextWorkspaceId);
   }, [videoContext, nextWorkspaceId, storedUiState.syncVideoContext]);
   const { storyboards, projects, mediaItems, storyboardUpdated } = useProjectPort(
@@ -488,7 +490,7 @@ export function useStoryboardPanelState<Selection>(
     [storyboards, uiState.videoContext],
   );
   const previousStoryboardRef = useRef({ videoContext: uiState.videoContext, storyboard });
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const previous = previousStoryboardRef.current;
     previousStoryboardRef.current = { videoContext: uiState.videoContext, storyboard };
     if (previous.videoContext !== uiState.videoContext) return;

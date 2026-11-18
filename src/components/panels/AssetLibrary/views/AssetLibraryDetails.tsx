@@ -1,5 +1,6 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { ChevronLeft, ChevronRight, Play, Star } from "lucide-react";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   assetLibraryColorLabels,
   assetLibraryEntryDurationUs,
@@ -173,11 +174,13 @@ function PlainEditor({
   title?: string;
   onCommit: (value: string) => void;
 }) {
+  const lifetime = new RenderLifetime();
+
   const [draft, setDraft] = useState<string | null>(null);
   const cancelledRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editing = draft !== null;
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     if (editing) textareaRef.current?.focus();
   }, [editing]);
   const finish = () => {
@@ -185,7 +188,7 @@ function PlainEditor({
     cancelledRef.current = false;
     setDraft(null);
   };
-  return (
+  return lifetime.render(
     <div className="storyboard-keyword-plain-editor" title={title}>
       {!editing && (
         <div
@@ -220,7 +223,7 @@ function PlainEditor({
           }
         }}
       />
-    </div>
+    </div>,
   );
 }
 
@@ -690,9 +693,11 @@ function ContainerProperties({
 }
 
 export function AssetLibraryDetails(props: AssetLibraryDetailsProps) {
+  const lifetime = new RenderLifetime();
+
   const { container, entries, collapsedSections, onToggleSection } = props;
   const sections: SectionState = { collapsed: collapsedSections, onToggle: onToggleSection };
-  const { ref, overflow } = useVerticalOverflow();
+  const { ref, overflow } = useVerticalOverflow(lifetime);
   const open = !collapsedSections.has(panelSection);
   const single = entries.length === 1 ? entries[0]! : null;
   let content: ReactNode;
@@ -746,7 +751,7 @@ export function AssetLibraryDetails(props: AssetLibraryDetailsProps) {
   } else {
     content = <div className="storyboard-keyword-empty">选择素材以查看和编辑属性</div>;
   }
-  return (
+  return lifetime.render(
     <aside
       ref={ref}
       className={`storyboard-keyword-panel asset-library-details${
@@ -762,6 +767,6 @@ export function AssetLibraryDetails(props: AssetLibraryDetailsProps) {
         />
         {open && content}
       </div>
-    </aside>
+    </aside>,
   );
 }

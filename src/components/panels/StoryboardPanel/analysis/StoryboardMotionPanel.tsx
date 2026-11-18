@@ -1,7 +1,7 @@
+import { scheduleAfter, cancelTask } from "../../../../runtime/scheduling";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { RotateCw } from "lucide-react";
 import {
-  useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -96,9 +96,14 @@ export function StoryboardMotionPanel({
   isPlaying,
   onSeekFrame,
 }: Props) {
+  const lifetime = new RenderLifetime();
+
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<TraceResult | null>(null);
   const cache = useRef(new Map<string, FrameTraceData>());
+  const [completedTraces, setCompletedTraces] = useState<ReadonlyMap<string, FrameTraceData>>(
+    new Map(),
+  );
   const native = isTauriRuntime();
   const nativeSession = useRef<NativeFrameTraceSession | null>(null);
   const sourceCache = useMemo(
@@ -113,7 +118,7 @@ export function StoryboardMotionPanel({
   const endFrame = shot?.end_frame;
   const key = JSON.stringify([assetId, fingerprint, startFrame, endFrame, videoSource, frameRate]);
   const knownCompleteData =
-    (result?.key === key ? result.data : null) ?? cache.current.get(key) ?? null;
+    (result?.key === key ? result.data : null) ?? completedTraces.get(key) ?? null;
   const observeLive = visible && !knownCompleteData;
   const liveVersion = useSyncExternalStore(
     observeLive ? sourceCache.subscribe : noTraceSubscription,
@@ -126,7 +131,7 @@ export function StoryboardMotionPanel({
     playbackFrame >= startFrame &&
     playbackFrame <= endFrame;
   const demand = useMemo(() => ({ enabled: visible }), [visible]);
-  usePublishProjection(PLAYBACK_TRACE_DEMAND_PROJECTION, identity, demand);
+  usePublishProjection(lifetime, PLAYBACK_TRACE_DEMAND_PROJECTION, identity, demand);
   const [hover, setHover] = useState<{ key: string; progress: number } | null>(null);
   const hoverSession = useRef<{ sessionId: string; assetId: string; frame: number } | null>(null);
   function finishHover() {
@@ -142,7 +147,7 @@ export function StoryboardMotionPanel({
     }
   }
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     window.addEventListener("blur", finishHover);
     return () => {
       window.removeEventListener("blur", finishHover);
@@ -150,11 +155,11 @@ export function StoryboardMotionPanel({
     };
   }, [key, mode, visible]);
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     if (isPlaying) finishHover();
   }, [isPlaying]);
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     const chart = chartRef.current;
     if (!chart || !visible) return;
     const measure = () =>
@@ -215,7 +220,7 @@ export function StoryboardMotionPanel({
     );
   }
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!native || !visible || !assetId || startFrame === undefined || endFrame === undefined)
       return;
     const cached = cache.current.get(key);
@@ -231,6 +236,7 @@ export function StoryboardMotionPanel({
       sourceCache,
       (data) => {
         rememberTrace(cache.current, key, data);
+        setCompletedTraces(new Map(cache.current));
         setResult({ key, data, failed: false });
       },
       () => setResult({ key, data: null, failed: true }),
@@ -243,7 +249,7 @@ export function StoryboardMotionPanel({
     };
   }, [native, visible, assetId, startFrame, endFrame, frameRate, sourceCache, key, retry]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     nativeSession.current?.update(playbackFrame, isPlaying);
   }, [
     native,
@@ -259,7 +265,7 @@ export function StoryboardMotionPanel({
     isPlaying,
   ]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (
       native ||
       isPlaying ||
@@ -273,13 +279,14 @@ export function StoryboardMotionPanel({
     const cached = cache.current.get(key) ?? sourceCache.complete(startFrame, endFrame);
     if (cached) {
       rememberTrace(cache.current, key, cached);
+      setCompletedTraces(new Map(cache.current));
       setResult({ key, data: cached, failed: false });
       return;
     }
     let disposed = false;
     const controller = new AbortController();
     setResult({ key, data: null, failed: false });
-    const timer = window.setTimeout(() => {
+    const timer = scheduleAfter(() => {
       void runOperation<FrameTraceData>("storyboard.trace", () =>
         decodeBrowserFrameTrace(
           videoSource!,
@@ -293,6 +300,7 @@ export function StoryboardMotionPanel({
         if (disposed) return;
         if (outcome.status === "success") {
           rememberTrace(cache.current, key, outcome.value);
+          setCompletedTraces(new Map(cache.current));
           setResult({ key, data: outcome.value, failed: false });
         } else {
           setResult({ key, data: null, failed: true });
@@ -301,7 +309,7 @@ export function StoryboardMotionPanel({
     }, 180);
     return () => {
       disposed = true;
-      window.clearTimeout(timer);
+      cancelTask(timer);
       controller.abort();
     };
   }, [
@@ -327,13 +335,16 @@ export function StoryboardMotionPanel({
   );
   const plotEndFrame = fullSamples || !isPlaying ? (endFrame ?? 0) : (playbackFrame ?? -1);
   const liveSamples = useMemo(
-    () =>
-      fullSamples ??
-      (observeLive
-        ? sourceCache.samples(startFrame ?? 0, Math.min(endFrame ?? -1, plotEndFrame))
-        : []),
+    () => ({
+      revision: liveVersion,
+      samples:
+        fullSamples ??
+        (observeLive
+          ? sourceCache.samples(startFrame ?? 0, Math.min(endFrame ?? -1, plotEndFrame))
+          : []),
+    }),
     [fullSamples, sourceCache, startFrame, endFrame, plotEndFrame, liveVersion, observeLive],
-  );
+  ).samples;
   const livePaths = useMemo(
     () =>
       playbackTracePaths(
@@ -385,7 +396,7 @@ export function StoryboardMotionPanel({
               ? "无相邻帧"
               : null;
 
-  return (
+  return lifetime.render(
     <div
       className="storyboard-motion-chart"
       aria-busy={Boolean(!isPlaying && shot && assetId && !current?.failed && !data)}
@@ -477,6 +488,6 @@ export function StoryboardMotionPanel({
           )}
         </div>
       )}
-    </div>
+    </div>,
   );
 }

@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useState } from "react";
 import { ChevronsUpDown } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -19,6 +20,8 @@ import { parseStoryboardKeywordInput } from "./storyboardKeywords";
 import { useKeywordSet } from "./keywordPresetState";
 import "./KeywordPresetControl.css";
 
+const keywordSlotIds = keywordSlots([]).map((_, slot) => `keyword-slot-${slot + 1}`);
+
 type PresetMenuItem = { type: "option"; value: string; label: string } | { type: "separator" };
 
 function KeywordPresetMenu({
@@ -34,11 +37,13 @@ function KeywordPresetMenu({
   variant?: "sidebar" | "spray" | "editor";
   ariaLabel: string;
 }) {
+  const lifetime = new RenderLifetime();
+
   const [anchor, setAnchor] = useState<{ x: number; y: number; width: number } | null>(null);
-  useCloseOnOutsidePointer(Boolean(anchor), () => setAnchor(null));
+  useCloseOnOutsidePointer(lifetime, Boolean(anchor), () => setAnchor(null));
   const label = items.find((item) => item.type === "option" && item.value === value);
   const spray = variant === "spray";
-  return (
+  return lifetime.render(
     <>
       <button
         type="button"
@@ -82,9 +87,13 @@ function KeywordPresetMenu({
             onPointerDown={(event) => event.stopPropagation()}
             onContextMenu={(event) => event.preventDefault()}
           >
-            {items.map((item, index) =>
-              item.type === "separator" ? (
-                <PopupMenuSeparator key={`separator-${index}`} />
+            {items.map((item, index) => {
+              const separatorKey =
+                "before-" +
+                (items.slice(index + 1).find((candidate) => candidate.type === "option")?.value ??
+                  "end");
+              return item.type === "separator" ? (
+                <PopupMenuSeparator key={separatorKey} />
               ) : (
                 <PopupMenuItem
                   key={item.value}
@@ -96,12 +105,12 @@ function KeywordPresetMenu({
                 >
                   {item.label}
                 </PopupMenuItem>
-              ),
-            )}
+              );
+            })}
           </PopupMenu>,
           document.body,
         )}
-    </>
+    </>,
   );
 }
 
@@ -332,12 +341,12 @@ export function KeywordPresetControl({
       <fieldset>
         <legend>关键字</legend>
         <div className="keyword-preset-inputs">
-          {keywords.map((keyword, index) => (
+          {keywordSlotIds.map((slotId, index) => (
             <input
-              key={index}
+              key={slotId}
               autoFocus={index === 0}
               aria-label={`关键字 ${index + 1}`}
-              value={keyword}
+              value={keywords[index] ?? ""}
               onChange={(event) => {
                 const next = [...keywords];
                 next[index] = event.target.value;

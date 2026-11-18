@@ -1,3 +1,5 @@
+import { useScopedState } from "../../../runtime/state/useScopedState";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { AdvancedSearchDialog } from "./AdvancedSearchDialog";
 import {
   defaultAdvancedSearch,
@@ -8,7 +10,7 @@ import {
   type AdvancedSearchOptions,
 } from "../../../core/editor/textSearch";
 import { ChevronLeft, ChevronRight, ChevronsUpDown, SlidersHorizontal } from "lucide-react";
-import { Fragment, useEffect, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import {
   canHighlightSearchRule,
@@ -86,6 +88,8 @@ export function PanelSearch({
   onNavigate,
   semantic,
 }: PanelSearchProps) {
+  const lifetime = new RenderLifetime();
+
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const configuration: SearchConfiguration = {
     query,
@@ -111,13 +115,19 @@ export function PanelSearch({
     semantic?.onThresholdChange(value);
     recordConfiguration({ ...configuration, threshold: value });
   }
-  const [menu, setMenu] = useState<{
+  const [menu, setMenu] = useScopedState<{
     kind: "mode" | "scope" | "rule";
     x: number;
     y: number;
-  } | null>(null);
-  const [matchDraft, setMatchDraft] = useState<string | null>(null);
-  const [thresholdDraft, setThresholdDraft] = useState<string | null>(null);
+  } | null>(JSON.stringify([disabled, mode, rule, scope, semantic?.available]), null);
+  const [matchDraft, setMatchDraft] = useScopedState<string | null>(
+    JSON.stringify([disabled, mode, rule, scope, semantic?.available]),
+    null,
+  );
+  const [thresholdDraft, setThresholdDraft] = useScopedState<string | null>(
+    JSON.stringify([disabled, mode, rule, scope, semantic?.available]),
+    null,
+  );
   const thresholdDecimals = semantic?.thresholdDecimals ?? 2;
   const thresholdScale = 10 ** thresholdDecimals;
   function commitThreshold() {
@@ -134,15 +144,7 @@ export function PanelSearch({
     }
     setThresholdDraft(null);
   }
-  useCloseOnOutsidePointer(Boolean(menu), () => setMenu(null));
-  const searchDraftKey = JSON.stringify([disabled, mode, rule, scope, semantic?.available]);
-  const [seenSearchDraftKey, setSeenSearchDraftKey] = useState(searchDraftKey);
-  if (seenSearchDraftKey !== searchDraftKey) {
-    setSeenSearchDraftKey(searchDraftKey);
-    setMenu(null);
-    setMatchDraft(null);
-    setThresholdDraft(null);
-  }
+  useCloseOnOutsidePointer(lifetime, Boolean(menu), () => setMenu(null));
 
   const navigationDisabled = disabled || mode !== "highlight" || !query.trim() || !canNavigate;
   const showMatchCount = !disabled && mode === "highlight" && matchCount > 0;
@@ -188,7 +190,7 @@ export function PanelSearch({
     );
   }
 
-  return (
+  return lifetime.render(
     <div className="panel-search-row">
       <SearchHistoryInput
         label={label}
@@ -437,7 +439,7 @@ export function PanelSearch({
           </PopupMenu>,
           document.body,
         )}
-    </div>
+    </div>,
   );
 }
 
@@ -493,11 +495,12 @@ export function SearchHighlight({
 }
 
 export function useSearchNavigation(
+  lifetime: RenderLifetime,
   panelRef: RefObject<HTMLElement | null>,
   enabled: boolean,
   onNavigate: (direction: -1 | 1) => void,
 ) {
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const panel = panelRef.current;
     if (!panel || !enabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {

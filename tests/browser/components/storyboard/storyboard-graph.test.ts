@@ -25,17 +25,15 @@ async function center(locator: Locator) {
 }
 const shot = (page: Page, id: number) =>
   page.getByRole("button", { name: `Shot ${id}`, exact: true });
-const selected = (page: Page): Promise<string[]> =>
-  page.evaluate(() => (window as any).graphSelection);
+const selected = (page: Page): Promise<string[]> => page.evaluate(() => window.graphSelection);
 const activated = (page: Page): Promise<string | null> =>
-  page.evaluate(() => (window as any).graphActivatedShot);
-const activations = (page: Page): Promise<string[]> =>
-  page.evaluate(() => (window as any).graphActivations);
+  page.evaluate(() => window.graphActivatedShot);
+const activations = (page: Page): Promise<string[]> => page.evaluate(() => window.graphActivations);
 const sprays = (
   page: Page,
 ): Promise<Array<{ ids: string[]; historyGroupId: string; eraseWithAlt: boolean }>> =>
-  page.evaluate(() => (window as any).graphSprays);
-const enableSpray = (page: Page) => page.evaluate(() => (window as any).graphSetSprayActive(true));
+  page.evaluate(() => window.graphSprays);
+const enableSpray = (page: Page) => page.evaluate(() => window.graphSetSprayActive(true));
 
 async function mountClusters(page: Page, overlap = false) {
   await page.goto("/tests/browser/support/blank.html");
@@ -99,7 +97,7 @@ test("cluster hover highlights its boundary, members and internal edges independ
     await page.mouse.move(850, 560);
     await expect(page.locator("[data-graph-cluster].is-hovered")).toHaveCount(0);
   }
-  await page.evaluate(() => (window as any).graphSetSelection(new Set(["0"])));
+  await page.evaluate(() => window.graphSetSelection(new Set(["0"])));
   await expect(page.locator(".storyboard-graph-preview")).toHaveCount(1);
   await page.mouse.move(point.x, point.y);
   await expect(page.locator("[data-graph-cluster].is-hovered")).toHaveCount(1);
@@ -120,7 +118,7 @@ for (const [mode, expected] of [
   }) => {
     await mountClusters(page);
     await page.getByRole("radio", { name: mode, exact: true }).click();
-    await page.evaluate(() => (window as any).graphSetSelection(new Set(["0", "3", "8"])));
+    await page.evaluate(() => window.graphSetSelection(new Set(["0", "3", "8"])));
     await expect.poll(() => selected(page)).toEqual(["0", "3", "8"]);
     const point = await worldPoint(page, 120, 0);
     await page.mouse.click(point.x, point.y);
@@ -144,7 +142,7 @@ test("overlapping clusters target only the upper region; hand and spray do not s
   );
   await page.mouse.dblclick(point.x, point.y);
   await expect.poll(() => selected(page)).toEqual(["6", "7", "8"]);
-  await page.evaluate(() => (window as any).graphSetSelection(new Set()));
+  await page.evaluate(() => window.graphSetSelection(new Set()));
   await page.getByRole("button", { name: "手型工具", exact: true }).click();
   await page.mouse.dblclick(point.x, point.y);
   expect(await selected(page)).toEqual([]);
@@ -167,11 +165,11 @@ test("cluster outlines follow zooming and dragging without selecting or seeking"
   await expect(outlines).toHaveCount(3);
   const enclosed = () =>
     page.evaluate(() => {
-      const nodes = (window as any).graphComputedGraph.nodes;
+      const nodes = window.graphComputedGraph.nodes;
       return [...document.querySelectorAll<SVGPathElement>("[data-graph-cluster]")].every((path) =>
         nodes
-          .filter((node: any) => String(node.cluster) === path.dataset.graphCluster)
-          .every((node: any) =>
+          .filter((node) => String(node.cluster) === path.dataset.graphCluster)
+          .every((node) =>
             [0, Math.PI / 2, Math.PI, Math.PI * 1.5].every((angle) =>
               path.isPointInFill(
                 new DOMPoint(
@@ -241,7 +239,7 @@ test("display edge limits update neighbors and radii from view degrees while pre
   await expect.poll(edgeCount).toBe(36);
   await expect.poll(miniCount).toBe(36);
   for (const limit of [3, 1, 0]) {
-    await page.evaluate((limit) => (window as any).graphSetMaxVisibleDegree(limit), limit);
+    await page.evaluate((limit) => window.graphSetMaxVisibleDegree(limit), limit);
     if (limit === 3) await expect.poll(edgeCount).toBeGreaterThan(10);
     else await expect.poll(edgeCount).toBe(10);
     const visible = await edgeCount();
@@ -258,7 +256,7 @@ test("display edge limits update neighbors and radii from view degrees while pre
       .toBeCloseTo((4 + neighborCount * 0.1 - 0.5) * 0.8, 4);
     expect(await geometry()).toEqual(beforeGeometry);
     expect(await transform(page)).toEqual(beforeCamera);
-    expect(await page.evaluate(() => (window as any).graphComputedGraph.edges.length)).toBe(36);
+    expect(await page.evaluate(() => window.graphComputedGraph.edges.length)).toBe(36);
     await page.mouse.move(30, 460);
   }
   expect(await selected(page)).toEqual([]);
@@ -382,7 +380,7 @@ test("view-degree radius changes preserve an already dragged layout and its came
   const before = await positions();
   const camera = await transform(page);
   const radius = await page.locator('[data-graph-node="4"]').getAttribute("r");
-  await page.evaluate(() => (window as any).graphSetMaxVisibleDegree(2));
+  await page.evaluate(() => window.graphSetMaxVisibleDegree(2));
   await expect.poll(() => page.locator('[data-graph-node="4"]').getAttribute("r")).not.toBe(radius);
   // Wait until the size spring completes; position must stay fixed throughout.
   for (let i = 0; i < 8; i++) {
@@ -399,7 +397,7 @@ for (const original of ["pointer", "hand", "spray"] as const) {
     page,
   }) => {
     await mount(page, false, 5);
-    await page.evaluate(() => (window as any).graphSetSelection(new Set(["8"])));
+    await page.evaluate(() => window.graphSetSelection(new Set(["8"])));
     const stage = page.locator(".storyboard-graph-view");
     await stage.focus();
     if (original === "hand") await page.keyboard.press("h");
@@ -502,7 +500,7 @@ for (const spread of [1, 5]) {
   }) => {
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await mount(page, false, spread);
-    await page.evaluate(() => (window as any).graphSetSelection(new Set(["8"])));
+    await page.evaluate(() => window.graphSetSelection(new Set(["8"])));
     const positions = () =>
       page.locator(".storyboard-graph-dot").evaluateAll((elements) =>
         elements.map((element) => ({
@@ -724,7 +722,7 @@ test("hovering selected shots and previews preserves selection and playback; des
   page,
 }) => {
   await mount(page);
-  await page.evaluate(() => (window as any).graphSetSelection(new Set(["0", "4", "8"])));
+  await page.evaluate(() => window.graphSetSelection(new Set(["0", "4", "8"])));
   await expect.poll(() => selected(page)).toEqual(["0", "4", "8"]);
   const beforeActivations = await activations(page);
   const beforeActivated = await activated(page);
@@ -753,7 +751,7 @@ test("hovering selected shots and previews preserves selection and playback; des
   await expectSelectedPreviews(["0", "4", "8"]);
 
   await page.mouse.move(1100, 700);
-  await page.evaluate(() => (window as any).graphSetSelection(new Set(["0", "4"])));
+  await page.evaluate(() => window.graphSetSelection(new Set(["0", "4"])));
   await expect(preview("8")).toHaveCount(0);
   await expectSelectedPreviews(["0", "4"]);
 });
@@ -1064,7 +1062,7 @@ for (const [keys, mode, label, expected] of [
 ] as const) {
   test(`selection modifiers ${mode} drive marquee and cursor without seeking`, async ({ page }) => {
     await mount(page);
-    await page.evaluate(() => (window as any).graphSetSelection(new Set(["1", "8"])));
+    await page.evaluate(() => window.graphSetSelection(new Set(["1", "8"])));
     const stage = page.locator(".storyboard-graph-view");
     const before = await transform(page);
     for (const key of keys) await page.keyboard.down(key);
@@ -1094,7 +1092,7 @@ test("stationary marquee recomputes modifiers from the original selection and bl
   page,
 }) => {
   await mount(page);
-  await page.evaluate(() => (window as any).graphSetSelection(new Set(["1", "8"])));
+  await page.evaluate(() => window.graphSetSelection(new Set(["1", "8"])));
   await topRowMarquee(page);
   await expect.poll(() => selected(page)).toEqual(["0", "1", "2"]);
   await page.keyboard.down("Shift");
@@ -1241,7 +1239,7 @@ test("unselected pointer hover reveals missing neighbors at 60% while selected p
   page,
 }) => {
   await mount(page);
-  await page.evaluate(() => (window as any).graphSetSelection(new Set(["0", "4"])));
+  await page.evaluate(() => window.graphSetSelection(new Set(["0", "4"])));
   const preview = (id: number) => page.locator(`[data-preview-shot-id="${id}"]`);
   const displayed = () =>
     page
@@ -1454,7 +1452,7 @@ test("graph annotations update readonly thumbnail badges, colored nodes and conc
 }) => {
   await mount(page);
   await page.evaluate(() =>
-    (window as any).graphSetAnnotations({
+    window.graphSetAnnotations({
       "4": { rating: 3, retained: true, keywordIds: ["keyword"], colorLabel: "red" },
       "8": { rating: 0, retained: false, colorLabel: "blue" },
     }),
@@ -1483,7 +1481,7 @@ test("graph annotations update readonly thumbnail badges, colored nodes and conc
   await expect(shot(page, 4)).toHaveCSS("opacity", "1");
   await expect(ring).toHaveCSS("stroke", fill);
   await page.evaluate(() =>
-    (window as any).graphSetAnnotations({
+    window.graphSetAnnotations({
       "4": { rating: 5, retained: false, excluded: true, customLabel: "自定义" },
     }),
   );
@@ -1491,7 +1489,7 @@ test("graph annotations update readonly thumbnail badges, colored nodes and conc
   await expect(metadata.getByRole("img", { name: "5 星", exact: true })).toBeVisible();
   await expect(metadata.getByRole("img", { name: "该分镜包含关键字", exact: true })).toHaveCount(0);
   await expect(node).not.toHaveCSS("fill", fill);
-  await page.evaluate(() => (window as any).graphSetAnnotations({}));
+  await page.evaluate(() => window.graphSetAnnotations({}));
   await expect(preview).not.toHaveClass(/has-color-label/);
   await expect(metadata.locator('[role="img"]')).toHaveCount(0);
   expect(await selected(page)).toEqual(["4"]);

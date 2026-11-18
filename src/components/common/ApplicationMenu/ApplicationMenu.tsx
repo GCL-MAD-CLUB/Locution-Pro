@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useScopedState } from "../../../runtime/state/useScopedState";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { useRef, useState } from "react";
 import { PopupMenu, PopupMenuItem, PopupMenuSeparator, PopupMenuSubmenu } from "../PopupMenu";
 import "./ApplicationMenu.css";
 
@@ -98,29 +100,25 @@ interface ApplicationMenuProps {
 }
 
 export function ApplicationMenu({ model }: ApplicationMenuProps) {
+  const lifetime = new RenderLifetime();
+
   const { file, edit, window: windowMenu, beta, help } = model;
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [editMenuOpen, setEditMenuOpen] = useState(false);
   const [windowMenuOpen, setWindowMenuOpen] = useState(false);
   const [betaMenuOpen, setBetaMenuOpen] = useState(false);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
-  const [recentProjectMenuOpen, setRecentProjectMenuOpen] = useState(false);
-  const [recentImportMenuOpen, setRecentImportMenuOpen] = useState(false);
-  const [projectWindowMenuOpen, setProjectWindowMenuOpen] = useState(false);
-  const [transcodeWindowMenuOpen, setTranscodeWindowMenuOpen] = useState(false);
-  const [preferencesMenuOpen, setPreferencesMenuOpen] = useState(false);
+  const [recentProjectMenuOpen, setRecentProjectMenuOpen] = useScopedState(fileMenuOpen, false);
+  const [recentImportMenuOpen, setRecentImportMenuOpen] = useScopedState(fileMenuOpen, false);
+  const [projectWindowMenuOpen, setProjectWindowMenuOpen] = useScopedState(windowMenuOpen, false);
+  const [transcodeWindowMenuOpen, setTranscodeWindowMenuOpen] = useScopedState(
+    windowMenuOpen,
+    false,
+  );
+  const [preferencesMenuOpen, setPreferencesMenuOpen] = useScopedState(editMenuOpen, false);
   const menuRef = useRef<HTMLElement>(null);
-  if (!fileMenuOpen && (recentProjectMenuOpen || recentImportMenuOpen)) {
-    setRecentProjectMenuOpen(false);
-    setRecentImportMenuOpen(false);
-  }
-  if (!editMenuOpen && preferencesMenuOpen) setPreferencesMenuOpen(false);
-  if (!windowMenuOpen && (projectWindowMenuOpen || transcodeWindowMenuOpen)) {
-    setProjectWindowMenuOpen(false);
-    setTranscodeWindowMenuOpen(false);
-  }
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!fileMenuOpen && !editMenuOpen && !windowMenuOpen && !betaMenuOpen && !helpMenuOpen) {
       return;
     }
@@ -160,7 +158,7 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
     await handler();
   };
 
-  return (
+  return lifetime.render(
     <nav className="application-menu" aria-label="应用菜单" ref={menuRef}>
       <div className="application-menu-root">
         <button
@@ -638,6 +636,6 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
           </PopupMenu>
         )}
       </div>
-    </nav>
+    </nav>,
   );
 }

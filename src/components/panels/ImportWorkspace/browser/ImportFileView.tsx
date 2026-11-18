@@ -44,6 +44,7 @@ function ImportFile({
     >
       <div className="import-file-preview">
         <button
+          type="button"
           className="import-file-hit"
           aria-label={`${selected ? "取消选择" : "选择"} ${entry.name}`}
           title={entry.is_directory ? `双击打开 ${entry.name}` : entry.path}
@@ -74,6 +75,7 @@ function ImportFile({
         />
       </div>
       <button
+        type="button"
         className="import-file-caption"
         title={entry.path}
         disabled={disabled || imported}

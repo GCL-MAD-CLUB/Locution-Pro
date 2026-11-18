@@ -178,7 +178,11 @@ test("unavailable manifests use the fixed 0.4.1 GitHub URL", async () => {
 });
 
 test("a stalled CDN manifest times out and continues to GitHub", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const deadline = new AbortController();
+  t.mock.method(AbortSignal, "timeout", (ms: number) => {
+    assert.equal(ms, 4000);
+    return deadline.signal;
+  });
   const calls: FetchTarget[] = [];
   const pending = readLatestRelease(async (url, init) => {
     calls.push(url);
@@ -187,7 +191,7 @@ test("a stalled CDN manifest times out and continues to GitHub", async (t) => {
       init?.signal?.addEventListener("abort", () => reject(new Error("timed out")), { once: true }),
     );
   });
-  t.mock.timers.tick(4001);
+  deadline.abort();
   assert.equal((await pending).version, "2.1.1");
   assert.deepEqual(calls, MANIFEST_URLS);
 });
@@ -332,7 +336,11 @@ test("the successful probe cancels its upstream without reading the remaining in
 });
 
 test("a stalled CDN probe times out and redirects to GitHub", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const deadline = new AbortController();
+  t.mock.method(AbortSignal, "timeout", (ms: number) => {
+    assert.equal(ms, 12000);
+    return deadline.signal;
+  });
   const calls: FetchTarget[] = [];
   const pending = downloadRelease(request(), release(), async (url, init) => {
     calls.push(url);
@@ -341,7 +349,7 @@ test("a stalled CDN probe times out and redirects to GitHub", async (t) => {
       init?.signal?.addEventListener("abort", () => reject(new Error("timed out")), { once: true }),
     );
   });
-  t.mock.timers.tick(12001);
+  deadline.abort();
   const response = await pending;
   assert.equal(response.status, 302);
   assert.equal(response.headers.get("Location"), release().platforms[RELEASE_PLATFORM].url);

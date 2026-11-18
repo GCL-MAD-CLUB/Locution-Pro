@@ -114,6 +114,7 @@ test("every native media input command receives document sources at the IPC boun
 });
 
 test("the real storyboard index dispatch includes current document media", async () => {
+  const scheduling = await import("../support/scheduling.ts");
   const { registerMediaSources, commandMediaSources } = loadModule<MediaSourcesModule>(modulePath);
   const media = { asset: { id: "a", path: "relinked.mp4" } };
   registerMediaSources(() => ({ a: media }));
@@ -125,6 +126,7 @@ test("the real storyboard index dispatch includes current document media", async
     "../../../src/application/media/storyboardSemanticSearch.ts",
     {
       "../../core/editor/semanticPrompts": {},
+      "../../runtime/scheduling": scheduling,
       "../../core/editor/textSearch": {},
       "@tauri-apps/api/core": { Channel: class {} },
       react: {},

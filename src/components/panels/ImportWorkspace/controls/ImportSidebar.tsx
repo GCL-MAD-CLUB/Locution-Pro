@@ -62,6 +62,7 @@ export function ImportSidebar({
       {groups.map((group) => (
         <section key={group.id}>
           <button
+            type="button"
             className="import-sidebar-heading"
             aria-expanded={!collapsed.has(group.id)}
             onClick={() =>
@@ -83,6 +84,7 @@ export function ImportSidebar({
                 : (icons[location.kind as keyof typeof icons] ?? HardDrive);
               return (
                 <button
+                  type="button"
                   key={location.path + location.kind}
                   className={`import-location ${favorite ? "is-favorite" : ""} ${pathKey(directory) === pathKey(location.path) ? "active" : ""}`}
                   title={location.path}

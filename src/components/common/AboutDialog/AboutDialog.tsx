@@ -1,4 +1,6 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { scheduleAfter, cancelTask } from "../../../runtime/scheduling";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { useId, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { version } from "../../../../package.json";
 import license from "../../../../LICENSE?raw";
 import thirdPartyNotices from "../../../../THIRD_PARTY_NOTICES?raw";
@@ -13,10 +15,10 @@ const CREDITS_SCROLL_PX_PER_SECOND = 12;
  * Holds the credits still, then rolls them upward at a constant speed and stops
  * once the last line is fully visible. Reduced-motion users keep a static list.
  */
-function useCreditsAutoScroll(enabled: boolean) {
+function useCreditsAutoScroll(lifetime: RenderLifetime, enabled: boolean) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const container = containerRef.current;
     if (!enabled || container === null) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -26,7 +28,7 @@ function useCreditsAutoScroll(enabled: boolean) {
     let position = 0;
     let lastFrame = 0;
     let frame = 0;
-    const holdTimer = window.setTimeout(() => {
+    const holdTimer = scheduleAfter(() => {
       lastFrame = performance.now();
       frame = window.requestAnimationFrame(roll);
     }, CREDITS_HOLD_MS);
@@ -42,7 +44,7 @@ function useCreditsAutoScroll(enabled: boolean) {
     }
 
     return () => {
-      window.clearTimeout(holdTimer);
+      cancelTask(holdTimer);
       window.cancelAnimationFrame(frame);
     };
   }, [enabled]);
@@ -55,13 +57,15 @@ interface AboutDialogProps {
 }
 
 export function AboutDialog({ onClose }: AboutDialogProps) {
+  const lifetime = new RenderLifetime();
+
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descriptionId = useId();
   const [showLegal, setShowLegal] = useState(false);
-  const creditsRef = useCreditsAutoScroll(!showLegal);
+  const creditsRef = useCreditsAutoScroll(lifetime, !showLegal);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const previousFocus = document.activeElement;
     const dialog = dialogRef.current;
     // A native modal keeps pointer and keyboard focus out of the underlying workspace.
@@ -120,7 +124,7 @@ export function AboutDialog({ onClose }: AboutDialogProps) {
     }
   }
 
-  return (
+  return lifetime.render(
     <dialog
       ref={dialogRef}
       className="about-dialog"
@@ -243,6 +247,6 @@ export function AboutDialog({ onClose }: AboutDialogProps) {
           <span>GCL MAD CLUB</span>
         </div>
       </footer>
-    </dialog>
+    </dialog>,
   );
 }

@@ -1,4 +1,5 @@
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import type { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
+import { useCallback, useMemo, useRef } from "react";
 import { normalizeFrameRate } from "../../core/editor/timeline";
 import {
   mediaPanelTitle,
@@ -311,7 +312,10 @@ export function useSourcePreviewRequest() {
 }
 
 /** Read the panel's source without giving a title or an inactive tab control of playback. */
-export function usePanelMediaSourceSelection(kind?: "subtitles" | "storyboard") {
+export function usePanelMediaSourceSelection(
+  lifetime: RenderLifetime,
+  kind?: "subtitles" | "storyboard",
+) {
   const selection = usePanelMediaSelection((state) => state);
   const panelId = usePanelInstanceId();
   const {
@@ -376,7 +380,7 @@ export function usePanelMediaSourceSelection(kind?: "subtitles" | "storyboard") 
   const activeTrackId = activeSource?.trackId ?? "";
   const project = activeSource?.project ?? null;
   const previousHistoryRef = useRef({ projectId, projectHistory });
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     const previous = previousHistoryRef.current;
     previousHistoryRef.current = { projectId, projectHistory };
     if (!kind || previous.projectId !== projectId) return;
@@ -477,15 +481,15 @@ export function usePanelMediaSourceSelection(kind?: "subtitles" | "storyboard") 
 }
 
 /** Issue source commands when the panel is activated, focused, or changes its own selection. */
-export function usePanelMediaSource(kind: "subtitles" | "storyboard") {
-  const source = usePanelMediaSourceSelection(kind);
-  usePublishPanelTitle(mediaPanelTitle(kind, source.selectedSources));
+export function usePanelMediaSource(lifetime: RenderLifetime, kind: "subtitles" | "storyboard") {
+  const source = usePanelMediaSourceSelection(lifetime, kind);
+  usePublishPanelTitle(lifetime, mediaPanelTitle(kind, source.selectedSources));
   const { selection, projectId, activeVideoId, activeTrackId, previewVideoId, project } = source;
   const panelId = usePanelInstanceId();
   const panelActive = usePanelActive();
   const identity = useStableIdentity("media-panel", panelId);
   const playback = usePlaybackStatus();
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     if (playback?.sourcePanelId === panelId && playback.videoId === activeVideoId) {
       selection.rememberFrame(activeVideoId, playback.currentFrame);
     }
@@ -503,7 +507,7 @@ export function usePanelMediaSource(kind: "subtitles" | "storyboard") {
     [],
     ["activeVideoChanged", "previewTrackChanged", "sourcePreviewCleared"],
   );
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     if (
       selection.projectId !== projectId ||
       (selection.videoId === null && Boolean(activeVideoId))
@@ -511,17 +515,19 @@ export function usePanelMediaSource(kind: "subtitles" | "storyboard") {
       selection.openVideo(projectId, activeVideoId, activeTrackId);
     }
   }, [activeTrackId, activeVideoId, previewVideoId, projectId, selection]);
-  useBroadcastEvent(identity, "media.video.opened", ({ payload }) =>
+  useBroadcastEvent(lifetime, identity, "media.video.opened", ({ payload }) =>
     source.selectVideo(payload.videoId, undefined, true) ? "handled" : "ignored",
   );
   const hasProject = Boolean(project);
   const selectionInitialized = selection.projectId === projectId && selection.videoId !== null;
+  // Playback frame persistence must not issue another source-open command.
+  const { videoId: selectedVideoId, savedFrame, openVersion } = selection;
   const openSource = useCallback(() => {
     if (!selectionInitialized) return;
     stateHub.publish<PlaybackSourceModeProjection>(PLAYBACK_SOURCE_MODE_PROJECTION, identity, {
       mode: kind,
       videoId: activeVideoId,
-      frame: selection.videoId === activeVideoId ? selection.savedFrame() : 0,
+      frame: selectedVideoId === activeVideoId ? savedFrame() : 0,
     });
     if (!hasProject) {
       sourcePreviewCleared();
@@ -535,38 +541,45 @@ export function usePanelMediaSource(kind: "subtitles" | "storyboard") {
       previewTrackChanged(activeTrackId);
     }
   }, [
-    previewTrackChanged,
-    activeTrackId,
-    activeVideoChanged,
-    activeVideoId,
-    hasProject,
+    selectionInitialized,
     identity,
     kind,
-    selection.openVersion,
-    selection.savedFrame,
-    selection.videoId,
-    selectionInitialized,
+    activeVideoId,
+    selectedVideoId,
+    savedFrame,
+    hasProject,
+    activeVideoChanged,
+    activeTrackId,
     sourcePreviewCleared,
+    previewTrackChanged,
   ]);
   const previousControlRef = useRef<{
     openSource: typeof openSource;
+    openVersion: number;
     canOpenSource: boolean;
     panelActive: boolean;
     panelFocused: boolean;
   } | null>(null);
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     const previous = previousControlRef.current;
-    previousControlRef.current = { openSource, canOpenSource, panelActive, panelFocused };
+    previousControlRef.current = {
+      openSource,
+      openVersion,
+      canOpenSource,
+      panelActive,
+      panelFocused,
+    };
     if (
       panelActive &&
       ((canOpenSource &&
         (!previous?.canOpenSource ||
           !previous.panelActive ||
-          previous.openSource !== openSource)) ||
+          previous.openSource !== openSource ||
+          previous.openVersion !== openVersion)) ||
         (panelFocused && !previous?.panelFocused))
     )
       openSource();
-  }, [canOpenSource, openSource, panelActive, panelFocused]);
+  }, [canOpenSource, openSource, openVersion, panelActive, panelFocused]);
   // Shared media follow the actual player even when another panel owns it.
   // Keep each panel's chosen sources, active source and subtitle track intact.
   const playbackSource = source.selectedSources.find(
@@ -577,9 +590,10 @@ export function usePanelMediaSource(kind: "subtitles" | "storyboard") {
 
 /** Workspace history belongs to the panel instance, rather than individual media IDs. */
 export function usePanelMediaWorkspaceMenu(
+  lifetime: RenderLifetime,
   kind: "subtitles" | "storyboard",
 ): PanelMenuEntryDefinition[] {
-  const { selection, projectId } = usePanelMediaSourceSelection();
+  const { selection, projectId } = usePanelMediaSourceSelection(lifetime);
   const { projects, mediaItems } = useProjectPort(["projects", "mediaItems"], []);
   const available = panelMediaSources(projects, mediaItems);
   const workspaces = selection.projectId === projectId ? panelMediaWorkspaces(selection) : [];

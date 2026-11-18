@@ -9,12 +9,10 @@ interface TraySelectionModifiers {
 }
 
 export function useImportTraySelection(items: ImportSelectionItem[]) {
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [selection, setSelected] = useState<Set<string>>(() => new Set());
   const anchor = useRef("");
   const itemKeys = useMemo(() => items.map((item) => pathKey(item.entry.path)), [items]);
-  const nextSelected = traySelectionForItems(selected, itemKeys);
-  if (nextSelected !== selected) setSelected(nextSelected);
-  if (anchor.current && !itemKeys.includes(anchor.current)) anchor.current = "";
+  const selected = traySelectionForItems(selection, itemKeys);
 
   function select(path: string, { range, toggle }: TraySelectionModifiers) {
     const key = pathKey(path);
@@ -25,12 +23,15 @@ export function useImportTraySelection(items: ImportSelectionItem[]) {
         Math.min(anchorIndex, targetIndex),
         Math.max(anchorIndex, targetIndex) + 1,
       );
-      setSelected((current) => new Set(toggle ? [...current, ...rangeKeys] : rangeKeys));
+      setSelected(
+        (current) =>
+          new Set(toggle ? [...traySelectionForItems(current, itemKeys), ...rangeKeys] : rangeKeys),
+      );
       return;
     }
     if (toggle) {
       setSelected((current) => {
-        const next = new Set(current);
+        const next = new Set(traySelectionForItems(current, itemKeys));
         if (next.has(key)) next.delete(key);
         else next.add(key);
         return next;

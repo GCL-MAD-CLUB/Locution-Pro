@@ -1,5 +1,5 @@
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import {
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -106,6 +106,8 @@ interface ExportWorkspaceProps {
 }
 
 export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
+  const lifetime = new RenderLifetime();
+
   const storedSource = useExportWorkspaceState((state) => state.source);
   const selectedClipIds = useExportWorkspaceState((state) => state.selectedClipIds);
   const settings = useExportWorkspaceState((state) => state.settings);
@@ -142,9 +144,13 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
   const [leftRatio, setLeftRatio] = useState(0.3);
   const [settingsRatio, setSettingsRatio] = useState(0.38);
   const leftRatioRef = useRef(leftRatio);
-  leftRatioRef.current = leftRatio;
+  lifetime.useBeforePaint(() => {
+    leftRatioRef.current = leftRatio;
+  });
   const settingsRatioRef = useRef(settingsRatio);
-  settingsRatioRef.current = settingsRatio;
+  lifetime.useBeforePaint(() => {
+    settingsRatioRef.current = settingsRatio;
+  });
   const dragRef = useRef<ColumnDragState | null>(null);
   const dragListenersRef = useRef<{
     onMove: (event: PointerEvent) => void;
@@ -165,7 +171,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
 
   // If the workspace unmounts mid-drag, drop the window listeners and the
   // resizing class so nothing is left stuck behind the component.
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     return () => {
       const listeners = dragListenersRef.current;
       dragListenersRef.current = null;
@@ -223,7 +229,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
   }
 
   const audioBindingKey = exportAudioBindingKey(source);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     adoptExportSource(source);
     applyProjectExportSettings();
   }, [adoptExportSource, applyProjectExportSettings, audioBindingKey, projectId, source]);
@@ -235,7 +241,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
     : null;
   const lastSourceKeyRef = useRef<string | null>(null);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!source || sourceKey === lastSourceKeyRef.current) {
       return;
     }
@@ -273,9 +279,13 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
     ? (source.clips.find((clip) => clip.id === previewClipId) ?? source.clips[0] ?? null)
     : null;
   const previewClipRef = useRef(previewClip);
-  previewClipRef.current = previewClip;
+  lifetime.useBeforePaint(() => {
+    previewClipRef.current = previewClip;
+  });
   const mediaItemsRef = useRef(mediaItems);
-  mediaItemsRef.current = mediaItems;
+  lifetime.useBeforePaint(() => {
+    mediaItemsRef.current = mediaItems;
+  });
   const [previewRequestId, setPreviewRequestId] = useState(0);
   const previewPlayRequestRef = useRef<string | null>(null);
 
@@ -285,7 +295,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
     setPreviewRequestId((count) => count + 1);
   }
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const previewClip = previewClipRef.current;
     if (!previewClip) {
       return;
@@ -331,7 +341,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
     gridTemplateColumns: `minmax(180px, ${leftRatio}fr) var(--resizer-size) minmax(240px, ${settingsTrack}fr) var(--resizer-size) minmax(220px, ${previewTrack}fr)`,
   };
 
-  return (
+  return lifetime.render(
     <section className={`export-workspace ${source ? "" : "is-empty"}`} aria-label="导出工作区">
       <div className="export-workspace-main" ref={mainRef} style={mainGridStyle}>
         <section className="export-zone">
@@ -401,6 +411,6 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
       </div>
 
       <ExportActionBar onExportStarted={onExportStarted} />
-    </section>
+    </section>,
   );
 }

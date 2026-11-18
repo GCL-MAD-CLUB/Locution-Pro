@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
+import { useMemo, useRef, useState } from "react";
 import {
   serializeStoryboardGraphOptions,
   type StoryboardGraph,
@@ -17,6 +18,7 @@ type GraphState =
   | { status: "cancelled" | "failed"; message: string };
 
 export function useStoryboardGraph(
+  lifetime: RenderLifetime,
   shots: readonly SemanticShot[],
   scope: string,
   enabled: boolean,
@@ -39,21 +41,25 @@ export function useStoryboardGraph(
   } | null>(null);
   const layout = useRef<{ worker: Worker; vectors?: StoryboardGraphVector[] } | null>(null);
   const lastGraph = useRef<{ scope: string; graph: StoryboardGraph } | null>(null);
+  const [completed, setCompleted] = useState<{ scope: string; graph: StoryboardGraph } | null>(
+    null,
+  );
   const sequence = useRef(0);
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<{ key: string; state: GraphState } | null>(null);
-  useEffect(
+  lifetime.useAfterCommit(
     () => () => {
       layout.current?.worker.terminate();
     },
     [],
   );
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!enabled) return;
     if (!shots.length) {
       const { nodeRadii: _, ...settings } = workerOptions;
       const graph: StoryboardGraph = { nodes: [], edges: [], neighbors: 0, ...settings };
       lastGraph.current = { scope, graph };
+      setCompleted({ scope, graph });
       setResult({ key, state: { status: "ready", graph } });
       return;
     }
@@ -144,6 +150,7 @@ export function useStoryboardGraph(
       });
       if (graph && active) {
         lastGraph.current = { scope, graph };
+        setCompleted({ scope, graph });
         update({ status: "ready", graph });
       }
     }).then((outcome) => {
@@ -158,7 +165,7 @@ export function useStoryboardGraph(
     };
   }, [key, enabled, attempt]);
   return {
-    graph: lastGraph.current?.scope === scope ? lastGraph.current.graph : undefined,
+    graph: completed?.scope === scope ? completed.graph : undefined,
     state: result?.key === key ? result.state : ({ status: "indexing" } as GraphState),
     retry: () => setAttempt((value) => value + 1),
   };

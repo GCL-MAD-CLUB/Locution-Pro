@@ -25,12 +25,14 @@ function loadRuntime(): RuntimeModule {
       "../runtime/mediaSources": loadModule("../../../src/runtime/mediaSources.ts"),
       "./model": model,
       "./recovery": loadRecovery(),
+      "../runtime/scheduling": {
+        scheduleAfter: () => ({ cancel() {}, pending: true }),
+      },
     },
     {
       window: { location: { pathname: "/" } },
       navigator: { userAgent: "test", onLine: true },
       document: { visibilityState: "visible" },
-      setTimeout: () => 0,
     },
   );
 }

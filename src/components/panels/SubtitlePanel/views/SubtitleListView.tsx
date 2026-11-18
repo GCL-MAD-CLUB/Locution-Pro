@@ -1,10 +1,12 @@
-import { cellEditReset } from "../../../../core/editor/cellEditReset";
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
+import { useScopedState } from "../../../../runtime/state/useScopedState";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { annotationColors } from "../../../../runtime/theme";
 import type { PanelRowSource } from "../../../../core/editor/multiSource";
-import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
+import type { VirtualItem } from "@tanstack/react-virtual";
+import type { RowVirtualizer } from "../../../../runtime/state/useRowVirtualizer";
 import { Star } from "lucide-react";
 import {
-  useEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -52,7 +54,7 @@ interface SubtitleListViewProps {
   currentCueIndex: number;
   tableStyle: CSSProperties;
   headerContent: ReactNode;
-  rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
+  rowVirtualizer: RowVirtualizer;
   virtualRows: VirtualItem[];
   thumbnailWindow: TimelineThumbnailWindowPlan;
   thumbnailTargetResolution: TimelineThumbnailResolution;
@@ -112,6 +114,8 @@ export function SubtitleListView({
   onOpenAnnotationMenu,
   cueLabel,
 }: SubtitleListViewProps) {
+  const lifetime = new RenderLifetime();
+
   const {
     activeCueId,
     selectedCueIds,
@@ -120,37 +124,25 @@ export function SubtitleListView({
     setCueRatings,
     setCueFlags,
     setCueColorLabels,
-  } = useSubtitlePanelState((state) => state);
-  const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
-  const [editingCueId, setEditingCueId] = useState<string | null>(null);
+  } = useSubtitlePanelState(lifetime, (state) => state);
+  const [activeCell, setActiveCell] = useScopedState<ActiveCell | null>(resetKey, null);
+  const [editingCueId, setEditingCueId] = useScopedState<string | null>(resetKey, null);
   const [editValue, setEditValue] = useState("");
-  const pendingCellEditRef = useRef<number | null>(null);
-  const [seenResetKey, setSeenResetKey] = useState(resetKey);
-  const editReset = cellEditReset(seenResetKey, resetKey, pendingCellEditRef.current);
-  if (editReset) {
-    setSeenResetKey(resetKey);
-    if (editReset.cancelPendingTimer && pendingCellEditRef.current !== null) {
-      window.clearTimeout(pendingCellEditRef.current);
-      pendingCellEditRef.current = null;
-    }
-    setEditingCueId(null);
-    setActiveCell(null);
-  }
-
-  useEffect(
-    () => () => {
-      cancelPendingCellEdit();
-    },
-    [],
-  );
+  const pendingCellEditRef = useRef<ScheduledTask | null>(null);
 
   function cancelPendingCellEdit() {
     if (pendingCellEditRef.current === null) {
       return;
     }
-    window.clearTimeout(pendingCellEditRef.current);
+    cancelTask(pendingCellEditRef.current);
     pendingCellEditRef.current = null;
   }
+  lifetime.useAfterCommit(
+    () => () => {
+      cancelPendingCellEdit();
+    },
+    [resetKey],
+  );
 
   function activateCell(cueId: string, columnId: ActiveColumn) {
     cancelPendingCellEdit();
@@ -181,7 +173,7 @@ export function SubtitleListView({
 
   function scheduleLabelEdit(cue: SubtitleCue) {
     cancelPendingCellEdit();
-    pendingCellEditRef.current = window.setTimeout(() => {
+    pendingCellEditRef.current = scheduleAfter(() => {
       pendingCellEditRef.current = null;
       beginLabelEdit(cue);
     }, cellEditDelayMs);
@@ -204,7 +196,7 @@ export function SubtitleListView({
     setEditingCueId(null);
   }
 
-  return (
+  return lifetime.render(
     <div className="subtitle-list-frame" role="table" aria-label="字幕列表" style={tableStyle}>
       <div className="subtitle-list-header-viewport">
         <div ref={headerRef} className="subtitle-list-header" role="row">
@@ -230,7 +222,7 @@ export function SubtitleListView({
           <div
             className="virtual-spacer"
             role="rowgroup"
-            style={{ height: `${rowVirtualizer.getTotalSize() + 8}px` }}
+            style={{ height: `${rowVirtualizer.totalSize + 8}px` }}
           >
             {virtualRows.map((virtualRow) => {
               const cue = cues[virtualRow.index];
@@ -460,6 +452,6 @@ export function SubtitleListView({
           </div>
         )}
       </div>
-    </div>
+    </div>,
   );
 }

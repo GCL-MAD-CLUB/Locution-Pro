@@ -1,3 +1,4 @@
+import type { RenderLifetime } from "../lifetime/RenderLifetime";
 import { useMemo } from "react";
 import { useBroadcastEvent } from "../events/react";
 import type { SystemIdentity } from "../systems/identity";
@@ -17,7 +18,7 @@ export interface EditCapabilityOptions {
   handlers: Partial<Record<EditOperation, EditHandler>>;
 }
 
-export function useEditCapability(options: EditCapabilityOptions) {
+export function useEditCapability(lifetime: RenderLifetime, options: EditCapabilityOptions) {
   const {
     identity,
     active,
@@ -27,29 +28,21 @@ export function useEditCapability(options: EditCapabilityOptions) {
     pasteCount = 0,
     handlers,
   } = options;
-  const can = {
-    copy: Boolean(handlers.copy && selectedCount > 0),
-    paste: Boolean(handlers.paste && !readOnly && pasteCount > 0),
-    clear: Boolean(handlers.clear && !readOnly && selectedCount > 0),
-    duplicate: Boolean(handlers.duplicate && !readOnly && selectedCount > 0),
-    selectAll: Boolean(handlers.selectAll && visibleCount > 0),
-    clearSelection: Boolean(handlers.clearSelection && selectedCount > 0),
-  };
+  const copy = Boolean(handlers.copy && selectedCount > 0);
+  const paste = Boolean(handlers.paste && !readOnly && pasteCount > 0);
+  const clear = Boolean(handlers.clear && !readOnly && selectedCount > 0);
+  const duplicate = Boolean(handlers.duplicate && !readOnly && selectedCount > 0);
+  const selectAll = Boolean(handlers.selectAll && visibleCount > 0);
+  const clearSelection = Boolean(handlers.clearSelection && selectedCount > 0);
+  const can = useMemo(
+    () => ({ copy, paste, clear, duplicate, selectAll, clearSelection }),
+    [copy, paste, clear, duplicate, selectAll, clearSelection],
+  );
   const projection = useMemo<EditCapabilityProjection>(
     () => ({ active, selectedCount, visibleCount, capabilities: can }),
-    [
-      active,
-      can.clear,
-      can.clearSelection,
-      can.copy,
-      can.duplicate,
-      can.paste,
-      can.selectAll,
-      selectedCount,
-      visibleCount,
-    ],
+    [active, can, selectedCount, visibleCount],
   );
-  usePublishProjection(EDIT_CAPABILITY_PROJECTION, identity, projection);
+  usePublishProjection(lifetime, EDIT_CAPABILITY_PROJECTION, identity, projection);
 
   async function run(operation: EditOperation) {
     const handler = handlers[operation];
@@ -60,10 +53,12 @@ export function useEditCapability(options: EditCapabilityOptions) {
     return "handled" as const;
   }
 
-  useBroadcastEvent(identity, "edit.copy.requested", () => run("copy"));
-  useBroadcastEvent(identity, "edit.paste.requested", () => run("paste"));
-  useBroadcastEvent(identity, "edit.clear.requested", () => run("clear"));
-  useBroadcastEvent(identity, "edit.duplicate.requested", () => run("duplicate"));
-  useBroadcastEvent(identity, "edit.select-all.requested", () => run("selectAll"));
-  useBroadcastEvent(identity, "edit.clear-selection.requested", () => run("clearSelection"));
+  useBroadcastEvent(lifetime, identity, "edit.copy.requested", () => run("copy"));
+  useBroadcastEvent(lifetime, identity, "edit.paste.requested", () => run("paste"));
+  useBroadcastEvent(lifetime, identity, "edit.clear.requested", () => run("clear"));
+  useBroadcastEvent(lifetime, identity, "edit.duplicate.requested", () => run("duplicate"));
+  useBroadcastEvent(lifetime, identity, "edit.select-all.requested", () => run("selectAll"));
+  useBroadcastEvent(lifetime, identity, "edit.clear-selection.requested", () =>
+    run("clearSelection"),
+  );
 }

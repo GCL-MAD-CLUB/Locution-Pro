@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { invokeCommand, runOperation } from "../../../../errors";
 import {
@@ -32,6 +33,29 @@ import type {
   StoryboardState,
 } from "../../../../types";
 import { ModalDialog } from "../../../common/ModalDialog";
+
+type Conflict = { videoIds: string[]; confirm: (mode: StoryboardDetectionMode | null) => void };
+function requestConflict(
+  videoId: string,
+  signal: AbortSignal,
+  resolvers: Set<Conflict["confirm"]>,
+  setConflicts: Dispatch<SetStateAction<Conflict[]>>,
+) {
+  return new Promise<StoryboardDetectionMode | null>(function awaitConfirmation(resolve) {
+    function confirm(mode: StoryboardDetectionMode | null) {
+      resolvers.delete(confirm);
+      signal.removeEventListener("abort", cancel);
+      resolve(mode);
+    }
+    function cancel() {
+      confirm(null);
+      setConflicts((current) => current.filter((conflict) => conflict.confirm !== confirm));
+    }
+    signal.addEventListener("abort", cancel, { once: true });
+    resolvers.add(confirm);
+    setConflicts((current) => [...current, { videoIds: [videoId], confirm }]);
+  });
+}
 
 const pending = new Set<string>();
 const detectionEventSource = eventSource("storyboard-detection");
@@ -171,12 +195,12 @@ export async function detectStoryboardVideo({
   }
 }
 
-export function useStoryboardDetection() {
+export function useStoryboardDetection(lifetime: RenderLifetime) {
   const { projects, mediaItems, storyboards, projectId, storyboardUpdated } = useProjectPort(
     ["projects", "mediaItems", "storyboards", "projectId"],
     ["storyboardUpdated"],
   );
-  const { tasks } = useTaskProgressStatus("storyboard.detect");
+  const { tasks } = useTaskProgressStatus(lifetime, "storyboard.detect");
   const [conflicts, setConflicts] = useState<
     {
       videoIds: string[];
@@ -185,7 +209,7 @@ export function useStoryboardDetection() {
   >([]);
   const conflictResolversRef = useRef(new Set<(mode: StoryboardDetectionMode | null) => void>());
   const mountedRef = useRef(true);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     mountedRef.current = true;
     setConflicts([]);
     return () => {
@@ -194,24 +218,14 @@ export function useStoryboardDetection() {
       conflictResolversRef.current.clear();
     };
   }, [projectId]);
-  const confirmConflict = useCallback((videoId: string, signal: AbortSignal) => {
+  const confirmConflict = useCallback(function confirmConflict(
+    videoId: string,
+    signal: AbortSignal,
+  ) {
     if (!mountedRef.current || signal.aborted) return Promise.resolve(null);
-    return new Promise<StoryboardDetectionMode | null>((resolve) => {
-      const confirm = (mode: StoryboardDetectionMode | null) => {
-        conflictResolversRef.current.delete(confirm);
-        signal.removeEventListener("abort", cancel);
-        resolve(mode);
-      };
-      const cancel = () => {
-        confirm(null);
-        setConflicts((current) => current.filter((conflict) => conflict.confirm !== confirm));
-      };
-      signal.addEventListener("abort", cancel, { once: true });
-      conflictResolversRef.current.add(confirm);
-      setConflicts((current) => [...current, { videoIds: [videoId], confirm }]);
-    });
+    return requestConflict(videoId, signal, conflictResolversRef.current, setConflicts);
   }, []);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const expired = new Set(
       conflicts.filter(
         (conflict) =>

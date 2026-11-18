@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { clientError } from "../../../errors";
@@ -437,13 +437,13 @@ export function PanelManagerProvider({
   store,
   children,
 }: PanelManagerProviderProps) {
-  const storeRef = useRef<StoreApi<PanelManagerState> | null>(store ?? null);
-  if (!storeRef.current && initialState) {
-    storeRef.current = createPanelManagerStore(initialState, defaultState ?? initialState);
-  }
-  return (
-    <PanelManagerContext.Provider value={storeRef.current}>{children}</PanelManagerContext.Provider>
+  const ownedStore = useMemo(
+    () =>
+      store ??
+      (initialState ? createPanelManagerStore(initialState, defaultState ?? initialState) : null),
+    [store, initialState, defaultState],
   );
+  return <PanelManagerContext.Provider value={ownedStore}>{children}</PanelManagerContext.Provider>;
 }
 
 export function usePanelManagerState<Selection>(selector: (state: PanelManagerState) => Selection) {

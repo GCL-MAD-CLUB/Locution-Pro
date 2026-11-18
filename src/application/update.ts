@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../runtime/scheduling";
 import { version as currentVersion } from "../../package.json";
 import { captureOperationError, clientError, invokeCommand } from "../errors";
 
@@ -118,6 +119,14 @@ export function compareVersions(left: string, right: string): number | null {
 }
 
 let activeCheck: Promise<UpdateCheckResult> | null = null;
+let startupCheck: Promise<UpdateCheckResult> | null = null;
+
+/** Automatic discovery belongs to the app session, including a settled failure.
+ * Remounting UI must not repeat it; explicit checks can always start a new request.
+ */
+export function checkForStartupUpdate(): Promise<UpdateCheckResult> {
+  return (startupCheck ??= checkForUpdate());
+}
 
 export function isStableUpdateVersion(version: string) {
   return /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version);
@@ -160,11 +169,11 @@ export function installPreparedUpdate(version: string, projectPath: string | nul
 }
 
 export function withUpdateTimeout<T>(operation: Promise<T>, milliseconds = 30000): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
+  let timer: ScheduledTask;
   return Promise.race([
     operation,
     new Promise<never>((_, reject) => {
-      timer = setTimeout(
+      timer = scheduleAfter(
         () =>
           reject(
             clientError(
@@ -175,7 +184,7 @@ export function withUpdateTimeout<T>(operation: Promise<T>, milliseconds = 30000
         milliseconds,
       );
     }),
-  ]).finally(() => clearTimeout(timer));
+  ]).finally(() => cancelTask(timer));
 }
 
 export function createUpdateWriteBarrier(timeout = 30000) {

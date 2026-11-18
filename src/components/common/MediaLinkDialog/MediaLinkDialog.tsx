@@ -1,4 +1,6 @@
-﻿import { open as openDialog, type DialogFilter } from "@tauri-apps/plugin-dialog";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { useScopedState } from "../../../runtime/state/useScopedState";
+import { open as openDialog, type DialogFilter } from "@tauri-apps/plugin-dialog";
 import { useMemo, useRef, useState } from "react";
 import { invokeCommand, runOperation } from "../../../errors";
 import { createFfmpegTaskId } from "../../../platform/tauri/ffmpegProgress";
@@ -171,38 +173,44 @@ function fileMatchesCandidate(
 }
 
 export function MediaLinkDialog({ candidates, mode, onAttach, onCancel }: MediaLinkDialogProps) {
+  const lifetime = new RenderLifetime();
   const candidateKey = useMemo(
     () => `${mode}:${candidates.map((candidate) => candidate.id).join("\u0000")}`,
     [candidates, mode],
   );
-  const [currentId, setCurrentId] = useState(candidates[0]?.id ?? "");
-  const [processedIds, setProcessedIds] = useState<Set<string>>(() => new Set());
-  const [skippedIds, setSkippedIds] = useState<Set<string>>(() => new Set());
+  const [currentId, setCurrentId] = useScopedState(candidateKey, candidates[0]?.id ?? "");
+  const [processedIds, setProcessedIds] = useScopedState<Set<string>>(
+    candidateKey,
+    (() => new Set())(),
+  );
+  const [skippedIds, setSkippedIds] = useScopedState<Set<string>>(
+    candidateKey,
+    (() => new Set())(),
+  );
   const [matchFileName, setMatchFileName] = useState(true);
   const [matchExtension, setMatchExtension] = useState(false);
   const [matchMediaStart, setMatchMediaStart] = useState(false);
   const [matchTapeName, setMatchTapeName] = useState(false);
   const [autoRelink, setAutoRelink] = useState(true);
   const [useMediaBrowser, setUseMediaBrowser] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [mediaBrowserOpen, setMediaBrowserOpen] = useState(false);
-  const [mediaBrowserDirectory, setMediaBrowserDirectory] = useState("");
-  const [suggestedBrowserDirectory, setSuggestedBrowserDirectory] = useState("");
-  const [suggestedBrowserPaths, setSuggestedBrowserPaths] = useState<string[]>([]);
+  const [busy, setBusy] = useScopedState(candidateKey, false);
+  const [mediaBrowserOpen, setMediaBrowserOpen] = useScopedState(candidateKey, false);
+  const [mediaBrowserDirectory, setMediaBrowserDirectory] = useScopedState(candidateKey, "");
+  const [suggestedBrowserDirectory, setSuggestedBrowserDirectory] = useScopedState(
+    candidateKey,
+    "",
+  );
+  const [suggestedBrowserPaths, setSuggestedBrowserPaths] = useScopedState<string[]>(
+    candidateKey,
+    [],
+  );
   const suggestionRequestRef = useRef(0);
-  const [seenCandidateKey, setSeenCandidateKey] = useState(candidateKey);
-  if (seenCandidateKey !== candidateKey) {
-    setSeenCandidateKey(candidateKey);
-    setCurrentId(candidates[0]?.id ?? "");
-    setProcessedIds(new Set());
-    setSkippedIds(new Set());
-    setBusy(false);
-    setMediaBrowserOpen(false);
-    setMediaBrowserDirectory("");
-    setSuggestedBrowserDirectory("");
-    setSuggestedBrowserPaths([]);
-    suggestionRequestRef.current += 1;
-  }
+  lifetime.useBeforePaint(
+    () => () => {
+      suggestionRequestRef.current += 1;
+    },
+    [candidateKey],
+  );
 
   const current =
     candidates.find((candidate) => candidate.id === currentId) ??
@@ -437,7 +445,7 @@ export function MediaLinkDialog({ candidates, mode, onAttach, onCancel }: MediaL
   }
 
   if (mediaBrowserOpen && current) {
-    return (
+    return lifetime.render(
       <MediaBrowserDialog
         title={browserTitleForMode(mode, current)}
         filters={dialogFilters(current, mode)}
@@ -460,11 +468,11 @@ export function MediaLinkDialog({ candidates, mode, onAttach, onCancel }: MediaL
             void attachPath(current, path);
           }
         }}
-      />
+      />,
     );
   }
 
-  return (
+  return lifetime.render(
     <ModalDialog
       title={titleForMode(mode)}
       className="modal-dialog-large media-link-dialog"
@@ -603,6 +611,6 @@ export function MediaLinkDialog({ candidates, mode, onAttach, onCancel }: MediaL
           </label>
         </div>
       </div>
-    </ModalDialog>
+    </ModalDialog>,
   );
 }

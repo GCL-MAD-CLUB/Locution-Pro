@@ -1,5 +1,6 @@
+import type { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { currentAppearance, subscribeAppearance, themeSvgDataUrl } from "../../../runtime/theme";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 function isAltKeyEvent(event: KeyboardEvent) {
   return event.key === "Alt" || event.code === "AltLeft" || event.code === "AltRight";
@@ -34,12 +35,16 @@ export function sprayEyedropperRemoveCursor() {
   return `url("${themeSvgDataUrl(sprayEyedropperActionSvg("remove"))}") 4 18, crosshair`;
 }
 
-export function useSprayToolModifiers(active: boolean, blockShift: boolean) {
+export function useSprayToolModifiers(
+  lifetime: RenderLifetime,
+  active: boolean,
+  blockShift: boolean,
+) {
   useSyncExternalStore(subscribeAppearance, currentAppearance);
   const [altPressed, setAltPressed] = useState(false);
   const [shiftPressed, setShiftPressed] = useState(false);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!active) {
       setAltPressed(false);
       setShiftPressed(false);

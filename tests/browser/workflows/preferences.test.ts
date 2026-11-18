@@ -71,7 +71,7 @@ test("首选项支持助记键，子菜单打开后不触发编辑菜单的同�
 test("项目首页的最暗与深色配色及交互状态完全一致，浅色保留原有配色", async ({ page, native }) => {
   void native;
   await page.addInitScript(() => {
-    (window as any).__nativeTest.preferences.show_home_on_startup = true;
+    window.__nativeTest.preferences.show_home_on_startup = true;
     localStorage.setItem(
       "locution-pro:recent-project-paths",
       JSON.stringify([{ path: "C:/projects/theme-test.lcp", projectId: "theme-test" }]),
@@ -265,7 +265,7 @@ for (const appearance of ["dark", "light", "legacy"] as const) {
   test(`启动时恢复外观：${appearance}`, async ({ page, native }) => {
     await page.goto("/tests/browser/support/blank.html");
     await page.evaluate(async (appearance) => {
-      const preferences = (window as any).__nativeTest.preferences;
+      const preferences = window.__nativeTest.preferences;
       if (appearance === "legacy") delete preferences.appearance;
       else preferences.appearance = appearance;
       const root = document.createElement("div");

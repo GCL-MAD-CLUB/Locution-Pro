@@ -1,5 +1,6 @@
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { X } from "lucide-react";
-import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { captureOperationError, invokeCommand, runBackgroundOperation } from "../../../errors";
 import "./ModalDialog.css";
 
@@ -72,9 +73,16 @@ async function playPromptSound() {
       gain.connect(context.destination);
       oscillator.start(start);
       oscillator.stop(start + 0.095);
+      if (index === notes.length - 1) {
+        oscillator.addEventListener(
+          "ended",
+          () => {
+            runBackgroundOperation("feedback.audio", () => context.close());
+          },
+          { once: true },
+        );
+      }
     });
-
-    window.setTimeout(() => runBackgroundOperation("feedback.audio", () => context.close()), 520);
   } catch (error) {
     captureOperationError("feedback.audio", error);
     // Audio feedback is best-effort; the visual alert still runs if audio is blocked.
@@ -97,21 +105,23 @@ export function ModalDialog({
   onCancel,
   onConfirm,
 }: ModalDialogProps) {
+  const lifetime = new RenderLifetime();
+
   const titleId = useId();
   const dialogRef = useRef<HTMLElement>(null);
   const [attentionActive, setAttentionActive] = useState(false);
-  const attentionTimerRef = useRef<number | null>(null);
+  const attentionFrameRef = useRef<number | null>(null);
 
-  useEffect(
+  lifetime.useAfterCommit(
     () => () => {
-      if (attentionTimerRef.current !== null) {
-        window.clearTimeout(attentionTimerRef.current);
+      if (attentionFrameRef.current !== null) {
+        cancelAnimationFrame(attentionFrameRef.current);
       }
     },
     [],
   );
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && !event.repeat) {
         onCancel();
@@ -121,7 +131,7 @@ export function ModalDialog({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onCancel]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!focusTrap) {
       return;
     }
@@ -137,7 +147,7 @@ export function ModalDialog({
     };
   }, [focusTrap, initialFocusRef]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!focusTrap) {
       return;
     }
@@ -174,22 +184,19 @@ export function ModalDialog({
 
   function requestAttention() {
     void playPromptSound();
-    if (attentionTimerRef.current !== null) {
-      window.clearTimeout(attentionTimerRef.current);
+    if (attentionFrameRef.current !== null) {
+      cancelAnimationFrame(attentionFrameRef.current);
     }
     setAttentionActive(false);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
+    attentionFrameRef.current = requestAnimationFrame(() => {
+      attentionFrameRef.current = requestAnimationFrame(() => {
+        attentionFrameRef.current = null;
         setAttentionActive(true);
-        attentionTimerRef.current = window.setTimeout(() => {
-          setAttentionActive(false);
-          attentionTimerRef.current = null;
-        }, 640);
       });
     });
   }
 
-  return (
+  return lifetime.render(
     <div className="modal-dialog-backdrop" role="presentation" onMouseDown={requestAttention}>
       <section
         ref={dialogRef}
@@ -197,6 +204,13 @@ export function ModalDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        onAnimationEnd={(event) => {
+          if (
+            event.target === event.currentTarget &&
+            event.animationName === "modal-dialog-attention-shadow"
+          )
+            setAttentionActive(false);
+        }}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="modal-dialog-header">
@@ -236,6 +250,6 @@ export function ModalDialog({
           )}
         </footer>
       </section>
-    </div>
+    </div>,
   );
 }

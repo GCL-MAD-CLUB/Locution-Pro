@@ -1,3 +1,4 @@
+import type { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
 import {
   panelMediaWorkspaces,
   readPanelMediaWorkspaces,
@@ -57,15 +58,18 @@ function persistedSources(value: unknown): MediaPanelSourceSelection[] | null {
   return value.length === 0 ? [] : sources.length ? sources : null;
 }
 
-export function usePersistedMediaPanelState({
-  selection,
-  sourceDirection,
-  sourceWidth,
-  onRestoreWorkspaces,
-  onRestoreSources,
-  onRestoreSourceDirection,
-  onRestoreSourceWidth,
-}: PersistedMediaPanelStateOptions) {
+export function usePersistedMediaPanelState(
+  lifetime: RenderLifetime,
+  {
+    selection,
+    sourceDirection,
+    sourceWidth,
+    onRestoreWorkspaces,
+    onRestoreSources,
+    onRestoreSourceDirection,
+    onRestoreSourceWidth,
+  }: PersistedMediaPanelStateOptions,
+) {
   const { projectId } = useProjectPort(["projectId"], []);
   const snapshot: PersistedMediaPanelState | null =
     selection.projectId === projectId
@@ -80,7 +84,7 @@ export function usePersistedMediaPanelState({
           sourceWidth,
         }
       : null;
-  usePersistedProjectPanelState(snapshot, (saved, restoredProjectId) => {
+  usePersistedProjectPanelState(lifetime, snapshot, (saved, restoredProjectId) => {
     selection.setSourceLocked(false);
     if (!saved || typeof saved !== "object") return;
     const workspaceState = readPanelMediaWorkspaces(saved.workspaceState);

@@ -43,7 +43,7 @@ export class SearchPanel {
   }
 
   snapshot(): Promise<SearchSnapshot> {
-    return this.page.evaluate(() => (window as any).searchSnapshot);
+    return this.page.evaluate(() => window.searchSnapshot);
   }
 
   async mode(mode: "过滤" | "高亮" | "语义", advanced = false) {

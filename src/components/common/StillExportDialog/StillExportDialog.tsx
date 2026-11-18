@@ -1,5 +1,6 @@
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   runStillExportTask,
@@ -24,6 +25,8 @@ export function StillExportDialog({
   request: StillExportRequest;
   onClose: () => void;
 }) {
+  const lifetime = new RenderLifetime();
+
   const [defaults, setDefaults] = useState<StillExportDefaults | null>(null);
   const [name, setName] = useState("");
   const [directory, setDirectory] = useState("");
@@ -33,7 +36,7 @@ export function StillExportDialog({
   const nameRef = useRef<HTMLInputElement>(null);
   const aliveRef = useRef(true);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     aliveRef.current = true;
     void (async () => {
       const outcome = await runOperation("export.run", () =>
@@ -53,7 +56,7 @@ export function StillExportDialog({
     };
   }, [request]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (defaults) {
       nameRef.current?.focus();
       nameRef.current?.select();
@@ -95,7 +98,8 @@ export function StillExportDialog({
   const validName = Boolean(
     name.trim() &&
     name === name.trim() &&
-    !/[<>:"/\\|?*\u0000-\u001f]/.test(name) &&
+    !Array.from(name).some((char) => char.charCodeAt(0) < 32) &&
+    !/[<>:"/\\|?*]/.test(name) &&
     !/[. ]$/.test(name) &&
     !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name),
   );
@@ -115,68 +119,70 @@ export function StillExportDialog({
     );
   }
 
-  return createPortal(
-    <ModalDialog
-      title="导出帧"
-      className="still-export-dialog"
-      bodyClassName="still-export-dialog-body"
-      confirmLabel="确定"
-      cancelLabel="取消"
-      closeTitle="关闭"
-      confirmDisabled={!canConfirm}
-      onCancel={onClose}
-      onConfirm={confirm}
-    >
-      <div className="still-export-field">
-        <label htmlFor="still-export-name">名称：</label>
-        <input
-          ref={nameRef}
-          id="still-export-name"
-          value={name}
-          disabled={!defaults || choosingDirectory}
-          onChange={(event) => setName(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              confirm();
-            }
-          }}
-        />
-      </div>
-      <div className="still-export-field">
-        <span>格式：</span>
-        <SelectDropdown
-          ariaLabel="格式"
-          className="still-export-format"
-          menuClassName="still-export-format-menu"
-          placement="bottom"
-          value={format}
-          items={selectDropdownItems([...stillFormats])}
-          onChange={setFormat}
-        />
-      </div>
-      <div className="still-export-path">
-        <span>路径：</span>
-        <span title={directory}>{directory}</span>
-      </div>
-      <div className="still-export-destination">
-        <label>
+  return lifetime.render(
+    createPortal(
+      <ModalDialog
+        title="导出帧"
+        className="still-export-dialog"
+        bodyClassName="still-export-dialog-body"
+        confirmLabel="确定"
+        cancelLabel="取消"
+        closeTitle="关闭"
+        confirmDisabled={!canConfirm}
+        onCancel={onClose}
+        onConfirm={confirm}
+      >
+        <div className="still-export-field">
+          <label htmlFor="still-export-name">名称：</label>
           <input
-            type="checkbox"
-            checked={importIntoProject}
-            onChange={(event) => setImportIntoProject(event.currentTarget.checked)}
+            ref={nameRef}
+            id="still-export-name"
+            value={name}
+            disabled={!defaults || choosingDirectory}
+            onChange={(event) => setName(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                confirm();
+              }
+            }}
           />
-          导入到项目中
-        </label>
-        <button
-          type="button"
-          onClick={() => void browse()}
-          disabled={!defaults || choosingDirectory}
-        >
-          浏览...
-        </button>
-      </div>
-    </ModalDialog>,
-    document.body,
+        </div>
+        <div className="still-export-field">
+          <span>格式：</span>
+          <SelectDropdown
+            ariaLabel="格式"
+            className="still-export-format"
+            menuClassName="still-export-format-menu"
+            placement="bottom"
+            value={format}
+            items={selectDropdownItems([...stillFormats])}
+            onChange={setFormat}
+          />
+        </div>
+        <div className="still-export-path">
+          <span>路径：</span>
+          <span title={directory}>{directory}</span>
+        </div>
+        <div className="still-export-destination">
+          <label>
+            <input
+              type="checkbox"
+              checked={importIntoProject}
+              onChange={(event) => setImportIntoProject(event.currentTarget.checked)}
+            />
+            导入到项目中
+          </label>
+          <button
+            type="button"
+            onClick={() => void browse()}
+            disabled={!defaults || choosingDirectory}
+          >
+            浏览...
+          </button>
+        </div>
+      </ModalDialog>,
+      document.body,
+    ),
   );
 }

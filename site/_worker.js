@@ -22,10 +22,9 @@ const platformQueries = { windows: RELEASE_PLATFORM, macos: MACOS_PLATFORM };
 export async function readLatestRelease(fetcher = fetch) {
   for (const url of MANIFEST_URLS) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), MANIFEST_TIMEOUT);
     try {
       const response = await fetcher(url, {
-        signal: controller.signal,
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(MANIFEST_TIMEOUT)]),
         headers: { Accept: "application/json", "User-Agent": "Locution-Pro-Downloads" },
         cache: "no-store",
       });
@@ -54,7 +53,7 @@ export async function readLatestRelease(fetcher = fetch) {
     } catch {
       controller.abort();
     } finally {
-      clearTimeout(timer);
+      controller.abort();
     }
   }
   return fallbackRelease();
@@ -79,7 +78,6 @@ export async function downloadRelease(request, release, fetcher = fetch) {
   }
   for (const url of [platform.cdn_url, platform.url].filter(Boolean)) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT);
     let upstream;
     let reader;
     try {
@@ -88,7 +86,11 @@ export async function downloadRelease(request, release, fetcher = fetch) {
         "Accept-Encoding": "identity",
         Range: "bytes=0-1",
       });
-      upstream = await fetcher(url, { headers, signal: controller.signal, cache: "no-store" });
+      upstream = await fetcher(url, {
+        headers,
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(DOWNLOAD_TIMEOUT)]),
+        cache: "no-store",
+      });
       if (
         ![200, 206].includes(upstream.status) ||
         !upstream.body ||
@@ -114,7 +116,6 @@ export async function downloadRelease(request, release, fetcher = fetch) {
     } catch {
       controller.abort();
     } finally {
-      clearTimeout(timer);
       controller.abort();
       if (reader) await reader.cancel().catch(() => {});
       else await upstream?.body?.cancel().catch(() => {});

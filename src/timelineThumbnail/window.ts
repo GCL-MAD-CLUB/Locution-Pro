@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { scheduleAfter, cancelTask } from "../runtime/scheduling";
+import type { RenderLifetime } from "../runtime/lifetime/RenderLifetime";
+import { useMemo, useRef, useState } from "react";
 import type { TimelineThumbnailBackfillRequest, TimelineThumbnailRequest } from "./manager";
 import { timelineThumbnailResolutions, type TimelineThumbnailResolution } from "./resolution";
 
@@ -172,33 +174,43 @@ export function timelineThumbnailWindowContains(plan: TimelineThumbnailWindowPla
   return index >= plan.targetStartIndex && index < plan.targetEndIndex;
 }
 
-export function useTimelineThumbnailWindow<Item>({
-  enabled,
-  sourceKey,
-  items,
-  getItemKey,
-  visibleRange,
-  targetResolution,
-  requestThumbnail,
-  backfillThumbnail,
-  debounceMs = defaultWindowDebounceMs,
-}: TimelineThumbnailWindowOptions<Item>) {
+export function useTimelineThumbnailWindow<Item>(
+  lifetime: RenderLifetime,
+  {
+    enabled,
+    sourceKey,
+    items,
+    getItemKey,
+    visibleRange,
+    targetResolution,
+    requestThumbnail,
+    backfillThumbnail,
+    debounceMs = defaultWindowDebounceMs,
+  }: TimelineThumbnailWindowOptions<Item>,
+) {
   const getItemKeyRef = useRef(getItemKey);
   const requestThumbnailRef = useRef(requestThumbnail);
   const backfillThumbnailRef = useRef(backfillThumbnail);
   const requestsRef = useRef(new Map<string, TimelineThumbnailWindowRequestRecord>());
   const sessionRef = useRef(0);
-  getItemKeyRef.current = getItemKey;
-  requestThumbnailRef.current = requestThumbnail;
-  backfillThumbnailRef.current = backfillThumbnail;
+  lifetime.useBeforePaint(() => {
+    getItemKeyRef.current = getItemKey;
+  });
+  lifetime.useBeforePaint(() => {
+    requestThumbnailRef.current = requestThumbnail;
+  });
+  lifetime.useBeforePaint(() => {
+    backfillThumbnailRef.current = backfillThumbnail;
+  });
 
+  const { centerIndex, endIndex, startIndex } = visibleRange;
   const rawPlan = useMemo(
-    () => createTimelineThumbnailWindowPlan(items.length, visibleRange),
-    [items.length, visibleRange.centerIndex, visibleRange.endIndex, visibleRange.startIndex],
+    () => createTimelineThumbnailWindowPlan(items.length, { centerIndex, endIndex, startIndex }),
+    [items.length, centerIndex, endIndex, startIndex],
   );
   const [debouncedPlan, setDebouncedPlan] = useState(rawPlan);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (rawPlan.signature === debouncedPlan.signature) {
       return;
     }
@@ -206,11 +218,11 @@ export function useTimelineThumbnailWindow<Item>({
       setDebouncedPlan(rawPlan);
       return;
     }
-    const timer = window.setTimeout(() => setDebouncedPlan(rawPlan), debounceMs);
-    return () => window.clearTimeout(timer);
+    const timer = scheduleAfter(() => setDebouncedPlan(rawPlan), debounceMs);
+    return () => cancelTask(timer);
   }, [debounceMs, debouncedPlan.signature, rawPlan]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!enabled || !sourceKey) {
       sessionRef.current += 1;
       for (const record of requestsRef.current.values()) {
@@ -335,7 +347,7 @@ export function useTimelineThumbnailWindow<Item>({
     })();
   }, [debouncedPlan, enabled, items, rawPlan.signature, sourceKey, targetResolution]);
 
-  useEffect(
+  lifetime.useAfterCommit(
     () => () => {
       sessionRef.current += 1;
       for (const record of requestsRef.current.values()) {

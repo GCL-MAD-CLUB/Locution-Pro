@@ -1,10 +1,11 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useRef, useState } from "react";
 
 /** Shows the storyboard-style scrollbar thumb only while the pane actually overflows. */
-export function useVerticalOverflow() {
+export function useVerticalOverflow(lifetime: RenderLifetime) {
   const ref = useRef<HTMLElement | null>(null);
   const [overflow, setOverflow] = useState(false);
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     const element = ref.current;
     if (!element) return;
     let frame: number | null = null;

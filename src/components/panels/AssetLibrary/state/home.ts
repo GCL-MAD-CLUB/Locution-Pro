@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import { usePersistedProjectPanelState } from "../../../../application/media/projectPanelPersistence";
@@ -54,16 +55,17 @@ function restoredHome(
 }
 
 /** The current project's home, restored when a project opens and saved as it changes. */
-export function useAssetLibraryHome() {
+export function useAssetLibraryHome(lifetime: RenderLifetime) {
   const { projectId } = useProjectPort(["projectId"], []);
   const state = useStore(homeStore);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     // A new, unsaved project starts with an empty home.
     if (projectId === null && homeStore.getState().projectId !== null) {
       homeStore.setState({ projectId: null, home: emptyAssetLibraryHome() });
     }
   }, [projectId]);
   usePersistedProjectPanelState<AssetLibraryHome>(
+    lifetime,
     state.projectId === projectId ? state.home : null,
     (saved, restoredProjectId) =>
       homeStore.setState((current) => restoredHome(current, saved, restoredProjectId)),

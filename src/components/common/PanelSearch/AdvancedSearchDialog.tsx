@@ -1,4 +1,6 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useScopedState } from "../../../runtime/state/useScopedState";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { useId, useRef, useState, type KeyboardEvent } from "react";
 import {
   canHighlightSearchRule,
   defaultAdvancedSearch,
@@ -23,7 +25,7 @@ export interface AdvancedSearchDraft {
 }
 
 export function AdvancedSearchDialog({
-  label,
+  label: _label,
   initial,
   semanticAvailable,
   defaultThreshold,
@@ -37,11 +39,13 @@ export function AdvancedSearchDialog({
   onApply: (value: AdvancedSearchDraft) => void;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState(initial);
+  const lifetime = new RenderLifetime();
+
+  const [draft, setDraft] = useScopedState(null, initial);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const fieldId = useId();
   const ref = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     const inputs = Array.from(ref.current?.querySelectorAll("textarea") ?? []);
     function resize(input: HTMLTextAreaElement) {
       const style = getComputedStyle(input);
@@ -66,7 +70,7 @@ export function AdvancedSearchDialog({
     inputs.forEach((input) => observer.observe(input));
     return () => observer.disconnect();
   }, [draft.query, draft.options.negativePrompts, draft.options.excludedText, draft.mode]);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const previous = document.activeElement;
     ref.current?.querySelector<HTMLTextAreaElement>("textarea:not(:disabled)")?.focus();
     return () => {
@@ -148,7 +152,7 @@ export function AdvancedSearchDialog({
     if (!error) onApply(draft);
   }
 
-  return (
+  return lifetime.render(
     <div
       ref={ref}
       className="advanced-search-modal"
@@ -264,19 +268,17 @@ export function AdvancedSearchDialog({
           />
         </div>
         {semantic ? (
-          <>
-            <div className="advanced-search-field advanced-search-text">
-              <label htmlFor={`${fieldId}-negative`}>反向描述</label>
-              <textarea
-                id={`${fieldId}-negative`}
-                {...validation("negativePrompts")}
-                rows={3}
-                value={draft.options.negativePrompts}
-                placeholder="每行一条，可留空"
-                onChange={(event) => update({ negativePrompts: event.target.value })}
-              />
-            </div>
-          </>
+          <div className="advanced-search-field advanced-search-text">
+            <label htmlFor={`${fieldId}-negative`}>反向描述</label>
+            <textarea
+              id={`${fieldId}-negative`}
+              {...validation("negativePrompts")}
+              rows={3}
+              value={draft.options.negativePrompts}
+              placeholder="每行一条，可留空"
+              onChange={(event) => update({ negativePrompts: event.target.value })}
+            />
+          </div>
         ) : (
           <>
             <div className="advanced-search-field advanced-search-text">
@@ -330,6 +332,6 @@ export function AdvancedSearchDialog({
           </div>
         )}
       </ModalDialog>
-    </div>
+    </div>,
   );
 }

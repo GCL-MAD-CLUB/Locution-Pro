@@ -1,6 +1,6 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
-  useEffect,
-  useLayoutEffect,
   useMemo,
   useId,
   useRef,
@@ -100,6 +100,8 @@ export function StoryboardTimeline({
   onRevealStoryboardShot,
   ...rulerProps
 }: StoryboardTimelineProps) {
+  const lifetime = new RenderLifetime();
+
   const { storyboards, storyboardUpdated } = useProjectPort(["storyboards"], ["storyboardUpdated"]);
   const storyboard = storyboards[videoContext];
   const shots = storyboard?.shots ?? emptyShots;
@@ -127,6 +129,8 @@ export function StoryboardTimeline({
   const dragRef = useRef<CutDrag | null>(null);
   const deselectionPointerRef = useRef<number | null>(null);
   const suppressDeselectionClickRef = useRef(false);
+  const releaseClickTaskRef = useRef<ScheduledTask | null>(null);
+  lifetime.useAfterCommit(() => () => cancelTask(releaseClickTaskRef.current), []);
   const previousShotsRef = useRef(shots);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [menu, setMenu] = useState<{ x: number; y: number; cutId?: string } | null>(null);
@@ -160,7 +164,18 @@ export function StoryboardTimeline({
   const cutFrame = Math.round(currentFrame);
   const canAdd = hasMedia && canAddStoryboardCut(storyboard, cutFrame, durationFrames);
 
-  useLayoutEffect(() => {
+  function addCut(frame = cutFrame) {
+    if (!hasMedia || !canAddStoryboardCut(storyboard, frame, durationFrames)) return;
+    onPause();
+    const id = `shot:${crypto.randomUUID()}`;
+    storyboardUpdated(videoContext, "添加切点", (current) =>
+      splitStoryboardShot(current, frame, frameRate, id, durationFrames, durationUs),
+    );
+    setSelectedIds(new Set([id]));
+    setMenu(null);
+    focusTimeline();
+  }
+  lifetime.useBeforePaint(() => {
     if (!addCutRef) return;
     addCutRef.current = addCut;
     return () => {
@@ -168,9 +183,11 @@ export function StoryboardTimeline({
     };
   });
 
-  useCloseOnOutsidePointer(Boolean(menu), () => setMenu(null), { ignorePopupMenuTargets: true });
+  useCloseOnOutsidePointer(lifetime, Boolean(menu), () => setMenu(null), {
+    ignorePopupMenuTargets: true,
+  });
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     setSelectedIds((current) => {
       const next = new Set(
         [...current].filter((id) => segments.slice(1).some((shot) => shot.id === id)),
@@ -221,18 +238,6 @@ export function StoryboardTimeline({
       removeStoryboardCuts(current, removed, durationFrames, frameRate),
     );
     setSelectedIds((current) => new Set([...current].filter((id) => !removed.has(id))));
-    setMenu(null);
-    focusTimeline();
-  }
-
-  function addCut(frame = cutFrame) {
-    if (!hasMedia || !canAddStoryboardCut(storyboard, frame, durationFrames)) return;
-    onPause();
-    const id = `shot:${crypto.randomUUID()}`;
-    storyboardUpdated(videoContext, "添加切点", (current) =>
-      splitStoryboardShot(current, frame, frameRate, id, durationFrames, durationUs),
-    );
-    setSelectedIds(new Set([id]));
     setMenu(null);
     focusTimeline();
   }
@@ -381,7 +386,9 @@ export function StoryboardTimeline({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     deselectionPointerRef.current = null;
-    window.setTimeout(() => {
+    cancelTask(releaseClickTaskRef.current);
+    releaseClickTaskRef.current = scheduleAfter(() => {
+      releaseClickTaskRef.current = null;
       suppressDeselectionClickRef.current = false;
     }, 0);
   }
@@ -401,7 +408,7 @@ export function StoryboardTimeline({
     suppressDeselectionClickRef.current = false;
   }
 
-  return (
+  return lifetime.render(
     <div
       ref={rootRef}
       className="storyboard-timeline"
@@ -647,6 +654,6 @@ export function StoryboardTimeline({
           </ModalDialog>,
           document.body,
         )}
-    </div>
+    </div>,
   );
 }

@@ -1,5 +1,6 @@
 ﻿import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
+import { useScopedState } from "../../../runtime/state/useScopedState";
 import {
   canOfferRemux,
   defaultProxyPreset,
@@ -63,14 +64,10 @@ export function ProxyCreationDialog() {
   const [frameSize, setFrameSize] = useState<ProxyFrameSize>("full");
   const [customWidth, setCustomWidth] = useState(1280);
   const [customHeight, setCustomHeight] = useState(720);
-  const [preset, setPreset] = useState<ProxyPreset>(() =>
+  const [preset, setPreset] = useScopedState<ProxyPreset>(
+    isProxyDialogOpen,
     defaultProxyPreset(project, isMacOSRuntime()),
   );
-  const [presetDialogWasOpen, setPresetDialogWasOpen] = useState(isProxyDialogOpen);
-  if (isProxyDialogOpen !== presetDialogWasOpen) {
-    setPresetDialogWasOpen(isProxyDialogOpen);
-    if (isProxyDialogOpen) setPreset(defaultProxyPreset(project, isMacOSRuntime()));
-  }
   const [watermark, setWatermark] = useState<ProxyWatermark>("none");
   const [location, setLocation] = useState<ProxyLocation>("source_proxy_folder");
   const [customLocation, setCustomLocation] = useState("");

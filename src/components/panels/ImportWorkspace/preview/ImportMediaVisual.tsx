@@ -1,8 +1,11 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { Captions, FileAudio2, FileVideo2, Image } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ImportFolderIcon } from "../browser/ImportFolderIcon";
 import { mediaKind, type ImportEntry, type ImportMetadata } from "../browser/importBrowserModel";
 import { importCover, importFrame, importMetadata, queuePreview } from "./importPreview";
+import { captureOperationError } from "../../../../errors";
+import { createLatestPreview, previewTimeUs } from "../../../../application/media/latestPreview";
 
 export function ImportMediaVisual({
   entry,
@@ -13,16 +16,23 @@ export function ImportMediaVisual({
   scrub?: boolean;
   onMetadata?: (metadata: ImportMetadata) => void;
 }) {
+  const lifetime = new RenderLifetime();
+
   const host = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(false);
   const [cover, setCover] = useState("");
   const [frame, setFrame] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [duration, setDuration] = useState(0);
-  const position = useRef(progress);
-  position.current = progress;
+  const hoverTime = useRef<number | null>(null);
+  lifetime.useBeforePaint(() => {
+    hoverTime.current = previewTimeUs(duration, progress, 100_000);
+  });
+  const previewRequest = useRef<{ request(timeUs: number): void } | null>(null);
   const reportMetadata = useRef(onMetadata);
-  reportMetadata.current = onMetadata;
+  lifetime.useBeforePaint(() => {
+    reportMetadata.current = onMetadata;
+  });
   const kind = entry.is_directory ? null : mediaKind(entry.path);
   const Icon =
     kind === "audio"
@@ -32,14 +42,14 @@ export function ImportMediaVisual({
         : kind === "subtitle"
           ? Captions
           : FileVideo2;
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const observer = new IntersectionObserver(([item]) => setVisible(item.isIntersecting), {
       rootMargin: "100px",
     });
     if (host.current) observer.observe(host.current);
     return () => observer.disconnect();
   }, []);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!visible || !kind || kind === "subtitle") return;
     let live = true;
     if (kind === "video" || kind === "image")
@@ -57,41 +67,38 @@ export function ImportMediaVisual({
     };
   }, [entry.path, visible, kind, scrub, Boolean(onMetadata)]);
   const hovering = progress !== null;
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!hovering || !duration || !scrub || kind !== "video") return;
     let live = true;
-    let timer = 0;
-    let previous = -1;
-    async function update() {
-      if (!live || position.current === null) return;
-      const time = Math.min(
-        Math.floor((duration * position.current) / 100_000) * 100_000,
-        Math.max(0, duration - 100_000),
-      );
-      if (time !== previous) {
-        previous = time;
-        const src = await queuePreview(() =>
-          live ? importFrame(entry.path, time) : Promise.resolve(""),
-        );
-        if (live && src) setFrame(src);
-      }
-      if (live) timer = window.setTimeout(() => void update(), 90);
-    }
-    timer = window.setTimeout(() => void update(), 100);
+    const request = createLatestPreview(
+      (time: number) =>
+        queuePreview(() => (live ? importFrame(entry.path, time) : Promise.resolve(""))),
+      (src) => {
+        if (src) setFrame(src);
+      },
+      (error) => captureOperationError("thumbnail.video", error),
+    );
+    previewRequest.current = request;
+    if (hoverTime.current !== null) request.request(hoverTime.current);
     return () => {
       live = false;
-      window.clearTimeout(timer);
+      request.dispose();
+      previewRequest.current = null;
       setFrame("");
     };
   }, [hovering, duration, scrub, kind, entry.path]);
-  return (
+  return lifetime.render(
     <span
       ref={host}
       className="import-media-visual"
       onPointerMove={(event) => {
         if (!scrub || kind !== "video" || event.buttons) return;
         const rect = event.currentTarget.getBoundingClientRect();
-        setProgress(Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)));
+        const next = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+        const time = previewTimeUs(duration, next, 100_000);
+        if (time !== null && time !== hoverTime.current) previewRequest.current?.request(time);
+        hoverTime.current = time;
+        setProgress(next);
       }}
       onPointerLeave={() => setProgress(null)}
     >
@@ -105,6 +112,6 @@ export function ImportMediaVisual({
       {scrub && hovering && cover && (
         <span className="import-scrub-line" style={{ left: `${progress! * 100}%` }} />
       )}
-    </span>
+    </span>,
   );
 }

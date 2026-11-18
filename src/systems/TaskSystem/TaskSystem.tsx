@@ -1,5 +1,6 @@
+import { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
 import { X } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { captureOperationError, type OperationKey, type PublicContext } from "../../errors";
 import "../../components/common/TaskProgress/TaskProgress.css";
 
@@ -145,9 +146,9 @@ function setSnapshot(nextSnapshot: TaskProgressSnapshot) {
 // import) moves it between nearly every commit. WKWebView delivers those events
 // between commits, so the forced renders chain until React aborts with
 // "Maximum update depth exceeded". Progress may trail by a frame instead.
-function useTaskProgressSnapshot() {
+function useTaskProgressSnapshot(lifetime: RenderLifetime) {
   const [current, setCurrent] = useState(getSnapshot);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const update = () => setCurrent(getSnapshot());
     update();
     return subscribe(update);
@@ -380,8 +381,11 @@ export async function cancelAllTaskProgress() {
   }
 }
 
-export function useTaskProgressStatus(operation?: OperationKey): TaskProgressStatus {
-  const { tasks } = useTaskProgressSnapshot();
+export function useTaskProgressStatus(
+  lifetime: RenderLifetime,
+  operation?: OperationKey,
+): TaskProgressStatus {
+  const { tasks } = useTaskProgressSnapshot(lifetime);
 
   return useMemo(() => {
     const visibleTasks = operation ? tasks.filter((task) => task.operation === operation) : tasks;
@@ -395,49 +399,62 @@ export function useTaskProgressStatus(operation?: OperationKey): TaskProgressSta
 }
 
 export function TaskProgress({ children }: TaskProgressProps) {
-  const { tasks } = useTaskProgressSnapshot();
+  const lifetime = new RenderLifetime();
+
+  const { tasks } = useTaskProgressSnapshot(lifetime);
 
   if (tasks.length === 0) {
-    return children;
+    return lifetime.render(children);
   }
 
   if (tasks.length === 1) {
     const task = tasks[0];
     const fillPercent = taskPercent(task);
     const percent = Math.round(fillPercent);
-    return (
-      <>
-        <div
-          className="topbar-progress"
-          title={`${task.label} ${task.state === "queued" ? "排队中" : `${percent}%`}`}
-        >
-          <span>
-            {task.label}
-            {task.state === "queued" ? "（排队中）" : ""}
-          </span>
-          <div className="topbar-progress-row">
-            <div className="topbar-progress-track">
-              <div className="topbar-progress-fill" style={{ width: `${fillPercent}%` }} />
-            </div>
-            {task.on_cancel && (
-              <button
-                className="topbar-progress-cancel"
-                onClick={() => {
-                  // The failure is already reported. Swallowing it here keeps
-                  // the click from becoming an unhandled rejection; quit still
-                  // observes the same rejected promise and stays open.
-                  void runTaskCancel(task).catch(() => undefined);
-                }}
-                title="取消任务"
-                aria-label="取消任务"
-                disabled={task.is_cancelling}
-              >
-                <X aria-hidden="true" />
-              </button>
-            )}
+    return lifetime.render(
+      <div
+        className="topbar-progress"
+        title={`${task.label} ${task.state === "queued" ? "排队中" : task.total <= 0 ? "正在处理" : `${percent}%`}`}
+      >
+        <span>
+          {task.label}
+          {task.state === "queued" ? "（排队中）" : ""}
+        </span>
+        <div className="topbar-progress-row">
+          <div
+            className="topbar-progress-track"
+            role="progressbar"
+            aria-label={task.label}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={task.total > 0 ? percent : undefined}
+          >
+            <div
+              className={`topbar-progress-fill${task.total <= 0 && task.state === "running" ? " is-indeterminate" : ""}`}
+              style={
+                task.total > 0 || task.state === "queued" ? { width: `${fillPercent}%` } : undefined
+              }
+            />
           </div>
+          {task.on_cancel && (
+            <button
+              type="button"
+              className="topbar-progress-cancel"
+              onClick={() => {
+                // The failure is already reported. Swallowing it here keeps
+                // the click from becoming an unhandled rejection; quit still
+                // observes the same rejected promise and stays open.
+                void runTaskCancel(task).catch(() => undefined);
+              }}
+              title="取消任务"
+              aria-label="取消任务"
+              disabled={task.is_cancelling}
+            >
+              <X aria-hidden="true" />
+            </button>
+          )}
         </div>
-      </>
+      </div>,
     );
   }
 
@@ -445,29 +462,39 @@ export function TaskProgress({ children }: TaskProgressProps) {
   const queued = tasks.filter((task) => task.state === "queued");
   const visibleTasks = [...running, ...queued].slice(0, TASK_PROGRESS_SLOTS);
 
-  return (
-    <>
-      <div className="topbar-progress topbar-progress-multi">
-        <span>{`正在执行 ${running.length} 项操作${queued.length ? `，${queued.length} 项排队中` : ""}...`}</span>
-        <div
-          className="topbar-progress-stack"
-          style={{ gridTemplateRows: `repeat(${visibleTasks.length}, minmax(0, 1fr))` }}
-        >
-          {visibleTasks.map((task) => {
-            const fillPercent = taskPercent(task);
-            const percent = Math.round(fillPercent);
-            return (
+  return lifetime.render(
+    <div className="topbar-progress topbar-progress-multi">
+      <span>{`正在执行 ${running.length} 项操作${queued.length ? `，${queued.length} 项排队中` : ""}...`}</span>
+      <div
+        className="topbar-progress-stack"
+        style={{ gridTemplateRows: `repeat(${visibleTasks.length}, minmax(0, 1fr))` }}
+      >
+        {visibleTasks.map((task) => {
+          const fillPercent = taskPercent(task);
+          const percent = Math.round(fillPercent);
+          return (
+            <div
+              key={task.id}
+              className="topbar-progress-track"
+              title={`${task.label} ${task.state === "queued" ? "排队中" : task.total <= 0 ? "正在处理" : `${percent}%`}`}
+              role="progressbar"
+              aria-label={task.label}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={task.total > 0 ? percent : undefined}
+            >
               <div
-                key={task.id}
-                className="topbar-progress-track"
-                title={`${task.label} ${task.state === "queued" ? "排队中" : `${percent}%`}`}
-              >
-                <div className="topbar-progress-fill" style={{ width: `${fillPercent}%` }} />
-              </div>
-            );
-          })}
-        </div>
+                className={`topbar-progress-fill${task.total <= 0 && task.state === "running" ? " is-indeterminate" : ""}`}
+                style={
+                  task.total > 0 || task.state === "queued"
+                    ? { width: `${fillPercent}%` }
+                    : undefined
+                }
+              />
+            </div>
+          );
+        })}
       </div>
-    </>
+    </div>,
   );
 }

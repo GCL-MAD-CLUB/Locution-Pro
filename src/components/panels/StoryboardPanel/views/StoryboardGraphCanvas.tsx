@@ -1,9 +1,10 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
+import { useScopedState } from "../../../../runtime/state/useScopedState";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
   memo,
   useCallback,
-  useEffect,
   useId,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -153,7 +154,7 @@ interface MarqueeGesture {
   camera: StoryboardGraphCamera;
   capture: HTMLElement | SVGPathElement;
   active: boolean;
-  timer?: number;
+  timer?: ScheduledTask;
   spray?: { historyGroupId: string };
 }
 
@@ -292,18 +293,20 @@ const GraphHighlightedEdges = memo(function GraphHighlightedEdges({
   edges: StoryboardGraph["edges"];
   nodes: StoryboardGraph["nodes"];
 }) {
-  const [retained, setRetained] = useState({ edges, nodes });
+  const lifetime = new RenderLifetime();
+
+  const [retained, setRetained] = useScopedState(null, { edges, nodes });
   const active = useMemo(() => new Set(edges), [edges]);
   const painted = new Set([...(retained.nodes === nodes ? retained.edges : []), ...edges]);
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     setRetained((previous) => ({
       nodes,
       edges: [...new Set([...(previous.nodes === nodes ? previous.edges : []), ...edges])],
     }));
-    const timer = window.setTimeout(() => setRetained({ edges, nodes }), graphHoverDurationMs);
-    return () => window.clearTimeout(timer);
+    const timer = scheduleAfter(() => setRetained({ edges, nodes }), graphHoverDurationMs);
+    return () => cancelTask(timer);
   }, [edges, nodes]);
-  return (
+  return lifetime.render(
     <>
       {[...painted].map((edge) => {
         const a = nodes[edge.source];
@@ -332,7 +335,7 @@ const GraphHighlightedEdges = memo(function GraphHighlightedEdges({
           />
         );
       })}
-    </>
+    </>,
   );
 });
 
@@ -348,11 +351,13 @@ function GraphPreviewPresence({
   enabled: boolean;
   children: (preview: StoryboardGraphPreview, exiting: boolean, onExited: () => void) => ReactNode;
 }) {
-  const [retained, setRetained] = useState(previews);
+  const lifetime = new RenderLifetime();
+
+  const [retained, setRetained] = useScopedState(null, previews);
   const active = new Map(previews.map((preview) => [preview.node.id, preview]));
   const painted = new Map(retained.map((preview) => [preview.node.id, preview]));
   for (const preview of previews) painted.set(preview.node.id, preview);
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     if (!enabled) {
       setRetained([]);
       return;
@@ -363,19 +368,21 @@ function GraphPreviewPresence({
       return [...merged.values()];
     });
     const activeIds = new Set(previews.map((preview) => preview.node.id));
-    const timer = window.setTimeout(
+    const timer = scheduleAfter(
       () => setRetained((previous) => previous.filter((preview) => activeIds.has(preview.node.id))),
       graphHoverDurationMs,
     );
-    return () => window.clearTimeout(timer);
+    return () => cancelTask(timer);
   }, [previews, enabled]);
-  return enabled
-    ? [...painted.values()].map((preview) =>
-        children(preview, !active.has(preview.node.id), () => {
-          setRetained((previous) => previous.filter((item) => item.node.id !== preview.node.id));
-        }),
-      )
-    : null;
+  return lifetime.render(
+    enabled
+      ? [...painted.values()].map((preview) =>
+          children(preview, !active.has(preview.node.id), () => {
+            setRetained((previous) => previous.filter((item) => item.node.id !== preview.node.id));
+          }),
+        )
+      : null,
+  );
 }
 
 export function StoryboardGraphCanvas({
@@ -398,6 +405,8 @@ export function StoryboardGraphCanvas({
   onActivateShot,
   children,
 }: StoryboardGraphCanvasProps) {
+  const lifetime = new RenderLifetime();
+
   const panelActive = usePanelActive();
   const stageRef = useRef<HTMLDivElement>(null);
   const nodePaintRef = useRef<SVGSVGElement>(null);
@@ -457,9 +466,13 @@ export function StoryboardGraphCanvas({
     mode: StoryboardGraphSelectionMode;
   } | null>(null);
   const selectionRef = useRef(selectedShotIds);
-  selectionRef.current = selectedShotIds;
+  lifetime.useBeforePaint(() => {
+    selectionRef.current = selectedShotIds;
+  });
   const callbacksRef = useRef({ onSelectionChange, onActivateShot, onSprayShots });
-  callbacksRef.current = { onSelectionChange, onActivateShot, onSprayShots };
+  lifetime.useBeforePaint(() => {
+    callbacksRef.current = { onSelectionChange, onActivateShot, onSprayShots };
+  });
   const commitSelection = useCallback((ids: ReadonlySet<string>) => {
     selectionRef.current = ids;
     callbacksRef.current.onSelectionChange(ids);
@@ -507,7 +520,7 @@ export function StoryboardGraphCanvas({
     beginDrag,
     moveDrag,
     endDrag,
-  } = useStoryboardGraphMotion(view?.graph, panelActive, pendingNodes, graph);
+  } = useStoryboardGraphMotion(lifetime, view?.graph, panelActive, pendingNodes, graph);
   const clusterPadding =
     (graph?.clusterPadding ?? defaultStoryboardGraphOptions.clusterPadding) * layoutProgress;
   const canvas = useMemo(
@@ -528,13 +541,13 @@ export function StoryboardGraphCanvas({
     camera: StoryboardGraphCamera;
     layoutSize?: typeof size;
   } | null>(null);
-  const loadingFrameRef = useRef<{
+  const [loadingSnapshot, setLoadingSnapshot] = useState<{
     camera: StoryboardGraphCamera;
     canvas: StoryboardGraphRect;
     size: typeof size;
   } | null>(null);
   const loadingFrame =
-    phase !== "ambient" && navigation?.graph === undefined ? loadingFrameRef.current : null;
+    phase !== "ambient" && navigation?.graph === undefined ? loadingSnapshot : null;
   const camera = useMemo(() => {
     if (loadingFrame?.size === size)
       return rescaleStoryboardGraphCamera(loadingFrame.camera, loadingFrame.canvas, canvas);
@@ -557,22 +570,27 @@ export function StoryboardGraphCanvas({
   const cameraRef = useRef(camera);
   // Wheel and pan write this ref a frame ahead of navigation state. A render
   // from the live simulation must not copy the stale state back over that write.
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     cameraRef.current = camera;
   }, [camera]);
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     if (phase === "ambient" && size.width > 1 && navigation?.layoutSize !== size)
       setNavigation({ graph, camera: initialCamera, layoutSize: size });
   }, [phase, size, navigation?.layoutSize, graph, initialCamera]);
-  useLayoutEffect(() => {
-    if (phase === "ambient" && size.width > 1) loadingFrameRef.current = { camera, canvas, size };
-    else if (phase === "ready" && loadingFrameRef.current) {
-      loadingFrameRef.current = null;
+  lifetime.useBeforePaint(() => {
+    if (phase === "ambient" && size.width > 1)
+      setLoadingSnapshot((current) =>
+        current?.camera === camera && current.canvas === canvas && current.size === size
+          ? current
+          : { camera, canvas, size },
+      );
+    else if (phase === "ready") {
+      setLoadingSnapshot(null);
       if (loadingFrame?.size === size) setNavigation({ graph, camera, layoutSize: size });
     }
   }, [phase, camera, canvas, size, loadingFrame, graph]);
   const cameraFrameRef = useRef<number | null>(null);
-  useEffect(
+  lifetime.useAfterCommit(
     () => () => {
       if (cameraFrameRef.current !== null) cancelAnimationFrame(cameraFrameRef.current);
     },
@@ -858,7 +876,7 @@ export function StoryboardGraphCanvas({
         if (node.capture.hasPointerCapture(node.id)) node.capture.releasePointerCapture(node.id);
       }
       if (selection) {
-        window.clearTimeout(selection.timer);
+        cancelTask(selection.timer);
         if (selection.capture.hasPointerCapture(selection.id))
           selection.capture.releasePointerCapture(selection.id);
         if (selection.active && restoreSelection && !selection.spray)
@@ -885,7 +903,7 @@ export function StoryboardGraphCanvas({
     resetHover();
   }, [cancelGestures, resetHover]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const keyup = (event: globalThis.KeyboardEvent) => {
       if ((event.code === "Space" || event.key === " ") && temporaryHandRef.current) {
         event.preventDefault();
@@ -906,7 +924,7 @@ export function StoryboardGraphCanvas({
     };
   }, [releaseTemporaryHand]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const stage = stageRef.current;
     if (!stage) return;
     const observer = new ResizeObserver(([entry]) =>
@@ -916,7 +934,7 @@ export function StoryboardGraphCanvas({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     resetHover();
     lastClickRef.current = null;
     lastSprayClickRef.current = null;
@@ -932,7 +950,7 @@ export function StoryboardGraphCanvas({
     resetHover,
   ]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!panelActive) {
       releaseTemporaryHand();
       cancelGestures();
@@ -940,7 +958,7 @@ export function StoryboardGraphCanvas({
     }
   }, [panelActive, releaseTemporaryHand, cancelGestures, resetHover]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const blur = () => {
       cancelGestures();
       resetHover();
@@ -961,11 +979,11 @@ export function StoryboardGraphCanvas({
       window.removeEventListener("blur", blur);
       window.removeEventListener("keydown", escape, true);
       const current = marqueeRef.current;
-      if (current) window.clearTimeout(current.timer);
+      if (current) cancelTask(current.timer);
     };
   }, [cancelGestures, resetHover]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!hoverEnabled) resetHover();
   }, [hoverEnabled, resetHover]);
 
@@ -985,7 +1003,7 @@ export function StoryboardGraphCanvas({
     [overviewCanvas],
   );
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const stage = stageRef.current;
     if (!stage) return;
     const wheel = (event: WheelEvent) => {
@@ -1033,7 +1051,7 @@ export function StoryboardGraphCanvas({
   function updateMarquee(gesture: MarqueeGesture, point: { x: number; y: number }) {
     gesture.active = true;
     gesture.point = point;
-    window.clearTimeout(gesture.timer);
+    cancelTask(gesture.timer);
     suppressClickRef.current = true;
     resetHover();
     const rect = storyboardGraphSelectionRect(gesture.start, point);
@@ -1044,7 +1062,7 @@ export function StoryboardGraphCanvas({
       );
   }
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const key = (event: globalThis.KeyboardEvent) => {
       if (!panelActive) return;
       if (
@@ -1073,7 +1091,7 @@ export function StoryboardGraphCanvas({
     };
   }, [panelActive, syncSelectionModifiers]);
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     const gesture = marqueeRef.current;
     if (!gesture || gesture.spray || gesture.mode === effectiveSelectionMode) return;
     gesture.mode = effectiveSelectionMode;
@@ -1134,7 +1152,7 @@ export function StoryboardGraphCanvas({
         active: false,
         spray: sprayActive ? { historyGroupId: newSprayHistoryGroup() } : undefined,
       };
-      gesture.timer = window.setTimeout(() => {
+      gesture.timer = scheduleAfter(() => {
         if (marqueeRef.current === gesture) updateMarquee(gesture, gesture.point);
       }, 180);
       marqueeRef.current = gesture;
@@ -1228,7 +1246,7 @@ export function StoryboardGraphCanvas({
         }
       }
       marqueeRef.current = null;
-      window.clearTimeout(selection.timer);
+      cancelTask(selection.timer);
       setMarquee(null);
       if (selection.capture.hasPointerCapture(selection.id))
         selection.capture.releasePointerCapture(selection.id);
@@ -1427,7 +1445,7 @@ export function StoryboardGraphCanvas({
     [overviewEdgePath, overviewCanvas, visibleNodes, selectedShotIds, shotAnnotations],
   );
 
-  return (
+  return lifetime.render(
     <div
       ref={stageRef}
       className={`storyboard-graph-view is-${tool} ${sprayActive ? "is-spraying" : ""} ${hoveredNode ? "has-focus" : ""} ${dragging === "canvas" ? "is-panning" : ""} ${dragging === "node" ? "is-dragging-node" : ""} ${marquee ? "is-selecting" : ""}`}
@@ -1747,6 +1765,6 @@ export function StoryboardGraphCanvas({
           />
         </svg>
       </div>
-    </div>
+    </div>,
   );
 }

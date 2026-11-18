@@ -1,8 +1,8 @@
-﻿import { convertFileSrc } from "@tauri-apps/api/core";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { Star } from "lucide-react";
 import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
 import {
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -52,6 +52,8 @@ function SubtitleCueFrameButton({
   resolution,
   onSelect,
 }: SubtitleCueFrameButtonProps) {
+  const lifetime = new RenderLifetime();
+
   const thumbnailIdentity = `${fingerprint}:${videoPath}:${cue.start_us}`;
   const [thumbnail, setThumbnail] = useState<{
     identity: string;
@@ -74,7 +76,7 @@ function SubtitleCueFrameButton({
   );
   const previewSrc = isTauriRuntime() ? convertFileSrc(previewVideoPath) : previewVideoPath;
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     let active = true;
     const commonOptions = {
       kind: "subtitle" as const,
@@ -148,11 +150,11 @@ function SubtitleCueFrameButton({
     videoPath,
   ]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     thumbnailRequestRef.current?.reprioritize(priority);
   }, [priority]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (hoverTargetTimeUs === null) {
       setHoverFrameReady(false);
       return;
@@ -194,7 +196,7 @@ function SubtitleCueFrameButton({
 
   const visibleThumbnail = thumbnail?.identity === thumbnailIdentity ? thumbnail : null;
 
-  return (
+  return lifetime.render(
     <button
       type="button"
       className="cue-frame-button"
@@ -236,7 +238,7 @@ function SubtitleCueFrameButton({
         </span>
       )}
       <VideoGlyph className="cue-frame-placeholder" aria-hidden="true" />
-    </button>
+    </button>,
   );
 }
 

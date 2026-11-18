@@ -1,11 +1,13 @@
-﻿import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { repeatEvery, cancelTask } from "../../../runtime/scheduling";
+import { useScopedState } from "../../../runtime/state/useScopedState";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   Grid2X2,
   FolderPlus,
   Link2,
   List,
   Loader2,
-  Menu,
   PanelTopOpen,
   PenLine,
   Plus,
@@ -15,7 +17,6 @@ import {
   Unlink2,
 } from "lucide-react";
 import {
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -202,13 +203,16 @@ function isImportedMediaFile(item: MediaBinItem) {
 }
 
 export function MediaBin({ rootFolderId = null }: MediaBinProps) {
+  const lifetime = new RenderLifetime();
+
   const { betaTranscodeEnabled } = usePreferencesPort(["betaTranscodeEnabled"], []);
   const panelInstanceId = usePanelInstanceId();
   const panelActive = usePanelActive();
   const focusedPanelId = usePanelManagerState((state) => state.focusedPanelId);
   const openPanel = usePanelManagerState((state) => state.openPanel);
   const identity = useStableIdentity("media-bin", panelInstanceId);
-  const { requestDetection, canRequestDetection, detectionDialog } = useStoryboardDetection();
+  const { requestDetection, canRequestDetection, detectionDialog } =
+    useStoryboardDetection(lifetime);
   const {
     projects,
     mediaFolders,
@@ -296,7 +300,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     setBindingVideoId,
   } = useMediaBinState((state) => state);
   const clipboardItemCount = useMediaBinClipboardItemCount();
-  const { isRunning: isImporting } = useTaskProgressStatus("media.import");
+  const { isRunning: isImporting } = useTaskProgressStatus(lifetime, "media.import");
   const isEditAuthority = panelActive && focusedPanelId === panelInstanceId;
   const isReadOnly = mediaBinReadOnly;
   const setReadOnly = mediaBinReadOnlyChanged;
@@ -304,9 +308,12 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
   const [contextMenu, setContextMenu] = useState<MediaBinContextMenuState | null>(null);
   const [linkDialog, setLinkDialog] = useState<MediaLinkDialogState | null>(null);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
-  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+  const [expandedFolderEdits, setExpandedFolderIds] = useState<Set<string>>(new Set());
   const [collapsedMediaIds, setCollapsedMediaIds] = useState<Set<string>>(new Set());
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(rootFolderId);
+  const [folderEdit, setCurrentFolderId] = useScopedState<string | null>(
+    rootFolderId,
+    rootFolderId,
+  );
   const rootFolder = rootFolderId
     ? (mediaFolders.find((folder) => folder.id === rootFolderId) ?? null)
     : null;
@@ -322,6 +329,15 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
   const scopedFolders = useMemo(
     () => mediaFolders.filter((folder) => scopedFolderIds.has(folder.id)),
     [mediaFolders, scopedFolderIds],
+  );
+  const folderNavigation = useMemo(
+    () => mediaBinFolderNavigation(folderEdit, rootFolderId, scopedFolderIds, expandedFolderEdits),
+    [folderEdit, rootFolderId, scopedFolderIds, expandedFolderEdits],
+  );
+  const currentFolderId = folderNavigation.currentFolderId;
+  const expandedFolderIds = useMemo(
+    () => new Set(folderNavigation.expandedFolderIds),
+    [folderNavigation.expandedFolderIds],
   );
   const scopedItems = useMemo(
     () =>
@@ -556,7 +572,11 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
       return result;
     }
 
-    const appendFolder = (folder: MediaBinFolder, depth: number, ancestorMatched: boolean) => {
+    const appendFolder = function appendFolder(
+      folder: MediaBinFolder,
+      depth: number,
+      ancestorMatched: boolean,
+    ) {
       const matchesFolder = folder.name.toLocaleLowerCase().includes(normalizedQuery);
       if (normalizedQuery && !ancestorMatched && !folderHasMatch(folder)) {
         return;
@@ -589,7 +609,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
   ]);
 
   const analysisRetryAfter = useRef(new Map<string, number>());
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) return;
     let disposed = false;
     let checking = false;
@@ -628,43 +648,30 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     // Import scheduling records pending analysis before this effect runs, so the
     // first check does not need a delay to avoid a duplicate enqueue.
     void checkAnalysis();
-    const retry = window.setInterval(() => void checkAnalysis(), 60_000);
+    const retry = repeatEvery(() => void checkAnalysis(), 60_000);
     return () => {
       disposed = true;
-      window.clearInterval(retry);
+      cancelTask(retry);
     };
   }, [projects, mediaItems]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (isReadOnly && bindingPopoverOpen) {
       setBindingPopoverOpen(false);
     }
   }, [bindingPopoverOpen, isReadOnly, setBindingPopoverOpen]);
 
-  useCloseOnOutsidePointer(Boolean(contextMenu), () => setContextMenu(null), {
+  useCloseOnOutsidePointer(lifetime, Boolean(contextMenu), () => setContextMenu(null), {
     capturePointerdown: true,
     ignorePopupMenuTargets: true,
   });
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const nextSelection = Array.from(selectedIds).filter((itemId) => scopedEntryIds.has(itemId));
     if (nextSelection.length !== selectedIds.size) {
       selectItems(nextSelection);
     }
   }, [scopedEntryIds, selectItems, selectedIds]);
-
-  const folderNavigation = mediaBinFolderNavigation(
-    currentFolderId,
-    rootFolderId,
-    scopedFolderIds,
-    expandedFolderIds,
-  );
-  if (folderNavigation.currentFolderId !== currentFolderId) {
-    setCurrentFolderId(folderNavigation.currentFolderId);
-  }
-  if (folderNavigation.expandedFolderIds !== expandedFolderIds) {
-    setExpandedFolderIds(new Set(folderNavigation.expandedFolderIds));
-  }
 
   function focusMediaBinEntry(entryId: string) {
     const folder = scopedFolders.find((candidate) => candidate.id === entryId);
@@ -1061,7 +1068,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     messagePublished(`已复制所选内容并创建媒体箱“${folder.name}”。`);
   }
 
-  useEditCapability({
+  useEditCapability(lifetime, {
     identity,
     active: isEditAuthority,
     selectedCount: selectedIds.size,
@@ -1226,7 +1233,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     makeMediaOffline(selectedOnlineItems);
   }
 
-  useMediaSelectionCapability({
+  useMediaSelectionCapability(lifetime, {
     identity,
     active: isEditAuthority,
     offlineSelectionCount: directlySelectedOfflineItems.length,
@@ -1314,7 +1321,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     }
   }
 
-  useExportCapability({
+  useExportCapability(lifetime, {
     identity,
     active: isEditAuthority,
     selectedCount: buildCurrentMediaBinSource()?.clips.length ?? 0,
@@ -1355,7 +1362,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     });
   }
 
-  return (
+  return lifetime.render(
     <>
       <section ref={panelRef} className="media-bin-panel" tabIndex={-1}>
         <div className="media-bin-project-row">
@@ -2111,6 +2118,6 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
           document.body,
         )}
       {detectionDialog}
-    </>
+    </>,
   );
 }

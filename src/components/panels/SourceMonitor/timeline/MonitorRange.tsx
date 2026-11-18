@@ -1,4 +1,5 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useRef, useState } from "react";
 import type { CSSProperties, PointerEventHandler } from "react";
 import { clampTimelineStartFrame } from "../../../../core/editor/timeline";
 
@@ -67,11 +68,17 @@ export function MonitorRange({
   onTimelineStartFrameChange,
   onTimelineSpanFramesChange,
 }: MonitorRangeProps) {
+  const lifetime = new RenderLifetime();
+
   const rangeRef = useRef<HTMLDivElement | null>(null);
   const timelineStartFrameRef = useRef(timelineStartFrame);
-  timelineStartFrameRef.current = timelineStartFrame;
+  lifetime.useBeforePaint(() => {
+    timelineStartFrameRef.current = timelineStartFrame;
+  });
   const timelineSpanFramesRef = useRef(timelineSpanFrames);
-  timelineSpanFramesRef.current = timelineSpanFrames;
+  lifetime.useBeforePaint(() => {
+    timelineSpanFramesRef.current = timelineSpanFrames;
+  });
   const [rangeWidthPx, setRangeWidthPx] = useState(0);
   const [rangeMinBarWidthPx, setRangeMinBarWidthPx] = useState(0);
   const [activeRangeHandle, setActiveRangeHandle] = useState<ActiveRangeHandle>(null);
@@ -84,7 +91,7 @@ export function MonitorRange({
     "--monitor-range-width": `${indicatorWidthRatio * 100}%`,
   } as CSSProperties;
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const range = rangeRef.current;
     if (!range) {
       return;
@@ -104,7 +111,54 @@ export function MonitorRange({
     return () => resizeObserver.disconnect();
   }, []);
 
-  useEffect(() => {
+  function shiftTimeline(deltaFrames: number) {
+    if (!hasMedia || durationFrames <= 0) {
+      return;
+    }
+    const currentStart = timelineStartFrameRef.current;
+    const currentSpan = timelineSpanFramesRef.current;
+    const nextStart = clampTimelineStartFrame(
+      currentStart + deltaFrames,
+      currentSpan,
+      durationFrames,
+    );
+    timelineStartFrameRef.current = nextStart;
+    onTimelineStartFrameChange(nextStart);
+  }
+  function resizeTimeline(deltaPx: number, anchorRatio = 0.5) {
+    if (!hasMedia || durationFrames <= 0) {
+      return;
+    }
+    const currentStart = timelineStartFrameRef.current;
+    const currentSpan = timelineSpanFramesRef.current;
+    const scale = Math.exp(clamp(deltaPx, -1200, 1200) * MONITOR_RANGE_ZOOM_SENSITIVITY);
+    const nextSpan = clamp(currentSpan * scale, minTimelineSpanFrames, durationFrames);
+    const anchorFrame = currentStart + currentSpan * anchorRatio;
+    const nextStart = clampTimelineStartFrame(
+      anchorFrame - nextSpan * anchorRatio,
+      nextSpan,
+      durationFrames,
+    );
+
+    timelineSpanFramesRef.current = nextSpan;
+    timelineStartFrameRef.current = nextStart;
+    onTimelineSpanFramesChange(nextSpan);
+    onTimelineStartFrameChange(nextStart);
+  }
+  function handleIndicatorWheel(event: WheelEvent) {
+    if (!hasMedia) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const delta = wheelDeltaPx(event);
+    if (event.altKey) {
+      shiftTimeline(delta * timelineSpanFramesRef.current * MONITOR_RANGE_SCROLL_SENSITIVITY);
+      return;
+    }
+    resizeTimeline(delta);
+  }
+  lifetime.useAfterCommit(() => {
     const range = rangeRef.current;
     if (!range) {
       return;
@@ -191,56 +245,6 @@ export function MonitorRange({
     return clampTimelineStartFrame(centerProgress * maxStartFrame, spanFrames, durationFrames);
   }
 
-  function shiftTimeline(deltaFrames: number) {
-    if (!hasMedia || durationFrames <= 0) {
-      return;
-    }
-    const currentStart = timelineStartFrameRef.current;
-    const currentSpan = timelineSpanFramesRef.current;
-    const nextStart = clampTimelineStartFrame(
-      currentStart + deltaFrames,
-      currentSpan,
-      durationFrames,
-    );
-    timelineStartFrameRef.current = nextStart;
-    onTimelineStartFrameChange(nextStart);
-  }
-
-  function resizeTimeline(deltaPx: number, anchorRatio = 0.5) {
-    if (!hasMedia || durationFrames <= 0) {
-      return;
-    }
-    const currentStart = timelineStartFrameRef.current;
-    const currentSpan = timelineSpanFramesRef.current;
-    const scale = Math.exp(clamp(deltaPx, -1200, 1200) * MONITOR_RANGE_ZOOM_SENSITIVITY);
-    const nextSpan = clamp(currentSpan * scale, minTimelineSpanFrames, durationFrames);
-    const anchorFrame = currentStart + currentSpan * anchorRatio;
-    const nextStart = clampTimelineStartFrame(
-      anchorFrame - nextSpan * anchorRatio,
-      nextSpan,
-      durationFrames,
-    );
-
-    timelineSpanFramesRef.current = nextSpan;
-    timelineStartFrameRef.current = nextStart;
-    onTimelineSpanFramesChange(nextSpan);
-    onTimelineStartFrameChange(nextStart);
-  }
-
-  function handleIndicatorWheel(event: WheelEvent) {
-    if (!hasMedia) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    const delta = wheelDeltaPx(event);
-    if (event.altKey) {
-      shiftTimeline(delta * timelineSpanFramesRef.current * MONITOR_RANGE_SCROLL_SENSITIVITY);
-      return;
-    }
-    resizeTimeline(delta);
-  }
-
   function beginRangeDrag(): RangeDragUpdate | null {
     if (!hasMedia || durationFrames <= 0) {
       return null;
@@ -317,38 +321,37 @@ export function MonitorRange({
 
   function handleRangeHandlePointerDown(
     side: "start" | "end",
-  ): PointerEventHandler<HTMLButtonElement> {
-    return (event) => {
-      if (!hasMedia) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      const rect = rangeRef.current?.getBoundingClientRect();
-      const controller = beginRangeHandleDrag(side);
-      if (!rect || !controller) {
-        controller?.end();
-        return;
-      }
+    event: Parameters<PointerEventHandler<HTMLButtonElement>>[0],
+  ) {
+    if (!hasMedia) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const rect = rangeRef.current?.getBoundingClientRect();
+    const controller = beginRangeHandleDrag(side);
+    if (!rect || !controller) {
+      controller?.end();
+      return;
+    }
 
-      const startX = event.clientX;
-      const handleMove = (moveEvent: globalThis.PointerEvent) => {
-        controller.update((moveEvent.clientX - startX) / rect.width);
-      };
-      const handleUp = () => {
-        controller.end();
-        window.removeEventListener("pointermove", handleMove);
-        window.removeEventListener("pointerup", handleUp);
-        window.removeEventListener("pointercancel", handleUp);
-      };
-
-      window.addEventListener("pointermove", handleMove);
-      window.addEventListener("pointerup", handleUp, { once: true });
-      window.addEventListener("pointercancel", handleUp, { once: true });
+    const startX = event.clientX;
+    const handleMove = (moveEvent: globalThis.PointerEvent) => {
+      controller.update((moveEvent.clientX - startX) / rect.width);
     };
+    const handleUp = () => {
+      controller.end();
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
+    };
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+    window.addEventListener("pointercancel", handleUp, { once: true });
   }
 
-  return (
+  return lifetime.render(
     <div ref={rangeRef} className={`monitor-range ${hasMedia ? "" : "empty-state"}`} tabIndex={-1}>
       <span className="monitor-range-min-width-probe" aria-hidden="true" />
       <div className="monitor-range-track">
@@ -363,7 +366,9 @@ export function MonitorRange({
               activeRangeHandle === "start" || activeRangeHandle === "both" ? "active" : ""
             }`}
             disabled={!hasMedia}
-            onPointerDown={hasMedia ? handleRangeHandlePointerDown("start") : undefined}
+            onPointerDown={
+              hasMedia ? (event) => handleRangeHandlePointerDown("start", event) : undefined
+            }
             aria-label="调整左边界"
           />
           <button
@@ -372,11 +377,13 @@ export function MonitorRange({
               activeRangeHandle === "end" || activeRangeHandle === "both" ? "active" : ""
             }`}
             disabled={!hasMedia}
-            onPointerDown={hasMedia ? handleRangeHandlePointerDown("end") : undefined}
+            onPointerDown={
+              hasMedia ? (event) => handleRangeHandlePointerDown("end", event) : undefined
+            }
             aria-label="调整右边界"
           />
         </div>
       </div>
-    </div>
+    </div>,
   );
 }

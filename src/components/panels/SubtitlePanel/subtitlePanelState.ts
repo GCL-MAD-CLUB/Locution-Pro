@@ -1,9 +1,10 @@
+import type { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import {
   defaultAdvancedSearch,
   defaultSemanticThreshold,
   type AdvancedSearchOptions,
 } from "../../../core/editor/textSearch";
-import { useLayoutEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { panelSessionForContext } from "../../../core/editor/panelSourceSelection";
 import { withoutEmptySelectionFilter } from "../../../core/editor/selectionFilter";
 import { scopedSubtitles } from "../../../core/editor/multiSource";
@@ -216,6 +217,7 @@ const useSubtitlePanelUiState = createPanelState<SubtitlePanelUiState>(() => (se
 }));
 
 export function useSubtitlePanelState<Selection>(
+  lifetime: RenderLifetime,
   selector: (state: SubtitlePanelState) => Selection,
   trackContext?: string,
   workspaceId?: number | null,
@@ -235,7 +237,7 @@ export function useSubtitlePanelState<Selection>(
     trackContext: context,
     workspaceId: nextWorkspaceId,
   };
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     if (trackContext !== undefined) storedUiState.syncTrackContext(trackContext, nextWorkspaceId);
   }, [trackContext, nextWorkspaceId, storedUiState.syncTrackContext]);
   const { subtitles, subtitleUpdated } = useProjectPort(["subtitles"], ["subtitleUpdated"]);

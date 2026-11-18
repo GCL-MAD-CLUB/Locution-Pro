@@ -1,3 +1,5 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../runtime/scheduling";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { Check, ChevronRight } from "lucide-react";
 import {
   Children,
@@ -6,8 +8,6 @@ import {
   isValidElement,
   useCallback,
   useContext,
-  useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -37,16 +37,21 @@ interface UseCloseOnOutsidePointerOptions {
  * clicking anywhere, pressing Escape, resizing the window, or losing window focus.
  */
 export function useCloseOnOutsidePointer(
+  lifetime: RenderLifetime,
   open: boolean,
   onClose: () => void,
   options: UseCloseOnOutsidePointerOptions = {},
 ) {
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  lifetime.useBeforePaint(() => {
+    onCloseRef.current = onClose;
+  });
   const optionsRef = useRef(options);
-  optionsRef.current = options;
+  lifetime.useBeforePaint(() => {
+    optionsRef.current = options;
+  });
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!open) {
       return;
     }
@@ -132,6 +137,8 @@ export function PopupMenu({
   onPointerDown,
   onContextMenu,
 }: PopupMenuProps) {
+  const lifetime = new RenderLifetime();
+
   const menuRef = useRef<HTMLDivElement | null>(null);
   const viewportLayoutRef = useRef(initialViewportLayout);
   const positionedRef = useRef(false);
@@ -225,7 +232,7 @@ export function PopupMenu({
     submenuAnchorTop,
   ]);
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     fitToViewport();
     if (!positionedRef.current) {
       positionedRef.current = true;
@@ -233,7 +240,7 @@ export function PopupMenu({
     }
   }, [children, fitToViewport, style]);
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     const menu = menuRef.current;
     if (!menu) {
       return;
@@ -249,7 +256,7 @@ export function PopupMenu({
     };
   }, [fitToViewport]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!enableMnemonics) {
       return;
     }
@@ -295,7 +302,7 @@ export function PopupMenu({
       : undefined,
   ].filter(Boolean);
 
-  return (
+  return lifetime.render(
     <div
       ref={menuRef}
       className={["popup-menu", className].filter(Boolean).join(" ")}
@@ -312,7 +319,7 @@ export function PopupMenu({
       onContextMenu={onContextMenu}
     >
       {children}
-    </div>
+    </div>,
   );
 }
 
@@ -430,37 +437,24 @@ export function PopupMenuSelectionGroup({
       `Popup menu selection value is not unique: ${duplicateValue}`,
     );
   }
-  const itemKey = items.map((item) => `${item.value}:${item.disabled}`).join("\u0000");
-  const initialValueRef = useRef<string | null | undefined>(undefined);
-  if (initialValueRef.current === undefined) {
-    initialValueRef.current =
-      items.find((item) => item.value === defaultValue && !item.disabled)?.value ??
-      items.find((item) => !item.disabled)?.value ??
-      items[0]?.value ??
-      null;
-  }
-  const [selectedValue, setSelectedValue] = useState(initialValueRef.current);
-  const selectedValueRef = useRef(selectedValue);
-  const [seenItemKey, setSeenItemKey] = useState(itemKey);
-  if (seenItemKey !== itemKey) {
-    setSeenItemKey(itemKey);
-    const fallbackValue = fallbackSelectionValue(items, selectedValueRef.current);
-    if (fallbackValue !== undefined && fallbackValue !== selectedValueRef.current) {
-      selectedValueRef.current = fallbackValue;
-      setSelectedValue(fallbackValue);
-    }
-  }
+  const [selection, setSelectedValue] = useState<string | null>(null);
+  const requestedSelection = selection ?? defaultValue ?? null;
+  const fallbackValue = fallbackSelectionValue(items, requestedSelection);
+  const selectedValue = fallbackValue === undefined ? requestedSelection : fallbackValue;
 
   const selectValue = useCallback(
     (value: string) => {
-      if (selectedValueRef.current === value) {
+      if (selectedValue === value) {
         return;
       }
-      selectedValueRef.current = value;
       setSelectedValue(value);
       onValueChange?.(value);
     },
-    [onValueChange],
+    [onValueChange, selectedValue],
+  );
+  const contextValue = useMemo(
+    () => ({ selectedValue, selectValue }),
+    [selectedValue, selectValue],
   );
 
   if (items.length === 0) {
@@ -468,7 +462,7 @@ export function PopupMenuSelectionGroup({
   }
 
   return (
-    <PopupMenuSelectionGroupContext.Provider value={{ selectedValue, selectValue }}>
+    <PopupMenuSelectionGroupContext.Provider value={contextValue}>
       {children}
     </PopupMenuSelectionGroupContext.Provider>
   );
@@ -551,17 +545,23 @@ export function PopupMenuSubmenu({
   menuClassName,
   onOpenChange,
 }: PopupMenuSubmenuProps) {
+  const lifetime = new RenderLifetime();
+
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
-  const hoverTimer = useRef<number | null>(null);
+  const hoverTimer = useRef<ScheduledTask | null>(null);
   const openRef = useRef(open);
-  openRef.current = open;
+  lifetime.useBeforePaint(() => {
+    openRef.current = open;
+  });
   const onOpenChangeRef = useRef(onOpenChange);
-  onOpenChangeRef.current = onOpenChange;
+  lifetime.useBeforePaint(() => {
+    onOpenChangeRef.current = onOpenChange;
+  });
 
   const clearHoverTimer = useCallback(() => {
     if (hoverTimer.current !== null) {
-      window.clearTimeout(hoverTimer.current);
+      cancelTask(hoverTimer.current);
       hoverTimer.current = null;
     }
   }, []);
@@ -573,7 +573,7 @@ export function PopupMenuSubmenu({
     (next: boolean) => {
       clearHoverTimer();
       if (openRef.current === next) return;
-      hoverTimer.current = window.setTimeout(
+      hoverTimer.current = scheduleAfter(
         () => {
           hoverTimer.current = null;
           if (openRef.current !== next) onOpenChangeRef.current(next);
@@ -584,7 +584,7 @@ export function PopupMenuSubmenu({
     [clearHoverTimer],
   );
 
-  useEffect(() => clearHoverTimer, [clearHoverTimer]);
+  lifetime.useAfterCommit(() => clearHoverTimer, [clearHoverTimer]);
 
   const updateAnchor = useCallback(() => {
     const next = hostRef.current?.getBoundingClientRect() ?? null;
@@ -600,7 +600,7 @@ export function PopupMenuSubmenu({
     );
   }, []);
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     if (!open) {
       setAnchor(null);
       return;
@@ -614,7 +614,7 @@ export function PopupMenuSubmenu({
     };
   }, [open, updateAnchor]);
 
-  return (
+  return lifetime.render(
     <div
       ref={hostRef}
       className="popup-menu-submenu"
@@ -657,6 +657,6 @@ export function PopupMenuSubmenu({
           </PopupMenu>,
           document.body,
         )}
-    </div>
+    </div>,
   );
 }

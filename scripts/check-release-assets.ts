@@ -94,7 +94,7 @@ export async function checkReleaseAssets({
     .split(/\r?\n/u);
   const checksums = new Map<string, string>();
   for (const line of lines) {
-    const match = /^([a-f0-9]{64})  (.+)$/u.exec(line);
+    const match = /^([a-f0-9]{64}) {2}(.+)$/u.exec(line);
     if (
       !match ||
       checksums.has(match[2]) ||

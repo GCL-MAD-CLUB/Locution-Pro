@@ -1,5 +1,7 @@
+import { repeatEvery, cancelTask } from "../../../runtime/scheduling";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { ChevronLeft, Search, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useMemo, useRef, useState, type PointerEvent } from "react";
 import { invokeCommand, runOperation } from "../../../errors";
 import { isTauriRuntime } from "../../../platform/tauri/runtime";
 import type { RecentProjectEntry } from "../../../types";
@@ -53,6 +55,8 @@ export function ProjectHome({
   onNew,
   onOpen,
 }: Props) {
+  const lifetime = new RenderLifetime();
+
   const layerRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -68,10 +72,10 @@ export function ProjectHome({
     ascending: false,
   });
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
     dialogRef.current?.focus();
-    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    const timer = repeatEvery(() => setNow(Date.now()), 30000);
     const observer = new ResizeObserver(() => {
       const layer = layerRef.current;
       if (!layer) return;
@@ -96,17 +100,17 @@ export function ProjectHome({
     });
     if (layerRef.current) observer.observe(layerRef.current);
     return () => {
-      window.clearInterval(timer);
+      cancelTask(timer);
       observer.disconnect();
       previousFocus?.focus();
     };
   }, []);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!suspended) dialogRef.current?.focus();
   }, [suspended]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime() || !projects.length) return;
     let cancelled = false;
     void runOperation("storage.recentPaths", () =>
@@ -195,7 +199,7 @@ export function ProjectHome({
     setBounds({ x, y, width, height });
   }
 
-  return (
+  return lifetime.render(
     <div className="project-home-layer" ref={layerRef}>
       <section
         className="project-home"
@@ -413,6 +417,6 @@ export function ProjectHome({
           />
         ))}
       </section>
-    </div>
+    </div>,
   );
 }

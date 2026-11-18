@@ -505,7 +505,7 @@ test("text columns and location sort, with empty values after filled ones", () =
   deepEqual(order("source", "descending"), ["z", "x", "y"]);
   deepEqual(order("subtitle", "ascending"), ["z", "x", "y"]);
   const located = [entry("deep", "f1"), entry("top", null)];
-  const where = (_root: string, folderId: string | null) => (folderId ? "字幕\a" : "字幕");
+  const where = (_root: string, folderId: string | null) => (folderId ? "字幕a" : "字幕");
   deepEqual(
     library
       .sortedAssetLibraryNodes([], located, { key: "location", direction: "ascending" }, where)

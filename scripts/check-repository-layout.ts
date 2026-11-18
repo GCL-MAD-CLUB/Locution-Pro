@@ -33,6 +33,17 @@ for (const [name, command] of Object.entries(scripts)) {
 }
 
 function typescriptSyntaxErrors(file: string) {
+  // Declaration files have no JavaScript output and cannot be transpiled.
+  if (file.endsWith(".d.ts")) {
+    return ts
+      .createProgram([resolve(root, file)], {
+        noEmit: true,
+        noResolve: true,
+        noLib: true,
+        types: [],
+      })
+      .getSyntacticDiagnostics();
+  }
   const result = ts.transpileModule(readFileSync(resolve(root, file), "utf8"), {
     fileName: file,
     reportDiagnostics: true,

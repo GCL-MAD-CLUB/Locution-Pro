@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useState } from "react";
 import { ExportField } from "../../ExportWorkspace";
 import {
   effectAvailable,
@@ -34,11 +35,13 @@ export function TranscodeVideoTab({
   sourceInfo,
   update,
 }: TranscodeTabProps) {
+  const lifetime = new RenderLifetime();
+
   const { video } = settings;
   const copy = video.codec === "copy";
   const traits = videoEncoderTraits(video.codec);
   const [pixelFormats, setPixelFormats] = useState<string[]>([]);
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     let live = true;
     setPixelFormats([]);
     void loadTranscodeCodecDetails("encoder", video.codec).then((details) => {
@@ -55,7 +58,7 @@ export function TranscodeVideoTab({
   const bitrateMode =
     video.rateControl === "vbr" || video.rateControl === "cbr" || video.rateControl === "twoPass";
 
-  return (
+  return lifetime.render(
     <div className="transcode-tab">
       <h3 className="export-settings-subheading">基本视频设置</h3>
       <ExportField label="编码器">
@@ -310,6 +313,6 @@ export function TranscodeVideoTab({
           }}
         />
       </ExportField>
-    </div>
+    </div>,
   );
 }

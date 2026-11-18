@@ -1,3 +1,4 @@
+import type { RenderLifetime } from "../lifetime/RenderLifetime";
 import { useMemo } from "react";
 import { captureOperationError } from "../../errors";
 import { useBroadcastEvent } from "../events/react";
@@ -17,17 +18,20 @@ export interface ExportCapabilityOptions {
 }
 
 /** Publishes the focused panel's export availability and handles global export commands. */
-export function useExportCapability(options: ExportCapabilityOptions) {
+export function useExportCapability(lifetime: RenderLifetime, options: ExportCapabilityOptions) {
   const { identity, active, selectedCount, hasLastSettings, handlers } = options;
-  const capabilities = {
-    configure: selectedCount > 0,
-    quick: selectedCount > 0 && hasLastSettings,
-  };
+  const capabilities = useMemo(
+    () => ({
+      configure: selectedCount > 0,
+      quick: selectedCount > 0 && hasLastSettings,
+    }),
+    [selectedCount, hasLastSettings],
+  );
   const projection = useMemo<ExportCapabilityProjection>(
     () => ({ active, selectedCount, capabilities }),
-    [active, capabilities.configure, capabilities.quick, selectedCount],
+    [active, capabilities, selectedCount],
   );
-  usePublishProjection(EXPORT_CAPABILITY_PROJECTION, identity, projection);
+  usePublishProjection(lifetime, EXPORT_CAPABILITY_PROJECTION, identity, projection);
 
   function run(operation: ExportOperation) {
     if (!active || !capabilities[operation]) {
@@ -46,6 +50,8 @@ export function useExportCapability(options: ExportCapabilityOptions) {
     return "handled" as const;
   }
 
-  useBroadcastEvent(identity, "export.configure-selection.requested", () => run("configure"));
-  useBroadcastEvent(identity, "export.quick-selection.requested", () => run("quick"));
+  useBroadcastEvent(lifetime, identity, "export.configure-selection.requested", () =>
+    run("configure"),
+  );
+  useBroadcastEvent(lifetime, identity, "export.quick-selection.requested", () => run("quick"));
 }

@@ -178,8 +178,7 @@ test("proxy generation task reports success, cancellation, and failure", async (
   ]);
   assert.deepEqual(ok.events, ["update", "remove"]);
 
-  let cancelled: ReturnType<typeof taskModule>;
-  cancelled = taskModule(async () => {
+  const cancelled = taskModule(async () => {
     await cancelled.cancel();
     throw new Error("killed");
   });

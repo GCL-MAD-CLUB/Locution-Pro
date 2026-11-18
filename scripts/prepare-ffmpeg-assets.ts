@@ -40,10 +40,8 @@ const outputs = {
 function download(url: string, outputPath: string, redirects = 0): Promise<void> {
   return new Promise<void>((resolvePromise, rejectPromise) => {
     let settled = false;
-    let request: ReturnType<typeof https.get> | undefined;
     let responseStream: IncomingMessage | undefined;
     let outputStream: ReturnType<typeof createWriteStream> | undefined;
-    let timeout: NodeJS.Timeout | undefined;
     const rejectOnce = (error: Error): void => {
       if (settled) return;
       settled = true;
@@ -51,51 +49,55 @@ function download(url: string, outputPath: string, redirects = 0): Promise<void>
       rmSync(outputPath, { force: true });
       rejectPromise(error);
     };
-    timeout = setTimeout(() => {
+    const timeout = setTimeout(() => {
       const error = new Error(`Download timed out after ${downloadTimeoutMilliseconds}ms: ${url}`);
       request?.destroy(error);
       responseStream?.destroy(error);
       outputStream?.destroy(error);
       rejectOnce(error);
     }, downloadTimeoutMilliseconds);
-    request = https.get(url, { headers: { "User-Agent": "Locution Pro-build" } }, (response) => {
-      responseStream = response;
-      const status = response.statusCode ?? 0;
-      const location = response.headers.location;
-      if (status >= 300 && status < 400 && location) {
-        response.resume();
-        if (redirects >= 8) {
-          rejectOnce(new Error(`Too many redirects while downloading ${url}`));
+    const request = https.get(
+      url,
+      { headers: { "User-Agent": "Locution Pro-build" } },
+      (response) => {
+        responseStream = response;
+        const status = response.statusCode ?? 0;
+        const location = response.headers.location;
+        if (status >= 300 && status < 400 && location) {
+          response.resume();
+          if (redirects >= 8) {
+            rejectOnce(new Error(`Too many redirects while downloading ${url}`));
+            return;
+          }
+          download(new URL(location, url).toString(), outputPath, redirects + 1).then(() => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            resolvePromise();
+          }, rejectOnce);
           return;
         }
-        download(new URL(location, url).toString(), outputPath, redirects + 1).then(() => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timeout);
-          resolvePromise();
-        }, rejectOnce);
-        return;
-      }
-      if (status !== 200) {
-        response.resume();
-        rejectOnce(new Error(`Download failed for ${url}: HTTP ${status}`));
-        return;
-      }
-      const stream = createWriteStream(outputPath);
-      outputStream = stream;
-      response.pipe(stream);
-      stream.on("finish", () => {
-        stream.close(() => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timeout);
-          resolvePromise();
+        if (status !== 200) {
+          response.resume();
+          rejectOnce(new Error(`Download failed for ${url}: HTTP ${status}`));
+          return;
+        }
+        const stream = createWriteStream(outputPath);
+        outputStream = stream;
+        response.pipe(stream);
+        stream.on("finish", () => {
+          stream.close(() => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            resolvePromise();
+          });
         });
-      });
-      stream.on("error", rejectOnce);
-      response.on("aborted", () => rejectOnce(new Error(`Download aborted: ${url}`)));
-      response.on("error", rejectOnce);
-    });
+        stream.on("error", rejectOnce);
+        response.on("aborted", () => rejectOnce(new Error(`Download aborted: ${url}`)));
+        response.on("error", rejectOnce);
+      },
+    );
     request.setTimeout(requestIdleTimeoutMilliseconds, () =>
       request.destroy(
         new Error(`Download received no data for ${requestIdleTimeoutMilliseconds}ms: ${url}`),

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { SelectDropdown, type SelectDropdownItem } from "../../../common/SelectDropdown";
 import type { TranscodeOptionItem } from "../../../../systems/TranscodeSystem";
 
@@ -70,12 +70,7 @@ export function TranscodeNumberField({
   placeholder,
   onChange,
 }: TranscodeNumberFieldProps) {
-  const [draft, setDraft] = useState(value === null ? "" : String(value));
-  const [draftValue, setDraftValue] = useState(value);
-  if (value !== draftValue) {
-    setDraftValue(value);
-    setDraft(value === null ? "" : String(value));
-  }
+  const [draft, setDraft] = useScopedState(value, value === null ? "" : String(value));
 
   function commit() {
     const trimmed = draft.trim();

@@ -1,6 +1,7 @@
+import { scheduleAfter, cancelTask } from "../../../../runtime/scheduling";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { ChevronRight, Pin } from "lucide-react";
 import {
-  useEffect,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -80,6 +81,8 @@ function parentKey(root: AssetLibraryRoot, folderId: string | null) {
 }
 
 export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
+  const lifetime = new RenderLifetime();
+
   const { library, location, collapsedKeys, dropTargetKey } = props;
   // Location keys make lookups match at every depth, not just under the roots.
   const childrenByParent = new Map<string, AssetLibraryFolder[]>();
@@ -98,10 +101,10 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
     : null;
   const dragExpandKey = hoveredTreeKey && collapsedKeys.has(hoveredTreeKey) ? hoveredTreeKey : null;
   const { onToggleCollapsed } = props;
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!dragExpandKey) return;
-    const timer = window.setTimeout(() => onToggleCollapsed(dragExpandKey), dragExpandDelayMs);
-    return () => window.clearTimeout(timer);
+    const timer = scheduleAfter(() => onToggleCollapsed(dragExpandKey), dragExpandDelayMs);
+    return () => cancelTask(timer);
   }, [dragExpandKey, onToggleCollapsed]);
 
   // Rows in display order, for arrow-key movement through the expanded tree.
@@ -302,7 +305,7 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
     );
   }
 
-  return (
+  return lifetime.render(
     <nav className="asset-library-navigation" aria-label="素材库文件夹">
       <div className="media-bin-table-scroll">
         <ul
@@ -381,6 +384,6 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
           </li>
         </ul>
       </div>
-    </nav>
+    </nav>,
   );
 }

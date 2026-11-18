@@ -1,4 +1,5 @@
-import { createContext, memo, useContext, useEffect, useState, type ReactNode } from "react";
+import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
+import { createContext, memo, useContext, useState, type ReactNode } from "react";
 import { PanelInstanceProvider, usePublishedPanelTitle } from "../../../runtime/systems/PanelState";
 import { clientError } from "../../../errors";
 import {
@@ -96,24 +97,26 @@ interface PanelDefinitionBoundaryProps {
 }
 
 function PanelDefinitionBoundary({ definition, instance, active }: PanelDefinitionBoundaryProps) {
+  const lifetime = new RenderLifetime();
+
   const closePanel = usePanelManagerState((state) => state.closePanel);
   const available = definition.useAvailable(instance.params);
   const Component = definition.Component;
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!available) {
       closePanel(instance.id);
     }
   }, [available, closePanel, instance.id]);
 
   if (!available) {
-    return null;
+    return lifetime.render(null);
   }
 
-  return (
+  return lifetime.render(
     <PanelInstanceProvider instanceId={instance.id} active={active}>
       <Component params={instance.params} />
-    </PanelInstanceProvider>
+    </PanelInstanceProvider>,
   );
 }
 
@@ -140,9 +143,10 @@ function PanelTitleContent({
   instance: PanelInstance;
   children: (title: string) => ReactNode;
 }) {
+  const lifetime = new RenderLifetime();
   const publishedTitle = usePublishedPanelTitle();
-  const fallbackTitle = definition.useTitle(instance.params);
-  return children(publishedTitle ?? fallbackTitle);
+  const fallbackTitle = definition.useTitle(instance.params, lifetime);
+  return lifetime.render(children(publishedTitle ?? fallbackTitle));
 }
 
 export function PanelTitle({
@@ -158,7 +162,9 @@ export function PanelTitle({
   }
   return (
     <PanelInstanceProvider instanceId={instance.id}>
-      <PanelTitleContent definition={definition} instance={instance} children={children} />
+      <PanelTitleContent definition={definition} instance={instance}>
+        {children}
+      </PanelTitleContent>
     </PanelInstanceProvider>
   );
 }
@@ -257,17 +263,18 @@ function PanelMenuItemsContent({
   instance: PanelInstance;
   closeMenu: () => void;
 }) {
-  const items = definition.useMenuItems(instance.params);
+  const lifetime = new RenderLifetime();
+  const items = definition.useMenuItems(instance.params, lifetime);
   if (items.length === 0) {
-    return null;
+    return lifetime.render(null);
   }
-  return (
+  return lifetime.render(
     <>
       <PopupMenuSeparator />
       {items.map((entry) => (
         <PanelMenuEntry key={entry.id} entry={entry} closeMenu={closeMenu} />
       ))}
-    </>
+    </>,
   );
 }
 

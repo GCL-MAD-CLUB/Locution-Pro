@@ -1,4 +1,7 @@
-﻿import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
+import { useScopedState } from "../../../../runtime/state/useScopedState";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { mediaGridLayout } from "../../../../application/media/mediaGridLayout";
 import { selectionFocusForVisibleIds } from "../../../../core/editor/selectionFocus";
 import { mediaDisplayColor } from "../../../../runtime/theme";
@@ -9,8 +12,6 @@ import {
   VideoGlyph,
 } from "../../../common/MediaKindIcons/MediaKindIcons";
 import {
-  useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -563,17 +564,19 @@ export function MediaBinTable({
   onBindItems,
   onImportPaths,
 }: MediaBinTableProps) {
+  const lifetime = new RenderLifetime();
+
   const [dropTargetVideoId, setDropTargetVideoId] = useState<string | null>(null);
   const [dropTargetFolderId, setDropTargetFolderId] = useState<string | null>(null);
   const [pointerDragPreview, setPointerDragPreview] = useState<PointerMediaDragPreview | null>(
     null,
   );
   const [columnWidths, setColumnWidths] = useState(initialColumnWidths);
-  const [sort, setSort] = useState<MediaBinSort>(defaultMediaBinSort);
+  const [sort, setSort] = useScopedState<MediaBinSort>(hasItems, defaultMediaBinSort);
   const [activeCell, setActiveCell] = useState<ActiveMediaCell | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
-  const [gridLayout, setGridLayout] = useState<GridLayout>({
+  const [gridLayout, setGridLayout] = useScopedState<GridLayout>(null, {
     columns: 1,
     cardWidth: gridCardWidth,
   });
@@ -593,7 +596,7 @@ export function MediaBinTable({
   const selectionAnchorRef = useRef<string | null>(null);
   const selectionFocusRef = useRef<string | null>(null);
   const marqueeCleanupRef = useRef<(() => void) | null>(null);
-  const pendingTitleRenameRef = useRef<number | null>(null);
+  const pendingTitleRenameRef = useRef<ScheduledTask | null>(null);
   const columnResizeRef = useRef<{
     columnId: ResizableColumnId;
     startX: number;
@@ -601,11 +604,8 @@ export function MediaBinTable({
     pointerId: number;
   } | null>(null);
   const suppressRowClickRef = useRef(false);
-  const [sawItems, setSawItems] = useState(hasItems);
-  if (sawItems !== hasItems) {
-    setSawItems(hasItems);
-    if (!sawItems && hasItems) setSort(defaultMediaBinSort);
-  }
+  const releaseClickTaskRef = useRef<ScheduledTask | null>(null);
+
   const tableMinWidth =
     labelColumnWidth +
     booleanColumnWidth * 2 +
@@ -631,7 +631,7 @@ export function MediaBinTable({
 
   onImportPathsRef.current = onImportPaths;
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!renamingFolderId) {
       return;
     }
@@ -693,7 +693,7 @@ export function MediaBinTable({
     selectionAnchorRef.current = nextSelectionFocus.anchorId;
   }
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const panel = selectionRootRef.current?.closest<HTMLElement>(".media-bin-panel");
     if (!panel) {
       return;
@@ -928,14 +928,14 @@ export function MediaBinTable({
     window.addEventListener("pointercancel", onCancel);
   }
 
-  useEffect(
+  lifetime.useAfterCommit(
     () => () => {
       marqueeCleanupRef.current?.();
     },
     [],
   );
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     document.body.classList.toggle("system-file-drag-active", systemFileDragActive);
 
     return () => {
@@ -943,16 +943,17 @@ export function MediaBinTable({
     };
   }, [systemFileDragActive]);
 
-  useEffect(
+  lifetime.useAfterCommit(
     () => () => {
       if (pendingTitleRenameRef.current !== null) {
-        window.clearTimeout(pendingTitleRenameRef.current);
+        cancelTask(pendingTitleRenameRef.current);
       }
+      cancelTask(releaseClickTaskRef.current);
     },
     [],
   );
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!isReadOnly) {
       return;
     }
@@ -962,7 +963,7 @@ export function MediaBinTable({
     onFinishRenameFolder();
   }, [isReadOnly]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime() || viewMode !== "list" || !canImport) {
       setSystemFileDragOver(false);
       setSystemFileDragActive(false);
@@ -1019,7 +1020,7 @@ export function MediaBinTable({
     };
   }, [canImport, viewMode]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime() || viewMode !== "list" || !canImport) {
       return;
     }
@@ -1083,7 +1084,7 @@ export function MediaBinTable({
     };
   }, [canImport, viewMode]);
 
-  useLayoutEffect(() => {
+  lifetime.useBeforePaint(() => {
     if (viewMode !== "grid") {
       return;
     }
@@ -1163,7 +1164,7 @@ export function MediaBinTable({
     if (pendingTitleRenameRef.current === null) {
       return;
     }
-    window.clearTimeout(pendingTitleRenameRef.current);
+    cancelTask(pendingTitleRenameRef.current);
     pendingTitleRenameRef.current = null;
   }
 
@@ -1209,7 +1210,7 @@ export function MediaBinTable({
       return;
     }
     cancelPendingTitleRename();
-    pendingTitleRenameRef.current = window.setTimeout(() => {
+    pendingTitleRenameRef.current = scheduleAfter(() => {
       pendingTitleRenameRef.current = null;
       beginTitleRename(entry);
     }, titleRenameDelayMs);
@@ -1413,7 +1414,9 @@ export function MediaBinTable({
       if (dragging) {
         finishEvent.preventDefault();
         suppressRowClickRef.current = true;
-        window.setTimeout(() => {
+        cancelTask(releaseClickTaskRef.current);
+        releaseClickTaskRef.current = scheduleAfter(() => {
+          releaseClickTaskRef.current = null;
           suppressRowClickRef.current = false;
         }, 0);
       }
@@ -1487,7 +1490,9 @@ export function MediaBinTable({
       if (dragging) {
         finishEvent.preventDefault();
         suppressRowClickRef.current = true;
-        window.setTimeout(() => {
+        cancelTask(releaseClickTaskRef.current);
+        releaseClickTaskRef.current = scheduleAfter(() => {
+          releaseClickTaskRef.current = null;
           suppressRowClickRef.current = false;
         }, 0);
       }
@@ -1533,9 +1538,9 @@ export function MediaBinTable({
 
   if (viewMode === "grid") {
     if (sortedRows.length === 0) {
-      return null;
+      return lifetime.render(null);
     }
-    return (
+    return lifetime.render(
       <>
         <div
           ref={(node) => {
@@ -1774,11 +1779,11 @@ export function MediaBinTable({
           })}
         </div>
         {renderMarqueeOverlay()}
-      </>
+      </>,
     );
   }
 
-  return (
+  return lifetime.render(
     <div
       ref={selectionRootRef}
       className="media-bin-table"
@@ -2268,6 +2273,6 @@ export function MediaBinTable({
           document.body,
         )}
       {renderMarqueeOverlay()}
-    </div>
+    </div>,
   );
 }

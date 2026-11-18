@@ -18,9 +18,7 @@ for (const label of ["字幕", "分镜"] as const) {
       .fill("  alpha\n\n beta\t gamma\u3000delta  ");
     await dialog.getByRole("button", { name: "应用", exact: true }).click();
     await expect(bar).toHaveValue("alpha beta gamma delta");
-    expect(await page.evaluate(() => (window as any).searchSnapshot.query)).toBe(
-      "alpha beta gamma delta",
-    );
+    expect(await page.evaluate(() => window.searchSnapshot.query)).toBe("alpha beta gamma delta");
     await entry.click();
     await expect(dialog.getByLabel("搜索内容", { exact: true })).toHaveValue(
       "alpha\nbeta\ngamma\ndelta",
@@ -66,6 +64,6 @@ for (const label of ["字幕", "分镜"] as const) {
     await expect(dialog.getByLabel("正向描述", { exact: true })).toHaveValue("ocean");
     await dialog.getByRole("button", { name: "取消", exact: true }).click();
     await bar.fill("");
-    expect(await page.evaluate(() => (window as any).searchSnapshot.query)).toBe("");
+    expect(await page.evaluate(() => window.searchSnapshot.query)).toBe("");
   });
 }

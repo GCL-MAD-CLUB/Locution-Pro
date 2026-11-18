@@ -1,3 +1,5 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { ChevronsUpDown } from "lucide-react";
 import { useState, type ComponentProps } from "react";
 import { createPortal } from "react-dom";
@@ -14,15 +16,19 @@ const frameDataModes = [{ mode: "histogram", label: "直方图" }, ...frameTrace
 type FrameDataMode = (typeof frameDataModes)[number]["mode"];
 
 export function StoryboardFrameDataPanel({ histogramVisible, ...motionProps }: Props) {
+  const lifetime = new RenderLifetime();
+
   const [open, setOpen] = useState(true);
   const [mode, setMode] = useState<FrameDataMode>("histogram");
-  const [modeMenu, setModeMenu] = useState<{ x: number; y: number } | null>(null);
+  const [modeMenu, setModeMenu] = useScopedState<{ x: number; y: number } | null>(
+    motionProps.visible && open,
+    null,
+  );
   const histogramSelected = mode === "histogram";
   const modeLabel = frameDataModes.find((option) => option.mode === mode)!.label;
-  useCloseOnOutsidePointer(Boolean(modeMenu), () => setModeMenu(null));
-  if (modeMenu && (!motionProps.visible || !open)) setModeMenu(null);
+  useCloseOnOutsidePointer(lifetime, Boolean(modeMenu), () => setModeMenu(null));
 
-  return (
+  return lifetime.render(
     <section className={`storyboard-frame-data-panel ${open ? "" : "is-collapsed"}`.trim()}>
       <StoryboardSidebarHeading
         title="帧数据"
@@ -94,6 +100,6 @@ export function StoryboardFrameDataPanel({ histogramVisible, ...motionProps }: P
           </PopupMenu>,
           document.body,
         )}
-    </section>
+    </section>,
   );
 }

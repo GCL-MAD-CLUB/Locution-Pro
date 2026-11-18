@@ -1,6 +1,9 @@
+import { scheduleAfter, cancelTask } from "../../../../runtime/scheduling";
+import { useScopedState } from "../../../../runtime/state/useScopedState";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type PointerEvent } from "react";
 import { frameToTimeUs, timeUsToFrame } from "../../../../core/editor/timeline";
 import { invokeCommand, runBackgroundOperation, runOperation } from "../../../../errors";
 import { createFfmpegTaskId } from "../../../../platform/tauri/ffmpegProgress";
@@ -65,6 +68,8 @@ export function TranscodePreview({
   outputName,
   onRangeChange,
 }: TranscodePreviewProps) {
+  const lifetime = new RenderLifetime();
+
   const durationUs = source.info?.durationUs ?? 0;
   const frameRate = streamFrameRate(source.info?.video[0]?.frameRate);
   const durationFrames = timeUsToFrame(durationUs, frameRate);
@@ -78,9 +83,12 @@ export function TranscodePreview({
   const hasVideo = (source.info?.video.length ?? 0) > 0 && durationFrames > 0;
   const middleFrame = Math.round(((rangeStartFrame ?? 0) + (rangeEndFrame ?? lastFrame)) / 2);
   const [mode, setMode] = useState<PreviewMode>("split");
-  const [currentFrame, setCurrentFrame] = useState(middleFrame);
-  const [timelineStartFrame, setTimelineStartFrame] = useState(0);
-  const [timelineSpanFrames, setTimelineSpanFrames] = useState(Math.max(1, durationFrames));
+  const [currentFrame, setCurrentFrame] = useScopedState(durationFrames > 0, middleFrame);
+  const [timelineStartFrame, setTimelineStartFrame] = useScopedState(durationFrames > 0, 0);
+  const [timelineSpanFrames, setTimelineSpanFrames] = useScopedState(
+    durationFrames > 0,
+    Math.max(1, durationFrames),
+  );
   const [minTimelineSpanFrames, setMinTimelineSpanFrames] = useState(0);
   const [encoded, setEncoded] = useState(false);
   const [actualSize, setActualSize] = useState(false);
@@ -108,13 +116,6 @@ export function TranscodePreview({
 
   // Media info may arrive after the dialog opens; the timeline then covers the
   // whole clip and starts in the middle, since the first frame is often black.
-  const [centeredOnDuration, setCenteredOnDuration] = useState(durationFrames > 0);
-  if (!centeredOnDuration && durationFrames > 0) {
-    setCenteredOnDuration(true);
-    setCurrentFrame(middleFrame);
-    setTimelineStartFrame(0);
-    setTimelineSpanFrames(durationFrames);
-  }
 
   const frame = Math.min(Math.max(currentFrame, 0), lastFrame);
   const timeUs = frameToTimeUs(frame, frameRate);
@@ -126,7 +127,7 @@ export function TranscodePreview({
       if (video && !video.paused) video.currentTime = frameToTimeUs(next, frameRate) / 1_000_000;
       return next;
     },
-    [frameRate, lastFrame],
+    [frameRate, lastFrame, setCurrentFrame],
   );
   const pause = useCallback(() => videoRef.current?.pause(), []);
   const stepFrame = useCallback(
@@ -134,7 +135,7 @@ export function TranscodePreview({
       pause();
       setCurrentFrame((value) => Math.min(Math.max(value + direction, 0), lastFrame));
     },
-    [lastFrame, pause],
+    [lastFrame, pause, setCurrentFrame],
   );
   const playStart = rangeStartFrame ?? 0;
   const playEnd = rangeEndFrame ?? lastFrame;
@@ -200,7 +201,7 @@ export function TranscodePreview({
   }
 
   // The playhead follows the video while it plays.
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const video = videoRef.current;
     if (!isPlaying || !video) return;
     let handle = 0;
@@ -241,11 +242,11 @@ export function TranscodePreview({
     [encoded, outputName, settings, source.path, timeUs],
   );
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     // Stills wait for playback to stop on a frame.
     if (!isTauriRuntime() || !hasVideo || isPlaying) return;
     const serial = ++requestSerial.current;
-    const timer = window.setTimeout(
+    const timer = scheduleAfter(
       () => {
         const previous = runningTask.current;
         if (previous) {
@@ -282,11 +283,11 @@ export function TranscodePreview({
       },
       encoded ? encodedDelayMs : filterDelayMs,
     );
-    return () => window.clearTimeout(timer);
+    return () => cancelTask(timer);
     // requestKey stands for every input of the request.
   }, [requestKey, hasVideo, isPlaying]);
 
-  useEffect(
+  lifetime.useAfterCommit(
     () => () => {
       const previous = runningTask.current;
       if (previous) {
@@ -427,7 +428,7 @@ export function TranscodePreview({
     );
   }
 
-  return (
+  return lifetime.render(
     <section className="transcode-preview" aria-label="预览">
       <div className="transcode-preview-toolbar">
         <div className="transcode-segmented" role="tablist" aria-label="预览方式">
@@ -589,6 +590,6 @@ export function TranscodePreview({
         </p>
       )}
       {noOutputVideo && <p className="transcode-note">当前设置不导出视频，只显示源画面。</p>}
-    </section>
+    </section>,
   );
 }

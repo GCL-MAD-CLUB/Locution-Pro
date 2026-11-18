@@ -1,5 +1,6 @@
-﻿import { convertFileSrc } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { useMemo, useRef, useState, type SyntheticEvent } from "react";
 import { runOperation } from "../../../../errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import { extractVideoCover } from "../../../../application/media/thumbnail";
@@ -37,6 +38,8 @@ export function MediaBinVideoThumbnail({
   project,
   hoverProgress,
 }: MediaBinVideoThumbnailProps) {
+  const lifetime = new RenderLifetime();
+
   const analysisPending = useMediaCoverDeferred(project.asset.id);
   const hoverTargetTimeUs = useMemo(
     () => (hoverProgress === null ? null : hoverThumbnailTimeUs(project, hoverProgress)),
@@ -49,7 +52,7 @@ export function MediaBinVideoThumbnail({
   const fallbackPath = project.proxy_path || item.path;
   const fallbackSrc = isTauriRuntime() ? convertFileSrc(fallbackPath) : fallbackPath;
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (analysisPending) {
       setThumbnail(null);
       return;
@@ -89,7 +92,7 @@ export function MediaBinVideoThumbnail({
     };
   }, [item.id, project.asset.fingerprint, analysisPending]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     const video = firstFrameVideoRef.current;
     if (!video) return;
     video.pause();
@@ -98,7 +101,7 @@ export function MediaBinVideoThumbnail({
     }
   }, [fallbackSrc]);
 
-  useEffect(() => {
+  lifetime.useAfterCommit(() => {
     if (hoverTargetTimeUs === null) {
       setHoverFrameReady(false);
       return;
@@ -146,15 +149,15 @@ export function MediaBinVideoThumbnail({
   const thumbnailSrc = thumbnail?.fingerprint === project.asset.fingerprint ? thumbnail.src : "";
 
   if (thumbnailSrc && !analysisPending) {
-    return (
+    return lifetime.render(
       <>
         <img className="media-bin-card-thumbnail" src={thumbnailSrc} alt="" draggable={false} />
         {hoverThumbnail}
-      </>
+      </>,
     );
   }
 
-  return (
+  return lifetime.render(
     <>
       <video
         ref={firstFrameVideoRef}
@@ -173,6 +176,6 @@ export function MediaBinVideoThumbnail({
         onLoadedData={(event) => currentVideo(event).pause()}
       />
       {hoverThumbnail}
-    </>
+    </>,
   );
 }

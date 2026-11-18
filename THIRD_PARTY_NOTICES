@@ -3,6 +3,15 @@
    Locution Pro bundles or optionally bundles the third-party components
    described below. Each component remains licensed under its own terms.
 
+RxJS
+
+   The application uses RxJS for cancellable scheduling resources.
+   RxJS is copyright 2015-2018 Google, Inc., Netflix, Inc., Microsoft Corp.
+   and contributors, and is licensed under the Apache License, Version 2.0.
+
+   https://github.com/ReactiveX/rxjs
+   https://github.com/ReactiveX/rxjs/blob/7.8.2/LICENSE.txt
+
 Locution Pro UI Sans
 
    The bundled src/assets/fonts/locution-pro-ui-sans-vf.woff2 is the

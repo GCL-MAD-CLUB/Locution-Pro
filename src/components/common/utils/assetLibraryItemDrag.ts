@@ -1,3 +1,4 @@
+import { suppressReleaseClick } from "./suppressReleaseClick";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { AssetLibraryLocation } from "../../../core/editor/assetLibrary";
 import type { AssetLibraryRoot } from "../../../types";
@@ -32,16 +33,6 @@ export interface AssetLibraryItemDragOptions {
 
 /** Presses in text fields select text instead of starting a drag. */
 export const textEntrySelector = "input, textarea, select, [contenteditable='true']";
-
-/** Ends a drag without the release also counting as a click on whatever is under it. */
-function suppressNextClick() {
-  const swallow = (event: MouseEvent) => {
-    event.stopPropagation();
-    event.preventDefault();
-  };
-  window.addEventListener("click", swallow, { capture: true, once: true });
-  window.setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
-}
 
 /**
  * Drags items from a panel into a folder of the asset library panel with pointer events, as
@@ -101,7 +92,7 @@ export function startAssetLibraryItemDrag(
     cleanup();
     if (!dragging) return;
     upEvent.preventDefault();
-    suppressNextClick();
+    suppressReleaseClick(cleanupRef);
     if (location) onDrop(location);
   };
 
@@ -119,7 +110,7 @@ export function startAssetLibraryItemDrag(
     const onRelease = (upEvent: PointerEvent) => {
       if (upEvent.pointerId !== pointerId) return;
       releaseCleanup();
-      suppressNextClick();
+      suppressReleaseClick(cleanupRef);
     };
     const releaseCleanup = () => {
       window.removeEventListener("pointerup", onRelease);

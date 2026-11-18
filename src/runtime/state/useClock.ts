@@ -1,3 +1,4 @@
+import { repeatEvery, cancelTask } from "../scheduling";
 import { useState } from "react";
 import type { RenderLifetime } from "../lifetime/RenderLifetime";
 
@@ -7,8 +8,8 @@ export function useClock(lifetime: RenderLifetime) {
   lifetime.useBeforePaint(() => {
     const sample = () => setNow(Date.now());
     sample();
-    const timer = window.setInterval(sample, 60_000);
-    return () => window.clearInterval(timer);
+    const timer = repeatEvery(sample, 60_000);
+    return () => cancelTask(timer);
   }, []);
   return now;
 }

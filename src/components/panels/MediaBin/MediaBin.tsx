@@ -1,3 +1,4 @@
+import { repeatEvery, cancelTask } from "../../../runtime/scheduling";
 import { useScopedState } from "../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -647,10 +648,10 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     // Import scheduling records pending analysis before this effect runs, so the
     // first check does not need a delay to avoid a duplicate enqueue.
     void checkAnalysis();
-    const retry = window.setInterval(() => void checkAnalysis(), 60_000);
+    const retry = repeatEvery(() => void checkAnalysis(), 60_000);
     return () => {
       disposed = true;
-      window.clearInterval(retry);
+      cancelTask(retry);
     };
   }, [projects, mediaItems]);
 

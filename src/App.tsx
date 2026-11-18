@@ -1,3 +1,4 @@
+import { scheduleAfter, repeatEvery, cancelTask, type ScheduledTask } from "./runtime/scheduling";
 import { RenderLifetime } from "./runtime/lifetime/RenderLifetime";
 import { applyAppearance, defaultThemeColor } from "./runtime/theme";
 import { listen } from "@tauri-apps/api/event";
@@ -516,11 +517,11 @@ function AppContent() {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
+    const timeoutId = scheduleAfter(() => {
       warningsReplaced([]);
     }, warningDisplayDurationMs);
 
-    return () => window.clearTimeout(timeoutId);
+    return () => cancelTask(timeoutId);
   }, [warnings, warningsReplaced]);
 
   lifetime.useAfterCommit(() => {
@@ -598,7 +599,7 @@ function AppContent() {
     }
 
     let snapshotRunning = false;
-    const timer = window.setInterval(() => {
+    const timer = repeatEvery(() => {
       if (snapshotRunning || updateInstallingRef.current) {
         return;
       }
@@ -625,7 +626,7 @@ function AppContent() {
         });
     }, autoSaveIntervalMinutes * 60_000);
 
-    return () => window.clearInterval(timer);
+    return () => cancelTask(timer);
   }, [autoSaveEnabled, autoSaveIntervalMinutes, hasProject, projectId]);
 
   // macOS reports Finder opens as events, including while the app is running;
@@ -2058,7 +2059,7 @@ function WorkspaceConfigAutoSave() {
     [focusedPanelId, instances, layout],
   );
   const configRef = useRef(config);
-  const saveTimerRef = useRef<number | null>(null);
+  const saveTimerRef = useRef<ScheduledTask | null>(null);
   const savingRef = useRef(false);
   const saveQueuedRef = useRef(false);
 
@@ -2090,9 +2091,9 @@ function WorkspaceConfigAutoSave() {
     }
     configRef.current = config;
     if (saveTimerRef.current !== null) {
-      window.clearTimeout(saveTimerRef.current);
+      cancelTask(saveTimerRef.current);
     }
-    saveTimerRef.current = window.setTimeout(() => {
+    saveTimerRef.current = scheduleAfter(() => {
       saveTimerRef.current = null;
       saveLatestConfig();
     }, workspaceConfigSaveDelayMs);
@@ -2101,7 +2102,7 @@ function WorkspaceConfigAutoSave() {
   lifetime.useAfterCommit(
     () => () => {
       if (saveTimerRef.current !== null) {
-        window.clearTimeout(saveTimerRef.current);
+        cancelTask(saveTimerRef.current);
         saveTimerRef.current = null;
         saveLatestConfig();
       }

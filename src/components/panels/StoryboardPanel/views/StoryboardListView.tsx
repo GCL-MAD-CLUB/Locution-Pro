@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { annotationColors } from "../../../../runtime/theme";
@@ -186,7 +187,7 @@ export function StoryboardListView({
   const [editingCell, setEditingCell] = useScopedState<ActiveCell | null>(resetKey, null);
   const [editValue, setEditValue] = useState("");
   const [editError, setEditError] = useScopedState<string | null>(resetKey, null);
-  const pendingCellEditRef = useRef<number | null>(null);
+  const pendingCellEditRef = useRef<ScheduledTask | null>(null);
 
   const stackMap = stacksByShotId(shotStacks);
 
@@ -194,7 +195,7 @@ export function StoryboardListView({
     if (pendingCellEditRef.current === null) {
       return;
     }
-    window.clearTimeout(pendingCellEditRef.current);
+    cancelTask(pendingCellEditRef.current);
     pendingCellEditRef.current = null;
   }
   lifetime.useAfterCommit(
@@ -244,7 +245,7 @@ export function StoryboardListView({
 
   function scheduleCellEdit(shot: StoryboardShot, columnId: EditableColumn) {
     cancelPendingCellEdit();
-    pendingCellEditRef.current = window.setTimeout(() => {
+    pendingCellEditRef.current = scheduleAfter(() => {
       pendingCellEditRef.current = null;
       beginCellEdit(shot, columnId);
     }, cellEditDelayMs);

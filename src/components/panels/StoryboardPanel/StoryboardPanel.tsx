@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../runtime/scheduling";
 import { useScopedState } from "../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { themeSvgDataUrl } from "../../../runtime/theme";
@@ -1239,6 +1240,7 @@ export function StoryboardPanel() {
   const lastPointerPositionRef = useRef<StoryboardMenuAnchor | null>(null);
   const shotKeywordDragCleanupRef = useRef<(() => void) | null>(null);
   const suppressShotClickRef = useRef(false);
+  const releaseClickTaskRef = useRef<ScheduledTask | null>(null);
   const keywordResizeCleanupRef = useRef<(() => void) | null>(null);
 
   const [ratingComparatorMenu, setRatingComparatorMenu] =
@@ -2430,6 +2432,7 @@ export function StoryboardPanel() {
       shotKeywordDragCleanupRef.current?.();
       keywordResizeCleanupRef.current?.();
       suppressShotClickRef.current = false;
+      cancelTask(releaseClickTaskRef.current);
       document.body.classList.remove("is-resizing-storyboard-column");
       document.body.classList.remove("is-resizing-storyboard-keyword-panel");
     },
@@ -2825,7 +2828,9 @@ export function StoryboardPanel() {
         } else if (!cancelled && target.libraryLocation) {
           addShotsToAssetLibrary(Array.from(dragShotIds), target.libraryLocation.folderId);
         }
-        window.setTimeout(() => {
+        cancelTask(releaseClickTaskRef.current);
+        releaseClickTaskRef.current = scheduleAfter(() => {
+          releaseClickTaskRef.current = null;
           suppressShotClickRef.current = false;
         }, 0);
       }

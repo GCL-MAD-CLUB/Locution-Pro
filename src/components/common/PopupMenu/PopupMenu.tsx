@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../runtime/scheduling";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { Check, ChevronRight } from "lucide-react";
 import {
@@ -548,7 +549,7 @@ export function PopupMenuSubmenu({
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
-  const hoverTimer = useRef<number | null>(null);
+  const hoverTimer = useRef<ScheduledTask | null>(null);
   const openRef = useRef(open);
   lifetime.useBeforePaint(() => {
     openRef.current = open;
@@ -560,7 +561,7 @@ export function PopupMenuSubmenu({
 
   const clearHoverTimer = useCallback(() => {
     if (hoverTimer.current !== null) {
-      window.clearTimeout(hoverTimer.current);
+      cancelTask(hoverTimer.current);
       hoverTimer.current = null;
     }
   }, []);
@@ -572,7 +573,7 @@ export function PopupMenuSubmenu({
     (next: boolean) => {
       clearHoverTimer();
       if (openRef.current === next) return;
-      hoverTimer.current = window.setTimeout(
+      hoverTimer.current = scheduleAfter(
         () => {
           hoverTimer.current = null;
           if (openRef.current !== next) onOpenChangeRef.current(next);

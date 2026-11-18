@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
@@ -28,7 +29,7 @@ interface TimecodeScrubState {
   startX: number;
   startFrame: number;
   lastFrameOffset: number;
-  longPressTimer: number | null;
+  longPressTimer: ScheduledTask | null;
   isScrubbing: boolean;
   suppressClick: boolean;
 }
@@ -255,7 +256,7 @@ export function VideoControls({
     if (!state || state.longPressTimer === null) {
       return;
     }
-    window.clearTimeout(state.longPressTimer);
+    cancelTask(state.longPressTimer);
     state.longPressTimer = null;
   }
   lifetime.useAfterCommit(
@@ -280,7 +281,7 @@ export function VideoControls({
       suppressClick: false,
     };
 
-    state.longPressTimer = window.setTimeout(() => {
+    state.longPressTimer = scheduleAfter(() => {
       if (timecodeScrubRef.current !== state) {
         return;
       }

@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../runtime/scheduling";
 import type { PlaybackTraceSample } from "../../core/editor/frameTrace";
 import type { FrameTraceData } from "./browserFrameTrace";
 
@@ -45,7 +46,7 @@ export class FrameTraceCache {
   private listeners = new Set<() => void>();
   private users = 0;
   private revision = 0;
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private timer: ScheduledTask | null = null;
   constructor(private readonly key: string) {}
   get observed() {
     return this.listeners.size > 0 || this.users > 0;
@@ -62,7 +63,7 @@ export class FrameTraceCache {
     return () => {
       this.listeners.delete(listener);
       if (!this.listeners.size && this.timer !== null) {
-        clearTimeout(this.timer);
+        cancelTask(this.timer);
         this.timer = null;
       }
     };
@@ -125,7 +126,7 @@ export class FrameTraceCache {
     this.revision++;
     // Sampling stays at video cadence; only chart notifications are coalesced.
     if (this.timer === null && this.listeners.size) {
-      this.timer = setTimeout(() => {
+      this.timer = scheduleAfter(() => {
         this.timer = null;
         for (const listener of this.listeners) listener();
       }, 32);

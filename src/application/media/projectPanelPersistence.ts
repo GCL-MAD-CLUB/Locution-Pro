@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../runtime/scheduling";
 import type { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
 import { useRef, useState, useSyncExternalStore } from "react";
 import { captureOperationError } from "../../errors";
@@ -40,10 +41,10 @@ export function usePersistedProjectPanelState<State>(
   const key = enabled && projectId ? JSON.stringify([projectId, panelId]) : null;
   const signature = JSON.stringify(snapshot);
   const pendingRef = useRef<{ projectId: string; panelId: string; snapshot: State } | null>(null);
-  const timerRef = useRef<number | null>(null);
+  const timerRef = useRef<ScheduledTask | null>(null);
 
   function flush() {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    if (timerRef.current !== null) cancelTask(timerRef.current);
     timerRef.current = null;
     const pending = pendingRef.current;
     pendingRef.current = null;
@@ -70,8 +71,8 @@ export function usePersistedProjectPanelState<State>(
     if (!native || !loaded || !key || !projectId || restoredKey !== key || snapshot === null)
       return;
     pendingRef.current = { projectId, panelId, snapshot };
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    timerRef.current = window.setTimeout(flush, 250);
+    if (timerRef.current !== null) cancelTask(timerRef.current);
+    timerRef.current = scheduleAfter(flush, 250);
   }, [native, loaded, key, projectId, panelId, restoredKey, signature]);
 
   return enabled && loaded && Boolean(key) && restoredKey === key;

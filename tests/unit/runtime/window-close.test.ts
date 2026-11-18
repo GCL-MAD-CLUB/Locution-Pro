@@ -2,19 +2,17 @@ import { createModuleLoader, deferred, flush } from "../support/module-loader.ts
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { WindowCloseAction } from "../../../src/application/windowClose.ts";
+import * as scheduling from "../support/scheduling.ts";
 
 const loadModule = createModuleLoader(import.meta.url);
 
 type WindowCloseModule = typeof import("../../../src/application/windowClose.ts");
 
 function windowClose() {
-  return loadModule<WindowCloseModule>(
-    "../../../src/application/windowClose.ts",
-    {
-      "../errors/runtime": { normalizeError: (error: unknown) => error },
-    },
-    { setTimeout, clearTimeout },
-  );
+  return loadModule<WindowCloseModule>("../../../src/application/windowClose.ts", {
+    "../errors/runtime": { normalizeError: (error: unknown) => error },
+    "../runtime/scheduling": scheduling,
+  });
 }
 
 test("window close always waits, and ignores re-entry and installer shutdown", () => {

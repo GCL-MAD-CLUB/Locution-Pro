@@ -5,6 +5,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 import { reactLifecycle } from "./tooling/eslint/react-lifecycle.ts";
+import { scheduling } from "./tooling/eslint/no-native-timers.ts";
 
 const effectNames = "^(useEffect|useLayoutEffect|useInsertionEffect)$";
 const effectMessage =
@@ -101,6 +102,16 @@ export default tseslint.config(
     },
   },
   prettier,
+  {
+    files: [
+      "src/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
+      "site/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
+      "docs/user-guide/.vitepress/theme/**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}",
+    ],
+    plugins: { "project-scheduling": scheduling },
+    linterOptions: { noInlineConfig: true },
+    rules: { "project-scheduling/no-native-timers": "error" },
+  },
   {
     files: ["src/**/*.worklet.js"],
     languageOptions: {

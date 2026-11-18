@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask } from "../runtime/scheduling";
 import type { RenderLifetime } from "../runtime/lifetime/RenderLifetime";
 import { useMemo, useRef, useState } from "react";
 import type { TimelineThumbnailBackfillRequest, TimelineThumbnailRequest } from "./manager";
@@ -217,8 +218,8 @@ export function useTimelineThumbnailWindow<Item>(
       setDebouncedPlan(rawPlan);
       return;
     }
-    const timer = window.setTimeout(() => setDebouncedPlan(rawPlan), debounceMs);
-    return () => window.clearTimeout(timer);
+    const timer = scheduleAfter(() => setDebouncedPlan(rawPlan), debounceMs);
+    return () => cancelTask(timer);
   }, [debounceMs, debouncedPlan.signature, rawPlan]);
 
   lifetime.useAfterCommit(() => {

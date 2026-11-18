@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask } from "../../../../runtime/scheduling";
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -245,7 +246,7 @@ export function TranscodePreview({
     // Stills wait for playback to stop on a frame.
     if (!isTauriRuntime() || !hasVideo || isPlaying) return;
     const serial = ++requestSerial.current;
-    const timer = window.setTimeout(
+    const timer = scheduleAfter(
       () => {
         const previous = runningTask.current;
         if (previous) {
@@ -282,7 +283,7 @@ export function TranscodePreview({
       },
       encoded ? encodedDelayMs : filterDelayMs,
     );
-    return () => window.clearTimeout(timer);
+    return () => cancelTask(timer);
     // requestKey stands for every input of the request.
   }, [requestKey, hasVideo, isPlaying]);
 

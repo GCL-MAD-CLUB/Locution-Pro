@@ -1,3 +1,9 @@
+import {
+  scheduleAfter,
+  repeatEvery,
+  cancelTask,
+  type ScheduledTask,
+} from "../../runtime/scheduling";
 import { mediaKind } from "../../components/panels/ImportWorkspace/browser/importBrowserModel";
 import { invokeCommand, runOperation } from "../../errors";
 import { normalizeError } from "../../errors/runtime";
@@ -35,18 +41,18 @@ interface ImportDirectoryListing {
 
 let startup: Promise<void> | null = null;
 let configWrite: Promise<unknown> = Promise.resolve();
-let configTimer: number | null = null;
+let configTimer: ScheduledTask | null = null;
 let lastSavedConfig = "";
 let probeChain: Promise<void> = Promise.resolve();
 let stopActive: (() => Promise<void>) | null = null;
-let watchTimer: number | null = null;
+let watchTimer: ScheduledTask | null = null;
 const watchSizes = new Map<string, number>();
 const detailRequests = new Map<string, Promise<TranscodeCodecDetails | null>>();
 
 function scheduleConfigSave() {
   if (!isTauriRuntime() || !transcodeQueueStore.getState().configLoaded) return;
-  if (configTimer !== null) window.clearTimeout(configTimer);
-  configTimer = window.setTimeout(() => {
+  if (configTimer !== null) cancelTask(configTimer);
+  configTimer = scheduleAfter(() => {
     configTimer = null;
     const config = transcodeConfigSnapshot(transcodeQueueStore.getState());
     const serialized = JSON.stringify(config);
@@ -317,13 +323,13 @@ function syncWatchTimer() {
   const { autoEncodeWatchFolders, watchFolders } = transcodeQueueStore.getState();
   const wanted = autoEncodeWatchFolders && watchFolders.length > 0;
   if (wanted && watchTimer === null) {
-    watchTimer = window.setInterval(() => {
+    watchTimer = repeatEvery(() => {
       void scanTranscodeWatchFolders().then((queued) => {
         if (queued > 0) void startTranscodeQueue();
       });
     }, watchIntervalMs);
   } else if (!wanted && watchTimer !== null) {
-    window.clearInterval(watchTimer);
+    cancelTask(watchTimer);
     watchTimer = null;
     watchSizes.clear();
   }

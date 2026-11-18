@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask } from "../../runtime/scheduling";
 import type { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
 import { searchSemanticPrompts } from "../../core/editor/semanticPrompts";
 import {
@@ -200,7 +201,7 @@ export function useSubtitleSemanticSearch(
       cancelledRequest.current === requestKey
     )
       return;
-    const timer = window.setTimeout(() => {
+    const timer = scheduleAfter(() => {
       busy.current = true;
       void (async () => {
         const start = latest.current;
@@ -287,7 +288,7 @@ export function useSubtitleSemanticSearch(
     }, 350);
     // Only the debounce is tied to view changes. A started index keeps its
     // background task and queue slot until native work settles.
-    return () => window.clearTimeout(timer);
+    return () => cancelTask(timer);
   }, [requestKey, tick]);
 
   const current = requestKey && result?.key === requestKey ? result : null;

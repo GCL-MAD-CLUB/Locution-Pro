@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { annotationColors } from "../../../../runtime/theme";
@@ -127,13 +128,13 @@ export function SubtitleListView({
   const [activeCell, setActiveCell] = useScopedState<ActiveCell | null>(resetKey, null);
   const [editingCueId, setEditingCueId] = useScopedState<string | null>(resetKey, null);
   const [editValue, setEditValue] = useState("");
-  const pendingCellEditRef = useRef<number | null>(null);
+  const pendingCellEditRef = useRef<ScheduledTask | null>(null);
 
   function cancelPendingCellEdit() {
     if (pendingCellEditRef.current === null) {
       return;
     }
-    window.clearTimeout(pendingCellEditRef.current);
+    cancelTask(pendingCellEditRef.current);
     pendingCellEditRef.current = null;
   }
   lifetime.useAfterCommit(
@@ -172,7 +173,7 @@ export function SubtitleListView({
 
   function scheduleLabelEdit(cue: SubtitleCue) {
     cancelPendingCellEdit();
-    pendingCellEditRef.current = window.setTimeout(() => {
+    pendingCellEditRef.current = scheduleAfter(() => {
       pendingCellEditRef.current = null;
       beginLabelEdit(cue);
     }, cellEditDelayMs);

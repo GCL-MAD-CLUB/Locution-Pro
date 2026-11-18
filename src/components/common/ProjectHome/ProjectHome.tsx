@@ -1,3 +1,4 @@
+import { repeatEvery, cancelTask } from "../../../runtime/scheduling";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { ChevronLeft, Search, X } from "lucide-react";
 import { useMemo, useRef, useState, type PointerEvent } from "react";
@@ -74,7 +75,7 @@ export function ProjectHome({
   lifetime.useAfterCommit(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
     dialogRef.current?.focus();
-    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    const timer = repeatEvery(() => setNow(Date.now()), 30000);
     const observer = new ResizeObserver(() => {
       const layer = layerRef.current;
       if (!layer) return;
@@ -99,7 +100,7 @@ export function ProjectHome({
     });
     if (layerRef.current) observer.observe(layerRef.current);
     return () => {
-      window.clearInterval(timer);
+      cancelTask(timer);
       observer.disconnect();
       previousFocus?.focus();
     };

@@ -1,6 +1,7 @@
 import { createModuleLoader, deferred, flush } from "../support/module-loader.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as scheduling from "../support/scheduling.ts";
 import type {
   ReleaseInfo,
   UpdateCheckResult,
@@ -12,7 +13,7 @@ type UpdateModule = typeof import("../../../src/application/update.ts");
 
 const loadTestModule = createModuleLoader(import.meta.url);
 function loadModule<T>(path: string, imports: Record<string, unknown>): T {
-  return loadTestModule<T>(path, imports, { setTimeout, clearTimeout });
+  return loadTestModule<T>(path, { ...imports, "../runtime/scheduling": scheduling });
 }
 
 function loadUpdate(release?: ReleaseInfo) {

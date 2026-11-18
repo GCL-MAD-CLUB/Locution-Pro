@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../runtime/scheduling";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import {
   useRef,
@@ -28,7 +29,7 @@ function readCssPixelVariable(name: string, fallback: number): number {
 interface DockDragState {
   panelId: string;
   sourceAreaId: DockAreaId;
-  timer: number | null;
+  timer: ScheduledTask | null;
   dragging: boolean;
 }
 
@@ -460,7 +461,7 @@ export function DockLayout() {
     if (!state?.timer) {
       return;
     }
-    window.clearTimeout(state.timer);
+    cancelTask(state.timer);
     state.timer = null;
   }
 
@@ -590,7 +591,7 @@ export function DockLayout() {
     };
     dragRef.current = state;
 
-    state.timer = window.setTimeout(() => {
+    state.timer = scheduleAfter(() => {
       if (dragRef.current !== state) {
         return;
       }

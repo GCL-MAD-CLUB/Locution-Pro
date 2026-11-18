@@ -1,3 +1,4 @@
+import { repeatEvery, cancelTask } from "../../../../runtime/scheduling";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { useState } from "react";
 import {
@@ -12,8 +13,8 @@ function useNow(lifetime: RenderLifetime, active: boolean) {
   const [now, setNow] = useState(() => Date.now());
   lifetime.useAfterCommit(() => {
     if (!active) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
+    const timer = repeatEvery(() => setNow(Date.now()), 1000);
+    return () => cancelTask(timer);
   }, [active]);
   return now;
 }

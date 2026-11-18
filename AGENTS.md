@@ -36,6 +36,19 @@
   resources unconditionally in a stable order; put activation conditions inside
   acquisition callbacks. Never acquire resources during render.
 
+## Scheduling
+
+- Production source (`src/`, `site/`, and the user guide theme) must not reference, import, alias, or wrap
+  native `setTimeout` or `setInterval`, including computed property access. Do not
+  disable the lint rule. Dependencies and generated artifacts are outside this ban;
+  tests and build tooling may use native timers.
+- Prefer events for completion and derive values during render. Necessary delays,
+  deadlines and recurring work use `src/runtime/scheduling.ts`, backed by RxJS.
+  The owner must cancel scheduled resources on replacement or disposal. Register
+  component resources through `RenderLifetime`, never during render. Async waits
+  may pass an `AbortSignal`; Worker request deadlines use platform abort signals.
+- Do not replace timers with animation-frame polling or add a native timer wrapper.
+
 ## Code formatting
 
 - TypeScript, TSX, JavaScript, JSON, CSS, HTML, and Markdown are formatted with the

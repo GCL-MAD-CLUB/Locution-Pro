@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask } from "../../../../runtime/scheduling";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { ChevronRight, Pin } from "lucide-react";
 import {
@@ -102,8 +103,8 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
   const { onToggleCollapsed } = props;
   lifetime.useAfterCommit(() => {
     if (!dragExpandKey) return;
-    const timer = window.setTimeout(() => onToggleCollapsed(dragExpandKey), dragExpandDelayMs);
-    return () => window.clearTimeout(timer);
+    const timer = scheduleAfter(() => onToggleCollapsed(dragExpandKey), dragExpandDelayMs);
+    return () => cancelTask(timer);
   }, [dragExpandKey, onToggleCollapsed]);
 
   // Rows in display order, for arrow-key movement through the expanded tree.

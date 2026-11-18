@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask } from "../../runtime/scheduling";
 import { clientError } from "../../errors/model";
 import { TRACE_WIDTH, TRACE_HEIGHT, type PlaybackTraceSample } from "../../core/editor/frameTrace";
 import type { FrameTraceCache } from "./frameTraceCache";
@@ -41,7 +42,7 @@ function waitForVideo(
   return new Promise<void>((resolve, reject) => {
     if (signal.aborted) return reject(aborted());
     const cleanup = () => {
-      clearTimeout(timeout);
+      cancelTask(timeout);
       video.removeEventListener(event, ready);
       video.removeEventListener("error", failed);
       signal.removeEventListener("abort", cancelled);
@@ -63,7 +64,7 @@ function waitForVideo(
       cleanup();
       reject(aborted());
     };
-    const timeout = setTimeout(() => {
+    const timeout = scheduleAfter(() => {
       cleanup();
       reject(clientError("VIDEO_FRAME_DECODE_TIMEOUT", "Browser frame trace decoding timed out"));
     }, 15_000);
@@ -211,17 +212,17 @@ async function decodeTrace(
     await seek(frame);
     const pixels = readTracePixels(context, video);
     const analysis = new Promise<PlaybackTraceSample>((resolve, reject) => {
-      const timer = setTimeout(
+      const timer = scheduleAfter(
         () => reject(clientError("VIDEO_FRAME_DECODE_TIMEOUT", "Frame trace worker timed out")),
         15_000,
       );
       pending = {
         resolve: (value) => {
-          clearTimeout(timer);
+          cancelTask(timer);
           resolve(value);
         },
         reject: (error) => {
-          clearTimeout(timer);
+          cancelTask(timer);
           reject(error);
         },
       };

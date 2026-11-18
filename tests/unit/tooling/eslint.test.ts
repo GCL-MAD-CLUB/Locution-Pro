@@ -137,3 +137,76 @@ test("generated artifacts are ignored and authored tooling is linted", async () 
   assert.equal(await eslint.isPathIgnored("tooling/eslint/react-lifecycle.ts"), false);
   assert.equal(await eslint.isPathIgnored("site/src/main.js"), false);
 });
+
+test("production source rejects timer calls, aliases, destructuring, computed access and imports", async () => {
+  for (const name of ["setTimeout", "setInterval"]) {
+    for (const source of [
+      `${name}(() => {}, 100);`,
+      `window.${name}(() => {}, 100);`,
+      `globalThis['${name}'](() => {}, 100);`,
+      `const run = globalThis.${name}; run(() => {}, 100);`,
+      `const { ${name}: run } = window; run(() => {}, 100);`,
+      `const { '${name}': run } = globalThis; run(() => {}, 100);`,
+      `const key = '${name}'; globalThis[key](() => {}, 100);`,
+      `globalThis['set' + '${name.slice(3)}'](() => {}, 100);`,
+      `const { ['${name}']: run } = window; run(() => {}, 100);`,
+      `import { ${name} as wait } from 'node:timers'; wait(() => {}, 100);`,
+      `import { '${name}' as wait } from 'node:timers'; wait(() => {}, 100);`,
+      `export { ${name} as wait } from 'node:timers/promises';`,
+      `export { '${name}' as wait } from 'node:timers/promises';`,
+      `export function wait(callback) { return ${name}(callback, 100); }`,
+      `/* eslint-disable project-scheduling/no-native-timers */ ${name}(() => {}, 100);`,
+    ]) {
+      for (const file of [
+        "src/timerFixture.ts",
+        "src/runtime/timerFixture.ts",
+        "site/timerFixture.js",
+        "docs/user-guide/.vitepress/theme/timerFixture.ts",
+      ]) {
+        assert(
+          (await rules(source, file)).includes("project-scheduling/no-native-timers"),
+          `${file}: ${source}`,
+        );
+      }
+    }
+  }
+});
+
+test("test and build tooling may use timers while production scheduling uses owned resources", async () => {
+  for (const file of [
+    "tests/unit/timerFixture.test.ts",
+    "tests/browser/timerFixture.ts",
+    "scripts/timerFixture.ts",
+  ]) {
+    assert(
+      !(await rules("setTimeout(() => {}, 100); setInterval(() => {}, 100);", file)).includes(
+        "project-scheduling/no-native-timers",
+      ),
+    );
+  }
+  assert(
+    !(
+      await rules(
+        `import {scheduleAfter} from './runtime/scheduling'; const task = scheduleAfter(() => {}, 100); task.cancel();`,
+        "src/timerFixture.ts",
+      )
+    ).includes("project-scheduling/no-native-timers"),
+  );
+});
+
+test("production source cannot obtain timer namespaces or re-export whole native modules", async () => {
+  for (const specifier of ["timers", "node:timers", "timers/promises", "node:timers/promises"]) {
+    for (const source of [
+      `export * from '${specifier}';`,
+      `import * as scheduler from '${specifier}'; export {scheduler};`,
+      `const scheduler = await import('${specifier}'); export {scheduler};`,
+      `const scheduler = require('${specifier}'); module.exports = scheduler;`,
+    ])
+      assert(
+        (await rules(source, "src/timerFixture.ts")).includes(
+          "project-scheduling/no-native-timers",
+        ),
+        source,
+      );
+  }
+});

@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -595,7 +596,7 @@ export function MediaBinTable({
   const selectionAnchorRef = useRef<string | null>(null);
   const selectionFocusRef = useRef<string | null>(null);
   const marqueeCleanupRef = useRef<(() => void) | null>(null);
-  const pendingTitleRenameRef = useRef<number | null>(null);
+  const pendingTitleRenameRef = useRef<ScheduledTask | null>(null);
   const columnResizeRef = useRef<{
     columnId: ResizableColumnId;
     startX: number;
@@ -603,6 +604,7 @@ export function MediaBinTable({
     pointerId: number;
   } | null>(null);
   const suppressRowClickRef = useRef(false);
+  const releaseClickTaskRef = useRef<ScheduledTask | null>(null);
 
   const tableMinWidth =
     labelColumnWidth +
@@ -944,8 +946,9 @@ export function MediaBinTable({
   lifetime.useAfterCommit(
     () => () => {
       if (pendingTitleRenameRef.current !== null) {
-        window.clearTimeout(pendingTitleRenameRef.current);
+        cancelTask(pendingTitleRenameRef.current);
       }
+      cancelTask(releaseClickTaskRef.current);
     },
     [],
   );
@@ -1161,7 +1164,7 @@ export function MediaBinTable({
     if (pendingTitleRenameRef.current === null) {
       return;
     }
-    window.clearTimeout(pendingTitleRenameRef.current);
+    cancelTask(pendingTitleRenameRef.current);
     pendingTitleRenameRef.current = null;
   }
 
@@ -1207,7 +1210,7 @@ export function MediaBinTable({
       return;
     }
     cancelPendingTitleRename();
-    pendingTitleRenameRef.current = window.setTimeout(() => {
+    pendingTitleRenameRef.current = scheduleAfter(() => {
       pendingTitleRenameRef.current = null;
       beginTitleRename(entry);
     }, titleRenameDelayMs);
@@ -1411,7 +1414,9 @@ export function MediaBinTable({
       if (dragging) {
         finishEvent.preventDefault();
         suppressRowClickRef.current = true;
-        window.setTimeout(() => {
+        cancelTask(releaseClickTaskRef.current);
+        releaseClickTaskRef.current = scheduleAfter(() => {
+          releaseClickTaskRef.current = null;
           suppressRowClickRef.current = false;
         }, 0);
       }
@@ -1485,7 +1490,9 @@ export function MediaBinTable({
       if (dragging) {
         finishEvent.preventDefault();
         suppressRowClickRef.current = true;
-        window.setTimeout(() => {
+        cancelTask(releaseClickTaskRef.current);
+        releaseClickTaskRef.current = scheduleAfter(() => {
+          releaseClickTaskRef.current = null;
           suppressRowClickRef.current = false;
         }, 0);
       }

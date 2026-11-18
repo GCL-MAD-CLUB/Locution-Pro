@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask } from "../../../../runtime/scheduling";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { RotateCw } from "lucide-react";
 import {
@@ -285,7 +286,7 @@ export function StoryboardMotionPanel({
     let disposed = false;
     const controller = new AbortController();
     setResult({ key, data: null, failed: false });
-    const timer = window.setTimeout(() => {
+    const timer = scheduleAfter(() => {
       void runOperation<FrameTraceData>("storyboard.trace", () =>
         decodeBrowserFrameTrace(
           videoSource!,
@@ -308,7 +309,7 @@ export function StoryboardMotionPanel({
     }, 180);
     return () => {
       disposed = true;
-      window.clearTimeout(timer);
+      cancelTask(timer);
       controller.abort();
     };
   }, [

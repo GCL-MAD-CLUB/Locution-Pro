@@ -1,4 +1,5 @@
-﻿import { convertFileSrc } from "@tauri-apps/api/core";
+import { scheduleAfter, cancelTask, waitForDelay, type ScheduledTask } from "../runtime/scheduling";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { captureOperationError, clientError, invokeCommand } from "../errors";
 import { isTauriRuntime } from "../platform/tauri/runtime";
 import { frameDurationUs } from "../core/editor/timeline";
@@ -232,11 +233,11 @@ function createTimelineThumbnailProvider({
     if (missing.length > 0 && !backendPreferredSources.has(videoSource)) {
       let extractionSettled = false;
       let startBackend!: () => void;
-      let backendTimer: number | undefined;
+      let backendTimer: ScheduledTask | undefined;
       const backendGate = new Promise<void>((resolve) => {
         startBackend = resolve;
         if (tauriRuntime) {
-          backendTimer = window.setTimeout(resolve, backendHedgeDelayMs);
+          backendTimer = scheduleAfter(resolve, backendHedgeDelayMs);
         }
       });
       const seekTimeUs = browserSeekTimeUs?.(options, extractionTimeUs) ?? extractionTimeUs;
@@ -276,7 +277,7 @@ function createTimelineThumbnailProvider({
           }
           backendPreferredSources.add(videoSource);
           if (backendTimer !== undefined) {
-            window.clearTimeout(backendTimer);
+            cancelTask(backendTimer);
           }
           startBackend();
           return Promise.reject(error);
@@ -297,7 +298,7 @@ function createTimelineThumbnailProvider({
           return results;
         } finally {
           if (backendTimer !== undefined) {
-            window.clearTimeout(backendTimer);
+            cancelTask(backendTimer);
           }
         }
       }
@@ -393,7 +394,7 @@ async function persistThumbnail(
   blob: Blob,
 ) {
   try {
-    await new Promise((resolve) => window.setTimeout(resolve, thumbnailCacheWriteDelayMs));
+    await waitForDelay(thumbnailCacheWriteDelayMs);
     const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
     await invokeCommand(definition.commands.cacheWrite, {
       assetId,
@@ -443,7 +444,7 @@ function waitForVideoEvent(
 ) {
   return new Promise<void>((resolve, reject) => {
     const cleanup = () => {
-      window.clearTimeout(timeoutId);
+      cancelTask(timeoutId);
       for (const eventName of successEvents) {
         video.removeEventListener(eventName, handleSuccess);
       }
@@ -462,7 +463,7 @@ function waitForVideoEvent(
         ),
       );
     };
-    const timeoutId = window.setTimeout(() => {
+    const timeoutId = scheduleAfter(() => {
       cleanup();
       reject(
         clientError(
@@ -519,14 +520,14 @@ function waitForPresentedVideoFrame(video: HTMLVideoElement) {
     return Promise.resolve();
   }
   return new Promise<void>((resolve) => {
-    const timeoutId = window.setTimeout(() => {
+    const timeoutId = scheduleAfter(() => {
       if (callbackId !== undefined) {
         frameVideo.cancelVideoFrameCallback?.(callbackId);
       }
       resolve();
     }, videoFramePresentationTimeoutMs);
     const callbackId = frameVideo.requestVideoFrameCallback(() => {
-      window.clearTimeout(timeoutId);
+      cancelTask(timeoutId);
       resolve();
     });
   });

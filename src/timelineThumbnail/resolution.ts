@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../runtime/scheduling";
 import type { RenderLifetime } from "../runtime/lifetime/RenderLifetime";
 import { useState } from "react";
 
@@ -37,7 +38,7 @@ export function useTimelineThumbnailResolution<Element extends HTMLElement>(
     }
     const committed = { width: resolution?.width ?? 0 };
     let firstMeasurement = true;
-    let timer: number | null = null;
+    let timer: ScheduledTask | null = null;
 
     const applyResolution = (next: TimelineThumbnailResolution) => {
       if (committed.width === next.width) {
@@ -49,13 +50,13 @@ export function useTimelineThumbnailResolution<Element extends HTMLElement>(
 
     const scheduleResolution = (next: TimelineThumbnailResolution) => {
       if (timer !== null) {
-        window.clearTimeout(timer);
+        cancelTask(timer);
         timer = null;
       }
       if (next.width === committed.width) {
         return;
       }
-      timer = window.setTimeout(() => {
+      timer = scheduleAfter(() => {
         timer = null;
         applyResolution(next);
       }, resolutionChangeDelayMs);
@@ -81,7 +82,7 @@ export function useTimelineThumbnailResolution<Element extends HTMLElement>(
     window.addEventListener("resize", updateResolution);
     return () => {
       if (timer !== null) {
-        window.clearTimeout(timer);
+        cancelTask(timer);
       }
       observer.disconnect();
       window.removeEventListener("resize", updateResolution);

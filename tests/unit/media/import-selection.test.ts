@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import * as scheduling from "../support/scheduling.ts";
 import { createModuleLoader, deferred, flush } from "../support/module-loader.ts";
 import { clientError } from "../../../src/errors/model.ts";
 import * as model from "../../../src/components/panels/ImportWorkspace/browser/importBrowserModel.ts";
@@ -24,8 +25,7 @@ const theme = load<ThemeModule>("../../../src/runtime/theme.ts", {
 });
 const scan = load<ImportFolderScanModule>(
   "../../../src/components/panels/ImportWorkspace/browser/importFolderScan.ts",
-  { "./importBrowserModel": model },
-  { setTimeout },
+  { "./importBrowserModel": model, "../../../../runtime/scheduling": scheduling },
 );
 const entry = (path: string, is_directory = false): ImportEntry => ({
   path,

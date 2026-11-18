@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask } from "../../../../runtime/scheduling";
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { KeywordPresetControl } from "./KeywordPresetControl";
@@ -469,7 +470,7 @@ export function StoryboardKeywordPanel({
     ) {
       return;
     }
-    const timeoutId = window.setTimeout(() => {
+    const timeoutId = scheduleAfter(() => {
       setCollapsedNodeIds((current) => {
         if (!current.has(draggedKeywordHoverId)) {
           return current;
@@ -479,7 +480,7 @@ export function StoryboardKeywordPanel({
         return next;
       });
     }, 600);
-    return () => window.clearTimeout(timeoutId);
+    return () => cancelTask(timeoutId);
   }, [childrenByParent, collapsedNodeIds, draggedKeywordHoverId, normalizedFilter]);
 
   const matchingTreeNodeIds = useMemo(() => {

@@ -1,3 +1,4 @@
+import { suppressReleaseClick } from "../../../common/utils/suppressReleaseClick";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   assetLibraryCanDropInto,
@@ -32,16 +33,6 @@ export interface AssetLibraryDragPreview {
 const draggingClass = "is-dragging-storyboard-shot";
 
 const allowedClass = "is-storyboard-shot-drag-allowed";
-
-/** Ends a drag without the release also counting as a click on whatever is under it. */
-function suppressNextClick() {
-  const swallow = (event: MouseEvent) => {
-    event.stopPropagation();
-    event.preventDefault();
-  };
-  window.addEventListener("click", swallow, { capture: true, once: true });
-  window.setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
-}
 
 export interface AssetLibraryDragDropContext {
   library: ProjectAssetLibraryState;
@@ -166,7 +157,7 @@ export function useAssetLibraryDragDrop(context: AssetLibraryDragDropContext) {
       cleanup();
       if (!dragging) return;
       upEvent.preventDefault();
-      suppressNextClick();
+      suppressReleaseClick(context.cleanupRef);
       const target = targetAt(upEvent.clientX, upEvent.clientY);
       if (target) drop(target.location, upEvent.ctrlKey || upEvent.metaKey);
     };
@@ -188,7 +179,7 @@ export function useAssetLibraryDragDrop(context: AssetLibraryDragDropContext) {
       const onRelease = (upEvent: PointerEvent) => {
         if (upEvent.pointerId !== pointerId) return;
         releaseCleanup();
-        suppressNextClick();
+        suppressReleaseClick(context.cleanupRef);
       };
       const releaseCleanup = () => {
         window.removeEventListener("pointerup", onRelease);

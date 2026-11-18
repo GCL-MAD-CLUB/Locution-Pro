@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
 import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
   useCallback,
@@ -31,7 +32,7 @@ function isNameTarget(target: EventTarget | null) {
  */
 export function useSlowClickRename(lifetime: RenderLifetime, startRename: (key: string) => void) {
   const armedRef = useRef<ArmedPress | null>(null);
-  const timerRef = useRef<number | null>(null);
+  const timerRef = useRef<ScheduledTask | null>(null);
   const startRenameRef = useRef(startRename);
   lifetime.useBeforePaint(() => {
     startRenameRef.current = startRename;
@@ -39,7 +40,7 @@ export function useSlowClickRename(lifetime: RenderLifetime, startRename: (key: 
 
   const cancel = useCallback(() => {
     armedRef.current = null;
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    if (timerRef.current !== null) cancelTask(timerRef.current);
     timerRef.current = null;
   }, []);
 
@@ -62,7 +63,7 @@ export function useSlowClickRename(lifetime: RenderLifetime, startRename: (key: 
     armedRef.current = null;
     if (!armed || armed.key !== key || event.detail > 1 || !isNameTarget(event.target)) return;
     if (Math.hypot(event.clientX - armed.x, event.clientY - armed.y) >= clickSlopPx) return;
-    timerRef.current = window.setTimeout(() => {
+    timerRef.current = scheduleAfter(() => {
       timerRef.current = null;
       startRenameRef.current(key);
     }, renameDelayMs);

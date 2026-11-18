@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask } from "../../../runtime/scheduling";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { useId, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { version } from "../../../../package.json";
@@ -27,7 +28,7 @@ function useCreditsAutoScroll(lifetime: RenderLifetime, enabled: boolean) {
     let position = 0;
     let lastFrame = 0;
     let frame = 0;
-    const holdTimer = window.setTimeout(() => {
+    const holdTimer = scheduleAfter(() => {
       lastFrame = performance.now();
       frame = window.requestAnimationFrame(roll);
     }, CREDITS_HOLD_MS);
@@ -43,7 +44,7 @@ function useCreditsAutoScroll(lifetime: RenderLifetime, enabled: boolean) {
     }
 
     return () => {
-      window.clearTimeout(holdTimer);
+      cancelTask(holdTimer);
       window.cancelAnimationFrame(frame);
     };
   }, [enabled]);

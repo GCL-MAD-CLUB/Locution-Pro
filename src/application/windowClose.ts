@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../runtime/scheduling";
 import { normalizeError } from "../errors/runtime";
 
 /** How long a quit waits for task cancellation and incomplete-output cleanup.
@@ -39,7 +40,7 @@ export async function finishWindowClose(
   destroyWindow: () => Promise<void>,
   timeoutMs = CLOSE_TASK_CLEANUP_TIMEOUT_MS,
 ): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: ScheduledTask | undefined;
   let failed: unknown;
   let settled = false;
   const cleanup = cancelTasks()
@@ -51,12 +52,12 @@ export async function finishWindowClose(
       settled = true;
     });
   const timeout = new Promise<void>((resolve) => {
-    timer = setTimeout(resolve, timeoutMs);
+    timer = scheduleAfter(resolve, timeoutMs);
   });
   try {
     await Promise.race([cleanup, timeout]);
   } finally {
-    if (timer !== undefined) clearTimeout(timer);
+    if (timer !== undefined) cancelTask(timer);
   }
   if (settled && failed !== undefined) {
     throw normalizeError(failed);

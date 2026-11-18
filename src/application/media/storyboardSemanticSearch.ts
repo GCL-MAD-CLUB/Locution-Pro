@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask } from "../../runtime/scheduling";
 import type { RenderLifetime } from "../../runtime/lifetime/RenderLifetime";
 import { searchSemanticPrompts } from "../../core/editor/semanticPrompts";
 import {
@@ -298,7 +299,7 @@ export function useStoryboardSemanticSearch(
       cancelledRequest.current === requestKey
     )
       return;
-    const timer = window.setTimeout(() => {
+    const timer = scheduleAfter(() => {
       busy.current = true;
       void (async () => {
         const start = latest.current;
@@ -411,7 +412,7 @@ export function useStoryboardSemanticSearch(
     }, 350);
     // Only the debounce is tied to view changes. A started index keeps its
     // background task and queue slot until native work settles.
-    return () => window.clearTimeout(timer);
+    return () => cancelTask(timer);
   }, [requestKey, tick, reusable]);
 
   const current = requestKey && result?.key === requestKey ? result : reusable;

@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
 import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
@@ -153,7 +154,7 @@ interface MarqueeGesture {
   camera: StoryboardGraphCamera;
   capture: HTMLElement | SVGPathElement;
   active: boolean;
-  timer?: number;
+  timer?: ScheduledTask;
   spray?: { historyGroupId: string };
 }
 
@@ -302,8 +303,8 @@ const GraphHighlightedEdges = memo(function GraphHighlightedEdges({
       nodes,
       edges: [...new Set([...(previous.nodes === nodes ? previous.edges : []), ...edges])],
     }));
-    const timer = window.setTimeout(() => setRetained({ edges, nodes }), graphHoverDurationMs);
-    return () => window.clearTimeout(timer);
+    const timer = scheduleAfter(() => setRetained({ edges, nodes }), graphHoverDurationMs);
+    return () => cancelTask(timer);
   }, [edges, nodes]);
   return lifetime.render(
     <>
@@ -367,11 +368,11 @@ function GraphPreviewPresence({
       return [...merged.values()];
     });
     const activeIds = new Set(previews.map((preview) => preview.node.id));
-    const timer = window.setTimeout(
+    const timer = scheduleAfter(
       () => setRetained((previous) => previous.filter((preview) => activeIds.has(preview.node.id))),
       graphHoverDurationMs,
     );
-    return () => window.clearTimeout(timer);
+    return () => cancelTask(timer);
   }, [previews, enabled]);
   return lifetime.render(
     enabled
@@ -875,7 +876,7 @@ export function StoryboardGraphCanvas({
         if (node.capture.hasPointerCapture(node.id)) node.capture.releasePointerCapture(node.id);
       }
       if (selection) {
-        window.clearTimeout(selection.timer);
+        cancelTask(selection.timer);
         if (selection.capture.hasPointerCapture(selection.id))
           selection.capture.releasePointerCapture(selection.id);
         if (selection.active && restoreSelection && !selection.spray)
@@ -978,7 +979,7 @@ export function StoryboardGraphCanvas({
       window.removeEventListener("blur", blur);
       window.removeEventListener("keydown", escape, true);
       const current = marqueeRef.current;
-      if (current) window.clearTimeout(current.timer);
+      if (current) cancelTask(current.timer);
     };
   }, [cancelGestures, resetHover]);
 
@@ -1050,7 +1051,7 @@ export function StoryboardGraphCanvas({
   function updateMarquee(gesture: MarqueeGesture, point: { x: number; y: number }) {
     gesture.active = true;
     gesture.point = point;
-    window.clearTimeout(gesture.timer);
+    cancelTask(gesture.timer);
     suppressClickRef.current = true;
     resetHover();
     const rect = storyboardGraphSelectionRect(gesture.start, point);
@@ -1151,7 +1152,7 @@ export function StoryboardGraphCanvas({
         active: false,
         spray: sprayActive ? { historyGroupId: newSprayHistoryGroup() } : undefined,
       };
-      gesture.timer = window.setTimeout(() => {
+      gesture.timer = scheduleAfter(() => {
         if (marqueeRef.current === gesture) updateMarquee(gesture, gesture.point);
       }, 180);
       marqueeRef.current = gesture;
@@ -1245,7 +1246,7 @@ export function StoryboardGraphCanvas({
         }
       }
       marqueeRef.current = null;
-      window.clearTimeout(selection.timer);
+      cancelTask(selection.timer);
       setMarquee(null);
       if (selection.capture.hasPointerCapture(selection.id))
         selection.capture.releasePointerCapture(selection.id);

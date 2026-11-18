@@ -1,8 +1,9 @@
 import { test, expect } from "../../support/fixtures";
 import type { Page } from "@playwright/test";
 
-async function mount(page: Page) {
+async function mount(page: Page, installClock = false) {
   await page.goto("/tests/browser/support/blank.html");
+  if (installClock) await page.clock.install();
   await page.evaluate(async () => {
     const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
     (await import(/* @vite-ignore */ path)).mountLiveGraph();
@@ -40,6 +41,9 @@ for (const reduced of [false, true]) {
   }) => {
     await page.emulateMedia({ reducedMotion: reduced ? "reduce" : "no-preference" });
     await page.goto("/tests/browser/support/blank.html");
+    // Install before mounting: replacing timer APIs after acquisition mixes native
+    // resource IDs with the fake clock and prevents library-owned timers from clearing.
+    await page.clock.install();
     await page.evaluate(async () => {
       const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
       (await import(/* @vite-ignore */ path)).mountLiveGraph(true, false, 64, 8);
@@ -53,8 +57,7 @@ for (const reduced of [false, true]) {
     await page
       .getByRole("group", { name: "图谱全景导航", exact: true })
       .click({ position: { x: 105, y: 35 } });
-    await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
-    await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"));
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
     const before = await graphFraming(page);
     const beforeTransform = await page
       .locator(".storyboard-graph-world")
@@ -494,7 +497,7 @@ test("filter updates reuse vectors and the worker, keep the scene visible and sp
 test("semantic thresholds rebuild the visible topology; deletion reuses search scores with no native work or progress", async ({
   page,
 }) => {
-  await mount(page);
+  await mount(page, true);
   await page.evaluate(() => window.graphLiveQuery("sun"));
   await assertConnected(page, ["4", "5", "6", "7", "8"]);
   await expect(page.locator(".storyboard-graph-message, .topbar-progress")).toHaveCount(0);
@@ -518,7 +521,6 @@ test("semantic thresholds rebuild the visible topology; deletion reuses search s
   await assertConnected(page, ["6", "8"]);
   await expect(page.locator(".storyboard-graph-dot")).toHaveCount(2);
   // Let the search debounce elapse too: deletion must not enqueue a later search.
-  await page.clock.install();
   await page.clock.runFor(500);
   const after = await page.evaluate(() => ({
     calls: window.graphLiveCalls.length,
@@ -532,7 +534,7 @@ test("semantic thresholds rebuild the visible topology; deletion reuses search s
 test("deleting during an in-flight semantic search accepts its remaining scores without another search", async ({
   page,
 }) => {
-  await mount(page);
+  await mount(page, true);
   await page.evaluate(() => {
     window.graphLiveHoldSearch = true;
     window.graphLiveQuery("sun");
@@ -552,7 +554,6 @@ test("deleting during an in-flight semantic search accepts its remaining scores 
   await assertConnected(page, ["0", "1", "2", "3", "4", "5", "6", "8"]);
   await page.evaluate(() => window.graphLiveReleaseSearch());
   await assertConnected(page, ["4", "5", "6", "8"]);
-  await page.clock.install();
   await page.clock.runFor(500);
   expect(await page.evaluate(() => window.graphLiveCalls.length)).toBe(calls);
   expect(await page.evaluate(() => window.graphLiveSearchStatus)).toBe("ready");

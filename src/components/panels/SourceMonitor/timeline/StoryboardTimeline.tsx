@@ -1,3 +1,4 @@
+import { scheduleAfter, cancelTask, type ScheduledTask } from "../../../../runtime/scheduling";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
   useMemo,
@@ -128,6 +129,8 @@ export function StoryboardTimeline({
   const dragRef = useRef<CutDrag | null>(null);
   const deselectionPointerRef = useRef<number | null>(null);
   const suppressDeselectionClickRef = useRef(false);
+  const releaseClickTaskRef = useRef<ScheduledTask | null>(null);
+  lifetime.useAfterCommit(() => () => cancelTask(releaseClickTaskRef.current), []);
   const previousShotsRef = useRef(shots);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [menu, setMenu] = useState<{ x: number; y: number; cutId?: string } | null>(null);
@@ -383,7 +386,9 @@ export function StoryboardTimeline({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     deselectionPointerRef.current = null;
-    window.setTimeout(() => {
+    cancelTask(releaseClickTaskRef.current);
+    releaseClickTaskRef.current = scheduleAfter(() => {
+      releaseClickTaskRef.current = null;
       suppressDeselectionClickRef.current = false;
     }, 0);
   }

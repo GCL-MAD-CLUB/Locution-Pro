@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createModuleLoader } from "../support/module-loader.ts";
 import { RenderLifetime } from "../support/lifetime.ts";
 import { fallbackSelectionValue } from "../../../src/components/common/PopupMenu/selectionValue.ts";
+import * as scheduling from "../support/scheduling.ts";
 
 const menu = createModuleLoader(import.meta.url)<
   typeof import("../../../src/components/common/PopupMenu/PopupMenu.tsx")
@@ -15,6 +16,7 @@ const menu = createModuleLoader(import.meta.url)<
   "react-dom": {},
   "lucide-react": {},
   "../../../runtime/lifetime/RenderLifetime": { RenderLifetime },
+  "../../../runtime/scheduling": scheduling,
   "../../../errors": { clientError: (_code: string, message: string) => new Error(message) },
   "./selectionValue": { fallbackSelectionValue },
   "./PopupMenu.css": {},

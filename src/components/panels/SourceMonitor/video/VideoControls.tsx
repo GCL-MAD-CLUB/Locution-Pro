@@ -506,6 +506,7 @@ export function VideoControls<PreviewMode extends string = MonitorPreviewMode>({
         )}
         {rangeActions && (
           <button
+            type="button"
             onClick={rangeActions.onMarkIn}
             title="标记入点"
             aria-label="标记入点"
@@ -558,6 +559,7 @@ export function VideoControls<PreviewMode extends string = MonitorPreviewMode>({
         )}
         {rangeActions && (
           <button
+            type="button"
             onClick={rangeActions.onMarkOut}
             title="标记出点"
             aria-label="标记出点"

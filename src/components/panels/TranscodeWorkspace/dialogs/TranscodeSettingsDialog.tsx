@@ -75,7 +75,6 @@ export function TranscodeSettingsDialog({
 }: TranscodeSettingsDialogProps) {
   const capabilities = useTranscodeQueueState((state) => state.capabilities);
   const userPresets = useTranscodeQueueState((state) => state.userPresets);
-  const projectDirectory = useTranscodeQueueState((state) => state.projectDirectory);
   const [settings, setSettings] = useScopedState<TranscodeSettings>(
     null,
     (() => cloneTranscodeSettings(output.settings))(),

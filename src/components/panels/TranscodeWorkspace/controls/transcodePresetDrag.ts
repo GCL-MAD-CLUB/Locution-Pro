@@ -1,3 +1,4 @@
+import { scheduleAfter } from "../../../../runtime/scheduling";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
@@ -45,13 +46,19 @@ function dropOutputIds(rowId: string | null) {
 }
 
 /** Keeps the release that ends a drag from also clicking whatever is under it. */
-function suppressNextClick() {
+function suppressNextClick(signal: AbortSignal) {
+  if (signal.aborted) return;
   const swallow = (event: MouseEvent) => {
     event.stopPropagation();
     event.preventDefault();
   };
-  window.addEventListener("click", swallow, { capture: true, once: true });
-  window.setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+  window.addEventListener("click", swallow, { capture: true, once: true, signal });
+  const task = scheduleAfter(() => {
+    window.removeEventListener("click", swallow, { capture: true });
+    signal.removeEventListener("abort", cancel);
+  }, 0);
+  const cancel = () => task.cancel();
+  signal.addEventListener("abort", cancel, { once: true });
 }
 
 /**
@@ -61,6 +68,7 @@ function suppressNextClick() {
 export function startTranscodePresetDrag(
   event: ReactPointerEvent<HTMLElement>,
   preset: TranscodePreset,
+  signal: AbortSignal,
 ) {
   if (event.button !== 0 || !event.isPrimary) return;
   const startX = event.clientX;
@@ -69,6 +77,7 @@ export function startTranscodePresetDrag(
   let dragging = false;
 
   const cleanup = () => {
+    signal.removeEventListener("abort", cleanup);
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("pointercancel", onCancel);
@@ -104,7 +113,7 @@ export function startTranscodePresetDrag(
     cleanup();
     if (!dragging) return;
     upEvent.preventDefault();
-    suppressNextClick();
+    suppressNextClick(signal);
     if (outputIds.length > 0) transcodeQueueStore.getState().applyPreset(outputIds, preset);
   };
 
@@ -121,11 +130,12 @@ export function startTranscodePresetDrag(
     const onRelease = (releaseEvent: PointerEvent) => {
       if (releaseEvent.pointerId !== pointerId) return;
       window.removeEventListener("pointerup", onRelease);
-      suppressNextClick();
+      suppressNextClick(signal);
     };
-    window.addEventListener("pointerup", onRelease);
+    window.addEventListener("pointerup", onRelease, { signal });
   };
 
+  signal.addEventListener("abort", cleanup, { once: true });
   window.addEventListener("pointermove", onMove, { passive: false });
   window.addEventListener("pointerup", onUp);
   window.addEventListener("pointercancel", onCancel);

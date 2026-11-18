@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { open } from "@tauri-apps/plugin-dialog";
 import { CopyPlus, ListPlus, ListX, Play, Plus, RotateCcw, Square, Trash2 } from "lucide-react";
 import { VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
@@ -112,6 +113,7 @@ interface TranscodeQueueProps {
 }
 
 export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
+  const lifetime = new RenderLifetime();
   const sources = useTranscodeQueueState((state) => state.sources);
   const selectedIds = useTranscodeQueueState((state) => state.selectedIds);
   const running = useTranscodeQueueState((state) => state.running);
@@ -166,7 +168,7 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
       dropRows.add(source.id);
   }
 
-  useEditCapability({
+  useEditCapability(lifetime, {
     identity,
     active: panelActive && focusedPanelId === panelInstanceId,
     selectedCount: selectedIds.length,
@@ -287,7 +289,7 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
         : output.destination
           ? path
           : "未选择输出位置（必填）";
-    return (
+    return lifetime.render(
       <div
         key={output.id}
         role="row"
@@ -341,11 +343,11 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
             </span>
           )}
         </span>
-      </div>
+      </div>,
     );
   }
 
-  return (
+  return lifetime.render(
     <div className="transcode-queue">
       <div className="transcode-panel-toolbar">
         <button
@@ -501,6 +503,6 @@ export function TranscodeQueue({ onEditOutput }: TranscodeQueueProps) {
           }}
         />
       )}
-    </div>
+    </div>,
   );
 }

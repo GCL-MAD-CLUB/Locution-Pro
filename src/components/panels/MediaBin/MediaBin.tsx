@@ -673,6 +673,14 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     }
   }, [scopedEntryIds, selectItems, selectedIds]);
 
+  const revealFrame = useRef<number | null>(null);
+  lifetime.useAfterCommit(
+    () => () => {
+      if (revealFrame.current !== null) cancelAnimationFrame(revealFrame.current);
+    },
+    [],
+  );
+
   // Other pages (the transcode queue) ask to show the items of finished files.
   useBroadcastEvent(lifetime, identity, "media.reveal.requested", ({ payload }) => {
     const paths = new Set(payload.paths);
@@ -690,7 +698,9 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     setExpandedFolderIds((current) => new Set([...current, ...ancestors]));
     setCurrentFolderId(items[0].bin_id ?? rootFolderId);
     selectItems(items.map((item) => item.id));
-    requestAnimationFrame(() => {
+    if (revealFrame.current !== null) cancelAnimationFrame(revealFrame.current);
+    revealFrame.current = requestAnimationFrame(() => {
+      revealFrame.current = null;
       panelRef.current
         ?.querySelector(`[data-media-entry-id="${CSS.escape(items[0].id)}"]`)
         ?.scrollIntoView({ block: "nearest", inline: "nearest" });

@@ -1,3 +1,4 @@
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   ChevronDown,
@@ -9,7 +10,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { invokeCommand, runOperation } from "../../../../errors";
 import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import {
@@ -47,6 +48,9 @@ function presetRate(preset: TranscodePreset) {
 }
 
 export function TranscodePresetBrowser() {
+  const lifetime = new RenderLifetime();
+  const dragOwner = useRef<AbortController | null>(null);
+  lifetime.useAfterCommit(() => () => dragOwner.current?.abort(), []);
   const capabilities = useTranscodeQueueState((state) => state.capabilities);
   const userPresets = useTranscodeQueueState((state) => state.userPresets);
   const sources = useTranscodeQueueState((state) => state.sources);
@@ -126,7 +130,7 @@ export function TranscodePresetBrowser() {
     );
   }
 
-  return (
+  return lifetime.render(
     <div className="transcode-presets">
       <div className="transcode-panel-toolbar">
         <button
@@ -205,7 +209,7 @@ export function TranscodePresetBrowser() {
         </div>
         {groups.map(([group, list]) => {
           const isCollapsed = collapsed.has(group);
-          return (
+          return lifetime.render(
             <div key={group} role="group" aria-label={group}>
               <button
                 type="button"
@@ -232,7 +236,13 @@ export function TranscodePresetBrowser() {
                     aria-selected={selected === preset.id}
                     className={`transcode-preset-row ${selected === preset.id ? "selected" : ""} ${usable ? "" : "is-unavailable"}`}
                     title={usable ? undefined : "当前 FFmpeg 不支持此预设所需的格式或编码器"}
-                    onPointerDown={(event) => usable && startTranscodePresetDrag(event, preset)}
+                    onPointerDown={(event) => {
+                      if (!usable) return;
+                      dragOwner.current?.abort();
+                      const owner = new AbortController();
+                      dragOwner.current = owner;
+                      startTranscodePresetDrag(event, preset, owner.signal);
+                    }}
                     onClick={() => setSelected(preset.id)}
                     onDoubleClick={() => usable && apply(preset)}
                   >
@@ -247,7 +257,7 @@ export function TranscodePresetBrowser() {
                     <span>{presetRate(preset)}</span>
                   </button>
                 ))}
-            </div>
+            </div>,
           );
         })}
       </div>
@@ -261,6 +271,6 @@ export function TranscodePresetBrowser() {
           refused={dropCount === 0}
         />
       )}
-    </div>
+    </div>,
   );
 }

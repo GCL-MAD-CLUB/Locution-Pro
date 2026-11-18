@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import type { KeyboardEvent, PointerEvent, RefObject } from "react";
 
 const keyboardStep = 0.02;
@@ -29,12 +31,16 @@ export function TranscodeSeam({
   label,
   onChange,
 }: TranscodeSeamProps) {
+  const lifetime = new RenderLifetime();
+  const release = useRef<(() => void) | null>(null);
+  lifetime.useAfterCommit(() => () => release.current?.(), []);
   const horizontal = axis === "columns";
 
   function beginDrag(event: PointerEvent<HTMLDivElement>) {
     const container = containerRef.current;
     if (event.button !== 0 || !container) return;
     event.preventDefault();
+    release.current?.();
     const rect = container.getBoundingClientRect();
     const size = horizontal ? rect.width : rect.height;
     if (size <= 0) return;
@@ -50,12 +56,14 @@ export function TranscodeSeam({
       onChange(clamp(startRatio + (pointer - startPointer) / size, min, max));
     };
     const onUp = () => {
+      release.current = null;
       if (seam.hasPointerCapture(pointerId)) seam.releasePointerCapture(pointerId);
       document.body.classList.remove("is-resizing-x", "is-resizing-y");
       seam.removeEventListener("pointermove", onMove);
       seam.removeEventListener("pointerup", onUp);
       seam.removeEventListener("pointercancel", onUp);
     };
+    release.current = onUp;
     seam.addEventListener("pointermove", onMove);
     seam.addEventListener("pointerup", onUp);
     seam.addEventListener("pointercancel", onUp);
@@ -70,7 +78,7 @@ export function TranscodeSeam({
     onChange(clamp(ratio + step, min, max));
   }
 
-  return (
+  return lifetime.render(
     <div
       className={`transcode-seam is-${axis}`}
       role="separator"
@@ -82,6 +90,6 @@ export function TranscodeSeam({
       tabIndex={0}
       onPointerDown={beginDrag}
       onKeyDown={handleKeyDown}
-    />
+    />,
   );
 }

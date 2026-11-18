@@ -520,12 +520,14 @@ export function usePanelMediaSource(lifetime: RenderLifetime, kind: "subtitles" 
   );
   const hasProject = Boolean(project);
   const selectionInitialized = selection.projectId === projectId && selection.videoId !== null;
+  // Playback frame persistence must not issue another source-open command.
+  const { videoId: selectedVideoId, savedFrame, openVersion } = selection;
   const openSource = useCallback(() => {
     if (!selectionInitialized) return;
     stateHub.publish<PlaybackSourceModeProjection>(PLAYBACK_SOURCE_MODE_PROJECTION, identity, {
       mode: kind,
       videoId: activeVideoId,
-      frame: selection.videoId === activeVideoId ? selection.savedFrame() : 0,
+      frame: selectedVideoId === activeVideoId ? savedFrame() : 0,
     });
     if (!hasProject) {
       sourcePreviewCleared();
@@ -543,7 +545,8 @@ export function usePanelMediaSource(lifetime: RenderLifetime, kind: "subtitles" 
     identity,
     kind,
     activeVideoId,
-    selection,
+    selectedVideoId,
+    savedFrame,
     hasProject,
     activeVideoChanged,
     activeTrackId,
@@ -552,23 +555,31 @@ export function usePanelMediaSource(lifetime: RenderLifetime, kind: "subtitles" 
   ]);
   const previousControlRef = useRef<{
     openSource: typeof openSource;
+    openVersion: number;
     canOpenSource: boolean;
     panelActive: boolean;
     panelFocused: boolean;
   } | null>(null);
   lifetime.useBeforePaint(() => {
     const previous = previousControlRef.current;
-    previousControlRef.current = { openSource, canOpenSource, panelActive, panelFocused };
+    previousControlRef.current = {
+      openSource,
+      openVersion,
+      canOpenSource,
+      panelActive,
+      panelFocused,
+    };
     if (
       panelActive &&
       ((canOpenSource &&
         (!previous?.canOpenSource ||
           !previous.panelActive ||
-          previous.openSource !== openSource)) ||
+          previous.openSource !== openSource ||
+          previous.openVersion !== openVersion)) ||
         (panelFocused && !previous?.panelFocused))
     )
       openSource();
-  }, [canOpenSource, openSource, panelActive, panelFocused]);
+  }, [canOpenSource, openSource, openVersion, panelActive, panelFocused]);
   // Shared media follow the actual player even when another panel owns it.
   // Keep each panel's chosen sources, active source and subtitle track intact.
   const playbackSource = source.selectedSources.find(

@@ -14,7 +14,7 @@ import {
   Trash2,
   type LucideIcon,
 } from "lucide-react";
-import { useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { AssetLibrarySort } from "../../../../core/editor/assetLibrary";
 import {
@@ -78,7 +78,7 @@ export interface AssetLibraryCommandBarActions {
   showProperties: () => void;
 }
 
-type CommandMenu = "new" | "sort" | "view" | "filter" | "more";
+type CommandMenu = "new" | "sort" | "view" | "filter" | "more" | "actions";
 
 /**
  * File-manager command bar: create, clipboard, rename and delete, then sort, view, filter
@@ -93,6 +93,67 @@ export function AssetLibraryCommandBar({
 }) {
   const lifetime = new RenderLifetime();
 
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const [compact, setCompact] = useState(false);
+  lifetime.useBeforePaint(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const style = getComputedStyle(bar);
+    const children = Array.from(bar.children) as HTMLElement[];
+    // Measure the full toolbar once, before collapsing, so resizing cannot oscillate.
+    const requiredWidth =
+      children.reduce((width, child) => {
+        const childStyle = getComputedStyle(child);
+        return (
+          width +
+          child.getBoundingClientRect().width +
+          (child.classList.contains("asset-library-command-pane-toggle")
+            ? 0
+            : parseFloat(childStyle.marginLeft) || 0) +
+          (parseFloat(childStyle.marginRight) || 0)
+        );
+      }, 0) +
+      (children.length - 1) * (parseFloat(style.columnGap) || 0) +
+      parseFloat(style.paddingLeft) +
+      parseFloat(style.paddingRight);
+    const measure = () => setCompact(bar.clientWidth < Math.ceil(requiredWidth));
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    measure();
+    return () => observer.disconnect();
+  }, []);
+
+  const commands = [
+    {
+      Icon: Scissors,
+      label: "剪切",
+      shortcut: "Ctrl+X",
+      enabled: model.canCut,
+      action: actions.cut,
+    },
+    { Icon: Copy, label: "复制", shortcut: "Ctrl+C", enabled: model.canCopy, action: actions.copy },
+    {
+      Icon: ClipboardPaste,
+      label: "粘贴",
+      shortcut: "Ctrl+V",
+      enabled: model.canPaste,
+      action: actions.paste,
+    },
+    {
+      Icon: TextCursorInput,
+      label: "重命名",
+      shortcut: "F2",
+      enabled: model.canRename,
+      action: actions.rename,
+    },
+    {
+      Icon: Trash2,
+      label: "删除",
+      shortcut: "Delete",
+      enabled: model.canDelete,
+      action: actions.remove,
+    },
+  ];
   const [menu, setMenu] = useState<{ kind: CommandMenu; x: number; y: number } | null>(null);
   /** The one submenu of the open menu: 分组依据 under 排序, 显示 under 查看. */
   const [submenuOpen, setSubmenuOpen] = useState(false);
@@ -128,6 +189,7 @@ export function AssetLibraryCommandBar({
   ) {
     return (
       <button
+        key={label}
         type="button"
         title={`${label} (${shortcut})`}
         aria-label={label}
@@ -164,6 +226,12 @@ export function AssetLibraryCommandBar({
 
   function menuItems(kind: CommandMenu): ReactNode {
     switch (kind) {
+      case "actions":
+        return commands.map(({ label, shortcut, enabled, action }) => (
+          <PopupMenuItem key={label} shortcut={shortcut} disabled={!enabled} onSelect={run(action)}>
+            {label}
+          </PopupMenuItem>
+        ));
       case "new":
         return (
           <PopupMenuItem
@@ -262,14 +330,14 @@ export function AssetLibraryCommandBar({
   }
 
   return lifetime.render(
-    <div className="asset-library-command-bar" role="toolbar" aria-label="素材库命令">
+    <div ref={barRef} className="asset-library-command-bar" role="toolbar" aria-label="素材库命令">
       {menuButton("new", CirclePlus, "新建")}
       <span className="asset-library-command-separator" aria-hidden="true" />
-      {commandButton(Scissors, "剪切", "Ctrl+X", model.canCut, actions.cut)}
-      {commandButton(Copy, "复制", "Ctrl+C", model.canCopy, actions.copy)}
-      {commandButton(ClipboardPaste, "粘贴", "Ctrl+V", model.canPaste, actions.paste)}
-      {commandButton(TextCursorInput, "重命名", "F2", model.canRename, actions.rename)}
-      {commandButton(Trash2, "删除", "Delete", model.canDelete, actions.remove)}
+      {compact
+        ? menuButton("actions", Scissors, "操作")
+        : commands.map(({ Icon, label, shortcut, enabled, action }) =>
+            commandButton(Icon, label, shortcut, enabled, action),
+          )}
       <span className="asset-library-command-separator" aria-hidden="true" />
       {menuButton("sort", ArrowUpDown, "排序")}
       {menuButton("view", LayoutList, "查看")}

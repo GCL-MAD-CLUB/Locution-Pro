@@ -182,7 +182,7 @@ test("queued outputs require a destination and keep it for the next sources", ()
   );
 });
 
-test("media bin destinations name any bin folder and restore older configs at the top level", () => {
+test("media bin destinations name any bin folder and restore older configs to the encoder bin", () => {
   const { queue, output } = loadSystem();
   const folders = [
     { id: "b", name: "转码", parent_id: "a" },
@@ -200,6 +200,14 @@ test("media bin destinations name any bin folder and restore older configs at th
     "媒体箱 / 素材 / 转码",
   );
   assert.equal(output.destinationLabel({ kind: "mediaBin", folderId: null }, folders), "媒体箱");
+  assert.equal(
+    output.destinationLabel({ kind: "mediaBin", folderId: "deleted" }, folders),
+    "媒体箱（文件夹已删除）",
+  );
+  assert.equal(
+    output.destinationLabel({ kind: "mediaBin", folderId: output.encoderBinFolderId }, folders),
+    "媒体箱 / encoder",
+  );
   assert.equal(output.destinationLabel({ kind: "folder", directory: "/out" }, folders), "/out");
   assert.equal(output.destinationLabel(null, folders), "未设置");
 
@@ -221,7 +229,7 @@ test("media bin destinations name any bin folder and restore older configs at th
   legacy.getState().restore(snapshot);
   assert.equal(
     JSON.stringify(legacy.getState().sources[0].outputs[0].destination),
-    JSON.stringify({ kind: "mediaBin", folderId: null }),
+    JSON.stringify({ kind: "mediaBin", folderId: output.encoderBinFolderId }),
   );
 });
 

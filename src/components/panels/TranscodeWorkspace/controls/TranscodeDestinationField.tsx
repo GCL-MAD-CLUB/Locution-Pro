@@ -6,6 +6,8 @@ import { isTauriRuntime } from "../../../../platform/tauri/runtime";
 import { useProjectPort } from "../../../../systems/ProjectSystem";
 import {
   destinationLabel,
+  encoderBinFolderId,
+  encoderFolderName,
   mediaBinFolderOutline,
   type TranscodeBinFolder,
   type TranscodeDestination,
@@ -44,8 +46,12 @@ function destinationItems(
       value: `${binValuePrefix}${folder.id}`,
       label: folder.name,
     })),
-    { type: "separator" },
   ];
+  // A restored older config targets the root `encoder` folder; keep that choice listed.
+  if (destination?.kind === "mediaBin" && destination.folderId === encoderBinFolderId) {
+    items.push({ type: "option", value: destinationValue(destination), label: encoderFolderName });
+  }
+  items.push({ type: "separator" });
   if (destination?.kind === "folder" && destination.directory) {
     items.push({
       type: "option",
@@ -73,6 +79,7 @@ export function TranscodeDestinationField({
   const depths = new Map(
     mediaBinFolderOutline(mediaFolders).map(({ folder, depth }) => [folder.id, depth + 1]),
   );
+  depths.set(encoderBinFolderId, 1);
   const label = destinationLabel(destination, mediaFolders);
   const missing = !destination || (destination.kind === "folder" && !destination.directory.trim());
 

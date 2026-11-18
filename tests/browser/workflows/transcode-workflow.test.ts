@@ -39,12 +39,12 @@ test("导入素材默认进入转码队列，未选择输出位置时不能开�
   ).toBeVisible();
 });
 
-test("输出到项目媒体箱时转码完成后放入 encoder 媒体箱", async ({ app, native }) => {
+test("输出到媒体箱时文件写入 encoder 文件夹，完成后导入项目媒体箱", async ({ app, native }) => {
   await importIntoTranscode(app);
   await queue(app).getByRole("row").filter({ hasText: "未选择输出位置" }).click();
   await app.getByRole("button", { name: "输出位置", exact: true }).click();
-  await app.getByRole("option", { name: "项目媒体箱中的 encoder 文件夹", exact: true }).click();
-  await expect(queue(app).getByText("C:/media/encoder/clip.mp4", { exact: true })).toBeVisible();
+  await app.getByRole("option", { name: "媒体箱", exact: true }).click();
+  await expect(queue(app).getByText("媒体箱 / clip.mp4", { exact: true })).toBeVisible();
   await app.getByRole("button", { name: "启动队列", exact: true }).click();
   await expect(queue(app).getByText("完成", { exact: true })).toBeVisible();
   const [call] = await native.calls("transcode_media");
@@ -57,9 +57,6 @@ test("输出到项目媒体箱时转码完成后放入 encoder 媒体箱", async
   await expect
     .poll(async () => (await native.calls("import_media")).map((item) => item.args.path))
     .toContain("C:/media/encoder/clip.mp4");
-  await expect(
-    app.locator(".media-bin-panel").getByText("encoder", { exact: true }).first(),
-  ).toBeVisible();
 });
 
 test("导出设置切换格式后修正编码器，字幕支持 ASS 并要求输出位置", async ({ app }) => {
@@ -81,7 +78,7 @@ test("导出设置切换格式后修正编码器，字幕支持 ASS 并要求输
   await app.getByRole("option", { name: "ASS (Advanced SubStation Alpha)" }).click();
 
   await dialog.getByRole("button", { name: "输出位置", exact: true }).click();
-  await app.getByRole("option", { name: "文件夹（文件管理器 / Finder）", exact: true }).click();
+  await app.getByRole("option", { name: "选择文件夹…", exact: true }).click();
   await expect(dialog.getByText("C:/exports", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "确定", exact: true }).click();
 
@@ -127,9 +124,8 @@ test("导出设置可预览源与输出画面，并可按实际编码画质对�
   await queue(app).getByRole("button", { name: "MP4", exact: true }).click();
   const dialog = app.getByRole("dialog", { name: "导出设置", exact: true });
   const preview = dialog.getByRole("region", { name: "预览", exact: true });
-  await expect(preview.getByRole("tab", { name: "分屏对比", exact: true })).toHaveAttribute(
-    "aria-selected",
-    "true",
+  await expect(preview.getByRole("button", { name: "预览方式", exact: true })).toHaveText(
+    "分屏对比",
   );
   await expect(preview.getByRole("img", { name: "输出画面" })).toBeVisible();
   await expect(preview.getByRole("slider", { name: "对比分界" })).toBeVisible();
@@ -155,15 +151,16 @@ test("导出设置可预览源与输出画面，并可按实际编码画质对�
       ),
     )
     .toBe(true);
-  await preview.getByRole("button", { name: "设为入点", exact: true }).click();
+  await preview.getByRole("button", { name: "标记入点", exact: true }).click();
   await expect(dialog.getByRole("textbox", { name: "入点", exact: true })).toHaveValue(
     "00:00:05.042",
   );
   await expect(preview.locator(".timeline-cue-range")).toBeVisible();
-  await preview.getByRole("button", { name: "清除范围", exact: true }).click();
+  await dialog.getByRole("button", { name: "清除范围", exact: true }).click();
   await expect(dialog.getByRole("textbox", { name: "入点", exact: true })).toHaveValue("");
 
-  await preview.getByRole("tab", { name: "并排", exact: true }).click();
+  await preview.getByRole("button", { name: "预览方式", exact: true }).click();
+  await app.getByRole("option", { name: "并排", exact: true }).click();
   await expect(preview.getByRole("img", { name: "源画面" })).toBeVisible();
   await expect(preview.getByRole("img", { name: "输出画面" })).toBeVisible();
 

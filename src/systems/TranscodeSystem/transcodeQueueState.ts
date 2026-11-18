@@ -1,7 +1,7 @@
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 import { defaultPresetId, resolvePresetSettings, systemPresets } from "./transcodePresets";
-import { fileStem } from "./transcodeOutput";
+import { encoderBinFolderId, fileStem } from "./transcodeOutput";
 import {
   cloneTranscodeSettings,
   defaultTranscodeSettings,
@@ -208,12 +208,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function restoreDestination(value: unknown): TranscodeDestination | null {
   if (!isRecord(value)) return null;
   // Configs saved before media bin folders could be chosen have no folderId;
-  // those outputs go to the top level of the media bin.
-  if (value.kind === "mediaBin")
+  // those outputs keep going to the root `encoder` folder.
+  if (value.kind === "mediaBin") {
+    if (!("folderId" in value)) return { kind: "mediaBin", folderId: encoderBinFolderId };
     return {
       kind: "mediaBin",
       folderId: typeof value.folderId === "string" ? value.folderId : null,
     };
+  }
   if (value.kind === "folder" && typeof value.directory === "string")
     return { kind: "folder", directory: value.directory };
   return null;

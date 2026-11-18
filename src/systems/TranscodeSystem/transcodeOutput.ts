@@ -10,6 +10,13 @@ import type {
 /** On-disk folder, beside the project file, that receives media bin outputs. */
 export const encoderFolderName = "encoder";
 
+/**
+ * Stands for the root `encoder` media bin folder, found or created when the
+ * output finishes. Configs saved before bin folders could be chosen restore
+ * to it, so their outputs keep landing where they used to.
+ */
+export const encoderBinFolderId = "transcode:encoder-bin";
+
 /** The part of a media bin folder that names it and places it in the tree. */
 export interface TranscodeBinFolder {
   id: string;
@@ -117,8 +124,10 @@ export function destinationLabel(
 ) {
   if (!destination) return "未设置";
   if (destination.kind === "folder") return destination.directory || "未设置";
-  const path = destination.folderId ? mediaBinFolderPath(folders, destination.folderId) : [];
-  return ["媒体箱", ...path].join(" / ");
+  if (!destination.folderId) return "媒体箱";
+  if (destination.folderId === encoderBinFolderId) return `媒体箱 / ${encoderFolderName}`;
+  const path = mediaBinFolderPath(folders, destination.folderId);
+  return path.length > 0 ? ["媒体箱", ...path].join(" / ") : "媒体箱（文件夹已删除）";
 }
 
 export function plannedOutputPath(

@@ -556,6 +556,9 @@ export function TranscodePreview({
           macOS 无法直接播放 MKV，正在无损重封装（不重新编码），完成后自动播放。
         </p>
       )}
+      {noOutputVideo && !isPlaying && (
+        <p className="transcode-note">当前设置不导出视频，只显示源画面。</p>
+      )}
       {playbackFailed && (
         <p className="transcode-note">
           无法播放这个源，可逐帧或拖动时间轴查看；也可以在媒体箱为它创建 H.264 代理。

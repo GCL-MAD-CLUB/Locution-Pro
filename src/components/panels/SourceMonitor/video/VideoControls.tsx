@@ -573,6 +573,7 @@ export function VideoControls<PreviewMode extends string = MonitorPreviewMode>({
         <SelectDropdown
           className="monitor-select"
           menuClassName="monitor-select-menu"
+          ariaLabel="预览方式"
           value={previewMode ?? previewModeOptions[0]}
           items={previewModeItems}
           onChange={onPreviewModeChange}

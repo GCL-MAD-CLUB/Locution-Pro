@@ -1,4 +1,5 @@
 import { test, expect } from "../../support/fixtures";
+import type { SearchHistoryEntry } from "../../../../src/components/common/PanelSearch/searchHistory";
 
 for (const label of ["字幕", "分镜"]) {
   test(`${label}最近搜索恢复完整配置、分区与高级星号`, async ({ page }) => {
@@ -60,7 +61,7 @@ for (const label of ["字幕", "分镜"]) {
     await option.click();
     await expect(bar).toBeFocused();
     await expect(bar).toHaveValue("alpha beta");
-    const restored = await page.evaluate(() => (window as any).searchSnapshot);
+    const restored = await page.evaluate(() => window.searchSnapshot);
     expect(restored).toMatchObject({
       mode: "highlight",
       rule: "equals",
@@ -69,7 +70,10 @@ for (const label of ["字幕", "分镜"]) {
     });
     if (label === "分镜") expect(restored.scope).toBe("keywords");
     const afterMouseSelection = await read("text");
-    expect(afterMouseSelection.map((entry: any) => entry.text)).toEqual(["alpha beta", "other"]);
+    expect(afterMouseSelection.map((entry: SearchHistoryEntry) => entry.text)).toEqual([
+      "alpha beta",
+      "other",
+    ]);
     expect(afterMouseSelection[0].configuration.options.excludedText).toBe("draft");
     expect((await read("semantic"))[0].text).toBe("forest");
     await advanced.click();
@@ -94,14 +98,14 @@ for (const label of ["字幕", "分镜"]) {
     await bar.press("Enter");
     await expect(bar).toBeFocused();
     const afterKeyboardSelection = await read("semantic");
-    expect(afterKeyboardSelection.map((entry: any) => entry.text)).toEqual([
+    expect(afterKeyboardSelection.map((entry: SearchHistoryEntry) => entry.text)).toEqual([
       "sunset|beach",
       "forest",
     ]);
     expect(afterKeyboardSelection[0].configuration.options.negativePrompts).toBe("crowd\ncity");
     expect((await read("text"))[0].text).toBe("alpha beta");
     await expect(bar).toHaveValue("sunset|beach");
-    expect(await page.evaluate(() => (window as any).searchSnapshot)).toMatchObject({
+    expect(await page.evaluate(() => window.searchSnapshot)).toMatchObject({
       mode: "semantic",
       query: "sunset\nbeach",
       threshold: 0.321,
@@ -123,6 +127,6 @@ for (const label of ["字幕", "分镜"]) {
     await bar.fill("alpha");
     await expect(page.getByRole("option")).toHaveCount(1);
     await page.getByRole("option", { name: "alpha beta", exact: true }).click();
-    expect(await page.evaluate(() => (window as any).searchSnapshot.mode)).toBe("highlight");
+    expect(await page.evaluate(() => window.searchSnapshot.mode)).toBe("highlight");
   });
 }

@@ -52,7 +52,7 @@ export function MediaBinVideoThumbnail({
   const fallbackPath = project.proxy_path || item.path;
   const fallbackSrc = isTauriRuntime() ? convertFileSrc(fallbackPath) : fallbackPath;
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (analysisPending) {
       setThumbnail(null);
       return;
@@ -92,7 +92,7 @@ export function MediaBinVideoThumbnail({
     };
   }, [item.id, project.asset.fingerprint, analysisPending]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const video = firstFrameVideoRef.current;
     if (!video) return;
     video.pause();
@@ -101,7 +101,7 @@ export function MediaBinVideoThumbnail({
     }
   }, [fallbackSrc]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (hoverTargetTimeUs === null) {
       setHoverFrameReady(false);
       return;

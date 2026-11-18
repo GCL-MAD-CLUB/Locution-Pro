@@ -14,7 +14,7 @@ import { isTauriRuntime } from "../../platform/tauri/runtime";
 
 export function useStoryboardSemanticSearchAvailable(lifetime: RenderLifetime) {
   const [available, setAvailable] = useState(false);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) return;
     let active = true;
     void runOperation("storyboard.semanticAvailability", () =>
@@ -240,16 +240,18 @@ export function useStoryboardSemanticSearch(
     requestKey,
     clearQuery,
   });
-  latest.current = {
-    negativePrompts,
-    enabled,
-    query,
-    scope,
-    shots,
-    indexKey,
-    requestKey,
-    clearQuery,
-  };
+  lifetime.useBeforePaint(() => {
+    latest.current = {
+      negativePrompts,
+      enabled,
+      query,
+      scope,
+      shots,
+      indexKey,
+      requestKey,
+      clearQuery,
+    };
+  });
   const mounted = useRef(true);
   const busy = useRef(false);
   const indexed = useRef(new Set<string>());
@@ -276,14 +278,14 @@ export function useStoryboardSemanticSearch(
     };
   }, [requestKey, result, scope, query, negativePrompts, shots]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (reusable) {
       completedRequest.current = requestKey;
       return;

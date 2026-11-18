@@ -42,11 +42,15 @@ export function useCloseOnOutsidePointer(
   options: UseCloseOnOutsidePointerOptions = {},
 ) {
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  lifetime.useBeforePaint(() => {
+    onCloseRef.current = onClose;
+  });
   const optionsRef = useRef(options);
-  optionsRef.current = options;
+  lifetime.useBeforePaint(() => {
+    optionsRef.current = options;
+  });
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!open) {
       return;
     }
@@ -227,7 +231,7 @@ export function PopupMenu({
     submenuAnchorTop,
   ]);
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     fitToViewport();
     if (!positionedRef.current) {
       positionedRef.current = true;
@@ -235,7 +239,7 @@ export function PopupMenu({
     }
   }, [children, fitToViewport, style]);
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const menu = menuRef.current;
     if (!menu) {
       return;
@@ -251,7 +255,7 @@ export function PopupMenu({
     };
   }, [fitToViewport]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!enableMnemonics) {
       return;
     }
@@ -432,37 +436,24 @@ export function PopupMenuSelectionGroup({
       `Popup menu selection value is not unique: ${duplicateValue}`,
     );
   }
-  const itemKey = items.map((item) => `${item.value}:${item.disabled}`).join("\u0000");
-  const initialValueRef = useRef<string | null | undefined>(undefined);
-  if (initialValueRef.current === undefined) {
-    initialValueRef.current =
-      items.find((item) => item.value === defaultValue && !item.disabled)?.value ??
-      items.find((item) => !item.disabled)?.value ??
-      items[0]?.value ??
-      null;
-  }
-  const [selectedValue, setSelectedValue] = useState(initialValueRef.current);
-  const selectedValueRef = useRef(selectedValue);
-  const [seenItemKey, setSeenItemKey] = useState(itemKey);
-  if (seenItemKey !== itemKey) {
-    setSeenItemKey(itemKey);
-    const fallbackValue = fallbackSelectionValue(items, selectedValueRef.current);
-    if (fallbackValue !== undefined && fallbackValue !== selectedValueRef.current) {
-      selectedValueRef.current = fallbackValue;
-      setSelectedValue(fallbackValue);
-    }
-  }
+  const [selection, setSelectedValue] = useState<string | null>(null);
+  const requestedSelection = selection ?? defaultValue ?? null;
+  const fallbackValue = fallbackSelectionValue(items, requestedSelection);
+  const selectedValue = fallbackValue === undefined ? requestedSelection : fallbackValue;
 
   const selectValue = useCallback(
     (value: string) => {
-      if (selectedValueRef.current === value) {
+      if (selectedValue === value) {
         return;
       }
-      selectedValueRef.current = value;
       setSelectedValue(value);
       onValueChange?.(value);
     },
-    [onValueChange],
+    [onValueChange, selectedValue],
+  );
+  const contextValue = useMemo(
+    () => ({ selectedValue, selectValue }),
+    [selectedValue, selectValue],
   );
 
   if (items.length === 0) {
@@ -470,7 +461,7 @@ export function PopupMenuSelectionGroup({
   }
 
   return (
-    <PopupMenuSelectionGroupContext.Provider value={{ selectedValue, selectValue }}>
+    <PopupMenuSelectionGroupContext.Provider value={contextValue}>
       {children}
     </PopupMenuSelectionGroupContext.Provider>
   );
@@ -559,9 +550,13 @@ export function PopupMenuSubmenu({
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const hoverTimer = useRef<number | null>(null);
   const openRef = useRef(open);
-  openRef.current = open;
+  lifetime.useBeforePaint(() => {
+    openRef.current = open;
+  });
   const onOpenChangeRef = useRef(onOpenChange);
-  onOpenChangeRef.current = onOpenChange;
+  lifetime.useBeforePaint(() => {
+    onOpenChangeRef.current = onOpenChange;
+  });
 
   const clearHoverTimer = useCallback(() => {
     if (hoverTimer.current !== null) {
@@ -588,7 +583,7 @@ export function PopupMenuSubmenu({
     [clearHoverTimer],
   );
 
-  lifetime.afterCommit(() => clearHoverTimer, [clearHoverTimer]);
+  lifetime.useAfterCommit(() => clearHoverTimer, [clearHoverTimer]);
 
   const updateAnchor = useCallback(() => {
     const next = hostRef.current?.getBoundingClientRect() ?? null;
@@ -604,7 +599,7 @@ export function PopupMenuSubmenu({
     );
   }, []);
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     if (!open) {
       setAnchor(null);
       return;

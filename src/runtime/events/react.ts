@@ -17,9 +17,11 @@ export function useBroadcastEvent<Type extends ApplicationEventType>(
   handler: (event: EventEnvelope<Type>) => EventHandlingResult | Promise<EventHandlingResult>,
 ) {
   const handlerRef = useRef(handler);
-  handlerRef.current = handler;
+  lifetime.useBeforePaint(() => {
+    handlerRef.current = handler;
+  });
 
-  lifetime.afterCommit(
+  lifetime.useAfterCommit(
     () =>
       eventHub.subscribe({
         id: eventSubscriberId(identity, type),

@@ -81,9 +81,13 @@ export function TimelineRuler({
 
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const timelineStartFrameRef = useRef(timelineStartFrame);
-  timelineStartFrameRef.current = timelineStartFrame;
+  lifetime.useBeforePaint(() => {
+    timelineStartFrameRef.current = timelineStartFrame;
+  });
   const timelineSpanFramesRef = useRef(timelineSpanFrames);
-  timelineSpanFramesRef.current = timelineSpanFrames;
+  lifetime.useBeforePaint(() => {
+    timelineSpanFramesRef.current = timelineSpanFrames;
+  });
   const timelineDragScrollAtRef = useRef(0);
   const timelineDragCleanupRef = useRef<(() => void) | null>(null);
   const cueRangeDragCleanupRef = useRef<(() => void) | null>(null);
@@ -134,7 +138,7 @@ export function TimelineRuler({
     [durationFrames, timelineWidthPx],
   );
 
-  lifetime.afterCommit(
+  lifetime.useAfterCommit(
     () => () => {
       timelineDragCleanupRef.current?.();
       cueRangeDragCleanupRef.current?.();
@@ -142,11 +146,11 @@ export function TimelineRuler({
     [hasMedia, canEditCueRange],
   );
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     onMinTimelineSpanFramesChange(minSpanFrames);
   }, [minSpanFrames, onMinTimelineSpanFramesChange]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const element = timelineRef.current;
     if (!element) {
       return;
@@ -159,7 +163,7 @@ export function TimelineRuler({
     return () => resizeObserver.disconnect();
   }, []);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const timeline = timelineRef.current;
     if (!timeline) {
       return;

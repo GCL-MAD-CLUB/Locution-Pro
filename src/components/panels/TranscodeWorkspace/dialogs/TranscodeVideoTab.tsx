@@ -41,7 +41,7 @@ export function TranscodeVideoTab({
   const copy = video.codec === "copy";
   const traits = videoEncoderTraits(video.codec);
   const [pixelFormats, setPixelFormats] = useState<string[]>([]);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     let live = true;
     setPixelFormats([]);
     void loadTranscodeCodecDetails("encoder", video.codec).then((details) => {

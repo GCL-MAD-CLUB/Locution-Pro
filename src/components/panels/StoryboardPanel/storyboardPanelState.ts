@@ -478,7 +478,7 @@ export function useStoryboardPanelState<Selection>(
     videoContext: context,
     workspaceId: nextWorkspaceId,
   };
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     if (videoContext !== undefined) storedUiState.syncVideoContext(videoContext, nextWorkspaceId);
   }, [videoContext, nextWorkspaceId, storedUiState.syncVideoContext]);
   const { storyboards, projects, mediaItems, storyboardUpdated } = useProjectPort(
@@ -490,7 +490,7 @@ export function useStoryboardPanelState<Selection>(
     [storyboards, uiState.videoContext],
   );
   const previousStoryboardRef = useRef({ videoContext: uiState.videoContext, storyboard });
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const previous = previousStoryboardRef.current;
     previousStoryboardRef.current = { videoContext: uiState.videoContext, storyboard };
     if (previous.videoContext !== uiState.videoContext) return;

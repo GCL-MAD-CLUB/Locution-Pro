@@ -325,7 +325,7 @@ export function resolvedMediaAudioSources(
       item.kind === "audio" &&
       isMediaItemEnabled(item) &&
       !isMediaItemOffline(item) &&
-      !Boolean(sourceVideo && isMediaItemOffline(sourceVideo)) &&
+      !(sourceVideo && isMediaItemOffline(sourceVideo)) &&
       item.bound_to_video_id === videoId
     );
   });
@@ -1761,7 +1761,7 @@ const projectState = createStore<ProjectSystemState>()((set) => ({
           return state;
         }
         const additions: MediaBinItem[] = [
-          ...result.audio_tracks.map((track, index) => ({
+          ...result.audio_tracks.map((track, _index) => ({
             id: `demux-audio:${videoId}:${track.stream_index}`,
             bin_id: video.bin_id,
             kind: "audio" as const,

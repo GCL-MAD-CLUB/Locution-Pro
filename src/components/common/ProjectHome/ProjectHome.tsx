@@ -71,7 +71,7 @@ export function ProjectHome({
     ascending: false,
   });
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
     dialogRef.current?.focus();
     const timer = window.setInterval(() => setNow(Date.now()), 30000);
@@ -105,11 +105,11 @@ export function ProjectHome({
     };
   }, []);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!suspended) dialogRef.current?.focus();
   }, [suspended]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime() || !projects.length) return;
     let cancelled = false;
     void runOperation("storage.recentPaths", () =>

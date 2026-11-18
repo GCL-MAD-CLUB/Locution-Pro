@@ -1,8 +1,9 @@
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
   useCallback,
   useRef,
-  useState,
+  type ComponentProps,
   type CSSProperties,
   type RefObject,
   type SyntheticEvent,
@@ -36,7 +37,7 @@ interface VideoDisplayProps {
 }
 
 interface VideoLayer {
-  id: number;
+  id: string;
   source: string;
   transform: string;
 }
@@ -45,7 +46,21 @@ interface VideoLayers {
   requestedSource: string | null;
   current: VideoLayer | null;
   displayed: VideoLayer | null;
-  nextId: number;
+}
+
+function VideoLayerElement({
+  layerId,
+  bindVideo,
+  ...props
+}: Omit<ComponentProps<"video">, "ref"> & {
+  layerId: string;
+  bindVideo: (id: string, video: HTMLVideoElement | null) => void;
+}) {
+  const ref = useCallback(
+    (video: HTMLVideoElement | null) => bindVideo(layerId, video),
+    [layerId, bindVideo],
+  );
+  return <video {...props} ref={ref} />;
 }
 
 function currentVideo(event: SyntheticEvent<HTMLVideoElement>) {
@@ -88,50 +103,57 @@ export function VideoDisplay({
   const setZoomLevel = useSourceMonitorState((state) => state.setZoomLevel);
   const setZoomPan = useSourceMonitorState((state) => state.setZoomPan);
   const zoomLevelRef = useRef(zoomLevel);
-  zoomLevelRef.current = zoomLevel;
+  lifetime.useBeforePaint(() => {
+    zoomLevelRef.current = zoomLevel;
+  });
   const zoomPanRef = useRef(zoomPan);
-  zoomPanRef.current = zoomPan;
+  lifetime.useBeforePaint(() => {
+    zoomPanRef.current = zoomPan;
+  });
   const requestedSource = videoSrc || null;
   const zoomScale = zoomLevel === "fit" ? 1 : zoomLevel / 100;
   const currentZoomPan = zoomLevel === "fit" ? { x: 0, y: 0 } : zoomPan;
   const transform = `translate(${currentZoomPan.x}px, ${currentZoomPan.y}px) scale(${zoomScale})`;
-  const [layers, setLayers] = useState<VideoLayers>(() => ({
-    requestedSource,
-    current: requestedSource ? { id: 0, source: requestedSource, transform } : null,
-    displayed: null,
-    nextId: 1,
-  }));
-  const displayedTransformRef = useRef(transform);
-  if (layers.requestedSource === requestedSource && layers.current?.id === layers.displayed?.id) {
-    displayedTransformRef.current = transform;
-  }
-  if (layers.requestedSource !== requestedSource) {
-    const displayed = layers.displayed
-      ? { ...layers.displayed, transform: displayedTransformRef.current }
-      : null;
-    const current = requestedSource
-      ? displayed?.source === requestedSource
-        ? displayed
-        : { id: layers.nextId, source: requestedSource, transform }
-      : null;
-    setLayers({
-      requestedSource,
-      current,
-      displayed: requestedSource ? displayed : null,
-      nextId: layers.nextId + (current?.id === layers.nextId ? 1 : 0),
-    });
-  }
-  const layersRef = useRef(layers);
-  layersRef.current = layers;
-  const transformRef = useRef(transform);
-  transformRef.current = transform;
-  const frameRateRef = useRef(frameRate);
-  frameRateRef.current = frameRate;
-  const videosRef = useRef(new Map<number, HTMLVideoElement>());
-  const histogramVideoRef = useRef<HTMLVideoElement | null>(null);
-  histogramVideoRef.current = layers.displayed
-    ? (videosRef.current.get(layers.displayed.id) ?? null)
+  const [presented, setPresented] = useScopedState<VideoLayer | null>(
+    requestedSource !== null,
+    null,
+  );
+  const displayed = requestedSource ? presented : null;
+  const current = requestedSource
+    ? displayed?.source === requestedSource
+      ? displayed
+      : { id: requestedSource, source: requestedSource, transform }
     : null;
+  const layers: VideoLayers = { requestedSource, current, displayed };
+  const layersRef = useRef(layers);
+  lifetime.useBeforePaint(() => {
+    layersRef.current = layers;
+  });
+  const displayedTransformRef = useRef(transform);
+
+  const transformRef = useRef(transform);
+  lifetime.useBeforePaint(() => {
+    transformRef.current = transform;
+  });
+  const frameRateRef = useRef(frameRate);
+  lifetime.useBeforePaint(() => {
+    frameRateRef.current = frameRate;
+  });
+  const videosRef = useRef(new Map<string, HTMLVideoElement>());
+  const histogramVideoRef = useRef<HTMLVideoElement | null>(null);
+  lifetime.useBeforePaint(() => {
+    histogramVideoRef.current = layers.displayed
+      ? (videosRef.current.get(layers.displayed.id) ?? null)
+      : null;
+  });
+  lifetime.useBeforePaint(() => {
+    if (displayed && displayed.id !== current?.id) {
+      const outgoing = videosRef.current.get(displayed.id);
+      if (outgoing) outgoing.style.transform = displayedTransformRef.current;
+    } else if (displayed) {
+      displayedTransformRef.current = transform;
+    }
+  });
   useVideoHistogram(
     lifetime,
     histogramVideoRef,
@@ -139,7 +161,7 @@ export function VideoDisplay({
     histogramEnabled && !transientPreview,
     (histogram) => onHistogram(layers.displayed?.source ?? null, histogram),
   );
-  const bindingsRef = useRef(new Map<number, (video: HTMLVideoElement | null) => void>());
+
   useVideoFrameTrace(
     lifetime,
     histogramVideoRef,
@@ -153,64 +175,69 @@ export function VideoDisplay({
   const pendingRevealRef = useRef<number | null>(null);
   const presentedFrameRef = useRef<{ video: HTMLVideoElement; time: number } | null>(null);
 
-  function finishIncomingFrame(video: HTMLVideoElement) {
-    const current = layersRef.current.current;
-    if (!current || video !== videoRef.current || video.readyState < 2 || video.seeking)
-      return false;
-    if (typeof video.requestVideoFrameCallback === "function") {
-      const presented = presentedFrameRef.current;
-      if (
-        !presented ||
-        presented.video !== video ||
-        Math.abs(presented.time - video.currentTime) > 1 / Math.max(1, frameRateRef.current)
-      )
+  const finishIncomingFrame = useCallback(
+    (video: HTMLVideoElement) => {
+      const current = layersRef.current.current;
+      if (!current || video !== videoRef.current || video.readyState < 2 || video.seeking)
         return false;
-    }
-    setLayers((state) =>
-      state.current?.id === current.id && state.displayed?.id !== current.id
-        ? { ...state, displayed: { ...state.current, transform: transformRef.current } }
-        : state,
-    );
-    const pending = pendingFrameRef.current;
-    if (pending?.video === video) {
-      pending.video.cancelVideoFrameCallback(pending.id);
-      pendingFrameRef.current = null;
-    }
-    if (pendingRevealRef.current !== null) {
-      cancelAnimationFrame(pendingRevealRef.current);
-      pendingRevealRef.current = null;
-    }
-    return true;
-  }
-
-  function watchIncomingFrame(video: HTMLVideoElement) {
-    if (
-      video !== videoRef.current ||
-      layersRef.current.displayed?.id === layersRef.current.current?.id
-    )
-      return;
-    if (typeof video.requestVideoFrameCallback === "function" && finishIncomingFrame(video)) return;
-    if (pendingFrameRef.current?.video === video || pendingRevealRef.current !== null) return;
-    if (typeof video.requestVideoFrameCallback === "function") {
-      const id = video.requestVideoFrameCallback((_now, metadata) => {
-        if (video !== videoRef.current) return;
+      if (typeof video.requestVideoFrameCallback === "function") {
+        const presented = presentedFrameRef.current;
+        if (
+          !presented ||
+          presented.video !== video ||
+          Math.abs(presented.time - video.currentTime) > 1 / Math.max(1, frameRateRef.current)
+        )
+          return false;
+      }
+      setPresented((previous) =>
+        previous?.id === current.id ? previous : { ...current, transform: transformRef.current },
+      );
+      const pending = pendingFrameRef.current;
+      if (pending?.video === video) {
+        pending.video.cancelVideoFrameCallback(pending.id);
         pendingFrameRef.current = null;
-        presentedFrameRef.current = { video, time: metadata.mediaTime };
-        if (!finishIncomingFrame(video)) watchIncomingFrame(video);
-      });
-      pendingFrameRef.current = { video, id };
-    } else if (video.readyState >= 2 && !video.seeking) {
-      pendingRevealRef.current = requestAnimationFrame(() => {
-        pendingRevealRef.current = requestAnimationFrame(() => {
-          pendingRevealRef.current = null;
-          finishIncomingFrame(video);
+      }
+      if (pendingRevealRef.current !== null) {
+        cancelAnimationFrame(pendingRevealRef.current);
+        pendingRevealRef.current = null;
+      }
+      return true;
+    },
+    [videoRef, setPresented],
+  );
+
+  const watchIncomingFrame = useCallback(
+    function watchIncomingFrame(video: HTMLVideoElement) {
+      if (
+        video !== videoRef.current ||
+        layersRef.current.displayed?.id === layersRef.current.current?.id
+      )
+        return;
+      if (typeof video.requestVideoFrameCallback === "function" && finishIncomingFrame(video))
+        return;
+      if (pendingFrameRef.current?.video === video || pendingRevealRef.current !== null) return;
+      if (typeof video.requestVideoFrameCallback === "function") {
+        const id = video.requestVideoFrameCallback((_now, metadata) => {
+          if (video !== videoRef.current) return;
+          pendingFrameRef.current = null;
+          presentedFrameRef.current = { video, time: metadata.mediaTime };
+          if (!finishIncomingFrame(video)) watchIncomingFrame(video);
         });
-      });
-    }
-  }
+        pendingFrameRef.current = { video, id };
+      } else if (video.readyState >= 2 && !video.seeking) {
+        pendingRevealRef.current = requestAnimationFrame(() => {
+          pendingRevealRef.current = requestAnimationFrame(() => {
+            pendingRevealRef.current = null;
+            finishIncomingFrame(video);
+          });
+        });
+      }
+    },
+    [videoRef, finishIncomingFrame],
+  );
 
   const bindVideo = useCallback(
-    (id: number, video: HTMLVideoElement | null) => {
+    (id: string, video: HTMLVideoElement | null) => {
       const previous = videosRef.current.get(id);
       const pending = pendingFrameRef.current;
       if (!video && pending && pending.video === previous) {
@@ -238,24 +265,14 @@ export function VideoDisplay({
             previous.pause();
             previous.removeAttribute("src");
             previous.load();
-            bindingsRef.current.delete(id);
           }
         });
       }
     },
-    [videoRef],
+    [videoRef, watchIncomingFrame],
   );
 
-  function layerBinding(id: number) {
-    let binding = bindingsRef.current.get(id);
-    if (!binding) {
-      binding = (video) => bindVideo(id, video);
-      bindingsRef.current.set(id, binding);
-    }
-    return binding;
-  }
-
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const video = layers.current && videosRef.current.get(layers.current.id);
     videoRef.current = video ?? null;
     const pending = pendingFrameRef.current;
@@ -282,7 +299,7 @@ export function VideoDisplay({
     if (video === videoRef.current) handler(video);
   }
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const stage = stageRef.current;
     if (!stage) {
       return;
@@ -359,9 +376,10 @@ export function VideoDisplay({
           ? [layers.current]
           : []
       ).map((layer) => (
-        <video
+        <VideoLayerElement
           key={layer.id}
-          ref={layerBinding(layer.id)}
+          layerId={layer.id}
+          bindVideo={bindVideo}
           crossOrigin="anonymous"
           src={layer.source}
           className={`source-video-layer ${layer.id === layers.displayed?.id ? "visible" : "loading"}`}
@@ -388,7 +406,7 @@ export function VideoDisplay({
           onPause={(event) => handleVideoEvent(event, onPause)}
           style={
             {
-              transform: layer.id === layers.current?.id ? transform : layer.transform,
+              transform: layer.id === layers.current?.id ? transform : undefined,
               transformOrigin: "50% 50%",
             } as CSSProperties
           }

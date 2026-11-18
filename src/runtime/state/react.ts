@@ -9,7 +9,7 @@ export function usePublishProjection<Value>(
   owner: SystemIdentity,
   value: Value,
 ) {
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     stateHub.publish(key, owner, value);
     return () => stateHub.remove(key, owner);
   }, [key, owner.instanceId, owner.system, value]);

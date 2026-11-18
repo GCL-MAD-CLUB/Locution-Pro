@@ -36,7 +36,7 @@ export function StillExportDialog({
   const nameRef = useRef<HTMLInputElement>(null);
   const aliveRef = useRef(true);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     aliveRef.current = true;
     void (async () => {
       const outcome = await runOperation("export.run", () =>
@@ -56,7 +56,7 @@ export function StillExportDialog({
     };
   }, [request]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (defaults) {
       nameRef.current?.focus();
       nameRef.current?.select();
@@ -98,7 +98,8 @@ export function StillExportDialog({
   const validName = Boolean(
     name.trim() &&
     name === name.trim() &&
-    !/[<>:"/\\|?*\u0000-\u001f]/.test(name) &&
+    !Array.from(name).some((char) => char.charCodeAt(0) < 32) &&
+    !/[<>:"/\\|?*]/.test(name) &&
     !/[. ]$/.test(name) &&
     !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name),
   );

@@ -13,7 +13,7 @@ function ManagedMediaBin({ params }: { params: MediaBinPanelParams }) {
   const lifetime = new RenderLifetime();
 
   const initializeViewMode = useMediaBinState((state) => state.initializeViewMode);
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     initializeViewMode(params.initialViewMode ?? "list");
   }, [initializeViewMode, params.initialViewMode]);
   return lifetime.render(<MediaBin rootFolderId={params.rootFolderId} />);

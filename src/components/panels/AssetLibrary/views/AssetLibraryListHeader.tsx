@@ -140,7 +140,10 @@ export function AssetLibraryListHeader(props: AssetLibraryListHeaderProps) {
     document.body.classList.remove("is-resizing-media-column");
   }
 
-  lifetime.afterCommit(() => () => document.body.classList.remove("is-resizing-media-column"), []);
+  lifetime.useAfterCommit(
+    () => () => document.body.classList.remove("is-resizing-media-column"),
+    [],
+  );
 
   function renderResizer(id: AssetLibraryColumnId) {
     const column = assetLibraryColumns.find((candidate) => candidate.id === id)!;

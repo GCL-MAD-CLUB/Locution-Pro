@@ -20,7 +20,7 @@ export function ProjectDiscardDialog({
 }: ProjectDiscardDialogProps) {
   const lifetime = new RenderLifetime();
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (
         saving ||

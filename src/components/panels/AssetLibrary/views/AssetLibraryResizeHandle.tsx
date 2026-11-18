@@ -18,7 +18,7 @@ export function AssetLibraryResizeHandle({
 
   const [active, setActive] = useState(false);
   const cleanupRef = useRef<(() => void) | null>(null);
-  lifetime.afterCommit(() => () => cleanupRef.current?.(), []);
+  lifetime.useAfterCommit(() => () => cleanupRef.current?.(), []);
 
   function startResize(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 0) return;

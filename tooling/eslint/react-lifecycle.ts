@@ -60,7 +60,9 @@ export const reactLifecycle = {
             if (
               node.id.type !== AST_NODE_TYPES.ArrayPattern ||
               node.init?.type !== AST_NODE_TYPES.CallExpression ||
-              !["useState", "useReducer"].includes(hookName(node.init.callee) ?? "")
+              !["useState", "useReducer", "useScopedState"].includes(
+                hookName(node.init.callee) ?? "",
+              )
             )
               return;
             const setter = node.id.elements[1];

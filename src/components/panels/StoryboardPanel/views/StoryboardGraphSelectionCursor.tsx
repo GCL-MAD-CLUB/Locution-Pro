@@ -27,7 +27,7 @@ export function StoryboardGraphSelectionCursor({
   const markerRef = useRef<HTMLSpanElement>(null);
   const pointRef = useRef<{ x: number; y: number; target: EventTarget | null } | null>(null);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const stage = stageRef.current;
     const marker = markerRef.current;
     if (!stage || !marker) return;

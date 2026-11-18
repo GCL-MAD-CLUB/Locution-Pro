@@ -1,3 +1,4 @@
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { KeywordPresetControl } from "./KeywordPresetControl";
 import { useKeywordSet } from "./keywordPresetState";
@@ -111,76 +112,90 @@ export function StoryboardKeywordPanel({
     toggleQuickFilterKeyword,
   } = useStoryboardPanelState(lifetime, (state) => state);
   const panelInstanceId = usePanelInstanceId();
-  const [keywordInput, setKeywordInput] = useState("");
-  const [keywordEditValue, setKeywordEditValue] = useState("");
-  const [keywordEditError, setKeywordEditError] = useState<string | null>(null);
+  const [keywordInput, setKeywordInput] = useScopedState(draftIdentity, "");
+  const [keywordEditDraft, setKeywordEditValue] = useScopedState(draftIdentity, "");
+  const [keywordEditError, setKeywordEditError] = useScopedState<string | null>(
+    draftIdentity,
+    null,
+  );
   const [keywordEditorFocused, setKeywordEditorFocused] = useState(false);
-  const [keywordModeMenu, setKeywordModeMenu] = useState<{ x: number; y: number } | null>(null);
-  const [treeContextMenu, setTreeContextMenu] = useState<{
+  const [keywordModeMenu, setKeywordModeMenu] = useScopedState<{ x: number; y: number } | null>(
+    draftIdentity,
+    null,
+  );
+  const [treeContextMenu, setTreeContextMenu] = useScopedState<{
     x: number;
     y: number;
     keywordId: string;
-  } | null>(null);
-  const [filter, setFilter] = useState("");
+  } | null>(draftIdentity, null);
+  const [filter, setFilter] = useScopedState(draftIdentity, "");
   const [panelOpen, setPanelOpen] = useState(true);
   const [assignmentOpen, setAssignmentOpen] = useState(true);
   const [suggestionsOpen, setSuggestionsOpen] = useState(true);
   const [recentOpen, setRecentOpen] = useState(true);
   const [treeOpen, setTreeOpen] = useState(true);
-  const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(() => new Set());
-  const [selectedTreeNodeIds, setSelectedTreeNodeIds] = useState<Set<string>>(() => new Set());
-  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
-  const [keywordBatchDeleteRequest, setKeywordBatchDeleteRequest] = useState(false);
-  const [keywordDeleteRequest, setKeywordDeleteRequest] = useState<{
+  const [collapsedNodeIds, setCollapsedNodeIds] = useScopedState<Set<string>>(
+    draftIdentity,
+    (() => new Set())(),
+  );
+  const [selectedTreeNodeIds, setSelectedTreeNodeIds] = useScopedState<Set<string>>(
+    draftIdentity,
+    (() => new Set())(),
+  );
+  const [selectionAnchorId, setSelectionAnchorId] = useScopedState<string | null>(
+    draftIdentity,
+    null,
+  );
+  const [keywordBatchDeleteRequest, setKeywordBatchDeleteRequest] = useScopedState(
+    draftIdentity,
+    false,
+  );
+  const [keywordDeleteRequest, setKeywordDeleteRequest] = useScopedState<{
     keywordId: string;
     label: string;
     count: number;
-  } | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  } | null>(draftIdentity, null);
+  const [createDialogOpen, setCreateDialogOpen] = useScopedState(draftIdentity, false);
   const [createName, setCreateName] = useState("");
   const [createSynonyms, setCreateSynonyms] = useState("");
   const [createNestIntoParent, setCreateNestIntoParent] = useState(false);
   const [createAddToShots, setCreateAddToShots] = useState(false);
-  const [createParentOverrideId, setCreateParentOverrideId] = useState<string | null>(null);
-  const [newKeywordContainerId, setNewKeywordContainerId] = useState<string | null>(null);
-  const [editKeywordDialog, setEditKeywordDialog] = useState<{ keywordId: string } | null>(null);
+  const [createParentOverrideId, setCreateParentOverrideId] = useScopedState<string | null>(
+    draftIdentity,
+    null,
+  );
+  const [newKeywordContainerId, setNewKeywordContainerId] = useScopedState<string | null>(
+    draftIdentity,
+    null,
+  );
+  const [editKeywordDialog, setEditKeywordDialog] = useScopedState<{ keywordId: string } | null>(
+    draftIdentity,
+    null,
+  );
   const [editName, setEditName] = useState("");
   const [editSynonyms, setEditSynonyms] = useState("");
-  const [duplicateNameRequest, setDuplicateNameRequest] = useState<{
+  const [duplicateNameRequest, setDuplicateNameRequest] = useScopedState<{
     name: string;
     keywordId: string | null;
-  } | null>(null);
-  const [altShortcutHintsVisible, setAltShortcutHintsVisible] = useState(false);
-  const [shortcutKeywordIds, setShortcutKeywordIds] = useState<readonly string[]>([]);
+  } | null>(draftIdentity, null);
+  const [altShortcutHintsVisible, setAltShortcutHintsVisible] = useScopedState(
+    draftIdentity,
+    false,
+  );
+  const [shortcutKeywordIds, setShortcutKeywordIds] = useScopedState<readonly string[]>(
+    draftIdentity,
+    [],
+  );
   const [panelHasVerticalOverflow, setPanelHasVerticalOverflow] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const keywordEditorRef = useRef<HTMLTextAreaElement | null>(null);
   const panelScrollRef = useRef<HTMLElement | null>(null);
   const cancelKeywordEditRef = useRef(false);
   const shortcutKeywordIdsRef = useRef<readonly string[]>([]);
-  const [seenDraftIdentity, setSeenDraftIdentity] = useState(draftIdentity);
-  if (seenDraftIdentity !== draftIdentity) {
-    setSeenDraftIdentity(draftIdentity);
-    setKeywordInput("");
-    setKeywordEditValue("");
-    setKeywordEditError(null);
-    setFilter("");
-    setCollapsedNodeIds(new Set());
-    setSelectedTreeNodeIds(new Set());
-    setSelectionAnchorId(null);
-    setKeywordDeleteRequest(null);
-    setKeywordBatchDeleteRequest(false);
-    setCreateDialogOpen(false);
-    setCreateParentOverrideId(null);
-    setNewKeywordContainerId(null);
-    setEditKeywordDialog(null);
-    setDuplicateNameRequest(null);
-    setKeywordModeMenu(null);
-    setTreeContextMenu(null);
-    setAltShortcutHintsVisible(false);
-    setShortcutKeywordIds((current) => (current.length ? [] : current));
-    shortcutKeywordIdsRef.current = [];
-  }
+  lifetime.useBeforePaint(() => {
+    shortcutKeywordIdsRef.current = shortcutKeywordIds;
+  }, [shortcutKeywordIds]);
+
   const targetShotIds = useMemo(() => Array.from(new Set(shotIds)), [shotIds]);
   const keywordParseResult = parseStoryboardKeywordInput(keywordInput);
   const mediaShotIds = useMemo(() => shots.map((shot) => shot.id), [shots]);
@@ -188,7 +203,7 @@ export function StoryboardKeywordPanel({
   useCloseOnOutsidePointer(lifetime, Boolean(treeContextMenu), () => setTreeContextMenu(null));
   useCloseOnOutsidePointer(lifetime, Boolean(keywordModeMenu), () => setKeywordModeMenu(null));
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const panel = panelScrollRef.current;
     if (!panel) {
       return;
@@ -250,7 +265,7 @@ export function StoryboardKeywordPanel({
     duplicateNameRequest,
   );
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!active || !panelOpen || !recentOpen || keywordShortcutBlocked) {
       setAltShortcutHintsVisible(false);
       setShortcutKeywordIds((current) => (current.length ? [] : current));
@@ -413,6 +428,7 @@ export function StoryboardKeywordPanel({
     () => expandedStoryboardKeywordText(selectedKeywordIds, keywordNodes),
     [keywordNodes, selectedKeywordIds],
   );
+  const keywordEditValue = keywordEditorFocused ? keywordEditDraft : selectedKeywordText;
   const keywordEditorKeywordCount = useMemo(
     () =>
       keywordEditValue
@@ -422,16 +438,7 @@ export function StoryboardKeywordPanel({
     [keywordEditValue],
   );
 
-  const [seenKeywordText, setSeenKeywordText] = useState<string | null>(null);
-  if (seenKeywordText !== selectedKeywordText) {
-    setSeenKeywordText(selectedKeywordText);
-    if (document.activeElement !== keywordEditorRef.current) {
-      if (keywordEditValue !== selectedKeywordText) setKeywordEditValue(selectedKeywordText);
-      if (keywordEditError !== null) setKeywordEditError(null);
-    }
-  }
-
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (keywordEditorFocused) {
       keywordEditorRef.current?.focus();
     }
@@ -453,7 +460,7 @@ export function StoryboardKeywordPanel({
 
   const normalizedFilter = filter.trim().toLocaleLowerCase();
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (
       !draggedKeywordHoverId ||
       normalizedFilter ||
@@ -501,7 +508,7 @@ export function StoryboardKeywordPanel({
 
   const visibleOrderedTreeNodeIds = useMemo(() => {
     const orderedIds: string[] = [];
-    const visit = (parentId: string | null) => {
+    const visit = function visit(parentId: string | null) {
       for (const node of childrenByParent.get(parentId) ?? []) {
         if (!matchingTreeNodeIds.has(node.id)) {
           continue;
@@ -740,8 +747,14 @@ export function StoryboardKeywordPanel({
     }
   }
 
-  const handleCancelDelete = useCallback(() => setKeywordDeleteRequest(null), []);
-  const handleCancelBatchDelete = useCallback(() => setKeywordBatchDeleteRequest(false), []);
+  const handleCancelDelete = useCallback(
+    () => setKeywordDeleteRequest(null),
+    [setKeywordDeleteRequest],
+  );
+  const handleCancelBatchDelete = useCallback(
+    () => setKeywordBatchDeleteRequest(false),
+    [setKeywordBatchDeleteRequest],
+  );
 
   const createParentCandidate = useMemo(() => {
     if (createParentOverrideId) {
@@ -815,7 +828,7 @@ export function StoryboardKeywordPanel({
     setCreateDialogOpen(false);
   }
 
-  const handleCancelCreate = useCallback(() => setCreateDialogOpen(false), []);
+  const handleCancelCreate = useCallback(() => setCreateDialogOpen(false), [setCreateDialogOpen]);
 
   function acknowledgeDuplicateName() {
     if (!duplicateNameRequest) {
@@ -868,7 +881,10 @@ export function StoryboardKeywordPanel({
     setEditKeywordDialog(null);
   }
 
-  const handleCancelKeywordTagEdit = useCallback(() => setEditKeywordDialog(null), []);
+  const handleCancelKeywordTagEdit = useCallback(
+    () => setEditKeywordDialog(null),
+    [setEditKeywordDialog],
+  );
 
   function renderKeywordGrid(
     keywordIds: readonly string[],
@@ -886,7 +902,7 @@ export function StoryboardKeywordPanel({
           }`.trim();
           if (!keywordId) {
             return (
-              <span key={`empty-${index}`} className={cellClassName} aria-hidden="true">
+              <span key={shortcutNumber} className={cellClassName} aria-hidden="true">
                 {showShortcutHint && (
                   <span className="storyboard-keyword-grid-shortcut">{shortcutNumber}</span>
                 )}
@@ -905,7 +921,7 @@ export function StoryboardKeywordPanel({
             : { active: false, mixed: false };
           return (
             <button
-              key={`${index}:${keywordId}`}
+              key={shortcutNumber}
               type="button"
               className={`${cellClassName} ${active ? "is-active" : ""} ${
                 mixed ? "is-mixed" : ""

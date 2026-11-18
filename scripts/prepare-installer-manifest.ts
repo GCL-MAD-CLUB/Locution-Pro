@@ -51,7 +51,8 @@ export async function prepareInstallerManifest(
     if (
       win32.isAbsolute(path) ||
       path.split("\\").some((part) => !part || part === "." || part === "..") ||
-      /[\x00-\x1f<>:"|?*\[\]=]/u.test(path) ||
+      Array.from(path).some((char) => char.charCodeAt(0) < 32) ||
+      /[<>:"|?*[\]=]/u.test(path) ||
       path
         .split("\\")
         .some(
@@ -122,7 +123,8 @@ export async function finalizeInstallerManifest(
 ): Promise<string> {
   if (
     win32.basename(binaryName) !== binaryName ||
-    !/^[^\x00-\x1f<>:"|?*]+\.exe$/iu.test(binaryName)
+    Array.from(binaryName).some((char) => char.charCodeAt(0) < 32) ||
+    !/^[^<>:"|?*]+\.exe$/iu.test(binaryName)
   ) {
     throw new Error(`Invalid main executable destination: ${binaryName}`);
   }
@@ -146,7 +148,11 @@ export async function finalizeInstallerManifest(
     group: "core",
   });
   for (const entry of manifest.files) {
-    if (typeof entry.path !== "string" || /[\x00-\x1f"]/u.test(entry.path)) {
+    if (
+      typeof entry.path !== "string" ||
+      Array.from(entry.path).some((char) => char.charCodeAt(0) < 32) ||
+      /"/u.test(entry.path)
+    ) {
       throw new Error("Invalid installer resource path");
     }
     entry.bundleInUpdate = bundleInUpdate(entry.path, entry.group);

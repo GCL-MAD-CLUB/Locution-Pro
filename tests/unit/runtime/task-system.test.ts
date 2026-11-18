@@ -249,7 +249,6 @@ test("a second cancel and cancel-all wait for the same in-flight backend request
   const system = taskSystem();
   const gate = deferred<void>();
   let requests = 0;
-  let handle!: TaskProgressHandle;
   const created = system.createTaskProgress(
     options(
       "export",
@@ -261,7 +260,7 @@ test("a second cancel and cancel-all wait for the same in-flight backend request
       },
     ),
   );
-  handle = await created;
+  const handle = await created;
   const view = () => system.useTaskProgressStatus(new RenderLifetime()).tasks[0];
   let firstSettled = false;
   let secondSettled = false;

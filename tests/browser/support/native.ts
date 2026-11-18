@@ -1,5 +1,8 @@
+import type { NativeArguments, NativeCall, NativeImportConfig } from "./native-types";
+import type { UpdateStartup } from "../../../src/application/update";
+import type { ProjectWorkspace } from "../../../src/types";
 import type { ImportEntry } from "../../../src/components/panels/ImportWorkspace/browser/importBrowserModel";
-import type { MediaDocument } from "../../../src/types";
+import type { MediaDocument, Preferences } from "../../../src/types";
 import type { ExportResult } from "../../../src/systems/ExportSystem/exportTypes";
 
 export const mediaEntries: ImportEntry[] = (
@@ -30,7 +33,10 @@ export function installNative({
   entries: typeof mediaEntries;
   betaTranscode?: boolean;
 }) {
-  const w = window as any;
+  const w = window as unknown as Window & {
+    __TAURI_INTERNALS__: unknown;
+    __TAURI_EVENT_PLUGIN_INTERNALS__: unknown;
+  };
   // The media transport/decoder is outside these UI workflows. Do not feed fake
   // bytes to a real decoder (which would trigger the application's proxy flow).
   const setAttribute = HTMLMediaElement.prototype.setAttribute;
@@ -54,7 +60,7 @@ export function installNative({
   HTMLMediaElement.prototype.play = async () => {};
   HTMLMediaElement.prototype.pause = () => {};
   let sequence = 0;
-  const callbacks = new Map<number, (...args: any[]) => void>();
+  const callbacks = new Map<number, (...args: unknown[]) => void>();
   let mediaSequence = 0;
   // One static PNG, wrapped in the backend's thumbnail batch protocol.
   const thumbnail = Uint8Array.from(
@@ -63,7 +69,7 @@ export function installNative({
     ),
     (char) => char.charCodeAt(0),
   );
-  function thumbnailBatch(args: any, cached: boolean) {
+  function thumbnailBatch(args: NativeArguments, cached: boolean) {
     const buffer = new ArrayBuffer(
       (cached ? 8 : 0) + args.widths.length * ((cached ? 5 : 4) + thumbnail.length),
     );
@@ -81,23 +87,23 @@ export function installNative({
     return Array.from(bytes);
   }
   const state = {
-    calls: [] as Array<{ command: string; args: any }>,
+    calls: [] as NativeCall[],
     unexpected: [] as string[],
     expectedFailures: [] as string[],
     existingFiles: false,
     existingPaths: [] as string[],
     failures: {} as Record<string, string>,
     held: {} as Record<string, boolean>,
-    pending: [] as Array<{ command: string; args: any; resolve: (value: any) => void }>,
+    pending: [] as Array<NativeCall & { resolve: () => void }>,
     // Stored settings opt out of the transcode hand-off so edit flows stay on 编辑;
     // transcode tests delete the flag to exercise the default.
     config: {
       favorites: [],
       lastDirectory: "C:/media",
       settings: { openInTranscode: false },
-    } as any,
-    transcodeConfig: null as any,
-    savedWorkspace: null as any,
+    } as NativeImportConfig,
+    transcodeConfig: null as unknown,
+    savedWorkspace: null as ProjectWorkspace | null,
     savedProjectId: "",
     updateStartup: {
       pending: null,
@@ -105,7 +111,7 @@ export function installNative({
       failure: null,
       ignored: false,
       ignoredVersions: [],
-    } as any,
+    } as UpdateStartup,
     latestRelease: {
       version: "v0.0.0",
       title: "Locution Pro 0.0.0",
@@ -125,10 +131,10 @@ export function installNative({
       auto_save_max_snapshots: 20,
       auto_remux_matroska: true,
       beta_transcode_enabled: betaTranscode,
-    },
+    } as Omit<Preferences, "appearance"> & { appearance?: Preferences["appearance"] },
   };
   w.__nativeTest = state;
-  const result = (command: string, args: any): any => {
+  const result = (command: string, args: NativeArguments): unknown => {
     switch (command) {
       case "plugin:event|listen":
         return ++sequence;
@@ -217,7 +223,7 @@ export function installNative({
         return state.existingFiles || state.existingPaths.includes(args.path);
       case "export_clips": {
         const exported: ExportResult = {
-          outputs: args.clips.map((clip: any) => ({
+          outputs: args.clips.map((clip) => ({
             clipId: clip.id,
             path: `C:/exports/${clip.outputName}`,
             status: "completed",
@@ -233,7 +239,7 @@ export function installNative({
           .filter(
             (entry) =>
               !entry.is_directory &&
-              args.extensions.includes(entry.path.split(".").pop()?.toLowerCase()),
+              args.extensions.includes(entry.path.split(".").pop()?.toLowerCase() ?? ""),
           )
           .map((entry) => ({ path: entry.path, file_name: entry.name }));
       case "probe_media_link_files":
@@ -337,7 +343,7 @@ export function installNative({
       case "import_media":
       case "register_import_media": {
         const id = `asset-${++mediaSequence}`;
-        const file_name = args.path.split(/[\\/]/).pop();
+        const file_name = args.path.split(/[\\/]/).pop() ?? args.path;
         const audio = /\.wav$/i.test(args.path);
         const project: MediaDocument = {
           asset: {
@@ -400,24 +406,26 @@ export function installNative({
   };
   w.__TAURI_INTERNALS__ = {
     metadata: { currentWindow: { label: "main" }, currentWebview: { label: "main" } },
-    transformCallback: (callback: (...args: any[]) => void) => {
+    transformCallback: (callback: (...args: unknown[]) => void) => {
       const id = ++sequence;
       callbacks.set(id, callback);
       return id;
     },
     unregisterCallback: (id: number) => callbacks.delete(id),
     convertFileSrc: () => "data:video/mp4;base64,",
-    invoke: async (command: string, args: any = {}) => {
+    invoke: async (command: string, payload: Partial<NativeArguments> = {}) => {
+      const args = payload as NativeArguments;
       state.calls.push({ command, args });
       const failure =
         state.failures[`${command}:${args.path ?? args.directory ?? ""}`] ??
         state.failures[command];
       if (failure) throw new Error(failure);
       if (state.held[command]) {
-        await new Promise((resolve) => state.pending.push({ command, args, resolve }));
+        await new Promise<void>((resolve) => state.pending.push({ command, args, resolve }));
       }
       return result(command, args);
     },
   };
   w.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
+  return state;
 }

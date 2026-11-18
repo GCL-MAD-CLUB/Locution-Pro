@@ -10,7 +10,7 @@ import {
 
 function useNow(lifetime: RenderLifetime, active: boolean) {
   const [now, setNow] = useState(() => Date.now());
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!active) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);

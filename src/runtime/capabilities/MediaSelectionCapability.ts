@@ -33,25 +33,21 @@ export function useMediaSelectionCapability(
     disabled = false,
     handlers,
   } = options;
-  const capabilities = {
-    replaceMedia: !disabled && offlineSelectionCount === 0 && onlineSelectionCount === 1,
-    linkMedia: !disabled && offlineSelectionCount > 0,
-    makeOffline: !disabled && onlineSelectionCount > 0,
-  };
+  const capabilities = useMemo(
+    () => ({
+      replaceMedia: !disabled && offlineSelectionCount === 0 && onlineSelectionCount === 1,
+      linkMedia: !disabled && offlineSelectionCount > 0,
+      makeOffline: !disabled && onlineSelectionCount > 0,
+    }),
+    [disabled, offlineSelectionCount, onlineSelectionCount],
+  );
   const projection = useMemo<MediaSelectionCapabilityProjection>(
     () => ({
       active,
       selectedCount: offlineSelectionCount + onlineSelectionCount,
       capabilities,
     }),
-    [
-      active,
-      capabilities.linkMedia,
-      capabilities.makeOffline,
-      capabilities.replaceMedia,
-      offlineSelectionCount,
-      onlineSelectionCount,
-    ],
+    [active, capabilities, offlineSelectionCount, onlineSelectionCount],
   );
   usePublishProjection(lifetime, MEDIA_SELECTION_CAPABILITY_PROJECTION, identity, projection);
 

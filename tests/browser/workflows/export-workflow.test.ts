@@ -44,7 +44,7 @@ for (const action of ["取消", "跳过"]) {
   test(`冲突时${action}保持导出页且从不派发编码`, async ({ app, native }) => {
     await prepareExport(app);
     await app.evaluate(() => {
-      (window as any).__nativeTest.existingFiles = true;
+      window.__nativeTest.existingFiles = true;
     });
     await app
       .locator(".export-action-bar")
@@ -67,7 +67,7 @@ for (const action of ["取消", "跳过"]) {
 test("冲突覆盖只派发一次，并传递用户决定", async ({ app, native }) => {
   await prepareExport(app);
   await app.evaluate(() => {
-    (window as any).__nativeTest.existingFiles = true;
+    window.__nativeTest.existingFiles = true;
   });
   await app
     .locator(".export-action-bar")
@@ -86,7 +86,7 @@ test("冲突覆盖只派发一次，并传递用户决定", async ({ app, native
 test("冲突使用唯一名称不会覆盖原输出，派发采用选定的新名字", async ({ app, native }) => {
   await prepareExport(app);
   await app.evaluate(() => {
-    (window as any).__nativeTest.existingPaths = ["C:/exports/clip.MP4.mp4"];
+    window.__nativeTest.existingPaths = ["C:/exports/clip.MP4.mp4"];
   });
   await app
     .locator(".export-action-bar")

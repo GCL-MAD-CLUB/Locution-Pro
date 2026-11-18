@@ -1,8 +1,9 @@
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
-import { cellEditReset } from "../../../../core/editor/cellEditReset";
 import { annotationColors } from "../../../../runtime/theme";
 import type { PanelRowSource } from "../../../../core/editor/multiSource";
-import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
+import type { VirtualItem } from "@tanstack/react-virtual";
+import type { RowVirtualizer } from "../../../../runtime/state/useRowVirtualizer";
 import { Star } from "lucide-react";
 import {
   useRef,
@@ -52,7 +53,7 @@ interface SubtitleListViewProps {
   currentCueIndex: number;
   tableStyle: CSSProperties;
   headerContent: ReactNode;
-  rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
+  rowVirtualizer: RowVirtualizer;
   virtualRows: VirtualItem[];
   thumbnailWindow: TimelineThumbnailWindowPlan;
   thumbnailTargetResolution: TimelineThumbnailResolution;
@@ -123,28 +124,10 @@ export function SubtitleListView({
     setCueFlags,
     setCueColorLabels,
   } = useSubtitlePanelState(lifetime, (state) => state);
-  const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
-  const [editingCueId, setEditingCueId] = useState<string | null>(null);
+  const [activeCell, setActiveCell] = useScopedState<ActiveCell | null>(resetKey, null);
+  const [editingCueId, setEditingCueId] = useScopedState<string | null>(resetKey, null);
   const [editValue, setEditValue] = useState("");
   const pendingCellEditRef = useRef<number | null>(null);
-  const [seenResetKey, setSeenResetKey] = useState(resetKey);
-  const editReset = cellEditReset(seenResetKey, resetKey, pendingCellEditRef.current);
-  if (editReset) {
-    setSeenResetKey(resetKey);
-    if (editReset.cancelPendingTimer && pendingCellEditRef.current !== null) {
-      window.clearTimeout(pendingCellEditRef.current);
-      pendingCellEditRef.current = null;
-    }
-    setEditingCueId(null);
-    setActiveCell(null);
-  }
-
-  lifetime.afterCommit(
-    () => () => {
-      cancelPendingCellEdit();
-    },
-    [],
-  );
 
   function cancelPendingCellEdit() {
     if (pendingCellEditRef.current === null) {
@@ -153,6 +136,12 @@ export function SubtitleListView({
     window.clearTimeout(pendingCellEditRef.current);
     pendingCellEditRef.current = null;
   }
+  lifetime.useAfterCommit(
+    () => () => {
+      cancelPendingCellEdit();
+    },
+    [resetKey],
+  );
 
   function activateCell(cueId: string, columnId: ActiveColumn) {
     cancelPendingCellEdit();
@@ -232,7 +221,7 @@ export function SubtitleListView({
           <div
             className="virtual-spacer"
             role="rowgroup"
-            style={{ height: `${rowVirtualizer.getTotalSize() + 8}px` }}
+            style={{ height: `${rowVirtualizer.totalSize + 8}px` }}
           >
             {virtualRows.map((virtualRow) => {
               const cue = cues[virtualRow.index];

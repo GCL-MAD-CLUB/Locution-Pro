@@ -25,10 +25,14 @@ export function ImportMediaVisual({
   const [progress, setProgress] = useState<number | null>(null);
   const [duration, setDuration] = useState(0);
   const hoverTime = useRef<number | null>(null);
-  hoverTime.current = previewTimeUs(duration, progress, 100_000);
+  lifetime.useBeforePaint(() => {
+    hoverTime.current = previewTimeUs(duration, progress, 100_000);
+  });
   const previewRequest = useRef<{ request(timeUs: number): void } | null>(null);
   const reportMetadata = useRef(onMetadata);
-  reportMetadata.current = onMetadata;
+  lifetime.useBeforePaint(() => {
+    reportMetadata.current = onMetadata;
+  });
   const kind = entry.is_directory ? null : mediaKind(entry.path);
   const Icon =
     kind === "audio"
@@ -38,14 +42,14 @@ export function ImportMediaVisual({
         : kind === "subtitle"
           ? Captions
           : FileVideo2;
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const observer = new IntersectionObserver(([item]) => setVisible(item.isIntersecting), {
       rootMargin: "100px",
     });
     if (host.current) observer.observe(host.current);
     return () => observer.disconnect();
   }, []);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!visible || !kind || kind === "subtitle") return;
     let live = true;
     if (kind === "video" || kind === "image")
@@ -63,7 +67,7 @@ export function ImportMediaVisual({
     };
   }, [entry.path, visible, kind, scrub, Boolean(onMetadata)]);
   const hovering = progress !== null;
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!hovering || !duration || !scrub || kind !== "video") return;
     let live = true;
     const request = createLatestPreview(

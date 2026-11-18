@@ -144,9 +144,13 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
   const [leftRatio, setLeftRatio] = useState(0.3);
   const [settingsRatio, setSettingsRatio] = useState(0.38);
   const leftRatioRef = useRef(leftRatio);
-  leftRatioRef.current = leftRatio;
+  lifetime.useBeforePaint(() => {
+    leftRatioRef.current = leftRatio;
+  });
   const settingsRatioRef = useRef(settingsRatio);
-  settingsRatioRef.current = settingsRatio;
+  lifetime.useBeforePaint(() => {
+    settingsRatioRef.current = settingsRatio;
+  });
   const dragRef = useRef<ColumnDragState | null>(null);
   const dragListenersRef = useRef<{
     onMove: (event: PointerEvent) => void;
@@ -167,7 +171,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
 
   // If the workspace unmounts mid-drag, drop the window listeners and the
   // resizing class so nothing is left stuck behind the component.
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     return () => {
       const listeners = dragListenersRef.current;
       dragListenersRef.current = null;
@@ -225,7 +229,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
   }
 
   const audioBindingKey = exportAudioBindingKey(source);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     adoptExportSource(source);
     applyProjectExportSettings();
   }, [adoptExportSource, applyProjectExportSettings, audioBindingKey, projectId, source]);
@@ -237,7 +241,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
     : null;
   const lastSourceKeyRef = useRef<string | null>(null);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!source || sourceKey === lastSourceKeyRef.current) {
       return;
     }
@@ -275,9 +279,13 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
     ? (source.clips.find((clip) => clip.id === previewClipId) ?? source.clips[0] ?? null)
     : null;
   const previewClipRef = useRef(previewClip);
-  previewClipRef.current = previewClip;
+  lifetime.useBeforePaint(() => {
+    previewClipRef.current = previewClip;
+  });
   const mediaItemsRef = useRef(mediaItems);
-  mediaItemsRef.current = mediaItems;
+  lifetime.useBeforePaint(() => {
+    mediaItemsRef.current = mediaItems;
+  });
   const [previewRequestId, setPreviewRequestId] = useState(0);
   const previewPlayRequestRef = useRef<string | null>(null);
 
@@ -287,7 +295,7 @@ export function ExportWorkspace({ onExportStarted }: ExportWorkspaceProps) {
     setPreviewRequestId((count) => count + 1);
   }
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const previewClip = previewClipRef.current;
     if (!previewClip) {
       return;

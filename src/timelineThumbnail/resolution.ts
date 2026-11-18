@@ -31,7 +31,7 @@ export function useTimelineThumbnailResolution<Element extends HTMLElement>(
   const [element, setElement] = useState<Element | null>(null);
   const [resolution, setResolution] = useState<TimelineThumbnailResolution | null>(null);
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     if (!element) {
       return;
     }

@@ -1,3 +1,4 @@
+import { useScopedState } from "../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
@@ -6,7 +7,6 @@ import {
   Link2,
   List,
   Loader2,
-  Menu,
   PanelTopOpen,
   PenLine,
   Plus,
@@ -307,9 +307,12 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
   const [contextMenu, setContextMenu] = useState<MediaBinContextMenuState | null>(null);
   const [linkDialog, setLinkDialog] = useState<MediaLinkDialogState | null>(null);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
-  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+  const [expandedFolderEdits, setExpandedFolderIds] = useState<Set<string>>(new Set());
   const [collapsedMediaIds, setCollapsedMediaIds] = useState<Set<string>>(new Set());
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(rootFolderId);
+  const [folderEdit, setCurrentFolderId] = useScopedState<string | null>(
+    rootFolderId,
+    rootFolderId,
+  );
   const rootFolder = rootFolderId
     ? (mediaFolders.find((folder) => folder.id === rootFolderId) ?? null)
     : null;
@@ -325,6 +328,15 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
   const scopedFolders = useMemo(
     () => mediaFolders.filter((folder) => scopedFolderIds.has(folder.id)),
     [mediaFolders, scopedFolderIds],
+  );
+  const folderNavigation = useMemo(
+    () => mediaBinFolderNavigation(folderEdit, rootFolderId, scopedFolderIds, expandedFolderEdits),
+    [folderEdit, rootFolderId, scopedFolderIds, expandedFolderEdits],
+  );
+  const currentFolderId = folderNavigation.currentFolderId;
+  const expandedFolderIds = useMemo(
+    () => new Set(folderNavigation.expandedFolderIds),
+    [folderNavigation.expandedFolderIds],
   );
   const scopedItems = useMemo(
     () =>
@@ -559,7 +571,11 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
       return result;
     }
 
-    const appendFolder = (folder: MediaBinFolder, depth: number, ancestorMatched: boolean) => {
+    const appendFolder = function appendFolder(
+      folder: MediaBinFolder,
+      depth: number,
+      ancestorMatched: boolean,
+    ) {
       const matchesFolder = folder.name.toLocaleLowerCase().includes(normalizedQuery);
       if (normalizedQuery && !ancestorMatched && !folderHasMatch(folder)) {
         return;
@@ -592,7 +608,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
   ]);
 
   const analysisRetryAfter = useRef(new Map<string, number>());
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) return;
     let disposed = false;
     let checking = false;
@@ -638,7 +654,7 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     };
   }, [projects, mediaItems]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (isReadOnly && bindingPopoverOpen) {
       setBindingPopoverOpen(false);
     }
@@ -649,25 +665,12 @@ export function MediaBin({ rootFolderId = null }: MediaBinProps) {
     ignorePopupMenuTargets: true,
   });
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const nextSelection = Array.from(selectedIds).filter((itemId) => scopedEntryIds.has(itemId));
     if (nextSelection.length !== selectedIds.size) {
       selectItems(nextSelection);
     }
   }, [scopedEntryIds, selectItems, selectedIds]);
-
-  const folderNavigation = mediaBinFolderNavigation(
-    currentFolderId,
-    rootFolderId,
-    scopedFolderIds,
-    expandedFolderIds,
-  );
-  if (folderNavigation.currentFolderId !== currentFolderId) {
-    setCurrentFolderId(folderNavigation.currentFolderId);
-  }
-  if (folderNavigation.expandedFolderIds !== expandedFolderIds) {
-    setExpandedFolderIds(new Set(folderNavigation.expandedFolderIds));
-  }
 
   function focusMediaBinEntry(entryId: string) {
     const folder = scopedFolders.find((candidate) => candidate.id === entryId);

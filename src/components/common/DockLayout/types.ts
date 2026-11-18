@@ -122,8 +122,10 @@ export interface PanelDefinition<Params = unknown> {
   useAvailable?: (params: Params) => boolean;
 }
 
-export type AnyPanelDefinition = PanelDefinition<any>;
+export type AnyPanelDefinition = PanelDefinition<unknown>;
 
-export function definePanel<Params>(definition: PanelDefinition<Params>) {
-  return definition;
+export function definePanel<Params>(definition: PanelDefinition<Params>): AnyPanelDefinition {
+  // Parameters remain paired with their component and hooks. Erase the generic
+  // only at this boundary so a registry can hold different panel contracts.
+  return definition as unknown as AnyPanelDefinition;
 }

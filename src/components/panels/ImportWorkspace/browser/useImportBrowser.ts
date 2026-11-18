@@ -67,7 +67,7 @@ export function useImportBrowser(lifetime: RenderLifetime) {
     setSettings(next);
     void saveImportSettings(next);
   }, []);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     let live = true;
     if (isTauriRuntime())
       void (async () => {

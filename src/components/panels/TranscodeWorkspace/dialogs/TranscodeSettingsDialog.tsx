@@ -1,3 +1,4 @@
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { useMemo, useState } from "react";
 import { ModalDialog } from "../../../common/ModalDialog";
 import { ExportField } from "../../ExportWorkspace";
@@ -62,17 +63,21 @@ export function TranscodeSettingsDialog({
   const capabilities = useTranscodeQueueState((state) => state.capabilities);
   const userPresets = useTranscodeQueueState((state) => state.userPresets);
   const projectDirectory = useTranscodeQueueState((state) => state.projectDirectory);
-  const [settings, setSettings] = useState<TranscodeSettings>(() =>
-    cloneTranscodeSettings(output.settings),
+  const [settings, setSettings] = useScopedState<TranscodeSettings>(
+    null,
+    (() => cloneTranscodeSettings(output.settings))(),
   );
-  const [presetId, setPresetId] = useState<string | null>(output.presetId);
-  const [presetName, setPresetName] = useState(output.presetName);
-  const [destination, setDestination] = useState<TranscodeDestination | null>(output.destination);
-  const [outputName, setOutputName] = useState(output.outputName);
+  const [presetId, setPresetId] = useScopedState<string | null>(null, output.presetId);
+  const [presetName, setPresetName] = useScopedState(null, output.presetName);
+  const [destination, setDestination] = useScopedState<TranscodeDestination | null>(
+    null,
+    output.destination,
+  );
+  const [outputName, setOutputName] = useScopedState(null, output.outputName);
   const [tab, setTab] = useState<TabId>("video");
   const [savingPreset, setSavingPreset] = useState(false);
   const [newPresetName, setNewPresetName] = useState("");
-  const [rangeDraft, setRangeDraft] = useState({
+  const [rangeDraft, setRangeDraft] = useScopedState(null, {
     start: formatTimecode(output.settings.rangeStartUs),
     end: formatTimecode(output.settings.rangeEndUs),
   });

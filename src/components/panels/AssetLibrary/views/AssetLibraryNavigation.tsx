@@ -100,7 +100,7 @@ export function AssetLibraryNavigation(props: AssetLibraryNavigationProps) {
     : null;
   const dragExpandKey = hoveredTreeKey && collapsedKeys.has(hoveredTreeKey) ? hoveredTreeKey : null;
   const { onToggleCollapsed } = props;
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!dragExpandKey) return;
     const timer = window.setTimeout(() => onToggleCollapsed(dragExpandKey), dragExpandDelayMs);
     return () => window.clearTimeout(timer);

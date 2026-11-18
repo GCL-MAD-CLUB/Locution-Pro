@@ -380,7 +380,7 @@ export function usePanelMediaSourceSelection(
   const activeTrackId = activeSource?.trackId ?? "";
   const project = activeSource?.project ?? null;
   const previousHistoryRef = useRef({ projectId, projectHistory });
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const previous = previousHistoryRef.current;
     previousHistoryRef.current = { projectId, projectHistory };
     if (!kind || previous.projectId !== projectId) return;
@@ -489,7 +489,7 @@ export function usePanelMediaSource(lifetime: RenderLifetime, kind: "subtitles" 
   const panelActive = usePanelActive();
   const identity = useStableIdentity("media-panel", panelId);
   const playback = usePlaybackStatus();
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     if (playback?.sourcePanelId === panelId && playback.videoId === activeVideoId) {
       selection.rememberFrame(activeVideoId, playback.currentFrame);
     }
@@ -507,7 +507,7 @@ export function usePanelMediaSource(lifetime: RenderLifetime, kind: "subtitles" 
     [],
     ["activeVideoChanged", "previewTrackChanged", "sourcePreviewCleared"],
   );
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     if (
       selection.projectId !== projectId ||
       (selection.videoId === null && Boolean(activeVideoId))
@@ -539,18 +539,16 @@ export function usePanelMediaSource(lifetime: RenderLifetime, kind: "subtitles" 
       previewTrackChanged(activeTrackId);
     }
   }, [
-    previewTrackChanged,
-    activeTrackId,
-    activeVideoChanged,
-    activeVideoId,
-    hasProject,
+    selectionInitialized,
     identity,
     kind,
-    selection.openVersion,
-    selection.savedFrame,
-    selection.videoId,
-    selectionInitialized,
+    activeVideoId,
+    selection,
+    hasProject,
+    activeVideoChanged,
+    activeTrackId,
     sourcePreviewCleared,
+    previewTrackChanged,
   ]);
   const previousControlRef = useRef<{
     openSource: typeof openSource;
@@ -558,7 +556,7 @@ export function usePanelMediaSource(lifetime: RenderLifetime, kind: "subtitles" 
     panelActive: boolean;
     panelFocused: boolean;
   } | null>(null);
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const previous = previousControlRef.current;
     previousControlRef.current = { openSource, canOpenSource, panelActive, panelFocused };
     if (

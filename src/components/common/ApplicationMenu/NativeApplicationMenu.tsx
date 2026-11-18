@@ -33,7 +33,9 @@ export function NativeApplicationMenu({ model }: NativeApplicationMenuProps) {
   );
   const menu = useMemo(() => buildNativeMenu(model, editingText), [model, editingText]);
   const commandsRef = useRef(menu.commands);
-  commandsRef.current = menu.commands;
+  lifetime.useBeforePaint(() => {
+    commandsRef.current = menu.commands;
+  });
   const description = JSON.stringify(menu.entries);
 
   // Bumped after a check item runs: AppKit already flipped its checkmark, so
@@ -41,7 +43,7 @@ export function NativeApplicationMenu({ model }: NativeApplicationMenuProps) {
   // unchanged.
   const [resync, setResync] = useState(0);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     runBackgroundOperation("app.menu", () => setNativeApplicationMenu(JSON.parse(description)));
   }, [description, resync]);
 
@@ -49,7 +51,7 @@ export function NativeApplicationMenu({ model }: NativeApplicationMenuProps) {
   // nothing to copy or undo, so their key equivalents keep working there.
   // Read the active element once focus settles: when the window resigns key,
   // WebKit sends focusout but the field remains the document's active element.
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     let pending = false;
     let disposed = false;
     const update = () => {
@@ -69,7 +71,7 @@ export function NativeApplicationMenu({ model }: NativeApplicationMenuProps) {
     };
   }, []);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
     const onSelect = (id: string) => {

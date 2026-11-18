@@ -1,4 +1,6 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import type { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useClock } from "../../../../runtime/state/useClock";
 import {
   assetLibraryChildren,
   assetLibraryDescendants,
@@ -87,20 +89,24 @@ interface AssetLibraryNodesOptions {
  * When grouped, `nodes` follows the group order and leaves out collapsed groups, while
  * `itemCount` still counts every listed item.
  */
-export function useAssetLibraryNodes({
-  library,
-  location,
-  query,
-  sort,
-  filter,
-  group,
-  collapsedGroups,
-  showHidden,
-  home,
-  homeTab,
-  mediaItems,
-  projects,
-}: AssetLibraryNodesOptions) {
+export function useAssetLibraryNodes(
+  lifetime: RenderLifetime,
+  {
+    library,
+    location,
+    query,
+    sort,
+    filter,
+    group,
+    collapsedGroups,
+    showHidden,
+    home,
+    homeTab,
+    mediaItems,
+    projects,
+  }: AssetLibraryNodesOptions,
+) {
+  const now = useClock(lifetime);
   const mediaByEntryId = useMemo(
     () =>
       new Map(
@@ -119,20 +125,13 @@ export function useAssetLibraryNodes({
   }, [library]);
 
   // Sorting by location compares full folder paths, as the location column shows them.
-  const locationText = useMemo(() => {
-    const cache = new Map<string, string>();
-    return (libraryRoot: AssetLibraryRoot, parentId: string | null) => {
-      const cacheKey = `${libraryRoot}:${parentId ?? ""}`;
-      let text = cache.get(cacheKey);
-      if (text === undefined) {
-        text = [libraryRoot, ...assetLibraryFolderPath(library, parentId).map((f) => f.name)].join(
-          "\\",
-        );
-        cache.set(cacheKey, text);
-      }
-      return text;
-    };
-  }, [library]);
+  const locationText = useCallback(
+    (libraryRoot: AssetLibraryRoot, parentId: string | null) =>
+      [libraryRoot, ...assetLibraryFolderPath(library, parentId).map((folder) => folder.name)].join(
+        "\\",
+      ),
+    [library],
+  );
 
   const { root, folderId } = location;
   const listed = useMemo<AssetLibraryNode[]>(() => {
@@ -227,7 +226,7 @@ export function useAssetLibraryNodes({
   const { nodes, groups } = useMemo(() => {
     if (!grouping) return { nodes: listed, groups: null };
     let start = 0;
-    const grouped = groupedAssetLibraryItems(listed, assetNodeGroupItem, group, Date.now()).map(
+    const grouped = groupedAssetLibraryItems(listed, assetNodeGroupItem, group, now).map(
       ({ id, label, items }): AssetLibraryNodeGroup => {
         const collapsed = collapsedGroups.has(id);
         const result = { id, label, nodes: items, collapsed, start };
@@ -239,7 +238,7 @@ export function useAssetLibraryNodes({
       nodes: grouped.flatMap((entry) => (entry.collapsed ? [] : entry.nodes)),
       groups: grouped,
     };
-  }, [collapsedGroups, group, grouping, listed]);
+  }, [collapsedGroups, group, grouping, listed, now]);
 
   return { nodes, groups, itemCount: listed.length, mediaByEntryId, childCounts };
 }

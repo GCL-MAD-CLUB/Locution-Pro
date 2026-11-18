@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 export function useVerticalOverflow(lifetime: RenderLifetime) {
   const ref = useRef<HTMLElement | null>(null);
   const [overflow, setOverflow] = useState(false);
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const element = ref.current;
     if (!element) return;
     let frame: number | null = null;

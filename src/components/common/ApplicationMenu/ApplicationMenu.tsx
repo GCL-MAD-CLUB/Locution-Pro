@@ -1,3 +1,4 @@
+import { useScopedState } from "../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { useRef, useState } from "react";
 import { PopupMenu, PopupMenuItem, PopupMenuSeparator, PopupMenuSubmenu } from "../PopupMenu";
@@ -107,23 +108,17 @@ export function ApplicationMenu({ model }: ApplicationMenuProps) {
   const [windowMenuOpen, setWindowMenuOpen] = useState(false);
   const [betaMenuOpen, setBetaMenuOpen] = useState(false);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
-  const [recentProjectMenuOpen, setRecentProjectMenuOpen] = useState(false);
-  const [recentImportMenuOpen, setRecentImportMenuOpen] = useState(false);
-  const [projectWindowMenuOpen, setProjectWindowMenuOpen] = useState(false);
-  const [transcodeWindowMenuOpen, setTranscodeWindowMenuOpen] = useState(false);
-  const [preferencesMenuOpen, setPreferencesMenuOpen] = useState(false);
+  const [recentProjectMenuOpen, setRecentProjectMenuOpen] = useScopedState(fileMenuOpen, false);
+  const [recentImportMenuOpen, setRecentImportMenuOpen] = useScopedState(fileMenuOpen, false);
+  const [projectWindowMenuOpen, setProjectWindowMenuOpen] = useScopedState(windowMenuOpen, false);
+  const [transcodeWindowMenuOpen, setTranscodeWindowMenuOpen] = useScopedState(
+    windowMenuOpen,
+    false,
+  );
+  const [preferencesMenuOpen, setPreferencesMenuOpen] = useScopedState(editMenuOpen, false);
   const menuRef = useRef<HTMLElement>(null);
-  if (!fileMenuOpen && (recentProjectMenuOpen || recentImportMenuOpen)) {
-    setRecentProjectMenuOpen(false);
-    setRecentImportMenuOpen(false);
-  }
-  if (!editMenuOpen && preferencesMenuOpen) setPreferencesMenuOpen(false);
-  if (!windowMenuOpen && (projectWindowMenuOpen || transcodeWindowMenuOpen)) {
-    setProjectWindowMenuOpen(false);
-    setTranscodeWindowMenuOpen(false);
-  }
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!fileMenuOpen && !editMenuOpen && !windowMenuOpen && !betaMenuOpen && !helpMenuOpen) {
       return;
     }

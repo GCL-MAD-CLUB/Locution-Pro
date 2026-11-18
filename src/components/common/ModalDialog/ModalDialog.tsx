@@ -112,7 +112,7 @@ export function ModalDialog({
   const [attentionActive, setAttentionActive] = useState(false);
   const attentionFrameRef = useRef<number | null>(null);
 
-  lifetime.afterCommit(
+  lifetime.useAfterCommit(
     () => () => {
       if (attentionFrameRef.current !== null) {
         cancelAnimationFrame(attentionFrameRef.current);
@@ -121,7 +121,7 @@ export function ModalDialog({
     [],
   );
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && !event.repeat) {
         onCancel();
@@ -131,7 +131,7 @@ export function ModalDialog({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onCancel]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!focusTrap) {
       return;
     }
@@ -147,7 +147,7 @@ export function ModalDialog({
     };
   }, [focusTrap, initialFocusRef]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!focusTrap) {
       return;
     }

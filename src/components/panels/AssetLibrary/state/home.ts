@@ -58,7 +58,7 @@ function restoredHome(
 export function useAssetLibraryHome(lifetime: RenderLifetime) {
   const { projectId } = useProjectPort(["projectId"], []);
   const state = useStore(homeStore);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     // A new, unsaved project starts with an empty home.
     if (projectId === null && homeStore.getState().projectId !== null) {
       homeStore.setState({ projectId: null, home: emptyAssetLibraryHome() });

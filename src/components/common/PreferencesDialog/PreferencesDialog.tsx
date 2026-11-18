@@ -1,3 +1,4 @@
+import { useScopedState } from "../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Loader2 } from "lucide-react";
@@ -67,7 +68,7 @@ function PreferencesEditor({
   );
   const [draft, setDraft] = useState(() => createDraft(preferences));
   const savedAppearance = useRef(preferences.appearance ?? "darkest");
-  const [category, setCategory] = useState<PreferencesCategory>(initialCategory);
+  const [category, setCategory] = useScopedState<PreferencesCategory>(null, initialCategory);
   const [isSaving, setIsSaving] = useState(false);
   const [isChoosingPath, setIsChoosingPath] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -77,14 +78,14 @@ function PreferencesEditor({
   const snapshotsValid = validInteger(draft.auto_save_max_snapshots, 1000);
   const valid = intervalValid && snapshotsValid;
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     // Preview the draft without seeding the next start until it is saved.
     applyAppearance(draft.appearance, false);
   }, [draft.appearance]);
 
-  lifetime.beforePaint(() => () => applyAppearance(savedAppearance.current), []);
+  lifetime.useBeforePaint(() => () => applyAppearance(savedAppearance.current), []);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const previousFocus = document.activeElement;
     dialogRef.current
       ?.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')

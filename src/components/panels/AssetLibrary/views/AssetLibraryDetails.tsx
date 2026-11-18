@@ -180,7 +180,7 @@ function PlainEditor({
   const cancelledRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editing = draft !== null;
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     if (editing) textareaRef.current?.focus();
   }, [editing]);
   const finish = () => {

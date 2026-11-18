@@ -192,17 +192,24 @@ export function useTimelineThumbnailWindow<Item>(
   const backfillThumbnailRef = useRef(backfillThumbnail);
   const requestsRef = useRef(new Map<string, TimelineThumbnailWindowRequestRecord>());
   const sessionRef = useRef(0);
-  getItemKeyRef.current = getItemKey;
-  requestThumbnailRef.current = requestThumbnail;
-  backfillThumbnailRef.current = backfillThumbnail;
+  lifetime.useBeforePaint(() => {
+    getItemKeyRef.current = getItemKey;
+  });
+  lifetime.useBeforePaint(() => {
+    requestThumbnailRef.current = requestThumbnail;
+  });
+  lifetime.useBeforePaint(() => {
+    backfillThumbnailRef.current = backfillThumbnail;
+  });
 
+  const { centerIndex, endIndex, startIndex } = visibleRange;
   const rawPlan = useMemo(
-    () => createTimelineThumbnailWindowPlan(items.length, visibleRange),
-    [items.length, visibleRange.centerIndex, visibleRange.endIndex, visibleRange.startIndex],
+    () => createTimelineThumbnailWindowPlan(items.length, { centerIndex, endIndex, startIndex }),
+    [items.length, centerIndex, endIndex, startIndex],
   );
   const [debouncedPlan, setDebouncedPlan] = useState(rawPlan);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (rawPlan.signature === debouncedPlan.signature) {
       return;
     }
@@ -214,7 +221,7 @@ export function useTimelineThumbnailWindow<Item>(
     return () => window.clearTimeout(timer);
   }, [debounceMs, debouncedPlan.signature, rawPlan]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!enabled || !sourceKey) {
       sessionRef.current += 1;
       for (const record of requestsRef.current.values()) {
@@ -339,7 +346,7 @@ export function useTimelineThumbnailWindow<Item>(
     })();
   }, [debouncedPlan, enabled, items, rawPlan.signature, sourceKey, targetResolution]);
 
-  lifetime.afterCommit(
+  lifetime.useAfterCommit(
     () => () => {
       sessionRef.current += 1;
       for (const record of requestsRef.current.values()) {

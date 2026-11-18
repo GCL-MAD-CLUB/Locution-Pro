@@ -20,7 +20,7 @@ export function ProjectSaveDialog({
 }: ProjectSaveDialogProps) {
   const lifetime = new RenderLifetime();
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       if (
         saving ||

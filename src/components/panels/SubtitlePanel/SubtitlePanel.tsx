@@ -1,3 +1,4 @@
+import { useScopedState } from "../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../runtime/lifetime/RenderLifetime";
 import { themeSvgDataUrl } from "../../../runtime/theme";
 import { matchesSearchDuration, type AdvancedSearchOptions } from "../../../core/editor/textSearch";
@@ -6,7 +7,7 @@ import {
   useSubtitleSemanticSearch,
 } from "../../../application/media/subtitleSemanticSearch";
 import { focusedSearchHitId } from "../../../core/editor/searchFocus";
-import { semanticSortDecision } from "../../../core/editor/semanticResultSort";
+import { useSemanticSortState } from "../../../runtime/state/useSemanticSortState";
 import { panelSourceTitle } from "../../../core/editor/panelSourceSelection";
 import {
   sourceDraftIdentity,
@@ -31,7 +32,7 @@ import {
 } from "../../common/utils/playbackFollowScroll";
 import { startAssetLibraryItemDrag } from "../../common/utils/assetLibraryItemDrag";
 import { DragStackPreview, maximumDragStackLayers } from "../../common/DragStackPreview";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useRowVirtualizer } from "../../../runtime/state/useRowVirtualizer";
 import {
   ArrowDownAZ,
   ArrowDownZA,
@@ -928,16 +929,40 @@ export function SubtitlePanel() {
     layerCount: number;
   } | null>(null);
   const sprayGestureCleanupRef = useRef<(() => void) | null>(null);
-  const [cueSort, setCueSort] = useState<SubtitleSort>(defaultSubtitleSort);
-  const [appliedSemanticVersion, setAppliedSemanticVersion] = useState(0);
+
   const [trackMenu, setTrackMenu] = useState<SubtitleMenuAnchor | null>(null);
-  const [ratingComparatorMenu, setRatingComparatorMenu] = useState<SubtitleMenuAnchor | null>(null);
-  const [footerSortMenu, setFooterSortMenu] = useState<SubtitleMenuAnchor | null>(null);
-  const [footerSprayMenu, setFooterSprayMenu] = useState<SubtitleMenuAnchor | null>(null);
-  const [footerOptionsMenu, setFooterOptionsMenu] = useState<SubtitleMenuAnchor | null>(null);
-  const [contextMenu, setContextMenu] = useState<SubtitleContextMenuState | null>(null);
-  const [annotationMenu, setAnnotationMenu] = useState<SubtitleAnnotationMenuState | null>(null);
-  const [sprayActive, setSprayActive] = useState(false);
+  const [ratingComparatorMenu, setRatingComparatorMenu] = useScopedState<SubtitleMenuAnchor | null>(
+    draftIdentity,
+    null,
+  );
+  const [sprayActive, setSprayActive] = useScopedState(draftIdentity, false);
+  lifetime.useBeforePaint(
+    () => () => {
+      sprayGestureCleanupRef.current?.();
+    },
+    [draftIdentity, sprayActive],
+  );
+  const [footerSortMenu, setFooterSortMenu] = useScopedState<SubtitleMenuAnchor | null>(
+    draftIdentity,
+    null,
+  );
+  const [footerSprayMenu, setFooterSprayMenu] = useScopedState<SubtitleMenuAnchor | null>(
+    JSON.stringify([draftIdentity, sprayActive]),
+    null,
+  );
+  const [footerOptionsMenu, setFooterOptionsMenu] = useScopedState<SubtitleMenuAnchor | null>(
+    draftIdentity,
+    null,
+  );
+  const [contextMenu, setContextMenu] = useScopedState<SubtitleContextMenuState | null>(
+    draftIdentity,
+    null,
+  );
+  const [annotationMenu, setAnnotationMenu] = useScopedState<SubtitleAnnotationMenuState | null>(
+    draftIdentity,
+    null,
+  );
+
   const [sprayMode, setSprayMode] = useState<SubtitleSprayMode>("colorLabel");
   const [sprayColorLabel, setSprayColorLabel] = useState<SubtitleCueColorLabel | null>(null);
   const [sprayCustomLabel, setSprayCustomLabel] = useState("");
@@ -964,17 +989,7 @@ export function SubtitlePanel() {
     [subtitleSources],
   );
   const activeTrack = activeSource?.tracks.find((track) => track.id === activeTrackId);
-  const [sourceDirection, setSourceDirection] = useState<SourceSortDirection>("ascending");
-  usePersistedMediaPanelState(lifetime, {
-    selection,
-    onRestoreWorkspaces: selection.hydrateWorkspaces,
-    sourceDirection,
-    sourceWidth: subtitleColumnWidths.source,
-    onRestoreSources: selection.setSources,
-    onRestoreSourceDirection: setSourceDirection,
-    onRestoreSourceWidth: (width) =>
-      setSubtitleColumnWidths((current) => ({ ...current, source: width })),
-  });
+
   const allCues = useMemo(
     () =>
       sources.flatMap((source) =>
@@ -985,8 +1000,11 @@ export function SubtitlePanel() {
       ),
     [sources, projects, mediaItems, multipleSubtitleSources],
   );
-  const sourceForCue = (cue: SubtitleCue) =>
-    sources.find((source) => source.context === sourceRowParts(cue.id)?.[0]) ?? sources[0];
+  const sourceForCue = useCallback(
+    (cue: SubtitleCue) =>
+      sources.find((source) => source.context === sourceRowParts(cue.id)?.[0]) ?? sources[0],
+    [sources],
+  );
   function seekToCue(cue: SubtitleCue, _videoId: string, focusRange = false) {
     const source = sourceForCue(cue);
     if (!source) return;
@@ -1004,7 +1022,7 @@ export function SubtitlePanel() {
         text: cue.plain_text,
         source: sourceForCue(cue).context,
       })),
-    [allCues, sources],
+    [allCues, sourceForCue],
   );
   const semanticScope = JSON.stringify([projectId, selection.workspaceId, trackContext]);
   const semantic = useSubtitleSemanticSearch(
@@ -1019,24 +1037,38 @@ export function SubtitlePanel() {
   const showSimilarity = searchMode === "semantic" && Boolean(query.trim());
   const hasSemanticResults =
     showSimilarity && semantic.status === "ready" && semantic.scores.size > 0;
-  const ordinaryCueSort = useRef<SubtitleSort>(defaultSubtitleSort);
-  if (cueSort.columnId !== "similarity") ordinaryCueSort.current = cueSort;
-  const activeCueSort =
-    cueSort.columnId === "similarity" && !hasSemanticResults ? ordinaryCueSort.current : cueSort;
-  const semanticSort = semanticSortDecision<SubtitleSort>({
-    hasSemanticResults,
-    showSimilarity,
-    resultVersion: semantic.resultVersion,
-    appliedVersion: appliedSemanticVersion,
-    sorts: [cueSort],
-    ordinary: [ordinaryCueSort.current],
-    similarity: { columnId: "similarity", direction: "descending" },
+  const semanticVersion = hasSemanticResults ? semantic.resultVersion : null;
+  const similaritySort = useMemo<SubtitleSort>(
+    () => ({ columnId: "similarity", direction: "descending" }),
+    [],
+  );
+
+  const {
+    sort: cueSort,
+    setSort: setCueSort,
+    ordinary: ordinaryCueSort,
+  } = useSemanticSortState<SubtitleSort>(
+    draftIdentity,
+    semanticVersion,
+    defaultSubtitleSort,
+    similaritySort,
+  );
+  const activeCueSort = cueSort;
+
+  const [sourceDirection, setSourceDirection] = useScopedState<SourceSortDirection>(
+    semanticVersion,
+    semanticVersion === null ? "ascending" : "none",
+  );
+  usePersistedMediaPanelState(lifetime, {
+    selection,
+    onRestoreWorkspaces: selection.hydrateWorkspaces,
+    sourceDirection,
+    sourceWidth: subtitleColumnWidths.source,
+    onRestoreSources: selection.setSources,
+    onRestoreSourceDirection: setSourceDirection,
+    onRestoreSourceWidth: (width) =>
+      setSubtitleColumnWidths((current) => ({ ...current, source: width })),
   });
-  if (semanticSort) {
-    setAppliedSemanticVersion(semanticSort.appliedVersion);
-    if (semanticSort.clearSourceDirection) setSourceDirection("none");
-    if (semanticSort.sorts) setCueSort(semanticSort.sorts[0]);
-  }
   const filteredCues = useMemo(
     () =>
       allCues.filter(
@@ -1084,7 +1116,7 @@ export function SubtitlePanel() {
         sourceForCue,
         sourceDirection,
       ),
-    [cueAnnotations, activeCueSort, filteredCues, sources, sourceDirection, semantic.scores],
+    [filteredCues, activeCueSort, cueAnnotations, semantic.scores, sourceForCue, sourceDirection],
   );
   const matchingCueIndices = useMemo(
     () =>
@@ -1222,7 +1254,7 @@ export function SubtitlePanel() {
           );
         })
         .sort((a, b) => a.start_us - b.start_us),
-    [filteredCues, sources, playbackSource],
+    [filteredCues, sourceForCue, playbackSource],
   );
   const cueFrameRanges = useMemo(() => {
     let maximumEndFrame = 0;
@@ -1277,7 +1309,7 @@ export function SubtitlePanel() {
   const getRowKey = useCallback((index: number) => sortedCues[index].id, [sortedCues]);
   const getRowHeight = useCallback(() => subtitleRowHeight, [subtitleRowHeight]);
   const getScrollElement = useCallback(() => listRef.current, []);
-  const rowVirtualizer = useVirtualizer({
+  const rowVirtualizer = useRowVirtualizer(lifetime, {
     count: sortedCues.length,
     getScrollElement,
     estimateSize: getRowHeight,
@@ -1317,7 +1349,7 @@ export function SubtitlePanel() {
     navigateSearch,
   );
   const searchFocusKey = `${searchMode}\u0000${searchRule}\u0000${query}`;
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (searchMode !== "highlight" || !query.trim()) return;
     const firstMatchIndex = matchingCueIndices[0];
     if (firstMatchIndex === undefined) return;
@@ -1332,7 +1364,7 @@ export function SubtitlePanel() {
     if (targetIndex === undefined) return;
     focusSearchMatch(targetIndex);
   }
-  const virtualRows = rowVirtualizer.getVirtualItems();
+  const virtualRows = rowVirtualizer.items;
   const thumbnailVisibleRange = timelineThumbnailVisibleRange(
     virtualRows,
     rowVirtualizer.scrollOffset ?? 0,
@@ -1467,32 +1499,9 @@ export function SubtitlePanel() {
         ? `${videoLabel} 无字幕`
         : "未选择";
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     rowVirtualizer.measure();
-  }, [rowVirtualizer, subtitleRowHeight]);
-
-  const [seenDraftIdentity, setSeenDraftIdentity] = useState(draftIdentity);
-  if (seenDraftIdentity !== draftIdentity) {
-    setSeenDraftIdentity(draftIdentity);
-    sprayGestureCleanupRef.current?.();
-    setSprayActive(false);
-    setContextMenu(null);
-    setAnnotationMenu(null);
-    setRatingComparatorMenu(null);
-    setFooterSortMenu(null);
-    setFooterSprayMenu(null);
-    setFooterOptionsMenu(null);
-    setCueSort(defaultSubtitleSort);
-  }
-
-  const [sprayWasActive, setSprayWasActive] = useState(sprayActive);
-  if (sprayWasActive !== sprayActive) {
-    setSprayWasActive(sprayActive);
-    if (!sprayActive) {
-      sprayGestureCleanupRef.current?.();
-      setFooterSprayMenu(null);
-    }
-  }
+  }, [rowVirtualizer.measure, subtitleRowHeight]);
 
   useCloseOnOutsidePointer(
     lifetime,
@@ -1538,7 +1547,7 @@ export function SubtitlePanel() {
     selectionAnchorRef.current = nextSelectionFocus.anchorId;
   }
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const panel = panelRef.current;
     if (!panel) {
       return;
@@ -1607,7 +1616,7 @@ export function SubtitlePanel() {
     return () => panel.removeEventListener("keydown", handleSelectionKeyDown);
   }, [activeCueId, cueSelectionReplaced, rowVirtualizer, selectedCueIds, sortedCues]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const handleRippleDeleteKey = (event: KeyboardEvent) => {
       if (
         !isEditAuthority ||
@@ -1629,7 +1638,7 @@ export function SubtitlePanel() {
     return () => window.removeEventListener("keydown", handleRippleDeleteKey);
   });
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const handleAnnotationShortcut = (event: KeyboardEvent) => {
       if (
         !isEditAuthority ||
@@ -1680,7 +1689,7 @@ export function SubtitlePanel() {
     contextMenu,
     cueSelectionReplaced,
     isEditAuthority,
-    rowVirtualizer,
+    rowVirtualizer.scrollToIndex,
     selectedCueIds,
     setCueColorLabels,
     setCueFlags,
@@ -1688,7 +1697,7 @@ export function SubtitlePanel() {
     sortedCues,
   ]);
 
-  lifetime.afterCommit(
+  lifetime.useAfterCommit(
     () => () => {
       if (scrollAnimationRef.current !== null) {
         scrollAnimationRef.current();
@@ -1701,7 +1710,7 @@ export function SubtitlePanel() {
     [],
   );
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isPlaying || !panelActive) {
       return;
     }
@@ -1711,7 +1720,6 @@ export function SubtitlePanel() {
       return;
     }
     // A row-height change can invalidate measurements earlier in this effect pass.
-    rowVirtualizer.getTotalSize();
     const offsetInfo = rowVirtualizer.getOffsetForIndex(followCueIndex, "center");
     if (!offsetInfo) {
       return;
@@ -1748,7 +1756,7 @@ export function SubtitlePanel() {
     playbackFrameRate,
     isPlaying,
     panelActive,
-    rowVirtualizer,
+    rowVirtualizer.getOffsetForIndex,
     rowVirtualizer.scrollRect?.height,
     subtitleRowHeight,
     sortedCues,
@@ -2341,7 +2349,7 @@ export function SubtitlePanel() {
     }
     setCueSort((stored) => {
       const current =
-        stored.columnId === "similarity" && !hasSemanticResults ? ordinaryCueSort.current : stored;
+        stored.columnId === "similarity" && !hasSemanticResults ? ordinaryCueSort : stored;
       return current.columnId === columnId
         ? {
             columnId,

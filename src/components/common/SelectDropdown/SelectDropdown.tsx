@@ -130,7 +130,7 @@ export function SelectDropdown<T extends string>({
     });
   }
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     if (!open) {
       return;
     }
@@ -139,7 +139,7 @@ export function SelectDropdown<T extends string>({
     return () => window.cancelAnimationFrame(frame);
   }, [open, items, menuMinWidth, menuWidth, placement, menuVariant]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!open) {
       return;
     }
@@ -191,9 +191,13 @@ export function SelectDropdown<T extends string>({
           style={{ ...menuStyle, position: "fixed" }}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          {items.map((item, index) =>
-            item.type === "separator" ? (
-              <PopupMenuSeparator key={`separator-${index}`} />
+          {items.map((item, index) => {
+            const separatorKey =
+              "before-" +
+              (items.slice(index + 1).find((candidate) => candidate.type === "option")?.value ??
+                "end");
+            return item.type === "separator" ? (
+              <PopupMenuSeparator key={separatorKey} />
             ) : (
               <PopupMenuItem
                 key={item.value}
@@ -208,8 +212,8 @@ export function SelectDropdown<T extends string>({
               >
                 {renderOptionLabel?.(item) ?? item.label}
               </PopupMenuItem>
-            ),
-          )}
+            );
+          })}
         </PopupMenu>
       </div>
     ) : (
@@ -222,9 +226,13 @@ export function SelectDropdown<T extends string>({
         aria-multiselectable={selectedValues ? true : undefined}
         style={menuStyle}
       >
-        {items.map((item, index) =>
-          item.type === "separator" ? (
-            <div key={`separator-${index}`} className="select-dropdown-separator" />
+        {items.map((item, index) => {
+          const separatorKey =
+            "before-" +
+            (items.slice(index + 1).find((candidate) => candidate.type === "option")?.value ??
+              "end");
+          return item.type === "separator" ? (
+            <div key={separatorKey} className="select-dropdown-separator" />
           ) : (
             <button
               key={item.value}
@@ -247,8 +255,8 @@ export function SelectDropdown<T extends string>({
                 {renderOptionLabel?.(item) ?? item.label}
               </span>
             </button>
-          ),
-        )}
+          );
+        })}
       </div>
     );
 

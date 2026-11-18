@@ -23,7 +23,7 @@ export function TranscodeWorkspace() {
   // would flash a different arrangement.
   const configLoaded = useTranscodeQueueState((state) => state.configLoaded);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     void ensureTranscodeReady();
   }, []);
 

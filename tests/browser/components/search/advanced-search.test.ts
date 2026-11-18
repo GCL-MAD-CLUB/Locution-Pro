@@ -97,8 +97,8 @@ for (const label of ["字幕", "分镜"] as const) {
     await search.mount();
     const { entry, dialog } = search;
     await page.evaluate(() => {
-      (window as any).leakedKeys = [];
-      window.addEventListener("keydown", (event) => (window as any).leakedKeys.push(event.key));
+      window.leakedKeys = [];
+      window.addEventListener("keydown", (event) => window.leakedKeys.push(event.key));
     });
     await entry.click();
     await dialog.getByRole("button", { name: "取消", exact: true }).focus();
@@ -107,7 +107,7 @@ for (const label of ["字幕", "分镜"] as const) {
     await page.keyboard.press("Shift+Tab");
     await expect(dialog.getByRole("button", { name: "取消", exact: true })).toBeFocused();
     await page.keyboard.press("j");
-    expect(await page.evaluate(() => (window as any).leakedKeys)).toEqual([]);
+    expect(await page.evaluate(() => window.leakedKeys)).toEqual([]);
     await dialog.getByRole("button", { name: "搜索模式", exact: true }).click();
     await page.keyboard.press("Escape");
     await expect(dialog).toBeVisible();

@@ -226,7 +226,7 @@ export function MediaBrowserDialog({
     });
   }
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     let cancelled = false;
     void (async () => {
       const rootsOutcome = await runOperation(operation, () =>
@@ -258,7 +258,6 @@ export function MediaBrowserDialog({
       cancelled = true;
     };
     // The initial directory is intentionally read once per dialog instance.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function isCompatible(entry: MediaBrowserEntry) {
@@ -276,7 +275,7 @@ export function MediaBrowserDialog({
     );
   }, [compatibleExtensions, listing, searchQuery, showHidden, shownExtensions]);
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const element = itemsRef.current;
     if (!element || view !== "grid") return;
     const update = () => {
@@ -293,7 +292,7 @@ export function MediaBrowserDialog({
 
   const suggestedSelectionKey = (suggestedPaths ?? []).map(pathKey).join("\u0000");
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (
       !listing ||
       !suggestedSelectionKey ||
@@ -313,7 +312,6 @@ export function MediaBrowserDialog({
     }
     // Paths are compared through the stable normalized key so an equivalent prop array does not
     // replace a manual selection on every parent render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listing, selectionMode, suggestedSelectionKey]);
 
   async function goBack() {

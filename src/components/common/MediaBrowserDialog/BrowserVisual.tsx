@@ -53,7 +53,7 @@ export function BrowserSystemIcon({
   const lifetime = new RenderLifetime();
 
   const [src, setSrc] = useState("");
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     let live = true;
     void iconSource(path).then((value) => {
       if (live) setSrc(value);
@@ -92,8 +92,10 @@ export function BrowserVisual({
   const [duration, setDuration] = useState(0);
   const hoverTimeRef = useRef<number | null>(null);
   const previewRequest = useRef<{ request(timeUs: number): void } | null>(null);
-  hoverTimeRef.current = previewTimeUs(duration, progress, 40_000);
-  lifetime.afterCommit(() => {
+  lifetime.useBeforePaint(() => {
+    hoverTimeRef.current = previewTimeUs(duration, progress, 40_000);
+  });
+  lifetime.useAfterCommit(() => {
     if (progress === null || !duration || !preview || !visible) {
       setFrame("");
       return;
@@ -133,12 +135,12 @@ export function BrowserVisual({
   }, [progress !== null, duration, path, preview, visible]);
   const isVideo =
     preview && !directory && /\.(mp4|mov|mkv|avi|webm|m4v|mts|m2ts|ts|mpeg|mpg)$/i.test(path);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting));
     if (host.current) observer.observe(host.current);
     return () => observer.disconnect();
   }, []);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!visible || !isVideo) return;
     let live = true;
     let url = "";
@@ -160,7 +162,7 @@ export function BrowserVisual({
       setCover("");
     };
   }, [visible, isVideo, path]);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (progress === null || duration > 0 || !isVideo) return;
     let live = true;
     void queued(async () => {

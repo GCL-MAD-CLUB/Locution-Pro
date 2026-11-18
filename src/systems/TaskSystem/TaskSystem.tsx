@@ -148,7 +148,7 @@ function setSnapshot(nextSnapshot: TaskProgressSnapshot) {
 // "Maximum update depth exceeded". Progress may trail by a frame instead.
 function useTaskProgressSnapshot(lifetime: RenderLifetime) {
   const [current, setCurrent] = useState(getSnapshot);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const update = () => setCurrent(getSnapshot());
     update();
     return subscribe(update);
@@ -412,18 +412,71 @@ export function TaskProgress({ children }: TaskProgressProps) {
     const fillPercent = taskPercent(task);
     const percent = Math.round(fillPercent);
     return lifetime.render(
-      <>
-        <div
-          className="topbar-progress"
-          title={`${task.label} ${task.state === "queued" ? "排队中" : task.total <= 0 ? "正在处理" : `${percent}%`}`}
-        >
-          <span>
-            {task.label}
-            {task.state === "queued" ? "（排队中）" : ""}
-          </span>
-          <div className="topbar-progress-row">
+      <div
+        className="topbar-progress"
+        title={`${task.label} ${task.state === "queued" ? "排队中" : task.total <= 0 ? "正在处理" : `${percent}%`}`}
+      >
+        <span>
+          {task.label}
+          {task.state === "queued" ? "（排队中）" : ""}
+        </span>
+        <div className="topbar-progress-row">
+          <div
+            className="topbar-progress-track"
+            role="progressbar"
+            aria-label={task.label}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={task.total > 0 ? percent : undefined}
+          >
             <div
+              className={`topbar-progress-fill${task.total <= 0 && task.state === "running" ? " is-indeterminate" : ""}`}
+              style={
+                task.total > 0 || task.state === "queued" ? { width: `${fillPercent}%` } : undefined
+              }
+            />
+          </div>
+          {task.on_cancel && (
+            <button
+              type="button"
+              className="topbar-progress-cancel"
+              onClick={() => {
+                // The failure is already reported. Swallowing it here keeps
+                // the click from becoming an unhandled rejection; quit still
+                // observes the same rejected promise and stays open.
+                void runTaskCancel(task).catch(() => undefined);
+              }}
+              title="取消任务"
+              aria-label="取消任务"
+              disabled={task.is_cancelling}
+            >
+              <X aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </div>,
+    );
+  }
+
+  const running = tasks.filter((task) => task.state === "running");
+  const queued = tasks.filter((task) => task.state === "queued");
+  const visibleTasks = [...running, ...queued].slice(0, TASK_PROGRESS_SLOTS);
+
+  return lifetime.render(
+    <div className="topbar-progress topbar-progress-multi">
+      <span>{`正在执行 ${running.length} 项操作${queued.length ? `，${queued.length} 项排队中` : ""}...`}</span>
+      <div
+        className="topbar-progress-stack"
+        style={{ gridTemplateRows: `repeat(${visibleTasks.length}, minmax(0, 1fr))` }}
+      >
+        {visibleTasks.map((task) => {
+          const fillPercent = taskPercent(task);
+          const percent = Math.round(fillPercent);
+          return (
+            <div
+              key={task.id}
               className="topbar-progress-track"
+              title={`${task.label} ${task.state === "queued" ? "排队中" : task.total <= 0 ? "正在处理" : `${percent}%`}`}
               role="progressbar"
               aria-label={task.label}
               aria-valuemin={0}
@@ -439,67 +492,9 @@ export function TaskProgress({ children }: TaskProgressProps) {
                 }
               />
             </div>
-            {task.on_cancel && (
-              <button
-                className="topbar-progress-cancel"
-                onClick={() => {
-                  // The failure is already reported. Swallowing it here keeps
-                  // the click from becoming an unhandled rejection; quit still
-                  // observes the same rejected promise and stays open.
-                  void runTaskCancel(task).catch(() => undefined);
-                }}
-                title="取消任务"
-                aria-label="取消任务"
-                disabled={task.is_cancelling}
-              >
-                <X aria-hidden="true" />
-              </button>
-            )}
-          </div>
-        </div>
-      </>,
-    );
-  }
-
-  const running = tasks.filter((task) => task.state === "running");
-  const queued = tasks.filter((task) => task.state === "queued");
-  const visibleTasks = [...running, ...queued].slice(0, TASK_PROGRESS_SLOTS);
-
-  return lifetime.render(
-    <>
-      <div className="topbar-progress topbar-progress-multi">
-        <span>{`正在执行 ${running.length} 项操作${queued.length ? `，${queued.length} 项排队中` : ""}...`}</span>
-        <div
-          className="topbar-progress-stack"
-          style={{ gridTemplateRows: `repeat(${visibleTasks.length}, minmax(0, 1fr))` }}
-        >
-          {visibleTasks.map((task) => {
-            const fillPercent = taskPercent(task);
-            const percent = Math.round(fillPercent);
-            return (
-              <div
-                key={task.id}
-                className="topbar-progress-track"
-                title={`${task.label} ${task.state === "queued" ? "排队中" : task.total <= 0 ? "正在处理" : `${percent}%`}`}
-                role="progressbar"
-                aria-label={task.label}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={task.total > 0 ? percent : undefined}
-              >
-                <div
-                  className={`topbar-progress-fill${task.total <= 0 && task.state === "running" ? " is-indeterminate" : ""}`}
-                  style={
-                    task.total > 0 || task.state === "queued"
-                      ? { width: `${fillPercent}%` }
-                      : undefined
-                  }
-                />
-              </div>
-            );
-          })}
-        </div>
+          );
+        })}
       </div>
-    </>,
+    </div>,
   );
 }

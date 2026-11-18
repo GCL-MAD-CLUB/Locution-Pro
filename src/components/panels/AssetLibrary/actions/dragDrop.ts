@@ -67,7 +67,7 @@ function nodeRoot(node: AssetLibraryNode): AssetLibraryRoot | null {
   return node.kind === "entry" ? node.entry.root : null;
 }
 
-export function assetLibraryDragDrop(context: AssetLibraryDragDropContext) {
+export function useAssetLibraryDragDrop(context: AssetLibraryDragDropContext) {
   const { library, location, selectedKeys, selectedNodes, commands, messagePublished } = context;
 
   function startNodeDrag(event: ReactPointerEvent<HTMLElement>, node: AssetLibraryNode) {

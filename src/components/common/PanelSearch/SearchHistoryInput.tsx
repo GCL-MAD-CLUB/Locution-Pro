@@ -1,5 +1,6 @@
+import { useScopedState } from "../../../runtime/state/useScopedState";
 import { Search } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 import { SelectDropdown, selectDropdownItems } from "../SelectDropdown";
 import {
   filterSearchHistory,
@@ -32,23 +33,15 @@ export function SearchHistoryInput({
   normalizeQuery?: (value: string) => string;
 }) {
   const listId = useId();
-  const [draft, setDraft] = useState<string | null>(null);
-  const lastEditedQuery = useRef<string | null>(null);
-  if (draft !== null && query !== lastEditedQuery.current) setDraft(null);
+  const [draft, setDraft] = useState<{ text: string; query: string } | null>(null);
   const space = searchHistorySpace(configuration.mode);
-  const [historyKind, setHistoryKind] = useState(kind);
-  const [historySpace, setHistorySpace] = useState(space);
-  const [history, setHistory] = useState<SearchHistoryEntry[]>(() =>
+  const historyKey = JSON.stringify([kind, space]);
+  const [history, setHistory] = useScopedState<SearchHistoryEntry[]>(
+    historyKey,
     readSearchHistory(kind, space),
   );
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState<string | null>(null);
-  if (kind !== historyKind || space !== historySpace) {
-    setHistoryKind(kind);
-    setHistorySpace(space);
-    setHistory(readSearchHistory(kind, space));
-    setActive(null);
-  }
+  const [active, setActive] = useScopedState<string | null>(historyKey, null);
   const suggestions = filterSearchHistory(history, query);
   const visible = open && !disabled && suggestions.length > 0;
   const activeIndex = suggestions.findIndex((entry) => entry.text === active);
@@ -57,7 +50,6 @@ export function SearchHistoryInput({
     const entry = suggestions.find((entry) => entry.text === value);
     if (!entry) return;
     setDraft(null);
-    lastEditedQuery.current = null;
     setHistory(rememberSearch(kind, entry.configuration));
     onConfigurationSelect(entry.configuration);
     setActive(null);
@@ -95,7 +87,7 @@ export function SearchHistoryInput({
         <>
           <Search aria-hidden="true" />
           <input
-            value={draft ?? query}
+            value={draft?.query === query ? draft.text : query}
             placeholder={`搜索${label}`}
             aria-label={`搜索${label}`}
             disabled={disabled}
@@ -115,8 +107,7 @@ export function SearchHistoryInput({
             onClick={() => setOpen(true)}
             onChange={(event) => {
               const value = event.currentTarget.value;
-              lastEditedQuery.current = normalizeQuery(value);
-              setDraft(value);
+              setDraft({ text: value, query: normalizeQuery(value) });
               onQueryChange(value);
               setActive(null);
               setOpen(true);

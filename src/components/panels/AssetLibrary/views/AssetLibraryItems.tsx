@@ -1,3 +1,4 @@
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { SubtitleGlyph, VideoGlyph } from "../../../common/MediaKindIcons/MediaKindIcons";
@@ -172,10 +173,10 @@ function RenameInput({
 }) {
   const lifetime = new RenderLifetime();
 
-  const [value, setValue] = useState(initialValue);
+  const [value, setValue] = useScopedState(null, initialValue);
   const finishedRef = useRef(false);
   const fieldRef = useRef<HTMLTextAreaElement | null>(null);
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const field = fieldRef.current;
     if (!field) return;
     const lines = Math.round(field.scrollHeight / nameLineHeightPx);
@@ -244,23 +245,18 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const [contentWidth, setContentWidth] = useState(0);
-  const [hoverScrub, setHoverScrub] = useState<HoverScrub | null>(null);
+  const [hoverEdit, setHoverScrub] = useState<HoverScrub | null>(null);
   /** Selected cards keep their last scrub position after the pointer leaves, as in the media bin. */
-  const [keptScrubProgress, setKeptScrubProgress] = useState<Readonly<Record<string, number>>>({});
+  const [keptScrubEdit, setKeptScrubProgress] = useState<Readonly<Record<string, number>>>({});
 
   // Unmounted cards never get pointerleave; drop scrubs for cards that left the view, and the
   // live scrub while the panel is in the background.
   const shownNodeKeys = new Set(nodes.map((node) => node.key));
-  if (hoverScrub && (!thumbnailsEnabled || !shownNodeKeys.has(hoverScrub.key))) {
-    setHoverScrub(null);
-  }
-  if (!Object.keys(keptScrubProgress).every((key) => shownNodeKeys.has(key))) {
-    setKeptScrubProgress(
-      Object.fromEntries(
-        Object.entries(keptScrubProgress).filter(([key]) => shownNodeKeys.has(key)),
-      ),
-    );
-  }
+  const hoverScrub =
+    thumbnailsEnabled && hoverEdit && shownNodeKeys.has(hoverEdit.key) ? hoverEdit : null;
+  const keptScrubProgress = Object.fromEntries(
+    Object.entries(keptScrubEdit).filter(([key]) => shownNodeKeys.has(key)),
+  );
   const grid =
     layout.mode === "icons"
       ? assetLibraryGridLayout(contentWidth - gridPadding * 2, layout.cardWidth, gridGap)
@@ -272,7 +268,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     );
   const selectedCount = nodes.filter((node) => selectedKeys.has(node.key)).length;
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const element = scrollRef.current;
     if (!element) return;
     const update = () => setContentWidth(element.clientWidth);
@@ -282,9 +278,11 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     return () => observer.disconnect();
   }, [nodes.length, layout.mode, layout.mode === "list" ? layout.rowHeight : layout.cardWidth]);
 
-  columnsRef.current = grid.columns;
+  lifetime.useBeforePaint(() => {
+    columnsRef.current = grid.columns;
+  });
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const element = scrollRef.current;
     if (!element) return;
     const handleWheel = (event: WheelEvent) => {
@@ -296,7 +294,7 @@ export function AssetLibraryItems(props: AssetLibraryItemsProps) {
     return () => element.removeEventListener("wheel", handleWheel);
   }, [onZoom]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!focusKey) return;
     scrollRef.current
       ?.querySelector<HTMLElement>(`[data-asset-key="${CSS.escape(focusKey)}"]`)

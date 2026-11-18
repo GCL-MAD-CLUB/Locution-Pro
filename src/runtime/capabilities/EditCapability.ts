@@ -28,27 +28,19 @@ export function useEditCapability(lifetime: RenderLifetime, options: EditCapabil
     pasteCount = 0,
     handlers,
   } = options;
-  const can = {
-    copy: Boolean(handlers.copy && selectedCount > 0),
-    paste: Boolean(handlers.paste && !readOnly && pasteCount > 0),
-    clear: Boolean(handlers.clear && !readOnly && selectedCount > 0),
-    duplicate: Boolean(handlers.duplicate && !readOnly && selectedCount > 0),
-    selectAll: Boolean(handlers.selectAll && visibleCount > 0),
-    clearSelection: Boolean(handlers.clearSelection && selectedCount > 0),
-  };
+  const copy = Boolean(handlers.copy && selectedCount > 0);
+  const paste = Boolean(handlers.paste && !readOnly && pasteCount > 0);
+  const clear = Boolean(handlers.clear && !readOnly && selectedCount > 0);
+  const duplicate = Boolean(handlers.duplicate && !readOnly && selectedCount > 0);
+  const selectAll = Boolean(handlers.selectAll && visibleCount > 0);
+  const clearSelection = Boolean(handlers.clearSelection && selectedCount > 0);
+  const can = useMemo(
+    () => ({ copy, paste, clear, duplicate, selectAll, clearSelection }),
+    [copy, paste, clear, duplicate, selectAll, clearSelection],
+  );
   const projection = useMemo<EditCapabilityProjection>(
     () => ({ active, selectedCount, visibleCount, capabilities: can }),
-    [
-      active,
-      can.clear,
-      can.clearSelection,
-      can.copy,
-      can.duplicate,
-      can.paste,
-      can.selectAll,
-      selectedCount,
-      visibleCount,
-    ],
+    [active, can, selectedCount, visibleCount],
   );
   usePublishProjection(lifetime, EDIT_CAPABILITY_PROJECTION, identity, projection);
 

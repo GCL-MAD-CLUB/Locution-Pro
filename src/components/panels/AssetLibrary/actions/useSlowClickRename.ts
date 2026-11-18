@@ -33,7 +33,9 @@ export function useSlowClickRename(lifetime: RenderLifetime, startRename: (key: 
   const armedRef = useRef<ArmedPress | null>(null);
   const timerRef = useRef<number | null>(null);
   const startRenameRef = useRef(startRename);
-  startRenameRef.current = startRename;
+  lifetime.useBeforePaint(() => {
+    startRenameRef.current = startRename;
+  });
 
   const cancel = useCallback(() => {
     armedRef.current = null;
@@ -41,7 +43,7 @@ export function useSlowClickRename(lifetime: RenderLifetime, startRename: (key: 
     timerRef.current = null;
   }, []);
 
-  lifetime.afterCommit(() => cancel, [cancel]);
+  lifetime.useAfterCommit(() => cancel, [cancel]);
 
   /** Arms the rename only on the name text of the sole selected item. */
   const armOnPointerDown = useCallback(

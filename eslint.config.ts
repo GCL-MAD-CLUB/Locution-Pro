@@ -86,6 +86,7 @@ export default tseslint.config(
       ),
       "react-hooks/component-hook-factories": "error",
       "react-hooks/no-deriving-state-in-effects": "error",
+      "react-hooks/memo-dependencies": "error",
       "react/prop-types": "off", // TypeScript owns component prop contracts.
       "react/no-direct-mutation-state": "error",
       "react/no-did-mount-set-state": "error",
@@ -100,4 +101,14 @@ export default tseslint.config(
     },
   },
   prettier,
+  {
+    files: ["src/**/*.worklet.js"],
+    languageOptions: {
+      globals: {
+        AudioWorkletProcessor: "readonly",
+        sampleRate: "readonly",
+        registerProcessor: "readonly",
+      },
+    },
+  },
 );

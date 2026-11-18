@@ -1,3 +1,4 @@
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { ArrowLeft, ArrowRight, ArrowUp, ChevronRight, Search } from "lucide-react";
 import {
@@ -74,7 +75,7 @@ function AddressInput({
   onSubmit: (value: string) => boolean;
   onCancel: () => void;
 }) {
-  const [value, setValue] = useState(initialValue);
+  const [value, setValue] = useScopedState(null, initialValue);
   return (
     <input
       className="asset-library-address-input"
@@ -102,7 +103,8 @@ function AddressInput({
 export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
   const lifetime = new RenderLifetime();
 
-  const { library, location, path, backStack, forwardStack, dropTargetKey } = props;
+  const { library, location, path, backStack, forwardStack, dropTargetKey, searchRef, query } =
+    props;
   const [menu, setMenu] = useState<AddressMenu | null>(null);
   useCloseOnOutsidePointer(lifetime, Boolean(menu), () => setMenu(null), {
     capturePointerdown: true,
@@ -360,8 +362,8 @@ export function AssetLibraryAddressBar(props: AssetLibraryAddressBarProps) {
       <label className="media-bin-search asset-library-search">
         <Search aria-hidden="true" />
         <input
-          ref={props.searchRef}
-          value={props.query}
+          ref={searchRef}
+          value={query}
           placeholder={`在“${placeLabel}”中搜索`}
           aria-label="搜索素材"
           onChange={(event) => props.onQueryChange(event.currentTarget.value)}

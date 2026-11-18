@@ -69,5 +69,5 @@ export function useProjections<Value>(key: string) {
     stateHub.getRevision,
     stateHub.getRevision,
   );
-  return useMemo(() => stateHub.get<Value>(key), [key, revision]);
+  return useMemo(() => ({ revision, values: stateHub.get<Value>(key) }), [key, revision]).values;
 }

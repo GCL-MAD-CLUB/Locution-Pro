@@ -13,7 +13,7 @@ import { isTauriRuntime } from "../../platform/tauri/runtime";
 
 export function useSemanticSearchAvailable(lifetime: RenderLifetime) {
   const [available, setAvailable] = useState(false);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) return;
     let active = true;
     void runOperation("subtitle.semanticAvailability", () =>
@@ -163,16 +163,18 @@ export function useSubtitleSemanticSearch(
     requestKey,
     clearQuery,
   });
-  latest.current = {
-    negativePrompts,
-    enabled,
-    query,
-    scope,
-    subtitles,
-    indexKey,
-    requestKey,
-    clearQuery,
-  };
+  lifetime.useBeforePaint(() => {
+    latest.current = {
+      negativePrompts,
+      enabled,
+      query,
+      scope,
+      subtitles,
+      indexKey,
+      requestKey,
+      clearQuery,
+    };
+  });
   const mounted = useRef(true);
   const busy = useRef(false);
   const indexed = useRef(new Set<string>());
@@ -182,14 +184,14 @@ export function useSubtitleSemanticSearch(
   const [tick, setTick] = useState(0);
   const [result, setResult] = useState<SearchResult | null>(null);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (cancelledRequest.current !== requestKey) cancelledRequest.current = null;
     if (
       !requestKey ||

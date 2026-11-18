@@ -86,6 +86,7 @@ export function ImportToolbar({
             <span key={part.path}>
               <ChevronRight />
               <button
+                type="button"
                 title={part.path}
                 aria-current={index === parts.length - 1 ? "location" : undefined}
                 onClick={() => void browser.navigate(part.path)}
@@ -96,6 +97,7 @@ export function ImportToolbar({
           ))}
         </nav>
         <button
+          type="button"
           className={`import-icon-button import-favorite-button ${currentFavorite ? "is-favorite" : ""}`}
           title={currentFavorite ? "从收藏夹移除" : "收藏位置"}
           aria-label={currentFavorite ? "从收藏夹移除" : "收藏位置"}
@@ -109,6 +111,7 @@ export function ImportToolbar({
       <div className="import-toolbar-controls">
         <ImportZoomControl value={zoom} onChange={onZoom} />
         <button
+          type="button"
           className={`import-icon-button ${view === "grid" ? "active" : ""}`}
           title="缩略图视图"
           aria-label="缩略图视图"
@@ -118,6 +121,7 @@ export function ImportToolbar({
           <Grid3X3 />
         </button>
         <button
+          type="button"
           className={`import-icon-button ${view === "list" ? "active" : ""}`}
           title="列表视图"
           aria-label="列表视图"
@@ -153,6 +157,7 @@ export function ImportToolbar({
           onChange={browser.setFilter}
         />
         <button
+          type="button"
           className={`import-icon-button ${browser.showHidden ? "active" : ""}`}
           title="显示隐藏文件"
           aria-label="显示隐藏文件"
@@ -169,7 +174,7 @@ export function ImportToolbar({
             onChange={(e) => browser.setQuery(e.currentTarget.value)}
           />
           {browser.query && (
-            <button aria-label="清空搜索" onClick={() => browser.setQuery("")}>
+            <button type="button" aria-label="清空搜索" onClick={() => browser.setQuery("")}>
               <X />
             </button>
           )}

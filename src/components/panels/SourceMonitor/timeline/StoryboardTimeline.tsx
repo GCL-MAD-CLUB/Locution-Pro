@@ -161,7 +161,18 @@ export function StoryboardTimeline({
   const cutFrame = Math.round(currentFrame);
   const canAdd = hasMedia && canAddStoryboardCut(storyboard, cutFrame, durationFrames);
 
-  lifetime.beforePaint(() => {
+  function addCut(frame = cutFrame) {
+    if (!hasMedia || !canAddStoryboardCut(storyboard, frame, durationFrames)) return;
+    onPause();
+    const id = `shot:${crypto.randomUUID()}`;
+    storyboardUpdated(videoContext, "添加切点", (current) =>
+      splitStoryboardShot(current, frame, frameRate, id, durationFrames, durationUs),
+    );
+    setSelectedIds(new Set([id]));
+    setMenu(null);
+    focusTimeline();
+  }
+  lifetime.useBeforePaint(() => {
     if (!addCutRef) return;
     addCutRef.current = addCut;
     return () => {
@@ -173,7 +184,7 @@ export function StoryboardTimeline({
     ignorePopupMenuTargets: true,
   });
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     setSelectedIds((current) => {
       const next = new Set(
         [...current].filter((id) => segments.slice(1).some((shot) => shot.id === id)),
@@ -224,18 +235,6 @@ export function StoryboardTimeline({
       removeStoryboardCuts(current, removed, durationFrames, frameRate),
     );
     setSelectedIds((current) => new Set([...current].filter((id) => !removed.has(id))));
-    setMenu(null);
-    focusTimeline();
-  }
-
-  function addCut(frame = cutFrame) {
-    if (!hasMedia || !canAddStoryboardCut(storyboard, frame, durationFrames)) return;
-    onPause();
-    const id = `shot:${crypto.randomUUID()}`;
-    storyboardUpdated(videoContext, "添加切点", (current) =>
-      splitStoryboardShot(current, frame, frameRate, id, durationFrames, durationUs),
-    );
-    setSelectedIds(new Set([id]));
     setMenu(null);
     focusTimeline();
   }

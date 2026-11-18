@@ -160,23 +160,22 @@ export async function runMultiScopeTests(fullUi = false) {
     snapshots.manager = usePanelManagerState((state) => state);
     return null;
   }
+  const usePanelSource = fullUi ? usePanelMediaSourceSelection : usePanelMediaSource;
   function Panel({ id, kind }) {
     const lifetime = new RenderLifetime();
 
-    const source = fullUi
-      ? usePanelMediaSourceSelection(lifetime, kind)
-      : usePanelMediaSource(lifetime, kind);
+    const source = usePanelSource(lifetime, kind);
     const board = useStoryboardPanelState(lifetime, (state) => state);
     const subtitle = useSubtitlePanelState(lifetime, (state) => state);
     const detection = useStoryboardDetection(lifetime);
     const context = sourceScope(source.selectedSources.map((entry) => entry.context));
-    lifetime.afterCommit(() => board.syncVideoContext(context), [context]);
+    lifetime.useAfterCommit(() => board.syncVideoContext(context), [context]);
     const trackContext = sourceScope(
       source.selectedSources
         .filter((entry) => entry.trackId)
         .map((entry) => `${entry.context}:${entry.trackId}`),
     );
-    lifetime.afterCommit(() => subtitle.syncTrackContext(trackContext), [trackContext]);
+    lifetime.useAfterCommit(() => subtitle.syncTrackContext(trackContext), [trackContext]);
     snapshots[id] = { source, board, subtitle, detection };
     return lifetime.render(
       h(

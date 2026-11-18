@@ -30,7 +30,7 @@ import { annotationShortcutAction } from "../../common/utils/annotationShortcuts
 import { useExternalAssetLibraryDropTarget } from "../../common/utils/assetLibraryDropTarget";
 import "./AssetLibrary.css";
 import { assetLibraryAnnotationActions, assetLibraryCommands } from "./actions/commands";
-import { assetLibraryDragDrop, type AssetLibraryDragPreview } from "./actions/dragDrop";
+import { useAssetLibraryDragDrop, type AssetLibraryDragPreview } from "./actions/dragDrop";
 import { assetLibraryFileOperations } from "./actions/fileOperations";
 import {
   assetLibraryButtonKeys,
@@ -118,7 +118,7 @@ export function AssetLibrary() {
   const externalDropTarget = useExternalAssetLibraryDropTarget();
   const shownDropTargetKey = dropTargetKey ?? externalDropTarget?.key ?? null;
   const dragCleanupRef = useRef<(() => void) | null>(null);
-  lifetime.afterCommit(() => () => dragCleanupRef.current?.(), []);
+  lifetime.useAfterCommit(() => () => dragCleanupRef.current?.(), []);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const [addressEditing, setAddressEditing] = useState(false);
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -133,7 +133,7 @@ export function AssetLibrary() {
   const inLibrary = isAssetLibraryLocation(location);
   const locationValid = location === place;
   const { replaceLocation } = view;
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!locationValid) replaceLocation(location);
   }, [location, locationValid, replaceLocation]);
 
@@ -149,7 +149,7 @@ export function AssetLibrary() {
   // As in a file manager's navigation pane, the tree reveals a folder when navigation enters
   // it, but opening a library root does not expand that root by itself.
   const { expandKeys } = view;
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     expandKeys([
       ...(location.folderId ? [assetLocationKey({ root: location.root, folderId: null })] : []),
       ...path.slice(0, -1).map((folder) => assetFolderKey(folder.id)),
@@ -157,7 +157,7 @@ export function AssetLibrary() {
   }, [expandKeys, location.root, location.folderId, path]);
 
   const { showHidden } = view;
-  const { nodes, groups, itemCount, mediaByEntryId, childCounts } = useAssetLibraryNodes({
+  const { nodes, groups, itemCount, mediaByEntryId, childCounts } = useAssetLibraryNodes(lifetime, {
     library,
     location,
     query,
@@ -188,7 +188,7 @@ export function AssetLibrary() {
 
   // Drop selection keys whose nodes are no longer visible (deleted, moved, filtered).
   const { select } = view;
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const visible = [...view.selectedKeys].filter((key) => nodeIndex.has(key));
     if (visible.length !== view.selectedKeys.size) select(visible);
   }, [nodeIndex, select, view.selectedKeys]);
@@ -327,7 +327,7 @@ export function AssetLibrary() {
 
   // --- Drag and drop -----------------------------------------------------------------
 
-  const { startNodeDrag } = assetLibraryDragDrop({
+  const { startNodeDrag } = useAssetLibraryDragDrop({
     library,
     location,
     selectedKeys: view.selectedKeys,
@@ -553,7 +553,7 @@ export function AssetLibrary() {
   // --- Command bar ---------------------------------------------------------------------
 
   // Commands hand focus back to the panel so keyboard shortcuts keep working afterwards.
-  const refocus = (action: () => void) => () => {
+  const refocus = (action: () => void) => {
     action();
     sectionRef.current?.focus({ preventScroll: true });
   };
@@ -578,11 +578,11 @@ export function AssetLibrary() {
   };
   const commandActions: AssetLibraryCommandBarActions = {
     createFolder: () => createFolder(),
-    cut: refocus(() => copyNodes(selection, true)),
-    copy: refocus(() => copyNodes(selection, false)),
-    paste: refocus(() => pasteInto(location)),
-    rename: refocus(() => startRename(singleSelected?.key ?? null)),
-    remove: refocus(() => removeNodes(selection)),
+    cut: () => refocus(() => copyNodes(selection, true)),
+    copy: () => refocus(() => copyNodes(selection, false)),
+    paste: () => refocus(() => pasteInto(location)),
+    rename: () => refocus(() => startRename(singleSelected?.key ?? null)),
+    remove: () => refocus(() => removeNodes(selection)),
     setSort: view.setSort,
     setGroup: view.setGroup,
     setFilter: view.setFilter,
@@ -591,9 +591,9 @@ export function AssetLibrary() {
     setDetailsVisible: view.setDetailsVisible,
     setItemCheckboxes: view.setItemCheckboxes,
     setShowHidden: view.setShowHidden,
-    selectAll: refocus(selectAll),
-    selectNone: refocus(() => view.select([], null, null)),
-    invertSelection: refocus(invertSelection),
+    selectAll: () => refocus(selectAll),
+    selectNone: () => refocus(() => view.select([], null, null)),
+    invertSelection: () => refocus(invertSelection),
     showProperties,
   };
 

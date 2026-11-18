@@ -121,7 +121,7 @@ function useShotFrameThumbnail(
     height: number;
   } | null>(null);
   const thumbnailRequestRef = useRef<ReturnType<typeof timelineThumbnails.request> | null>(null);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     let active = true;
     const commonOptions = {
       kind: "storyboard" as const,
@@ -198,7 +198,7 @@ function useShotFrameThumbnail(
     videoPath,
   ]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     thumbnailRequestRef.current?.reprioritize(priority);
   }, [priority]);
 
@@ -288,7 +288,7 @@ export function ShotFrameButton({
   }, [frameRate, hoverProgress, shot.end_frame, shot.start_us]);
   const previewSrc = isTauriRuntime() ? convertFileSrc(previewVideoPath) : previewVideoPath;
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (hoverTargetTimeUs === null) {
       setHoverFrameReady(false);
       return;

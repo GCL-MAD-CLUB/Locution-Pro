@@ -28,11 +28,9 @@ export function useStoryboardGraphMotion(
   const pending = !graph && pendingNodes.length > 0;
   const target = graph?.nodes ?? pendingNodes;
   const ambient = useRef<StoryboardGraphAmbient | null>(null);
-  const [painted, setPainted] = useState(() => {
-    if (!pending) return target;
-    ambient.current = createStoryboardGraphAmbient(target);
-    return ambient.current.nodes.map((node) => ({ ...node }));
-  });
+  const [paintedEdit, setPainted] = useState<StoryboardGraph["nodes"] | null>(null);
+  const painted = paintedEdit ?? target;
+  const [ambientPresent, setAmbientPresent] = useState(false);
   const [visual, setVisual] = useState<{
     owner: StoryboardGraph["nodes"];
     edges: StoryboardGraphVisualEdge[];
@@ -59,7 +57,7 @@ export function useStoryboardGraphMotion(
     live.current = null;
     dragged.current = null;
   }, []);
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const radiusOnly = previousLayout.current === layoutGraph;
     previousLayout.current = layoutGraph;
     stopLive();
@@ -77,6 +75,7 @@ export function useStoryboardGraphMotion(
         node.thumbnailFrame = target[i].thumbnailFrame;
       });
       ambient.current = world;
+      setAmbientPresent(true);
       initialized.current = true;
       setCollapsing(false);
       setLayoutProgress(0);
@@ -115,6 +114,7 @@ export function useStoryboardGraphMotion(
         : target;
     const provisional = ambient.current;
     ambient.current = null;
+    setAmbientPresent(false);
     const collapse = Boolean(provisional && target.length && !reduced);
     setCollapsing(collapse);
     setLayoutProgress(collapse ? 0 : 1);
@@ -208,7 +208,7 @@ export function useStoryboardGraphMotion(
     };
   }, [target, graph?.edges, pending, publish, stopLive, layoutGraph]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!pending) return;
     cancelAnimationFrame(springFrame.current);
     if (
@@ -279,7 +279,7 @@ export function useStoryboardGraphMotion(
     simulation.alphaTarget(0).alpha(Math.max(0.3, simulation.alpha())).restart();
   }, []);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!active) {
       endDrag();
       live.current?.stop();
@@ -309,7 +309,7 @@ export function useStoryboardGraphMotion(
   return {
     nodes,
     edges,
-    phase: pending ? "ambient" : collapsing || ambient.current ? "collapse" : "ready",
+    phase: pending ? "ambient" : collapsing || ambientPresent ? "collapse" : "ready",
     layoutProgress,
     beginDrag,
     moveDrag,

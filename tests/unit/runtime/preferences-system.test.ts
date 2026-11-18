@@ -97,7 +97,6 @@ test("a failed load leaves the defaults unloaded", async () => {
 test("updating stores the persisted document and a failure keeps the previous one", async () => {
   const calls: Array<{ command: string; args?: Record<string, unknown> }> = [];
   let failSave = false;
-  let defaults: Preferences | undefined;
   const system = preferencesModule(async (command, args) => {
     calls.push({ command, args });
     if (command === "get_preferences") return defaults;
@@ -106,7 +105,7 @@ test("updating stores the persisted document and a failure keeps the previous on
     if (!preferences || typeof preferences !== "object") throw new Error("missing preferences");
     return { ...preferences, cache_dir: "normalized-cache" };
   });
-  defaults = system.defaultPreferences();
+  const defaults = system.defaultPreferences();
   await system.loadPreferences();
   const next = savedPreferences({ cache_dir: "typed-cache" });
   const saved = await system.updatePreferences(next);

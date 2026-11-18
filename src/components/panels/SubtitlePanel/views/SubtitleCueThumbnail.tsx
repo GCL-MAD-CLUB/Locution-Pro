@@ -76,7 +76,7 @@ function SubtitleCueFrameButton({
   );
   const previewSrc = isTauriRuntime() ? convertFileSrc(previewVideoPath) : previewVideoPath;
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     let active = true;
     const commonOptions = {
       kind: "subtitle" as const,
@@ -150,11 +150,11 @@ function SubtitleCueFrameButton({
     videoPath,
   ]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     thumbnailRequestRef.current?.reprioritize(priority);
   }, [priority]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (hoverTargetTimeUs === null) {
       setHoverFrameReady(false);
       return;

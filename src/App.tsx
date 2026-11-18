@@ -95,7 +95,6 @@ import {
   invokeCommand,
   runBackgroundOperation,
   runOperation,
-  type OperationKey,
 } from "./errors";
 import { normalizeError } from "./errors/runtime";
 import {
@@ -442,7 +441,7 @@ function AppContent() {
   const [restartingBeta, setRestartingBeta] = useState(false);
   const startupPreferenceApplied = useRef(false);
   const autoSaveIntervalMinutes = preferences.auto_save_interval_minutes;
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     applyAppearance(preferences.appearance ?? "darkest");
   }, [preferences.appearance]);
   const autoSaveEnabled = preferences.auto_save_enabled;
@@ -512,7 +511,7 @@ function AppContent() {
   const activeStatusLabel =
     runningTasks.length === 1 ? runningTasks[0].label : `正在执行 ${runningTasks.length} 项操作...`;
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (warnings.length === 0) {
       return;
     }
@@ -524,14 +523,14 @@ function AppContent() {
     return () => window.clearTimeout(timeoutId);
   }, [warnings, warningsReplaced]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
     void loadPreferences();
   }, [loadPreferences]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!preferencesLoaded || startupPreferenceApplied.current) return;
     startupPreferenceApplied.current = true;
     if (!preferences.show_home_on_startup) {
@@ -539,7 +538,7 @@ function AppContent() {
     }
   }, [preferencesLoaded, preferences.show_home_on_startup]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) return;
     let active = true;
     void (async () => {
@@ -586,14 +585,14 @@ function AppContent() {
     };
   }, []);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (updateDialogState?.status !== "installed") return;
     void acknowledgeUpdateNotes().catch((error) =>
       captureOperationError("help.checkUpdates", error),
     );
   }, [updateDialogState]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime() || !hasProject || !autoSaveEnabled) {
       return;
     }
@@ -631,7 +630,7 @@ function AppContent() {
 
   // macOS reports Finder opens as events, including while the app is running;
   // the backend stores the path for take_launch_project_path first.
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
@@ -660,7 +659,7 @@ function AppContent() {
     };
   }, []);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
@@ -685,7 +684,7 @@ function AppContent() {
       });
   }, []);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     try {
       window.localStorage.setItem(recentMediaStorageKey, JSON.stringify(recentMediaPaths));
     } catch (error) {
@@ -694,7 +693,7 @@ function AppContent() {
     }
   }, [recentMediaPaths]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     try {
       window.localStorage.setItem(recentProjectStorageKey, JSON.stringify(recentProjects));
     } catch (error) {
@@ -708,7 +707,7 @@ function AppContent() {
   // project is always kept (its id may not be on the list yet while unsaved),
   // and pruning waits until the launch-path project, if any, has been opened so
   // it cannot be wiped before its recorded state is read.
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime() || !launchResolved) {
       return;
     }
@@ -729,7 +728,7 @@ function AppContent() {
     };
   }, [launchResolved, projectId, recentProjects]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
@@ -739,7 +738,7 @@ function AppContent() {
     runBackgroundOperation("window.title", () => getCurrentWindow().setTitle(title));
   }, [project, projectDirty, projectFilePath]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
@@ -833,7 +832,7 @@ function AppContent() {
     }
   }
 
-  lifetime.afterCommit(
+  lifetime.useAfterCommit(
     () => () => {
       const resolve = pendingDiscardResolveRef.current;
       pendingDiscardResolveRef.current = null;
@@ -1481,7 +1480,7 @@ function AppContent() {
 
   // The transcode queue runs in the background, so it always needs to know
   // where the project lives to resolve the encoder bin folder.
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     transcodeQueueStore
       .getState()
       .setProjectDirectory(projectFilePath ? parentDirectory(projectFilePath) : "");
@@ -1543,7 +1542,7 @@ function AppContent() {
     return "handled" as const;
   });
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       if (event.repeat) {
         return;
@@ -2064,27 +2063,28 @@ function WorkspaceConfigAutoSave() {
   const saveQueuedRef = useRef(false);
 
   const saveLatestConfig = useMemo(
-    () => () => {
-      if (savingRef.current) {
-        saveQueuedRef.current = true;
-        return;
-      }
-      savingRef.current = true;
-      const latestConfig = configRef.current;
-      void runOperation("workspace.save", () =>
-        invokeCommand("save_workspace_config", { config: latestConfig }),
-      ).finally(() => {
-        savingRef.current = false;
-        if (saveQueuedRef.current) {
-          saveQueuedRef.current = false;
-          saveLatestConfig();
+    () =>
+      function saveLatestConfig() {
+        if (savingRef.current) {
+          saveQueuedRef.current = true;
+          return;
         }
-      });
-    },
+        savingRef.current = true;
+        const latestConfig = configRef.current;
+        void runOperation("workspace.save", () =>
+          invokeCommand("save_workspace_config", { config: latestConfig }),
+        ).finally(() => {
+          savingRef.current = false;
+          if (saveQueuedRef.current) {
+            saveQueuedRef.current = false;
+            saveLatestConfig();
+          }
+        });
+      },
     [],
   );
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }
@@ -2098,7 +2098,7 @@ function WorkspaceConfigAutoSave() {
     }, workspaceConfigSaveDelayMs);
   }, [config, saveLatestConfig]);
 
-  lifetime.afterCommit(
+  lifetime.useAfterCommit(
     () => () => {
       if (saveTimerRef.current !== null) {
         window.clearTimeout(saveTimerRef.current);
@@ -2119,7 +2119,7 @@ function RestoredPanelManager() {
     isTauriRuntime() ? null : initialAppPanelState,
   );
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime()) {
       return;
     }

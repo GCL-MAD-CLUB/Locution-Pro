@@ -20,7 +20,7 @@ export function ExportClipThumbnail({ clip, durationText, onPlay }: ExportClipTh
 
   const [src, setSrc] = useState<string | null>(null);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const thumbnail = clip.thumbnail;
     if (!thumbnail || !clip.sourcePath) {
       return;

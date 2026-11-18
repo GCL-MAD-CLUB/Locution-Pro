@@ -40,7 +40,7 @@ export function useTimelineThumbnailListResizeAnchor<Element extends HTMLElement
     );
   }, [enabled, itemCount, itemHeight, scrollRef]);
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const centerPosition = pendingCenterPositionRef.current;
     const scrollContainer = scrollRef.current;
     if (centerPosition === null) {

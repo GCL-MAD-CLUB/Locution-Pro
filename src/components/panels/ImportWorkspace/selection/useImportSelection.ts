@@ -30,7 +30,7 @@ export function useImportSelection(lifetime: RenderLifetime, imported: Set<strin
   const [rawItems, setItems] = useState<ImportSelectionItem[]>([]);
   const jobs = useRef(new Map<string, AbortController>());
   const entries = useRef(new Map<string, ImportEntry>());
-  lifetime.afterCommit(
+  lifetime.useAfterCommit(
     () => () => {
       jobs.current.forEach((job) => job.abort());
       jobs.current.clear();

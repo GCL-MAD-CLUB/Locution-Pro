@@ -1,4 +1,5 @@
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { ChevronsUpDown } from "lucide-react";
 import { useState, type ComponentProps } from "react";
 import { createPortal } from "react-dom";
@@ -19,11 +20,13 @@ export function StoryboardFrameDataPanel({ histogramVisible, ...motionProps }: P
 
   const [open, setOpen] = useState(true);
   const [mode, setMode] = useState<FrameDataMode>("histogram");
-  const [modeMenu, setModeMenu] = useState<{ x: number; y: number } | null>(null);
+  const [modeMenu, setModeMenu] = useScopedState<{ x: number; y: number } | null>(
+    motionProps.visible && open,
+    null,
+  );
   const histogramSelected = mode === "histogram";
   const modeLabel = frameDataModes.find((option) => option.mode === mode)!.label;
   useCloseOnOutsidePointer(lifetime, Boolean(modeMenu), () => setModeMenu(null));
-  if (modeMenu && (!motionProps.visible || !open)) setModeMenu(null);
 
   return lifetime.render(
     <section className={`storyboard-frame-data-panel ${open ? "" : "is-collapsed"}`.trim()}>

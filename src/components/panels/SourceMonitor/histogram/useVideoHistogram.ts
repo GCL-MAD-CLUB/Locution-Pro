@@ -12,8 +12,10 @@ export function useVideoHistogram(
   onHistogram: (histogram: FrameHistogram | null) => void,
 ) {
   const callback = useRef(onHistogram);
-  callback.current = onHistogram;
-  lifetime.afterCommit(() => {
+  lifetime.useBeforePaint(() => {
+    callback.current = onHistogram;
+  });
+  lifetime.useAfterCommit(() => {
     const video = videoRef.current;
     if (!enabled) return;
     callback.current(null);

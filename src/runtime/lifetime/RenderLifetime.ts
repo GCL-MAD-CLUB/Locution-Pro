@@ -21,16 +21,16 @@ interface ActiveResource extends Resource {
 export class RenderLifetime {
   readonly resources: Resource[] = [];
 
-  beforePaint(acquire: Acquire, keys?: readonly unknown[]) {
+  useBeforePaint(acquire: Acquire, keys?: readonly unknown[]) {
     this.resources.push({ phase: "beforePaint", acquire, keys });
   }
 
-  afterCommit(acquire: Acquire, keys?: readonly unknown[]) {
+  useAfterCommit(acquire: Acquire, keys?: readonly unknown[]) {
     this.resources.push({ phase: "afterCommit", acquire, keys });
   }
 
   render(children: ReactNode) {
-    return createElement(LifetimeBoundary, { lifetime: this, children });
+    return createElement(LifetimeBoundary, { lifetime: this }, children);
   }
 }
 
@@ -90,7 +90,7 @@ export class CommittedLifetime {
 
 interface BoundaryProps {
   lifetime: RenderLifetime;
-  children: ReactNode;
+  children?: ReactNode;
 }
 class LifetimeBoundary extends Component<BoundaryProps, { error: { value: unknown } | null }> {
   state = { error: null as { value: unknown } | null };

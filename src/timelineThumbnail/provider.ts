@@ -519,14 +519,13 @@ function waitForPresentedVideoFrame(video: HTMLVideoElement) {
     return Promise.resolve();
   }
   return new Promise<void>((resolve) => {
-    let callbackId: number | undefined;
     const timeoutId = window.setTimeout(() => {
       if (callbackId !== undefined) {
         frameVideo.cancelVideoFrameCallback?.(callbackId);
       }
       resolve();
     }, videoFramePresentationTimeoutMs);
-    callbackId = frameVideo.requestVideoFrameCallback(() => {
+    const callbackId = frameVideo.requestVideoFrameCallback(() => {
       window.clearTimeout(timeoutId);
       resolve();
     });

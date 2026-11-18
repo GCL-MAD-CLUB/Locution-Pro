@@ -34,7 +34,9 @@ export function usePersistedProjectPanelState<State>(
   const loaded = !native || statesLoaded;
   const [restoredKey, setRestoredKey] = useState<string | null>(null);
   const restoreRef = useRef(onRestore);
-  restoreRef.current = onRestore;
+  lifetime.useBeforePaint(() => {
+    restoreRef.current = onRestore;
+  });
   const key = enabled && projectId ? JSON.stringify([projectId, panelId]) : null;
   const signature = JSON.stringify(snapshot);
   const pendingRef = useRef<{ projectId: string; panelId: string; snapshot: State } | null>(null);
@@ -52,7 +54,7 @@ export function usePersistedProjectPanelState<State>(
     }
   }
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     if (!key) {
       if (restoredKey !== null) setRestoredKey(null);
       return;
@@ -62,9 +64,9 @@ export function usePersistedProjectPanelState<State>(
     setRestoredKey(key);
   }, [loaded, key, projectId, panelId, restoredKey]);
 
-  lifetime.afterCommit(() => () => flush(), [key]);
+  lifetime.useAfterCommit(() => () => flush(), [key]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!native || !loaded || !key || !projectId || restoredKey !== key || snapshot === null)
       return;
     pendingRef.current = { projectId, panelId, snapshot };

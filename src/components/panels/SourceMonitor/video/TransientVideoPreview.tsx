@@ -27,7 +27,9 @@ export function TransientVideoPreview({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [ready, setReady] = useState(false);
   const targetRef = useRef(0);
-  targetRef.current = (preview.frame + 0.125) / preview.frameRate;
+  lifetime.useBeforePaint(() => {
+    targetRef.current = (preview.frame + 0.125) / preview.frameRate;
+  });
   useVideoHistogram(lifetime, videoRef, preview.src, ready && histogramEnabled, onHistogram);
 
   function seek(video: HTMLVideoElement) {
@@ -46,7 +48,7 @@ export function TransientVideoPreview({
     }
   }
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (videoRef.current) seek(videoRef.current);
   }, [preview.frame, preview.frameRate]);
 

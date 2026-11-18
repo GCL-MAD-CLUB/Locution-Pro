@@ -1,3 +1,4 @@
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { annotationColors } from "../../../../runtime/theme";
 import type { PanelRowSource } from "../../../../core/editor/multiSource";
@@ -240,7 +241,7 @@ export function StoryboardIconView({
     setShotStackExpanded,
     setIconMetadataMode,
   } = useStoryboardPanelState(lifetime, (state) => state);
-  const [gridLayout, setGridLayout] = useState<StoryboardGridLayout>({
+  const [gridLayout, setGridLayout] = useScopedState<StoryboardGridLayout>(null, {
     columns: 1,
     cardWidth: gridCardWidth,
   });
@@ -270,7 +271,7 @@ export function StoryboardIconView({
     paddingTop: Math.floor(renderRange.startIndex / gridLayout.columns) * gridLayout.cardWidth,
   } as CSSProperties;
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const grid = gridRef.current;
     if (!grid || !panelActive) {
       return;
@@ -348,7 +349,7 @@ export function StoryboardIconView({
     return () => resizeObserver.disconnect();
   }, [gridCardWidth, gridLayout.cardWidth, gridLayout.columns, panelActive, scrollRef, shots]);
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const resizeAnchor = pendingGridResizeAnchorRef.current;
     const scrollContainer = scrollRef.current;
     if (
@@ -378,7 +379,7 @@ export function StoryboardIconView({
     scrollContainer.scrollTop = clamp(desiredScrollTop, 0, maximumScrollTop);
   }, [gridLayout.cardWidth, gridLayout.columns, scrollRef, shots]);
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const scrollContainer = scrollRef.current;
     if (!panelActive) return;
     if (!scrollContainer || shots.length === 0) {

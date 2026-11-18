@@ -16,15 +16,17 @@ import { getFrameTraceCache } from "../../../../application/media/frameTraceCach
 export function useVideoFrameTrace(
   lifetime: RenderLifetime,
   videoRef: RefObject<HTMLVideoElement | null>,
-  sourceKey: number | null,
+  sourceKey: string | number | null,
   frameRate: number,
   enabled: boolean,
   onSample: (sample: PlaybackTraceSample | null) => void,
   cacheKey?: string,
 ) {
   const callback = useRef(onSample);
-  callback.current = onSample;
-  lifetime.afterCommit(() => {
+  lifetime.useBeforePaint(() => {
+    callback.current = onSample;
+  });
+  lifetime.useAfterCommit(() => {
     callback.current(null);
     const video = videoRef.current;
     if (!enabled || !video || sourceKey === null) return;

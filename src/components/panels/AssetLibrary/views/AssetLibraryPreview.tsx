@@ -25,7 +25,7 @@ interface AssetLibraryThumbnailProps {
 
 function useNearViewport(lifetime: RenderLifetime, element: HTMLElement | null) {
   const [visible, setVisible] = useState(false);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!element) return;
     const observer = new IntersectionObserver(
       ([record]) => setVisible(Boolean(record?.isIntersecting)),
@@ -58,7 +58,7 @@ export function AssetLibraryThumbnail({
   } | null>(null);
   const requestRef = useRef<ReturnType<typeof timelineThumbnails.request> | null>(null);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!media) return;
     const options = {
       kind,
@@ -109,7 +109,7 @@ export function AssetLibraryThumbnail({
     visible,
   ]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     requestRef.current?.reprioritize(priority);
   }, [priority]);
 
@@ -163,7 +163,7 @@ export function AssetLibraryHoverFrame({ entry, media, progress }: AssetLibraryH
     }
   }
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const video = videoRef.current;
     if (video && video.readyState >= HTMLMediaElement.HAVE_METADATA) seek(video);
     // seek reads the latest target; rerun only when it moves.

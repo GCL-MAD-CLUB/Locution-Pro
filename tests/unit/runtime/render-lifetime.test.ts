@@ -22,12 +22,12 @@ function commit(owner: CommittedLifetime, render: RenderLifetime) {
 test("abandoned renders acquire nothing and committed resources follow their phase", () => {
   const log: string[] = [];
   const abandoned = new RenderLifetime();
-  abandoned.afterCommit(resource(log, "abandoned"), []);
+  abandoned.useAfterCommit(resource(log, "abandoned"), []);
   abandoned.render(null);
   assert.deepEqual(log, []);
   const render = new RenderLifetime();
-  render.afterCommit(resource(log, "subscription"), []);
-  render.beforePaint(resource(log, "measurement"), []);
+  render.useAfterCommit(resource(log, "subscription"), []);
+  render.useBeforePaint(resource(log, "measurement"), []);
   const owner = new CommittedLifetime();
   owner.commit(render, "beforePaint");
   assert.deepEqual(log, ["open:measurement"]);
@@ -46,8 +46,8 @@ test("unchanged keys retain resources; project switches flush old writers before
   const owner = new CommittedLifetime();
   const render = (project: string) => {
     const next = new RenderLifetime();
-    next.afterCommit(resource(log, `writer:${project}`), [project]);
-    next.afterCommit(resource(log, `reader:${project}`), [project]);
+    next.useAfterCommit(resource(log, `writer:${project}`), [project]);
+    next.useAfterCommit(resource(log, `reader:${project}`), [project]);
     return next;
   };
   commit(owner, render("a"));
@@ -69,7 +69,7 @@ test("removed resources and repeated disposal release each handle exactly once",
   const log: string[] = [];
   const owner = new CommittedLifetime();
   const render = new RenderLifetime();
-  render.afterCommit(resource(log, "timer"), []);
+  render.useAfterCommit(resource(log, "timer"), []);
   commit(owner, render);
   commit(owner, new RenderLifetime());
   owner.dispose();
@@ -82,8 +82,8 @@ test("keys use Object.is and omitted keys reconnect at every commit", () => {
   const owner = new CommittedLifetime();
   const next = (key: number) => {
     const render = new RenderLifetime();
-    render.beforePaint(resource(log, "keyed"), [key]);
-    render.afterCommit(resource(log, "every"));
+    render.useBeforePaint(resource(log, "keyed"), [key]);
+    render.useAfterCommit(resource(log, "every"));
     return render;
   };
   commit(owner, next(NaN));
@@ -100,13 +100,13 @@ test("one failing cleanup cannot leak the remaining resources", () => {
   const log: string[] = [];
   const owner = new CommittedLifetime();
   const render = new RenderLifetime();
-  render.afterCommit(
+  render.useAfterCommit(
     () => () => {
       throw new Error("cleanup failed");
     },
     [],
   );
-  render.afterCommit(resource(log, "observer"), []);
+  render.useAfterCommit(resource(log, "observer"), []);
   commit(owner, render);
   assert.throws(() => owner.dispose(), /cleanup failed/);
   owner.dispose();
@@ -117,7 +117,7 @@ test("unmount invalidates asynchronous results and Strict Mode replay reacquires
   let deliver!: () => void;
   const results: string[] = [];
   const render = new RenderLifetime();
-  render.afterCommit(() => {
+  render.useAfterCommit(() => {
     let active = true;
     deliver = () => {
       if (active) results.push("result");
@@ -153,7 +153,7 @@ function boundary(lifetime: RenderLifetime): Boundary {
 test("boundary cancels deferred acquisition on unmount and replays a fresh mount", async () => {
   const log: string[] = [];
   const render = new RenderLifetime();
-  render.afterCommit(resource(log, "listener"), []);
+  render.useAfterCommit(resource(log, "listener"), []);
   const instance = boundary(render);
   instance.componentDidMount();
   instance.componentWillUnmount();
@@ -168,12 +168,12 @@ test("boundary cancels deferred acquisition on unmount and replays a fresh mount
 test("rapid commits flush pending subscriptions and replace them without leaking callbacks", async () => {
   const log: string[] = [];
   const first = new RenderLifetime();
-  first.afterCommit(resource(log, "a"), ["a"]);
+  first.useAfterCommit(resource(log, "a"), ["a"]);
   const instance = boundary(first);
   instance.componentDidMount();
   const previous = instance.props;
   const second = new RenderLifetime();
-  second.afterCommit(resource(log, "b"), ["b"]);
+  second.useAfterCommit(resource(log, "b"), ["b"]);
   instance.props = { lifetime: second, children: null };
   instance.componentDidUpdate(previous);
   await Promise.resolve();

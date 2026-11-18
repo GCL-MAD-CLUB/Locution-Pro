@@ -1,8 +1,9 @@
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
-import { cellEditReset } from "../../../../core/editor/cellEditReset";
 import { annotationColors } from "../../../../runtime/theme";
 import type { PanelRowSource } from "../../../../core/editor/multiSource";
-import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
+import type { VirtualItem } from "@tanstack/react-virtual";
+import type { RowVirtualizer } from "../../../../runtime/state/useRowVirtualizer";
 import {
   useRef,
   useState,
@@ -71,7 +72,7 @@ interface StoryboardListViewProps {
   currentShotIndex: number;
   tableStyle: CSSProperties;
   headerContent: ReactNode;
-  rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
+  rowVirtualizer: RowVirtualizer;
   virtualRows: VirtualItem[];
   thumbnailWindow: TimelineThumbnailWindowPlan;
   thumbnailTargetResolution: TimelineThumbnailResolution;
@@ -181,31 +182,13 @@ export function StoryboardListView({
     setShotColorLabels,
     setShotStackExpanded,
   } = useStoryboardPanelState(lifetime, (state) => state);
-  const [activeCell, setActiveCell] = useState<ActiveCell | null>(null);
-  const [editingCell, setEditingCell] = useState<ActiveCell | null>(null);
+  const [activeCell, setActiveCell] = useScopedState<ActiveCell | null>(resetKey, null);
+  const [editingCell, setEditingCell] = useScopedState<ActiveCell | null>(resetKey, null);
   const [editValue, setEditValue] = useState("");
-  const [editError, setEditError] = useState<string | null>(null);
+  const [editError, setEditError] = useScopedState<string | null>(resetKey, null);
   const pendingCellEditRef = useRef<number | null>(null);
-  const [seenResetKey, setSeenResetKey] = useState(resetKey);
-  const editReset = cellEditReset(seenResetKey, resetKey, pendingCellEditRef.current);
-  if (editReset) {
-    setSeenResetKey(resetKey);
-    if (editReset.cancelPendingTimer && pendingCellEditRef.current !== null) {
-      window.clearTimeout(pendingCellEditRef.current);
-      pendingCellEditRef.current = null;
-    }
-    setEditingCell(null);
-    setEditError(null);
-    setActiveCell(null);
-  }
-  const stackMap = stacksByShotId(shotStacks);
 
-  lifetime.afterCommit(
-    () => () => {
-      cancelPendingCellEdit();
-    },
-    [],
-  );
+  const stackMap = stacksByShotId(shotStacks);
 
   function cancelPendingCellEdit() {
     if (pendingCellEditRef.current === null) {
@@ -214,6 +197,12 @@ export function StoryboardListView({
     window.clearTimeout(pendingCellEditRef.current);
     pendingCellEditRef.current = null;
   }
+  lifetime.useAfterCommit(
+    () => () => {
+      cancelPendingCellEdit();
+    },
+    [resetKey],
+  );
 
   function activateCell(shotId: string, columnId: ActiveColumn) {
     cancelPendingCellEdit();
@@ -413,7 +402,7 @@ export function StoryboardListView({
           <div
             className="virtual-spacer"
             role="rowgroup"
-            style={{ height: `${rowVirtualizer.getTotalSize() + 8}px` }}
+            style={{ height: `${rowVirtualizer.totalSize + 8}px` }}
           >
             {virtualRows.map((virtualRow) => {
               const shot = shots[virtualRow.index];

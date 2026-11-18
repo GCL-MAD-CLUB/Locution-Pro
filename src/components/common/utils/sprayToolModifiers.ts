@@ -44,7 +44,7 @@ export function useSprayToolModifiers(
   const [altPressed, setAltPressed] = useState(false);
   const [shiftPressed, setShiftPressed] = useState(false);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!active) {
       setAltPressed(false);
       setShiftPressed(false);

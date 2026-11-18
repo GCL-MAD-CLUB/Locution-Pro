@@ -153,7 +153,7 @@ test("disabling clustering preserves semantic topology and restores ordinary for
     clustered.nodes.map((node) => node.radius),
   );
   const withLabels: SimulationNode[] = clustered.nodes.map((node) => ({ ...node }));
-  const withoutLabels = withLabels.map(({ cluster, ...node }) => node);
+  const withoutLabels = withLabels.map(({ cluster: _cluster, ...node }) => node);
   const a = graphModule.createStoryboardGraphSimulation(withLabels, plain.edges, plain);
   const b = graphModule.createStoryboardGraphSimulation(withoutLabels, plain.edges, plain);
   try {

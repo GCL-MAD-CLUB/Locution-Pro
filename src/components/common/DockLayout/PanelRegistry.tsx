@@ -103,7 +103,7 @@ function PanelDefinitionBoundary({ definition, instance, active }: PanelDefiniti
   const available = definition.useAvailable(instance.params);
   const Component = definition.Component;
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!available) {
       closePanel(instance.id);
     }
@@ -162,7 +162,9 @@ export function PanelTitle({
   }
   return (
     <PanelInstanceProvider instanceId={instance.id}>
-      <PanelTitleContent definition={definition} instance={instance} children={children} />
+      <PanelTitleContent definition={definition} instance={instance}>
+        {children}
+      </PanelTitleContent>
     </PanelInstanceProvider>
   );
 }

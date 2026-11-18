@@ -1,7 +1,7 @@
 import { ArrowUpRight, CircleAlert, Loader2, RefreshCw } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { MouseEvent } from "react";
+import type { ComponentProps, MouseEvent } from "react";
 import { currentVersion, type ReleaseInfo, type UpdateFailure } from "../../../application/update";
 import { captureOperationError } from "../../../errors";
 import { openExternalUrl, resolveExternalUrl } from "../../../platform/tauri/externalUrl";
@@ -36,6 +36,22 @@ async function openReleaseUrl(url: string) {
     captureOperationError("help.checkUpdates", error);
   }
 }
+
+function ReleaseLink({ href, children }: ComponentProps<"a">) {
+  const url = href ? resolveExternalUrl(href) : null;
+  return (
+    <a
+      href={url ?? undefined}
+      onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+        event.preventDefault();
+        if (url) void openReleaseUrl(url);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+const releaseMarkdownComponents = { a: ReleaseLink };
 
 export function UpdateDialog({
   state,
@@ -187,39 +203,19 @@ export function UpdateDialog({
             </div>
           </div>
           {state.status === "available" && (
-            <>
-              <p role={state.error ? "alert" : "status"}>
-                {state.error ??
-                  (installing
-                    ? "正在启动更新包，更新包将关闭软件并开始更新。"
-                    : blocked
-                      ? "更新包已下载，请等待当前任务结束后更新。"
-                      : "更新包已下载并校验，更新完成后将重新打开软件。")}
-              </p>
-            </>
+            <p role={state.error ? "alert" : "status"}>
+              {state.error ??
+                (installing
+                  ? "正在启动更新包，更新包将关闭软件并开始更新。"
+                  : blocked
+                    ? "更新包已下载，请等待当前任务结束后更新。"
+                    : "更新包已下载并校验，更新完成后将重新打开软件。")}
+            </p>
           )}
           {state.status === "installed" && <p>已启动新版本，以下是本次更新内容。</p>}
           <section className="update-dialog-notes" aria-label="版本更新说明">
             {release.body.trim() ? (
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  a: ({ href, children }) => {
-                    const url = href ? resolveExternalUrl(href) : null;
-                    return (
-                      <a
-                        href={url ?? undefined}
-                        onClick={(event: MouseEvent<HTMLAnchorElement>) => {
-                          event.preventDefault();
-                          if (url) void openReleaseUrl(url);
-                        }}
-                      >
-                        {children}
-                      </a>
-                    );
-                  },
-                }}
-              >
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={releaseMarkdownComponents}>
                 {release.body}
               </ReactMarkdown>
             ) : (

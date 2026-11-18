@@ -17,7 +17,7 @@ const CREDITS_SCROLL_PX_PER_SECOND = 12;
 function useCreditsAutoScroll(lifetime: RenderLifetime, enabled: boolean) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const container = containerRef.current;
     if (!enabled || container === null) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -64,7 +64,7 @@ export function AboutDialog({ onClose }: AboutDialogProps) {
   const [showLegal, setShowLegal] = useState(false);
   const creditsRef = useCreditsAutoScroll(lifetime, !showLegal);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const previousFocus = document.activeElement;
     const dialog = dialogRef.current;
     // A native modal keeps pointer and keyboard focus out of the underlying workspace.

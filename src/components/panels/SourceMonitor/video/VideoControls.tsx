@@ -1,3 +1,4 @@
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import {
   useRef,
@@ -152,10 +153,14 @@ export function VideoControls({
   const timecodeScrubRef = useRef<TimecodeScrubState | null>(null);
   const suppressTimeEditClickRef = useRef(false);
   const timelineStartFrameRef = useRef(timelineStartFrame);
-  timelineStartFrameRef.current = timelineStartFrame;
+  lifetime.useBeforePaint(() => {
+    timelineStartFrameRef.current = timelineStartFrame;
+  });
   const timelineSpanFramesRef = useRef(timelineSpanFrames);
-  timelineSpanFramesRef.current = timelineSpanFrames;
-  const [editingTime, setEditingTime] = useState(false);
+  lifetime.useBeforePaint(() => {
+    timelineSpanFramesRef.current = timelineSpanFrames;
+  });
+  const [editingTime, setEditingTime] = useScopedState(mediaKey, false);
   const [timeEditSelection, setTimeEditSelection] = useState<"all" | "cursor">("cursor");
   const [timeDraft, setTimeDraft] = useState("");
 
@@ -165,54 +170,6 @@ export function VideoControls({
     : "00:00:00:00";
   const monitorTimeColumnCh = Math.max(11, monitorTimeText.length, monitorDurationText.length);
   const monitorTimeStyle = { "--monitor-time-ch": monitorTimeColumnCh } as CSSProperties;
-
-  lifetime.afterCommit(() => {
-    const row = rowRef.current;
-    if (!row) {
-      return;
-    }
-
-    const handleWheel = (event: WheelEvent) => {
-      handleTimelineViewportWheel(event);
-    };
-
-    row.addEventListener("wheel", handleWheel, { passive: false });
-    return () => row.removeEventListener("wheel", handleWheel);
-  }, [durationFrames, hasMedia, minTimelineSpanFrames]);
-
-  lifetime.afterCommit(() => {
-    if (!editingTime) {
-      return;
-    }
-    const editor = timeEditorRef.current;
-    if (!editor) {
-      return;
-    }
-    editor.focus();
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(editor);
-    if (timeEditSelection === "cursor") {
-      range.collapse(false);
-    }
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-  }, [editingTime, timeEditSelection]);
-
-  const [seenMediaKey, setSeenMediaKey] = useState(mediaKey);
-  if (seenMediaKey !== mediaKey) {
-    setSeenMediaKey(mediaKey);
-    clearTimecodeScrubTimer();
-    timecodeScrubRef.current = null;
-    setEditingTime(false);
-  }
-
-  lifetime.afterCommit(
-    () => () => {
-      clearTimecodeScrubTimer();
-    },
-    [],
-  );
 
   function shiftTimeline(deltaFrames: number) {
     if (!hasMedia || durationFrames <= 0) {
@@ -228,7 +185,6 @@ export function VideoControls({
     timelineStartFrameRef.current = nextStart;
     onTimelineStartFrameChange(nextStart);
   }
-
   function resizeTimeline(deltaPx: number, anchorRatio = 0.5) {
     if (!hasMedia || durationFrames <= 0) {
       return;
@@ -249,7 +205,6 @@ export function VideoControls({
     onTimelineSpanFramesChange(nextSpan);
     onTimelineStartFrameChange(nextStart);
   }
-
   function handleTimelineViewportWheel(event: WheelEvent) {
     if (!hasMedia) {
       return;
@@ -263,6 +218,38 @@ export function VideoControls({
     }
     resizeTimeline(delta);
   }
+  lifetime.useAfterCommit(() => {
+    const row = rowRef.current;
+    if (!row) {
+      return;
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      handleTimelineViewportWheel(event);
+    };
+
+    row.addEventListener("wheel", handleWheel, { passive: false });
+    return () => row.removeEventListener("wheel", handleWheel);
+  }, [durationFrames, hasMedia, minTimelineSpanFrames]);
+
+  lifetime.useAfterCommit(() => {
+    if (!editingTime) {
+      return;
+    }
+    const editor = timeEditorRef.current;
+    if (!editor) {
+      return;
+    }
+    editor.focus();
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    if (timeEditSelection === "cursor") {
+      range.collapse(false);
+    }
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }, [editingTime, timeEditSelection]);
 
   function clearTimecodeScrubTimer(state = timecodeScrubRef.current) {
     if (!state || state.longPressTimer === null) {
@@ -271,6 +258,12 @@ export function VideoControls({
     window.clearTimeout(state.longPressTimer);
     state.longPressTimer = null;
   }
+  lifetime.useAfterCommit(
+    () => () => {
+      clearTimecodeScrubTimer();
+    },
+    [mediaKey],
+  );
 
   function startTimecodeScrub(event: PointerEvent<HTMLButtonElement>) {
     if (!hasMedia || event.button !== 0) {
@@ -468,6 +461,7 @@ export function VideoControls({
         </span>
       ) : (
         <button
+          type="button"
           className="monitor-time"
           disabled={!hasMedia}
           onClick={handleTimecodeClick}
@@ -484,6 +478,7 @@ export function VideoControls({
       <div className="transport-controls">
         {storyboardActions && (
           <button
+            type="button"
             onClick={storyboardActions.onAddCut}
             title="添加切点"
             aria-label="添加切点"
@@ -498,11 +493,12 @@ export function VideoControls({
             </svg>
           </button>
         )}
-        <button onClick={() => onStepFrame(-1)} title="上一帧" disabled={!hasMedia}>
+        <button type="button" onClick={() => onStepFrame(-1)} title="上一帧" disabled={!hasMedia}>
           <span className="transport-icon step-left" />
         </button>
         {onTogglePlayback && (
           <button
+            type="button"
             onClick={onTogglePlayback}
             title={isPlaying ? "暂停" : "播放"}
             disabled={!hasMedia}
@@ -510,11 +506,12 @@ export function VideoControls({
             <span className={`transport-icon ${isPlaying ? "stop" : "play"}`} />
           </button>
         )}
-        <button onClick={() => onStepFrame(1)} title="下一帧" disabled={!hasMedia}>
+        <button type="button" onClick={() => onStepFrame(1)} title="下一帧" disabled={!hasMedia}>
           <span className="transport-icon step-right" />
         </button>
         {storyboardActions && (
           <button
+            type="button"
             onClick={storyboardActions.onExportFrame}
             title="导出帧"
             aria-label="导出帧"

@@ -1,3 +1,4 @@
+import { useScopedState } from "../../../../runtime/state/useScopedState";
 import { RenderLifetime } from "../../../../runtime/lifetime/RenderLifetime";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { mediaGridLayout } from "../../../../application/media/mediaGridLayout";
@@ -570,11 +571,11 @@ export function MediaBinTable({
     null,
   );
   const [columnWidths, setColumnWidths] = useState(initialColumnWidths);
-  const [sort, setSort] = useState<MediaBinSort>(defaultMediaBinSort);
+  const [sort, setSort] = useScopedState<MediaBinSort>(hasItems, defaultMediaBinSort);
   const [activeCell, setActiveCell] = useState<ActiveMediaCell | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
-  const [gridLayout, setGridLayout] = useState<GridLayout>({
+  const [gridLayout, setGridLayout] = useScopedState<GridLayout>(null, {
     columns: 1,
     cardWidth: gridCardWidth,
   });
@@ -602,11 +603,7 @@ export function MediaBinTable({
     pointerId: number;
   } | null>(null);
   const suppressRowClickRef = useRef(false);
-  const [sawItems, setSawItems] = useState(hasItems);
-  if (sawItems !== hasItems) {
-    setSawItems(hasItems);
-    if (!sawItems && hasItems) setSort(defaultMediaBinSort);
-  }
+
   const tableMinWidth =
     labelColumnWidth +
     booleanColumnWidth * 2 +
@@ -632,7 +629,7 @@ export function MediaBinTable({
 
   onImportPathsRef.current = onImportPaths;
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!renamingFolderId) {
       return;
     }
@@ -694,7 +691,7 @@ export function MediaBinTable({
     selectionAnchorRef.current = nextSelectionFocus.anchorId;
   }
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const panel = selectionRootRef.current?.closest<HTMLElement>(".media-bin-panel");
     if (!panel) {
       return;
@@ -929,14 +926,14 @@ export function MediaBinTable({
     window.addEventListener("pointercancel", onCancel);
   }
 
-  lifetime.afterCommit(
+  lifetime.useAfterCommit(
     () => () => {
       marqueeCleanupRef.current?.();
     },
     [],
   );
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     document.body.classList.toggle("system-file-drag-active", systemFileDragActive);
 
     return () => {
@@ -944,7 +941,7 @@ export function MediaBinTable({
     };
   }, [systemFileDragActive]);
 
-  lifetime.afterCommit(
+  lifetime.useAfterCommit(
     () => () => {
       if (pendingTitleRenameRef.current !== null) {
         window.clearTimeout(pendingTitleRenameRef.current);
@@ -953,7 +950,7 @@ export function MediaBinTable({
     [],
   );
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isReadOnly) {
       return;
     }
@@ -963,7 +960,7 @@ export function MediaBinTable({
     onFinishRenameFolder();
   }, [isReadOnly]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime() || viewMode !== "list" || !canImport) {
       setSystemFileDragOver(false);
       setSystemFileDragActive(false);
@@ -1020,7 +1017,7 @@ export function MediaBinTable({
     };
   }, [canImport, viewMode]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!isTauriRuntime() || viewMode !== "list" || !canImport) {
       return;
     }
@@ -1084,7 +1081,7 @@ export function MediaBinTable({
     };
   }, [canImport, viewMode]);
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     if (viewMode !== "grid") {
       return;
     }

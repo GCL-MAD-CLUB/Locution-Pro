@@ -114,7 +114,7 @@ async function importCompletedExportOutputs(outputs: ExportOutput[], projectId: 
 export function normalizeExportSettings(settings: ExportSettings): ExportSettings {
   const audioOnlyContainer = isAudioOnlyContainer(settings.container);
   let includeVideo = audioOnlyContainer ? false : (settings.includeVideo ?? true);
-  let includeAudio = audioOnlyContainer ? true : (settings.includeAudio ?? true);
+  const includeAudio = audioOnlyContainer ? true : (settings.includeAudio ?? true);
   if (!includeVideo && !includeAudio) {
     includeVideo = true;
   }

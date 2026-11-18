@@ -44,7 +44,7 @@ export function ImportSelectionBar({
   const [itemsScrolling, setItemsScrolling] = useState(false);
   const itemsRef = useRef<HTMLDivElement | null>(null);
   const traySelection = useImportTraySelection(items);
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     const host = itemsRef.current;
     if (!host) return;
     let frame: number | null = null;
@@ -77,70 +77,69 @@ export function ImportSelectionBar({
   return lifetime.render(
     <footer className="import-selection-bar">
       {items.length ? (
-        <>
-          <div
-            ref={itemsRef}
-            className={`import-selection-items ${itemsScrolling ? "is-scrolling" : ""}`}
-            aria-label="待导入媒体"
-          >
-            {items.map(({ entry, files, scanning: folderScanning, unreadable }) => (
-              <button
-                className={`import-selection-item ${entry.is_directory ? "is-folder" : ""} ${traySelection.selected.has(pathKey(entry.path)) ? "selected" : ""}`}
-                key={entry.path}
-                aria-label={entry.name}
-                aria-pressed={traySelection.selected.has(pathKey(entry.path))}
-                onClick={(event) => {
-                  if (busy) return;
-                  traySelection.select(entry.path, {
-                    range: event.shiftKey,
-                    toggle: event.ctrlKey || event.metaKey,
-                  });
-                }}
-                onPointerEnter={(event) => {
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  setTooltip({
-                    path: entry.path,
-                    x: Math.min(Math.max(rect.left, 12), Math.max(12, window.innerWidth - 572)),
-                    y: rect.top - 12,
-                  });
-                }}
-                onPointerLeave={() => setTooltip(null)}
-                onFocus={(event) => {
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  setTooltip({ path: entry.path, x: rect.left, y: rect.top - 12 });
-                }}
-                onBlur={() => setTooltip(null)}
-                onContextMenu={(event) => {
+        <div
+          ref={itemsRef}
+          className={`import-selection-items ${itemsScrolling ? "is-scrolling" : ""}`}
+          aria-label="待导入媒体"
+        >
+          {items.map(({ entry, files, scanning: folderScanning, unreadable }) => (
+            <button
+              type="button"
+              className={`import-selection-item ${entry.is_directory ? "is-folder" : ""} ${traySelection.selected.has(pathKey(entry.path)) ? "selected" : ""}`}
+              key={entry.path}
+              aria-label={entry.name}
+              aria-pressed={traySelection.selected.has(pathKey(entry.path))}
+              onClick={(event) => {
+                if (busy) return;
+                traySelection.select(entry.path, {
+                  range: event.shiftKey,
+                  toggle: event.ctrlKey || event.metaKey,
+                });
+              }}
+              onPointerEnter={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                setTooltip({
+                  path: entry.path,
+                  x: Math.min(Math.max(rect.left, 12), Math.max(12, window.innerWidth - 572)),
+                  y: rect.top - 12,
+                });
+              }}
+              onPointerLeave={() => setTooltip(null)}
+              onFocus={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                setTooltip({ path: entry.path, x: rect.left, y: rect.top - 12 });
+              }}
+              onBlur={() => setTooltip(null)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setTooltip(null);
+                if (!busy) {
+                  traySelection.selectForContextMenu(entry.path);
+                  setMenu({ path: entry.path, x: event.clientX, y: event.clientY });
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Delete" && !busy) {
                   event.preventDefault();
-                  setTooltip(null);
-                  if (!busy) {
-                    traySelection.selectForContextMenu(entry.path);
-                    setMenu({ path: entry.path, x: event.clientX, y: event.clientY });
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Delete" && !busy) {
-                    event.preventDefault();
-                    const paths = traySelection.selected.has(pathKey(entry.path))
-                      ? traySelection.selectedPaths
-                      : [entry.path];
-                    onRemoveMany(paths);
-                  }
-                }}
-              >
-                {entry.is_directory ? (
-                  <ImportFolderBadge
-                    count={files.length}
-                    scanning={folderScanning}
-                    hasErrors={unreadable.length > 0}
-                  />
-                ) : (
-                  <ImportMediaVisual entry={entry} />
-                )}
-              </button>
-            ))}
-          </div>
-        </>
+                  const paths = traySelection.selected.has(pathKey(entry.path))
+                    ? traySelection.selectedPaths
+                    : [entry.path];
+                  onRemoveMany(paths);
+                }
+              }}
+            >
+              {entry.is_directory ? (
+                <ImportFolderBadge
+                  count={files.length}
+                  scanning={folderScanning}
+                  hasErrors={unreadable.length > 0}
+                />
+              ) : (
+                <ImportMediaVisual entry={entry} />
+              )}
+            </button>
+          ))}
+        </div>
       ) : (
         <div className="import-selection-empty">
           <span className="import-selection-hint">
@@ -158,10 +157,15 @@ export function ImportSelectionBar({
         </span>
       )}
       <div className="import-selection-actions">
-        <button className="import-cancel" disabled={busy} onClick={onCancel}>
+        <button type="button" className="import-cancel" disabled={busy} onClick={onCancel}>
           取消
         </button>
-        <button className="import-submit" disabled={!canImport || busy} onClick={onImport}>
+        <button
+          type="button"
+          className="import-submit"
+          disabled={!canImport || busy}
+          onClick={onImport}
+        >
           {busy ? "正在导入…" : "导入"}
         </button>
       </div>

@@ -111,7 +111,7 @@ test("pure derived values and event-owned state updates remain valid", async () 
   );
 });
 
-test("compiler rules detect impure renders, mutation, fake boundaries, and lost memoization", async () => {
+test("compiler rules detect impure renders, mutation, fake boundaries, and missing dependencies", async () => {
   for (const [expected, source] of [
     ["purity", "export function Clock() { return <span>{Date.now()}</span>; }"],
     [
@@ -123,7 +123,7 @@ test("compiler rules detect impure renders, mutation, fake boundaries, and lost 
       "export function Parent() { try { return <Child />; } catch { return null; } }",
     ],
     [
-      "preserve-manual-memoization",
+      "exhaustive-deps",
       "import {useCallback} from 'react'; export function Card({onSave, value}) { const save = useCallback(() => onSave(value), [onSave]); return <button type='button' onClick={save}>Save</button>; }",
     ],
   ]) {

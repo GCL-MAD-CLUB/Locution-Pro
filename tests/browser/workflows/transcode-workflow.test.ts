@@ -12,7 +12,7 @@ function workspaceButton(page: Page, name: string) {
 /** Imports clip.MP4 with the default “在转码页面打开导入素材” setting. */
 async function importIntoTranscode(page: Page) {
   await page.evaluate(() => {
-    delete (window as any).__nativeTest.config.settings.openInTranscode;
+    delete window.__nativeTest.config.settings.openInTranscode;
   });
   await openImport(page);
   await expect(

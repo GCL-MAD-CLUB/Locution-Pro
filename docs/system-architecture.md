@@ -24,6 +24,16 @@
 
 运行时契约位于 `src/runtime/events`、`src/runtime/state` 与 `src/runtime/systems`。公共组件位于 `src/components/common`，业务面板位于 `src/components/panels`。
 
+## React 渲染与资源所有权
+
+渲染保持纯粹：从当前输入计算显示值，事件处理器提交编辑；禁止镜像 props 或其他 state 的派生状态，以及任何有条件或无条件的渲染期状态更新。草稿通过 `useScopedState` 保存当前上下文的用户编辑，切换上下文立即回到派生默认值，迟到回调只影响原编辑会话。
+
+禁止导入、调用、别名或包装 React 的 `useEffect`、`useLayoutEffect`、`useInsertionEffect`，浏览器 harness 同样遵守。外部资源显式接收 `RenderLifetime`，无条件按稳定顺序调用 `useBeforePaint` / `useAfterCommit` 登记获取和释放；激活条件放在获取回调内部。每条返回路径都渲染该 lifetime 的边界，未提交的渲染不获取资源。方法名中的 `use` 让 Hooks 和 Compiler 分析识别提交阶段的回调边界。
+
+可变外部对象不能直接成为渲染数据。虚拟列表由 lifetime 在提交时配置和释放，`useSyncExternalStore` 发布独立快照；滚动、测量等控制仅从事件或提交回调执行。
+
+`npm run lint` 对应用、官网、测试和工具执行 ESLint，所有 React Hooks / Compiler 推荐规则均为 error，包括纯度、不可变性、refs、错误边界和手工记忆化保持规则。项目规则补充禁止条件性渲染更新和派生状态初始化。`npm run lint:fix` 仅执行 ESLint 提供的自动修复，余下诊断必须按所有权和数据流修正，不通过关闭规则规避。
+
 ## 多来源与派生读取
 
 来源上下文只组织视图和编辑分发，不将多个视频变为共享媒体。显示行可以包装来源身份，但持久化条目保留原身份。合并镜头、删除与堆叠在各视频内执行；关键字目录按项目协调。

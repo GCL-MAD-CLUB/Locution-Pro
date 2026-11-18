@@ -100,6 +100,9 @@ export function StoryboardMotionPanel({
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<TraceResult | null>(null);
   const cache = useRef(new Map<string, FrameTraceData>());
+  const [completedTraces, setCompletedTraces] = useState<ReadonlyMap<string, FrameTraceData>>(
+    new Map(),
+  );
   const native = isTauriRuntime();
   const nativeSession = useRef<NativeFrameTraceSession | null>(null);
   const sourceCache = useMemo(
@@ -114,7 +117,7 @@ export function StoryboardMotionPanel({
   const endFrame = shot?.end_frame;
   const key = JSON.stringify([assetId, fingerprint, startFrame, endFrame, videoSource, frameRate]);
   const knownCompleteData =
-    (result?.key === key ? result.data : null) ?? cache.current.get(key) ?? null;
+    (result?.key === key ? result.data : null) ?? completedTraces.get(key) ?? null;
   const observeLive = visible && !knownCompleteData;
   const liveVersion = useSyncExternalStore(
     observeLive ? sourceCache.subscribe : noTraceSubscription,
@@ -143,7 +146,7 @@ export function StoryboardMotionPanel({
     }
   }
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     window.addEventListener("blur", finishHover);
     return () => {
       window.removeEventListener("blur", finishHover);
@@ -151,11 +154,11 @@ export function StoryboardMotionPanel({
     };
   }, [key, mode, visible]);
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     if (isPlaying) finishHover();
   }, [isPlaying]);
 
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     const chart = chartRef.current;
     if (!chart || !visible) return;
     const measure = () =>
@@ -216,7 +219,7 @@ export function StoryboardMotionPanel({
     );
   }
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (!native || !visible || !assetId || startFrame === undefined || endFrame === undefined)
       return;
     const cached = cache.current.get(key);
@@ -232,6 +235,7 @@ export function StoryboardMotionPanel({
       sourceCache,
       (data) => {
         rememberTrace(cache.current, key, data);
+        setCompletedTraces(new Map(cache.current));
         setResult({ key, data, failed: false });
       },
       () => setResult({ key, data: null, failed: true }),
@@ -244,7 +248,7 @@ export function StoryboardMotionPanel({
     };
   }, [native, visible, assetId, startFrame, endFrame, frameRate, sourceCache, key, retry]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     nativeSession.current?.update(playbackFrame, isPlaying);
   }, [
     native,
@@ -260,7 +264,7 @@ export function StoryboardMotionPanel({
     isPlaying,
   ]);
 
-  lifetime.afterCommit(() => {
+  lifetime.useAfterCommit(() => {
     if (
       native ||
       isPlaying ||
@@ -274,6 +278,7 @@ export function StoryboardMotionPanel({
     const cached = cache.current.get(key) ?? sourceCache.complete(startFrame, endFrame);
     if (cached) {
       rememberTrace(cache.current, key, cached);
+      setCompletedTraces(new Map(cache.current));
       setResult({ key, data: cached, failed: false });
       return;
     }
@@ -294,6 +299,7 @@ export function StoryboardMotionPanel({
         if (disposed) return;
         if (outcome.status === "success") {
           rememberTrace(cache.current, key, outcome.value);
+          setCompletedTraces(new Map(cache.current));
           setResult({ key, data: outcome.value, failed: false });
         } else {
           setResult({ key, data: null, failed: true });
@@ -328,13 +334,16 @@ export function StoryboardMotionPanel({
   );
   const plotEndFrame = fullSamples || !isPlaying ? (endFrame ?? 0) : (playbackFrame ?? -1);
   const liveSamples = useMemo(
-    () =>
-      fullSamples ??
-      (observeLive
-        ? sourceCache.samples(startFrame ?? 0, Math.min(endFrame ?? -1, plotEndFrame))
-        : []),
+    () => ({
+      revision: liveVersion,
+      samples:
+        fullSamples ??
+        (observeLive
+          ? sourceCache.samples(startFrame ?? 0, Math.min(endFrame ?? -1, plotEndFrame))
+          : []),
+    }),
     [fullSamples, sourceCache, startFrame, endFrame, plotEndFrame, liveVersion, observeLive],
-  );
+  ).samples;
   const livePaths = useMemo(
     () =>
       playbackTracePaths(

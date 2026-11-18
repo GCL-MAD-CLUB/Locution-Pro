@@ -662,9 +662,9 @@ SectionEnd
     const data = join(temporary, "standalone-data");
     const record = join(temporary, "standalone.ini");
     const scopedDataBlock = dataBlock
-      .replaceAll("$APPDATA\\\${BUNDLEID}", nsis(join(data, "roaming")))
-      .replaceAll("$LOCALAPPDATA\\\${BUNDLEID}", nsis(join(data, "local")))
-      .replaceAll("$LOCALAPPDATA\\\${PRODUCTNAME}", nsis(join(data, "application")));
+      .replaceAll("$APPDATA\\${BUNDLEID}", nsis(join(data, "roaming")))
+      .replaceAll("$LOCALAPPDATA\\${BUNDLEID}", nsis(join(data, "local")))
+      .replaceAll("$LOCALAPPDATA\\${PRODUCTNAME}", nsis(join(data, "application")));
     assert(
       !/\$(?:LOCAL)?APPDATA/u.test(scopedDataBlock),
       "All data deletion must stay in the fixture",

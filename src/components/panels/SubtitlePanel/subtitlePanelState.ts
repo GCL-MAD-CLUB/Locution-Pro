@@ -237,7 +237,7 @@ export function useSubtitlePanelState<Selection>(
     trackContext: context,
     workspaceId: nextWorkspaceId,
   };
-  lifetime.beforePaint(() => {
+  lifetime.useBeforePaint(() => {
     if (trackContext !== undefined) storedUiState.syncTrackContext(trackContext, nextWorkspaceId);
   }, [trackContext, nextWorkspaceId, storedUiState.syncTrackContext]);
   const { subtitles, subtitleUpdated } = useProjectPort(["subtitles"], ["subtitleUpdated"]);

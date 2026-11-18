@@ -51,7 +51,7 @@ interface PlayerState {
   manualPlaybackTickAtRef: { current: number | null };
   seekTargetFrameRef: { current: number };
   playbackTickRef: { current: number | null };
-  cueRange: PlayerRange | null;
+  exportPlaybackRange: PlayerRange | null;
   frameRate: number;
   durationFrames: number;
   performance: { now: () => number };
@@ -94,7 +94,7 @@ function player(
     manualPlaybackTickAtRef: ref(null),
     seekTargetFrameRef: ref(pointerFrame),
     playbackTickRef: ref(null),
-    cueRange: range,
+    exportPlaybackRange: range,
     frameRate: 25,
     durationFrames: 100,
     performance: { now: () => 0 },
@@ -175,6 +175,12 @@ test("slow forward playback preserves the stop point across ticks and stops at t
   tick(960);
   assert.deepEqual(stopped, [20]);
   assert.equal(state.manualPlaybackFrameRef.current, 20);
+});
+
+test("forward preview can start in the leading extension and stops at the trailing extension", () => {
+  const { state } = player(8, { startFrame: 5, endFrame: 25 });
+  state.applyPlaybackMode(1);
+  assert.equal(state.cuePlaybackEndFrameRef.current, 25);
 });
 
 test("editor source monitor keeps its ordinary playback behavior inside brackets", () => {

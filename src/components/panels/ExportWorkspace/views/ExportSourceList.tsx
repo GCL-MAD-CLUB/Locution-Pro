@@ -1,23 +1,18 @@
 import {} from "react";
 import { formatDuration } from "../../../../core/editor/playback/time";
-import type { ExportClip, ExportSource } from "../../../../systems/ExportSystem";
+import { exportClipDurationUs } from "../../../../core/editor/export/exportRange";
+import type { ExportSource } from "../../../../systems/ExportSystem";
 import { ExportClipThumbnail } from "./ExportClipThumbnail";
 import "./ExportSourceList.css";
 
 interface ExportSourceListProps {
   source: ExportSource;
   selectedClipIds: Set<string>;
+  selectedDurationUs: number;
   previewClipId: string | null;
   onToggleClip: (clipId: string) => void;
   onSetAllSelected: (selected: boolean) => void;
   onPreviewClip: (clipId: string, play?: boolean) => void;
-}
-
-function clipDurationUs(clip: ExportClip) {
-  if (clip.endUs > 0) {
-    return Math.max(0, clip.endUs - clip.startUs);
-  }
-  return Math.max(0, clip.durationUs);
 }
 
 /** The first label line leads; any further lines (a translation, keywords) follow quieter. */
@@ -50,6 +45,7 @@ function SelectAllCheckbox({
 export function ExportSourceList({
   source,
   selectedClipIds,
+  selectedDurationUs,
   previewClipId,
   onToggleClip,
   onSetAllSelected,
@@ -57,7 +53,6 @@ export function ExportSourceList({
 }: ExportSourceListProps) {
   const selectedClips = source.clips.filter((clip) => selectedClipIds.has(clip.id));
   const allSelected = source.clips.length > 0 && selectedClips.length === source.clips.length;
-  const totalDurationUs = selectedClips.reduce((sum, clip) => sum + clipDurationUs(clip), 0);
 
   return (
     <section className="export-clips-panel">
@@ -74,7 +69,7 @@ export function ExportSourceList({
           已选 <strong>{selectedClips.length}</strong> / {source.clips.length}
         </span>
         <span className="export-source-duration">
-          总时长 <strong>{formatDuration(totalDurationUs)}</strong>
+          总时长 <strong>{formatDuration(selectedDurationUs)}</strong>
         </span>
       </div>
 
@@ -105,7 +100,7 @@ export function ExportSourceList({
               </span>
               <ExportClipThumbnail
                 clip={clip}
-                durationText={formatDuration(clipDurationUs(clip))}
+                durationText={formatDuration(exportClipDurationUs(clip))}
                 onPlay={() => onPreviewClip(clip.id, true)}
               />
               <span className="export-clip-info">

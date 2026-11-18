@@ -2444,6 +2444,7 @@ mod tests {
             output_stem: "result".to_string(),
             output_name: String::new(),
             existing_file_mode: ExportExistingFileMode::Overwrite,
+            range_extension: Default::default(),
             rename_rule: ExportRenameRule::Filename,
             custom_name: String::new(),
             start_number: 1,

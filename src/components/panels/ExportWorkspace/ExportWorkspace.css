@@ -247,6 +247,70 @@
   font-size: 12px;
 }
 
+.export-range-extension {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 3px;
+}
+
+.export-range-extension input {
+  width: 100%;
+  min-width: 0;
+  min-height: 24px;
+  appearance: textfield;
+  padding: 0 1px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  color: var(--color-text-highlight);
+  background: var(--color-surface-input);
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.export-range-extension input::-webkit-inner-spin-button {
+  appearance: none;
+}
+
+.export-range-extension .export-range-link {
+  display: grid;
+  place-items: center;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  color: var(--color-text);
+  background: var(--color-transparent);
+  cursor: pointer;
+}
+
+.export-range-extension .export-range-link:is(:hover, :focus-visible) {
+  color: var(--color-text-highlight);
+}
+
+.export-range-link svg {
+  width: 14px;
+  height: 14px;
+}
+
+.export-range-unit {
+  font-size: 12px;
+}
+
+.export-range-unit .select-dropdown-trigger {
+  grid-template-columns: minmax(0, 1fr) 16px;
+}
+
+.export-range-unit .select-dropdown-trigger > span {
+  padding: 0;
+  text-align: center;
+}
+
+.export-range-unit .select-dropdown-trigger svg {
+  width: 12px;
+  height: 12px;
+}
+
 .export-resolution-control {
   display: grid;
   gap: 6px;

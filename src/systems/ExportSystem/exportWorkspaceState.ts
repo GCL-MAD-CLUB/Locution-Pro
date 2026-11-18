@@ -9,6 +9,7 @@ import type {
   ExportSource,
 } from "../../core/editor/export/exportTypes";
 import { constrainExportSettings } from "./exportSettingsConstraints";
+import { defaultExportRangeExtension } from "../../core/editor/export/exportRange";
 
 const exportDirStorageKey = "locution-pro:export-dir";
 
@@ -120,6 +121,7 @@ export function defaultExportSettings(): ExportSettings {
     // Key order must match the backend's ExportOptions serialization; exportSettingsEqual compares via JSON.stringify.
     outputName: "",
     existingFileMode: "ask",
+    rangeExtension: { ...defaultExportRangeExtension },
   };
 }
 

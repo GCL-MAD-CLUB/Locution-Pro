@@ -4,8 +4,10 @@ import test from "node:test";
 import type {
   ExportClip,
   ExportMode,
+  ExportRangeExtension,
   ExportSettings,
 } from "../../../../src/core/editor/export/exportTypes.ts";
+import { exportRange } from "../../support/export-range.ts";
 import type { ExportTaskSubmission } from "../../../../src/systems/ExportSystem/exportTask.ts";
 
 type ExportTaskModule = typeof import("../../../../src/systems/ExportSystem/exportTask.ts");
@@ -17,6 +19,7 @@ interface TaskHarnessOptions {
   mode?: ExportMode;
   uniqueName?: string | null;
   progressCancelled?: boolean;
+  rangeExtension?: ExportRangeExtension;
 }
 
 interface HarnessScenario {
@@ -33,6 +36,7 @@ function taskHarness({
   mode = "individual",
   uniqueName = "new.mp4",
   progressCancelled = false,
+  rangeExtension,
 }: TaskHarnessOptions = {}) {
   const calls: HarnessCall[] = [];
   const scan = deferred();
@@ -74,6 +78,7 @@ function taskHarness({
       "../ProjectSystem": { getProjectExportContext: () => ({ projectId: null }) },
       "../MediaImportSystem": {},
       "../../core/editor/export/exportTypes": { isAudioOnlyContainer: () => false },
+      "../../core/editor/export/exportRange": exportRange,
       "./exportResolvers": {},
       "./exportDestination": {},
       "./exportRename": {
@@ -103,18 +108,44 @@ function taskHarness({
       id,
       audioSources: [] as ExportClip["audioSources"],
       sourcePath: `${id}.mp4`,
+      startUs: 1_000_000,
+      endUs: 2_000_000,
     })) as ExportClip[],
     settings: {
       destination: "specified",
       outputDir: "D:/exports",
       mode,
       existingFileMode: "ask",
+      rangeExtension,
     } as ExportSettings,
     audioBindingsAlreadyRefreshed: true,
     projectId: null,
   });
   return { calls, scan, choice, backend, submission };
 }
+
+test("merge dispatch extends each captured clip without rereading the editable settings", async () => {
+  const rangeExtension: ExportRangeExtension = {
+    unit: "seconds",
+    before: 0.75,
+    after: 0.5,
+    linked: false,
+  };
+  const harness = taskHarness({ mode: "merge", rangeExtension });
+  rangeExtension.before = 0;
+  harness.scan.resolve([]);
+  assert.equal(await harness.submission.started, true);
+  const command = harness.calls.find(([name]) => name === "export_clips")?.[1] as {
+    clips: Pick<ExportClip, "id" | "startUs" | "endUs">[];
+  };
+  assert.equal(command.clips.length, 2);
+  for (const clip of command.clips) {
+    assert.equal(clip.startUs, 250_000);
+    assert.equal(clip.endUs, 2_500_000);
+  }
+  harness.backend.resolve({ outputs: [], warnings: [] });
+  assert.equal((await harness.submission.completion).status, "success");
+});
 
 test("conflict checks and decisions precede progress registration and export start", async () => {
   const h = taskHarness();

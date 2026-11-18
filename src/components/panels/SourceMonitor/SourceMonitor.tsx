@@ -56,6 +56,7 @@ import {
 } from "../../../application/mediaSources/mediaDrag";
 import { usePanelManagerState } from "../../common/DockLayout";
 import { canEditExportClipRange, useExportWorkspaceState } from "../../../systems/ExportSystem";
+import { exportClipPreviewRanges } from "../../../core/editor/export/exportRange";
 import "./SourceMonitor.css";
 import { StoryboardTimeline } from "./timeline/StoryboardTimeline";
 import { MonitorRange, TimelineRuler, VideoControls } from "../../common/PlaybackControls";
@@ -210,6 +211,9 @@ export function SourceMonitor() {
   const exportPreviewClipId = useExportWorkspaceState((state) => state.previewClipId);
   const exportPreviewVersion = useExportWorkspaceState((state) => state.previewVersion);
   const updateExportClipRange = useExportWorkspaceState((state) => state.updateClipRange);
+  const exportRangeExtension = useExportWorkspaceState((state) =>
+    isExportMonitor ? state.settings.rangeExtension : undefined,
+  );
   const exportClip = isExportMonitor
     ? exportSource?.clips.find((clip) => clip.id === exportPreviewClipId)
     : undefined;
@@ -526,10 +530,10 @@ export function SourceMonitor() {
       cuePlaybackEndFrameRef.current =
         isExportMonitor &&
         effectivePlaybackRate(nextMode, frameRate) > 0 &&
-        cueRange &&
-        pointerFrame >= cueRange.startFrame &&
-        pointerFrame <= cueRange.endFrame
-          ? cueRange.endFrame
+        exportPlaybackRange &&
+        pointerFrame >= exportPlaybackRange.startFrame &&
+        pointerFrame <= exportPlaybackRange.endFrame
+          ? exportPlaybackRange.endFrame
           : null;
       preserveCuePlaybackEnd = cuePlaybackEndFrameRef.current !== null;
     }
@@ -720,45 +724,28 @@ export function SourceMonitor() {
     setMinTimelineSpanFrames((current) => (current === spanFrames ? current : spanFrames));
   }, []);
 
-  const exportRange =
-    exportClip && durationFrames > 0
-      ? {
-          startFrame: clamp(timeUsToFrame(exportClip.startUs, frameRate), 0, durationFrames - 1),
-          endFrame: clamp(
-            exportClip.endUs > 0
-              ? Math.ceil((exportClip.endUs / 1_000_000) * frameRate) - 1
-              : durationFrames - 1,
-            0,
-            durationFrames - 1,
-          ),
-        }
-      : null;
-  const exportRangeStartFrame = exportRange?.startFrame;
-  const exportRangeEndFrame = exportRange?.endFrame;
+  const exportRanges = exportClip
+    ? exportClipPreviewRanges(exportClip, exportRangeExtension, frameRate, durationUs)
+    : null;
+  const exportPlaybackRange = exportRanges?.playback;
+  const exportBounds = exportRanges?.bounds ?? null;
+  const exportBoundsRef = useRef(exportBounds);
+  lifetime.useBeforePaint(() => {
+    exportBoundsRef.current = exportBounds;
+  });
+  const exportPlaybackEndFrame = exportPlaybackRange?.endFrame;
 
   lifetime.useAfterCommit(() => {
     if (!isExportMonitor) return;
-    const range =
-      exportRangeStartFrame === undefined || exportRangeEndFrame === undefined
-        ? null
-        : {
-            startFrame: exportRangeStartFrame,
-            endFrame: Math.max(exportRangeStartFrame, exportRangeEndFrame),
-          };
-    setCueRange(range);
-    cuePlaybackEndFrameRef.current = range?.endFrame ?? null;
-  }, [isExportMonitor, exportRangeStartFrame, exportRangeEndFrame, setCueRange]);
+    cuePlaybackEndFrameRef.current = exportPlaybackEndFrame ?? null;
+  }, [isExportMonitor, exportPlaybackEndFrame]);
 
   lifetime.useAfterCommit(() => {
     if (!isExportMonitor || durationFrames <= 0) return;
-    const clip = exportClipRef.current;
-    if (!clip) return;
-    const start = clamp(timeUsToFrame(clip.startUs, frameRate), 0, durationFrames - 1);
-    const end = clamp(
-      clip.endUs > 0 ? Math.ceil((clip.endUs / 1_000_000) * frameRate) : durationFrames,
-      start + 1,
-      durationFrames,
-    );
+    const bounds = exportBoundsRef.current;
+    if (!bounds) return;
+    const start = bounds.startFrame;
+    const end = bounds.endFrame + 1;
     const span = Math.min(durationFrames, Math.max(minTimelineSpanFrames, end - start));
     const idealStart = start - (span - (end - start)) / 2;
     const timelineStart =
@@ -770,6 +757,9 @@ export function SourceMonitor() {
   }, [
     isExportMonitor,
     exportPreviewVersion,
+    exportRangeExtension?.unit,
+    exportRangeExtension?.before,
+    exportRangeExtension?.after,
     mediaKey,
     durationFrames,
     frameRate,
@@ -909,16 +899,10 @@ export function SourceMonitor() {
               durationUs,
             ),
           );
-      const focusedRange =
-        isExportMonitor && exportRange
-          ? {
-              startFrame: exportRange.startFrame,
-              endFrame: Math.max(exportRange.startFrame, exportRange.endFrame),
-            }
-          : { startFrame: rangeStartFrame, endFrame: rangeEndFrame };
+      const focusedRange = { startFrame: rangeStartFrame, endFrame: rangeEndFrame };
       setCueRange(focusedRange);
       if (!isExportMonitor) centerTimelineOnFrame(rangeStartFrame);
-      cuePlaybackEndFrameRef.current = focusedRange.endFrame;
+      cuePlaybackEndFrameRef.current = exportPlaybackRange?.endFrame ?? focusedRange.endFrame;
       cueRangeTargetRef.current = detail.focusTarget ?? null;
     }
     const video = videoRef.current;
@@ -1767,7 +1751,6 @@ export function SourceMonitor() {
     if (isExportMonitor ? !exportClipRangeEditable : !storyboardMode) return;
     cuePlaybackEndFrameRef.current = range?.endFrame ?? null;
     if (isExportMonitor) {
-      setCueRange(range);
       const clip = exportClipRef.current;
       if (range && clip) {
         const startUs = Math.min(frameToClampedUs(range.startFrame), Math.max(0, durationUs - 1));
@@ -2022,7 +2005,8 @@ export function SourceMonitor() {
           durationFrames={durationFrames}
           timelineStartFrame={timelineStartFrame}
           timelineSpanFrames={timelineSpanFrames}
-          cueRange={cueRange}
+          cueRange={isExportMonitor ? (exportRanges?.original ?? null) : cueRange}
+          extendedCueRange={exportBounds}
           cueRangeEditable={
             isExportMonitor
               ? exportClipRangeEditable && Boolean(exportClip)

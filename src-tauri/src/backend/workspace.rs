@@ -1043,8 +1043,8 @@ mod tests {
         use crate::{
             ExportAudioChannels, ExportAudioCodec, ExportContainer, ExportDestination,
             ExportEncoderSpeed, ExportExistingFileMode, ExportExtensionCase,
-            ExportHardwareAcceleration, ExportMode, ExportOptions, ExportQuality, ExportRenameRule,
-            ExportResolution,
+            ExportHardwareAcceleration, ExportMode, ExportOptions, ExportQuality,
+            ExportRangeExtension, ExportRangeExtensionUnit, ExportRenameRule, ExportResolution,
         };
         let mut config = sample_config();
         config.project_states.insert(
@@ -1079,6 +1079,12 @@ mod tests {
                     extension_case: ExportExtensionCase::Lower,
                     output_name: String::new(),
                     existing_file_mode: ExportExistingFileMode::Ask,
+                    range_extension: ExportRangeExtension {
+                        unit: ExportRangeExtensionUnit::Seconds,
+                        before: 0.5,
+                        after: 1.25,
+                        linked: false,
+                    },
                 }),
                 panel_states: HashMap::from([(
                     "subtitles".to_string(),
@@ -1125,6 +1131,7 @@ mod tests {
         let export_state = legacy_json["exportState"].as_object_mut().unwrap();
         export_state.remove("includeVideo");
         export_state.remove("includeAudio");
+        export_state.remove("rangeExtension");
         *legacy_state = serde_json::to_string(&legacy_json).unwrap();
         let restored_legacy = legacy_xml.into_json().unwrap();
         let export_state = restored_legacy.project_states["project-1"]
@@ -1133,6 +1140,10 @@ mod tests {
             .unwrap();
         assert!(export_state.include_video);
         assert!(export_state.include_audio);
+        assert_eq!(
+            export_state.range_extension,
+            ExportRangeExtension::default()
+        );
     }
 
     #[test]

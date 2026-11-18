@@ -10,6 +10,7 @@ import {
   type ExportSettings,
   type ExportSource,
 } from "../../systems/ExportSystem";
+import { resolveExportClipRange } from "../../core/editor/export/exportRange";
 import {
   applyContainer,
   defaultTranscodeSettings,
@@ -136,14 +137,15 @@ export function planExportToTranscode(
     : null;
   const jobs = new Map<string, TranscodeJob>();
   for (const clip of clips) {
+    const range = resolveExportClipRange(clip, settings.rangeExtension);
     const path = clipInputPath(clip, settings.useProxy);
     const job = jobs.get(path) ?? { path, outputs: [] };
     jobs.set(path, job);
     job.outputs.push({
       settings: {
         ...structuredClone(base),
-        rangeStartUs: clip.startUs > 0 ? clip.startUs : null,
-        rangeEndUs: clip.endUs > 0 ? clip.endUs : null,
+        rangeStartUs: range.startUs > 0 ? range.startUs : null,
+        rangeEndUs: range.endUs > 0 ? range.endUs : null,
       },
       presetName: `导出设置 · ${label}`,
       outputName: names.get(clip.id) ?? clip.label,

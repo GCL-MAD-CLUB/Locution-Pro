@@ -1,5 +1,9 @@
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, Link2, Unlink2 } from "lucide-react";
 import { useState } from "react";
+import {
+  defaultExportRangeExtension,
+  editExportRangeExtension,
+} from "../../../../core/editor/export/exportRange";
 import { ExportField, ExportSettingsGroup } from "../../../common/EncodingSettings";
 import { open } from "../../../../platform/tauri/dialogs";
 import {
@@ -13,6 +17,7 @@ import type {
   ExportDestination,
   ExportContainer,
   ExportExistingFileMode,
+  ExportRangeExtension,
   ExportSettings,
   ExportSource,
 } from "../../../../systems/ExportSystem";
@@ -72,6 +77,11 @@ const existingFileModeItems: Array<SelectDropdownItem<ExportExistingFileMode>> =
 
 type ExportSettingsGroupId = "rename" | "video" | "audio" | "general";
 
+const rangeExtensionUnitItems = selectDropdownItems([
+  ["frames", "帧"],
+  ["seconds", "秒"],
+] as const);
+
 interface ExportSettingsSectionProps {
   settings: ExportSettings;
   onUpdateSettings: (updates: Partial<ExportSettings>) => void;
@@ -101,6 +111,11 @@ export function ExportSettingsSection({
   }
 
   const frameRateValue = settings.frameRate === null ? "source" : String(settings.frameRate);
+  const rangeExtension = settings.rangeExtension ?? defaultExportRangeExtension;
+  const extensionStep = rangeExtension.unit === "frames" ? 1 : 0.01;
+  function changeRangeExtension(change: Partial<ExportRangeExtension>) {
+    onUpdateSettings({ rangeExtension: editExportRangeExtension(rangeExtension, change) });
+  }
   const audioOnlyContainer = isAudioOnlyContainer(settings.container);
   const audioFormat = audioFormatOfCodec(settings.audioCodec);
   const audioSampleRateValue =
@@ -281,6 +296,52 @@ export function ExportSettingsSection({
             items={selectDropdownItems(containerOptions)}
             onChange={(value) => changeContainer(value)}
           />
+        </ExportField>
+
+        <ExportField label="范围扩展">
+          <div className="export-range-extension" role="group" aria-label="导出范围扩展">
+            <input
+              type="number"
+              min={0}
+              step={extensionStep}
+              aria-label="片头扩展"
+              title="片头扩展"
+              value={rangeExtension.before}
+              onChange={(event) => changeRangeExtension({ before: event.target.valueAsNumber })}
+            />
+            <button
+              type="button"
+              className="export-range-link"
+              aria-label="联动片头和片尾扩展"
+              aria-pressed={rangeExtension.linked}
+              title={rangeExtension.linked ? "取消联动，分别设置" : "以片头数值联动两侧"}
+              onClick={() => changeRangeExtension({ linked: !rangeExtension.linked })}
+            >
+              {rangeExtension.linked ? (
+                <Link2 aria-hidden="true" />
+              ) : (
+                <Unlink2 aria-hidden="true" />
+              )}
+            </button>
+            <input
+              type="number"
+              min={0}
+              step={extensionStep}
+              aria-label="片尾扩展"
+              title="片尾扩展"
+              value={rangeExtension.after}
+              onChange={(event) => changeRangeExtension({ after: event.target.valueAsNumber })}
+            />
+            <SelectDropdown
+              className="export-range-unit"
+              ariaLabel="扩展单位"
+              title="帧数按各片段的源帧率计算"
+              menuWidth="content"
+              value={rangeExtension.unit}
+              items={rangeExtensionUnitItems}
+              onChange={(unit) => changeRangeExtension({ unit })}
+            />
+          </div>
         </ExportField>
       </div>
 

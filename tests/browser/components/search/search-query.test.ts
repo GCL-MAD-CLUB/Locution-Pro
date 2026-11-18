@@ -1,5 +1,5 @@
 import { test, expect } from "../../support/fixtures";
-import { SearchPanel } from "../../support/search-panel";
+import { SearchPanel } from "./search-panel";
 
 for (const label of ["字幕", "分镜"] as const) {
   test(`${label}搜索栏与高级搜索双向转换空白和语义分隔符`, async ({ page }) => {

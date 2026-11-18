@@ -6,12 +6,18 @@
   Do not create standalone Rust test files, external test modules, or Rust test directories.
 - Keep deterministic frontend tests in `tests/unit/`, manual browser tests in
   `tests/browser/`, and external-tool tests in `tests/integration/`.
+  Create feature directories within each layer. Colocate local fixtures with their tests and keep
+  shared test support scoped to its layer. Test entry points use `.test.ts`.
+- Use `.ts` and `.tsx` for all authored frontend, test, and tooling code. Keep executable code out
+  of HTML and SVG markup. Compile browser and deployment artifacts during the build.
 - Do not add or run browser E2E tests for the official website (`site/`). Validate
   the website through static checks and deterministic unit tests instead.
 - E2E tests verify behavior: user actions, state changes, validation, persistence,
-  focus, and command dispatch. Do not assert UI coordinates, spacing, dimensions,
-  typography, or decorative alignment. Geometry may drive pointer interactions or
-  verify functional canvas navigation, dragging, and selection; avoid fixed layout expectations.
+  focus, and command dispatch. Do not assert CSS, static geometry, colors, typography, or visual
+  snapshots. Use the pointer helper for input coordinates. Test interaction-driven presentation with
+  semantic states or focused probes that compare the result against the previous state.
+- Run `npm test` to enforce frontend coverage. Add deterministic coverage for logic branches,
+  failure paths, and state transitions when modifying them.
 - `scripts/` contains executable build, asset preparation, release, and repository
   check commands only. Every script needs a `package.json` entry point. Do not put
   tests, experiments, or documentation inventories there.
@@ -51,7 +57,7 @@
 
 ## Code formatting
 
-- TypeScript, TSX, JavaScript, JSON, CSS, HTML, and Markdown are formatted with the
+- TypeScript, TSX, JSON, CSS, HTML, and Markdown are formatted with the
   project-local Prettier configuration in `.prettierrc.json`.
 - Rust is formatted with `cargo fmt` using `src-tauri/Cargo.toml`.
 - Format changed frontend files with `npx prettier --write <files>`.

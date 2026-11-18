@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { prepareReleaseManifest } from "./prepare-release-manifest.ts";
 import { buildUpdateInstaller } from "./build-update-installer.ts";
-import { isReleaseVersion } from "../site/src/release-contract.js";
+import { isReleaseVersion } from "../site/src/release-contract.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const releaseArtifacts = join(root, "src-tauri", "target", "release-artifacts");

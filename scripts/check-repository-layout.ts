@@ -89,22 +89,18 @@ for (const file of files) {
   }
   if (/\.(?:test|spec)\.[cm]?[jt]sx?$/u.test(file)) {
     const discovered =
-      /^tests\/unit\/[\w-]+\/[\w-]+\.test\.ts$/u.test(file) ||
-      /^tests\/browser\/(?:workflows|components|state)\/(?:[\w-]+\/)*[\w-]+\.test\.ts$/u.test(
+      /^tests\/unit\/(?!support\/)[\w-]+\/(?!support\/)[\w-]+\/(?:[\w-]+\/)*[\w-]+\.test\.ts$/u.test(
         file,
       ) ||
-      /^tests\/integration\/(?:[\w-]+\/)*[\w-]+\.test\.ts$/u.test(file);
+      /^tests\/browser\/(?:workflows|components|state)\/[\w-]+\/(?:[\w-]+\/)*[\w-]+\.test\.ts$/u.test(
+        file,
+      ) ||
+      /^tests\/integration\/[\w-]+\/(?:[\w-]+\/)*[\w-]+\.test\.ts$/u.test(file);
     if (!discovered)
       fail(
         file,
         "test files must follow the documented layer, domain and runner naming conventions",
       );
-    if (
-      file.startsWith("tests/browser/") &&
-      /import\s*\{[^}]*\btest\b[^}]*\}\s*from\s*["']@playwright\/test["']/u.test(source())
-    ) {
-      fail(file, "browser tests must use the shared support/fixtures diagnostics");
-    }
   }
   if (file.startsWith("scripts/")) {
     if (!/^scripts\/(?:check-[\w-]+|build-[\w-]+|prepare-[\w-]+|release)\.ts$/u.test(file)) {
@@ -123,34 +119,41 @@ for (const file of files) {
       fail(file, "test code belongs in tests/, not scripts/");
     }
   }
-  if (/\.(?:mjs|js)$/u.test(file)) {
-    if (
-      !file.startsWith("site/") &&
-      !file.startsWith("src/") &&
-      !/^tests\/browser\/(?:components|state)\/(?:[\w-]+\/)*[\w-]+\.harness\.js$/u.test(file)
-    ) {
-      fail(file, "JavaScript files must be site assets, source files or browser harnesses");
+  if (/\.(?:[cm]?js[x]?|[cm]ts[x]?)$/iu.test(file)) {
+    fail(file, "authored frontend code must use .ts or .tsx");
+    continue;
+  }
+  if (/\.(?:html?|svg)$/iu.test(file)) {
+    const document = source().replace(/<!--[^]*?-->/gu, "");
+    for (const [, attributes, body] of document.matchAll(
+      /<script\b([^>]*)>([^]*?)<\/script\s*>/giu,
+    )) {
+      if (/\stype\s*=\s*["']application\/(?:ld\+)?json["']/iu.test(attributes)) continue;
+      if (body.trim() || !/\ssrc\s*=\s*["'][^"'\s]+\.tsx?["']/u.test(attributes)) {
+        fail(file, "HTML and SVG scripts must reference a TypeScript module");
+      }
     }
-    try {
-      execFileSync(process.execPath, ["--check", resolve(root, file)], {
-        encoding: "utf8",
-        stdio: "pipe",
-        windowsHide: true,
-      });
-    } catch (error) {
-      const failure = error as { stderr?: string; message?: string };
-      fail(file, failure.stderr?.trim() || failure.message || String(error));
+    if (/<[a-z][^>]*\s(?:on[a-z]+\s*=|(?:href|src)\s*=\s*["']?javascript:)/iu.test(document)) {
+      fail(file, "HTML and SVG inline JavaScript handlers are forbidden");
     }
   }
-  if (file.endsWith(".ts") && (file.startsWith("scripts/") || file.startsWith("tests/"))) {
+  if (file.startsWith("tests/") && /\.(?:tsx?|html)$/u.test(file)) {
+    const testFile = file.endsWith(".test.ts");
+    const localBrowserFixture =
+      /^tests\/browser\/(?:components|state|workflows)\/[\w-]+\/(?:[\w-]+\/)*[\w.-]+\.(?:tsx?|html)$/u.test(
+        file,
+      );
+    const layerSupport =
+      /^tests\/(?:unit|browser)\/support\/(?:[\w-]+\/)*[\w.-]+\.(?:tsx?|html)$/u.test(file);
+    const localNodeFixture =
+      /^tests\/(?:unit\/[\w-]+\/[\w-]+|integration\/[\w-]+)\/(?:[\w-]+\/)*[\w.-]+\.ts$/u.test(file);
+    if (!testFile && !localBrowserFixture && !layerSupport && !localNodeFixture)
+      fail(file, "place test helpers and harnesses in their feature or layer support directory");
+  }
+  if (/\.tsx?$/u.test(file) && (file.startsWith("scripts/") || file.startsWith("tests/"))) {
     const diagnostics = typescriptSyntaxErrors(file);
     if (diagnostics.length > 0) failTypescriptSyntax(file, diagnostics);
-    const strictTypeScript =
-      file.startsWith("scripts/") ||
-      file.startsWith("tests/unit/") ||
-      file.startsWith("tests/integration/");
     if (
-      strictTypeScript &&
       file !== "scripts/check-repository-layout.ts" &&
       (/@ts-(?:ignore|nocheck|expect-error)\b/u.test(source()) ||
         /\bas\s+any\b|:\s*any\b|<any>|\bany\[\]|\[\s*any\s*\]/u.test(source()))

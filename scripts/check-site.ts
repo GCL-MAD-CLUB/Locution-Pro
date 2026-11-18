@@ -1,7 +1,7 @@
 import { lstat, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { FALLBACK_VERSION } from "../site/src/release-contract.js";
+import { FALLBACK_VERSION } from "../site/src/release-contract.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const requiredFiles = [
@@ -10,7 +10,6 @@ const requiredFiles = [
   "_headers",
   "_redirects",
   "robots.txt",
-  "_worker.js",
   "_routes.json",
 ];
 const apiRoutes = new Set(["/api/release", "/api/download"]);
@@ -22,7 +21,7 @@ interface SiteRoutes {
 }
 
 // Only these public trees and entry points belong in the deployment.
-export async function siteFiles(siteRoot: string): Promise<string[]> {
+export async function siteFiles(siteRoot: string, output = false): Promise<string[]> {
   const files: string[] = [];
   async function visit(relativePath: string): Promise<void> {
     const metadata = await lstat(path.join(siteRoot, relativePath));
@@ -38,15 +37,17 @@ export async function siteFiles(siteRoot: string): Promise<string[]> {
       throw new Error(`${relativePath}: expected a regular file`);
     }
   }
-  for (const entry of [...requiredFiles, "src", "assets"]) await visit(entry);
+  for (const entry of [...requiredFiles, output ? "_worker.js" : "_worker.ts", "src", "assets"]) {
+    await visit(entry);
+  }
   return files;
 }
 
-export async function checkSite(siteRoot: string): Promise<string[]> {
+export async function checkSite(siteRoot: string, output = false): Promise<string[]> {
   const errors: string[] = [];
   let files: string[];
   try {
-    files = await siteFiles(siteRoot);
+    files = await siteFiles(siteRoot, output);
   } catch (error) {
     return [error instanceof Error ? error.message : String(error)];
   }
@@ -71,7 +72,7 @@ export async function checkSite(siteRoot: string): Promise<string[]> {
   }
   const documents = new Map<string, string>();
   const ids = new Map<string, Set<string>>();
-  for (const file of files.filter((name) => /\.(?:html|css|js|svg)$/u.test(name))) {
+  for (const file of files.filter((name) => /\.(?:html|css|[jt]s|svg)$/u.test(name))) {
     const source = await readFile(path.join(siteRoot, file), "utf8");
     documents.set(file, source);
     if (!file.endsWith(".html")) continue;
@@ -147,7 +148,7 @@ export async function checkSite(siteRoot: string): Promise<string[]> {
         assertReference(file, reference);
       }
     }
-    if (file === "src/main.js") {
+    if (file === (output ? "src/main.js" : "src/main.ts")) {
       for (const [, image] of source.matchAll(/\bimage:\s*"([^"]+)"/gu)) {
         assertReference("index.html", `./assets/${image}`);
       }
@@ -157,7 +158,9 @@ export async function checkSite(siteRoot: string): Promise<string[]> {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const errors = await checkSite(path.resolve(root, process.argv[2] ?? "site"));
+  const siteRoot = path.resolve(root, process.argv[2] ?? "site");
+  const output = siteRoot === path.join(root, "dist", "site") || process.argv.includes("--output");
+  const errors = await checkSite(siteRoot, output);
   if (errors.length > 0) {
     console.error(`Site check failed:\n${errors.map((error) => `- ${error}`).join("\n")}`);
     process.exitCode = 1;

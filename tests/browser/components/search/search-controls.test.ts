@@ -1,5 +1,5 @@
 import { test, expect } from "../../support/fixtures";
-import { SearchPanel } from "../../support/search-panel";
+import { SearchPanel } from "./search-panel";
 
 for (const label of ["字幕", "分镜"] as const) {
   test(`${label}快捷规则菜单可切换所有规则`, async ({ page }) => {

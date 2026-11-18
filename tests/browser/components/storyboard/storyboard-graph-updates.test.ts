@@ -1,3 +1,4 @@
+import { pointerAt } from "../../support/pointer";
 import { test, expect } from "../../support/fixtures";
 import type { Page } from "@playwright/test";
 
@@ -5,7 +6,7 @@ async function mount(page: Page, installClock = false) {
   await page.goto("/tests/browser/support/blank.html");
   if (installClock) await page.clock.install();
   await page.evaluate(async () => {
-    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
+    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.ts";
     (await import(/* @vite-ignore */ path)).mountLiveGraph();
   });
   await expect.poll(() => page.evaluate(() => window.graphLiveTarget?.nodes.length)).toBe(9);
@@ -13,27 +14,8 @@ async function mount(page: Page, installClock = false) {
   await expect(page.locator(".storyboard-graph-view")).toHaveAttribute("data-graph-phase", "ready");
 }
 
-async function graphFraming(page: Page) {
-  return page.evaluate(() => {
-    const stage = document.querySelector<HTMLElement>(".storyboard-graph-view")!;
-    const world = document.querySelector(".storyboard-graph-world")!;
-    const matrix = new DOMMatrix(getComputedStyle(world).transform);
-    const camera = {
-      x: (stage.clientWidth / 2 - matrix.e) / matrix.a,
-      y: (stage.clientHeight / 2 - matrix.f) / matrix.a,
-      zoom: matrix.a,
-    };
-    const canvas = JSON.parse(stage.dataset.graphCanvas!);
-    return {
-      canvas,
-      zoom: camera.zoom,
-      width: stage.clientWidth / camera.zoom / canvas.width,
-      height: stage.clientHeight / camera.zoom / canvas.height,
-      x: (camera.x - canvas.x) / canvas.width,
-      y: (camera.y - canvas.y) / canvas.height,
-    };
-  });
-}
+const graphFraming = (page: Page) => page.evaluate(() => window.graphGeometry.framing());
+const graphCamera = (page: Page) => page.evaluate(() => window.graphGeometry.camera());
 
 for (const reduced of [false, true]) {
   test(`loading completion scales the camera with an expanding canvas while preserving navigated framing (reduced motion ${reduced})`, async ({
@@ -45,23 +27,21 @@ for (const reduced of [false, true]) {
     // resource IDs with the fake clock and prevents library-owned timers from clearing.
     await page.clock.install();
     await page.evaluate(async () => {
-      const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
+      const path = "/tests/browser/components/storyboard/storyboard-graph.harness.ts";
       (await import(/* @vite-ignore */ path)).mountLiveGraph(true, false, 64, 8);
     });
     const stage = page.locator(".storyboard-graph-view");
     await expect(stage).toHaveAttribute("data-graph-phase", "ambient");
     await expect(page.locator("[data-overlay-node]")).toHaveCount(64);
-    const bounds = (await stage.boundingBox())!;
-    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    const bounds = await pointerAt(stage);
+    await page.mouse.move(bounds.x, bounds.y);
     await page.mouse.wheel(0, -300);
     await page
       .getByRole("group", { name: "图谱全景导航", exact: true })
       .click({ position: { x: 105, y: 35 } });
     await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
     const before = await graphFraming(page);
-    const beforeTransform = await page
-      .locator(".storyboard-graph-world")
-      .evaluate((element) => getComputedStyle(element).transform);
+    const beforeTransform = await graphCamera(page);
     await page.evaluate(() => {
       window.graphLiveHold = true;
       window.graphLiveReleaseIndex();
@@ -69,20 +49,12 @@ for (const reduced of [false, true]) {
     await expect.poll(() => page.evaluate(() => window.graphLiveRequests.length)).toBe(1);
     await expect(page.locator(".topbar-progress")).toHaveCount(0);
     await expect(stage).toHaveAttribute("data-graph-phase", "ambient");
-    expect(
-      await page
-        .locator(".storyboard-graph-world")
-        .evaluate((element) => getComputedStyle(element).transform),
-    ).toBe(beforeTransform);
+    expect(await graphCamera(page)).toEqual(beforeTransform);
     await page.evaluate(() => window.graphLiveRelease());
     await expect.poll(() => page.evaluate(() => Boolean(window.graphLiveTarget))).toBe(true);
     if (!reduced) {
       await expect(stage).toHaveAttribute("data-graph-phase", "collapse");
-      expect(
-        await page
-          .locator(".storyboard-graph-world")
-          .evaluate((element) => getComputedStyle(element).transform),
-      ).toBe(beforeTransform);
+      expect(await graphCamera(page)).toEqual(beforeTransform);
       for (let i = 0; i < 5; i++) {
         await page.clock.runFor(150);
         const moving = await graphFraming(page);
@@ -143,8 +115,8 @@ test("toolbar clustering toggle reuses indexed vectors and animates between opti
   const before = await page.evaluate(() => ({
     calls: window.graphLiveCalls.length,
     edges: window.graphLiveTarget.edges,
-    camera: getComputedStyle(document.querySelector(".storyboard-graph-world")!).transform,
   }));
+  const cameraBeforeToggle = await graphCamera(page);
   for (const enabled of [false, true]) {
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", String(enabled));
@@ -157,11 +129,7 @@ test("toolbar clustering toggle reuses indexed vectors and animates between opti
     await expect(stage).toHaveAttribute("data-graph-phase", "ready");
     expect(await page.evaluate(() => window.graphLiveTarget.edges)).toEqual(before.edges);
     expect(await page.evaluate(() => window.graphLiveCalls.length)).toBe(before.calls);
-    expect(
-      await page
-        .locator(".storyboard-graph-world")
-        .evaluate((element) => getComputedStyle(element).transform),
-    ).toBe(before.camera);
+    expect(await graphCamera(page)).toEqual(cameraBeforeToggle);
     await expect(page.locator(".topbar-progress")).toHaveCount(0);
     expect(await page.evaluate(() => window.graphLiveInteractions)).toEqual({
       selections: [],
@@ -183,7 +151,7 @@ test("initial indexing keeps global progress while the canvas shows a random for
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/tests/browser/support/blank.html");
   await page.evaluate(async () => {
-    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
+    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.ts";
     (await import(/* @vite-ignore */ path)).mountLiveGraph(true);
   });
   const view = page.locator(".storyboard-graph-view");
@@ -232,11 +200,7 @@ test("initial indexing keeps global progress while the canvas shows a random for
       const node = document.querySelector<HTMLElement>(
         '.storyboard-graph-dot[data-storyboard-shot-id="0"]',
       );
-      if (node)
-        window.graphInitialTrace.push({
-          x: parseFloat(node.style.left),
-          y: parseFloat(node.style.top),
-        });
+      if (node) window.graphInitialTrace.push(window.graphGeometry.position(node));
       if (window.graphInitialTrace.length < 120) requestAnimationFrame(sample);
     };
     requestAnimationFrame(sample);
@@ -263,51 +227,40 @@ test("preparation allows persistent wheel zoom and minimap navigation while othe
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto("/tests/browser/support/blank.html");
   await page.evaluate(async () => {
-    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
+    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.ts";
     (await import(/* @vite-ignore */ path)).mountLiveGraph(true, false, 64);
   });
   const stage = page.locator(".storyboard-graph-view");
   await expect(stage).toHaveAttribute("data-graph-phase", "ambient");
   await expect(page.locator("[data-overlay-node]")).toHaveCount(64);
-  const camera = () =>
-    page.locator(".storyboard-graph-world").evaluate((element) => {
-      const matrix = new DOMMatrix(getComputedStyle(element).transform);
-      return { x: matrix.e, y: matrix.f, zoom: matrix.a };
-    });
-  const bounds = (await stage.boundingBox())!;
-  const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  const camera = () => graphCamera(page);
+  const bounds = await pointerAt(stage);
+  const point = { x: bounds.x, y: bounds.y };
   const initial = await camera();
   await page.mouse.move(point.x, point.y);
   await page.mouse.wheel(0, -600);
   await expect.poll(async () => (await camera()).zoom).toBeGreaterThan(initial.zoom);
   const zoomed = await camera();
   // Several live simulation frames must retain the user's transform.
-  const trace = await page.locator(".storyboard-graph-world").evaluate(async (element) => {
-    const trace = [];
-    for (let i = 0; i < 12; i++) {
-      await new Promise(requestAnimationFrame);
-      const matrix = new DOMMatrix(getComputedStyle(element).transform);
-      trace.push({ x: matrix.e, y: matrix.f, zoom: matrix.a });
-    }
-    return trace;
-  });
+  const trace = await page.evaluate(() => window.graphGeometry.cameraTrace());
   expect(trace.every((sample) => JSON.stringify(sample) === JSON.stringify(zoomed))).toBe(true);
   const mini = page.locator(".storyboard-graph-minimap");
-  const frame = (await page.locator("[data-graph-viewport]").boundingBox())!;
-  await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
+  const frame = await pointerAt(page.locator("[data-graph-viewport]"));
+  await page.mouse.move(frame.x, frame.y);
   await page.mouse.down();
-  await page.mouse.move(frame.x + frame.width / 2 + 16, frame.y + frame.height / 2 + 8, {
+  await page.mouse.move(frame.x + 16, frame.y + 8, {
     steps: 5,
   });
   await page.mouse.up();
   await expect.poll(camera).not.toEqual(zoomed);
   expect((await camera()).zoom).toBe(zoomed.zoom);
   const beforeLocate = await camera();
-  const miniBounds = (await mini.boundingBox())!;
-  await page.mouse.click(miniBounds.x + 8, miniBounds.y + 8);
+  const locate = await pointerAt(mini, 0.05, 0.08);
+  await page.mouse.click(locate.x, locate.y);
   await expect.poll(camera).not.toEqual(beforeLocate);
   const beforeWheel = await camera();
-  await page.mouse.move(miniBounds.x + miniBounds.width / 2, miniBounds.y + miniBounds.height / 2);
+  const wheel = await pointerAt(mini);
+  await page.mouse.move(wheel.x, wheel.y);
   await page.mouse.wheel(0, 120);
   await expect.poll(async () => (await camera()).zoom).toBeLessThan(beforeWheel.zoom);
   const navigated = await camera();
@@ -358,7 +311,7 @@ test("without any cut storyboards the graph remains blank and starts no preparat
 }) => {
   await page.goto("/tests/browser/support/blank.html");
   await page.evaluate(async () => {
-    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
+    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.ts";
     (await import(/* @vite-ignore */ path)).mountLiveGraph(false, true);
   });
   await expect(page.locator(".storyboard-graph-view")).toBeVisible();
@@ -374,20 +327,19 @@ test("a single remaining node eases back after release instead of jumping to the
   await page.evaluate(() => window.graphLiveFilter(["0"]));
   await assertConnected(page, ["0"]);
   const node = page.locator('.storyboard-graph-dot[data-storyboard-shot-id="0"]');
-  const box = (await node.boundingBox())!;
-  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const start = await pointerAt(node);
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
   await page.mouse.move(start.x + 100, start.y + 40, { steps: 6 });
   await expect
-    .poll(() => node.evaluate((element) => parseFloat((element as HTMLElement).style.left)))
+    .poll(() => node.evaluate((element) => window.graphGeometry.position(element).x))
     .toBeGreaterThan(90);
   await page.mouse.up();
   expect(
-    await node.evaluate((element) => parseFloat((element as HTMLElement).style.left)),
+    await node.evaluate((element) => window.graphGeometry.position(element).x),
   ).toBeGreaterThan(50);
   await expect
-    .poll(() => node.evaluate((element) => parseFloat((element as HTMLElement).style.left)))
+    .poll(() => node.evaluate((element) => window.graphGeometry.position(element).x))
     .toBeLessThan(2);
 });
 
@@ -397,8 +349,7 @@ test("filtering during a node drag releases capture and transitions from the liv
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await mount(page);
   const node = page.locator('.storyboard-graph-dot[data-storyboard-shot-id="0"]');
-  const box = (await node.boundingBox())!;
-  const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const start = await pointerAt(node);
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
   await page.mouse.move(start.x + 70, start.y + 45, { steps: 6 });
@@ -413,8 +364,8 @@ test("filtering during a node drag releases capture and transitions from the liv
       node.evaluate(
         (element, target) =>
           Math.hypot(
-            parseFloat((element as HTMLElement).style.left) - target.x,
-            parseFloat((element as HTMLElement).style.top) - target.y,
+            window.graphGeometry.position(element).x - target.x,
+            window.graphGeometry.position(element).y - target.y,
           ),
         target,
       ),
@@ -438,16 +389,13 @@ test("filter updates reuse vectors and the worker, keep the scene visible and sp
     window.graphLiveRetained = dot;
     window.graphLiveTrace = [];
     const sample = () => {
-      window.graphLiveTrace.push({
-        x: parseFloat(dot.style.left),
-        y: parseFloat(dot.style.top),
-      });
+      window.graphLiveTrace.push(window.graphGeometry.position(dot));
       if (window.graphLiveTrace.length < 120) requestAnimationFrame(sample);
     };
     requestAnimationFrame(sample);
     window.graphLiveHold = true;
     window.graphLiveFilter(["0", "2", "4", "6", "8"]);
-    return { x: parseFloat(dot.style.left), y: parseFloat(dot.style.top) };
+    return window.graphGeometry.position(dot);
   });
   await expect(page.locator(".storyboard-graph-dot")).toHaveCount(5);
   await expect(page.locator(".storyboard-graph-message, .topbar-progress")).toHaveCount(0);
@@ -459,10 +407,9 @@ test("filter updates reuse vectors and the worker, keep the scene visible and sp
   );
   expect(Math.hypot(target.x - before.x, target.y - before.y)).toBeGreaterThan(1);
   const position = () =>
-    page.locator('.storyboard-graph-dot[data-storyboard-shot-id="0"]').evaluate((element) => ({
-      x: parseFloat((element as HTMLElement).style.left),
-      y: parseFloat((element as HTMLElement).style.top),
-    }));
+    page
+      .locator('.storyboard-graph-dot[data-storyboard-shot-id="0"]')
+      .evaluate((element) => window.graphGeometry.position(element));
   await expect
     .poll(async () => Math.hypot((await position()).x - target.x, (await position()).y - target.y))
     .toBeLessThan(0.05);
@@ -564,7 +511,7 @@ test("deleting during initial indexing shares the covering job instead of launch
 }) => {
   await page.goto("/tests/browser/support/blank.html");
   await page.evaluate(async () => {
-    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.js";
+    const path = "/tests/browser/components/storyboard/storyboard-graph.harness.ts";
     (await import(/* @vite-ignore */ path)).mountLiveGraph(true);
   });
   const indexes = () =>

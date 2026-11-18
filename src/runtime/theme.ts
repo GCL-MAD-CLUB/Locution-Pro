@@ -1,6 +1,9 @@
 import stylesheet from "../styles.css?raw";
 import { clientError } from "../core/errors";
 import type { Appearance } from "../types";
+import { appearanceStorageKey, storedAppearance } from "./appearanceStorage";
+
+export { knownAppearances } from "./appearanceStorage";
 
 // Non-DOM consumers (saved media defaults and standalone SVG images) read the
 // same palette as CSS. Keep literal colors exclusively in styles.css. Parsing is
@@ -32,15 +35,6 @@ export function defaultThemeColor(name: string): string {
   );
 }
 
-// index.html reads this key in its head script; the tooling theme test keeps the
-// two in sync.
-export const appearanceStorageKey = "locution-pro:appearance";
-export const knownAppearances = [
-  "darkest",
-  "dark",
-  "light",
-] as const satisfies readonly Appearance[];
-
 let appearance: Appearance = "darkest";
 const appearanceListeners = new Set<() => void>();
 
@@ -51,15 +45,6 @@ export function subscribeAppearance(listener: () => void) {
   return () => {
     appearanceListeners.delete(listener);
   };
-}
-
-function storedAppearance(): Appearance | null {
-  try {
-    const value = window.localStorage.getItem(appearanceStorageKey);
-    return knownAppearances.find((candidate) => candidate === value) ?? null;
-  } catch {
-    return null;
-  }
 }
 
 /**

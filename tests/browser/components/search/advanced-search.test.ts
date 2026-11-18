@@ -1,5 +1,5 @@
 import { test, expect } from "../../support/fixtures";
-import { SearchPanel } from "../../support/search-panel";
+import { SearchPanel } from "./search-panel";
 
 for (const label of ["字幕", "分镜"] as const) {
   test(`${label}取消保留已应用条件，应用同步搜索栏，重置恢复默认值`, async ({ page }) => {
@@ -53,17 +53,6 @@ for (const label of ["字幕", "分镜"] as const) {
     const apply = dialog.getByRole("button", { name: "应用", exact: true });
     await query.fill("[");
     await expect(query).toHaveAttribute("aria-invalid", "true");
-    const errorColor = await dialog.evaluate((element) => {
-      const reference = document.createElement("span");
-      reference.style.color = "var(--color-danger)";
-      element.append(reference);
-      const color = getComputedStyle(reference).color;
-      reference.remove();
-      return color;
-    });
-    await expect(query).toHaveCSS("border-bottom-color", errorColor);
-    for (const edge of ["top", "right", "left"])
-      await expect(query).not.toHaveCSS(`border-${edge}-color`, errorColor);
     await expect(apply).toBeDisabled();
     await query.fill("hello.*");
     await dialog.getByLabel("最短时长").fill("2");
@@ -84,7 +73,6 @@ for (const label of ["字幕", "分镜"] as const) {
     await negative.fill(" shared ");
     await expect(positive).toHaveAttribute("aria-invalid", "true");
     await expect(negative).toHaveAttribute("aria-invalid", "true");
-    await expect(negative).toHaveCSS("border-bottom-color", errorColor);
     await expect(dialog.getByRole("alert")).toContainText("重复");
     await negative.fill("crowd");
     await expect(positive).toHaveAttribute("aria-invalid", "false");

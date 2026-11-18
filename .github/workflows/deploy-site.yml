@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/actions/setup-npm/action.yml"
       - ".github/workflows/deploy-site.yml"
+      - "tsconfig.json"
       - "package.json"
       - "package-lock.json"
       - "scripts/check-site.ts"

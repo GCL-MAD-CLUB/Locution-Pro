@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import ts from "typescript";
 
-const sourceExtension = /\.[cm]?[jt]sx?$/u;
+const sourceExtension = /\.tsx?$/u;
 const desktopLayers = [
   "core",
   "runtime",
@@ -18,8 +18,8 @@ const entryPoints = [
   "src/main.tsx",
   "src/types.ts",
   "src/vite-env.d.ts",
-  "site/src/main.js",
-  "site/_worker.js",
+  "site/src/main.ts",
+  "site/_worker.ts",
   `${guideTheme}/index.ts`,
 ];
 
@@ -70,8 +70,8 @@ function dependencyGroup(file: string) {
   const unit = owner(file);
   if (unit) return unit;
   if (surface(file) !== "desktop") {
-    if (file === "site/_worker.js") return "site/worker";
-    if (file === "site/src/release-contract.js") return "site/release";
+    if (file === "site/_worker.ts") return "site/worker";
+    if (file === "site/src/release-contract.ts") return "site/release";
     return surface(file) === "site" ? "site/browser" : guideTheme;
   }
   const [, section, category, name] = file.split("/");
@@ -220,11 +220,11 @@ function internalIssue(file: string, target: string) {
     return "Production code must stay within its desktop, site, or guide source tree.";
   }
   if (surface(file) === "site") {
-    if (target === "site/src/release-contract.js") return;
+    if (target === "site/src/release-contract.ts") return;
     if (
-      file === "site/_worker.js" ||
-      file === "site/src/release-contract.js" ||
-      target === "site/_worker.js"
+      file === "site/_worker.ts" ||
+      file === "site/src/release-contract.ts" ||
+      target === "site/_worker.ts"
     ) {
       return "The website browser and Worker may share the release contract only.";
     }
@@ -372,7 +372,7 @@ export function analyzeFrontend(root: string) {
     ...filesUnder(root, "src"),
     ...filesUnder(root, "site/src"),
     ...filesUnder(root, guideTheme),
-    "site/_worker.js",
+    "site/_worker.ts",
   ]
     .filter((file) => existsSync(resolve(root, file)))
     .sort();

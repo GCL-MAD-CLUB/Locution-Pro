@@ -194,7 +194,7 @@ export function AboutDialog({ onClose }: AboutDialogProps) {
               <dd>
                 <a href="https://space.bilibili.com/99325557">Kotodama Yl</a>,{" "}
                 <a href="https://github.com/WillisChen1031">Chen Willis</a>,{" "}
-                <a href="https://github.com/Chang-Yo">Chang Yo</a>
+                <a href="https://github.com/Chang-Yo">ChangYo</a>
               </dd>
             </div>
             <div>

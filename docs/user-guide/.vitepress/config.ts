@@ -146,6 +146,10 @@ export default defineConfig({
             link: "/media/organize-bin",
           },
           {
+            text: "使用项目素材库",
+            link: "/media/asset-library",
+          },
+          {
             text: "管理音频与字幕轨",
             link: "/media/tracks-binding",
           },

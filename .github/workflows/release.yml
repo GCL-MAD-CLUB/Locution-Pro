@@ -265,7 +265,7 @@ jobs:
           app="$mount/Locution Pro.app"
           codesign --verify --deep --strict "$app"
           resources="$app/Contents/Resources/transnetv2"
-          lipo -verify_arch arm64 "$resources/libonnxruntime.dylib"
+          lipo "$resources/libonnxruntime.dylib" -verify_arch arm64
           cp "$resources/libonnxruntime.dylib" "$work/$package/lib/libonnxruntime.1.24.4.dylib"
           cp "$resources/onnxruntime-LICENSE" "$work/$package/LICENSE"
           cp "$resources/onnxruntime-ThirdPartyNotices.txt" "$work/$package/ThirdPartyNotices.txt"

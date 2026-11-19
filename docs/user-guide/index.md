@@ -29,7 +29,7 @@ features:
 
 Locution Pro 帮助你从大量视频中发现、筛选和整理可用素材。无需字幕，也可以完成镜头检测、画面检索、标注和导出；已有字幕时，还可按对白文字或含义查找片段。
 
-本指南适用于 Locution Pro 5.0.0。首次使用请从[安装与首次启动](/getting-started/install)和[创建第一个项目](/getting-started/first-project)开始。需要按画面关系比较和整理镜头时，阅读[使用分镜图谱](/storyboard/graph)。
+本指南适用于 Locution Pro 0.5.0。首次使用请从[安装与首次启动](/getting-started/install)和[创建第一个项目](/getting-started/first-project)开始。需要按画面关系比较和整理镜头时，阅读[使用分镜图谱](/storyboard/graph)。
 
 ## 按功能浏览帮助
 

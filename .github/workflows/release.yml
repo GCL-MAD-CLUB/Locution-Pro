@@ -239,6 +239,37 @@ jobs:
           LOCUTION_PRO_FFMPEG_DIR="$dir" npm run prepare:ffmpeg
       # tauri-build validates bundle resources during Rust compilation, before
       # beforeBundleCommand would download the ONNX Runtime dylib.
+      - name: Recover pinned ONNX Runtime when the upstream asset is unavailable
+        env:
+          ONNX_DONOR_SHA256: 886d86e58b47e73475060026c5de1854f059c01482c759e3d4feadfb863ecca8
+        run: |
+          set -euo pipefail
+          if ! grep -Fq 'const onnxRuntimeVersion = "1.24.4";' scripts/prepare-transnetv2-assets.ts; then
+            exit 0
+          fi
+          package=onnxruntime-osx-arm64-1.24.4
+          upstream="https://github.com/microsoft/onnxruntime/releases/download/v1.24.4/$package.tgz"
+          status="$(curl --silent --show-error --head --retry 2 --output /dev/null --write-out '%{http_code}' "$upstream")"
+          if [[ "$status" != 404 ]]; then
+            exit 0
+          fi
+          # The previously published disk image contains the same library and notices.
+          work="$(mktemp -d "$RUNNER_TEMP/onnxruntime.XXXXXXXX")"
+          dmg="$work/Locution.Pro_0.4.3_aarch64.dmg"
+          mount="$work/mount"
+          mkdir -p "$mount" "$work/$package/lib" .cache/transnetv2-assets
+          curl -fsSL --retry 3 -o "$dmg" "https://github.com/GCL-MAD-CLUB/Locution-Pro/releases/download/v0.4.3/${dmg##*/}"
+          echo "$ONNX_DONOR_SHA256  $dmg" | shasum -a 256 -c -
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount" "$dmg"
+          trap 'hdiutil detach "$mount" >/dev/null' EXIT
+          app="$mount/Locution Pro.app"
+          codesign --verify --deep --strict "$app"
+          resources="$app/Contents/Resources/transnetv2"
+          lipo -verify_arch arm64 "$resources/libonnxruntime.dylib"
+          cp "$resources/libonnxruntime.dylib" "$work/$package/lib/libonnxruntime.1.24.4.dylib"
+          cp "$resources/onnxruntime-LICENSE" "$work/$package/LICENSE"
+          cp "$resources/onnxruntime-ThirdPartyNotices.txt" "$work/$package/ThirdPartyNotices.txt"
+          tar -czf ".cache/transnetv2-assets/$package.tgz" -C "$work" "$package"
       - name: Prepare ONNX Runtime and TransNetV2 assets before application compilation
         run: npm run prepare:transnetv2
       - name: Build macOS application and disk image

@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-315EFB?style=flat-square" height="20" alt="支持 Windows 10 和 Windows 11" />
   <img src="https://img.shields.io/badge/Workflow-Local-6E56CF?style=flat-square" height="20" alt="本地处理素材" />
   <img src="https://img.shields.io/badge/Search-Visual-15856B?style=flat-square" height="20" alt="按画面检索镜头" />
-  <a href="https://locution.dpdns.org/#download"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Windows%20%E5%AE%89%E8%A3%85%E7%A8%8B%E5%BA%8F-315EFB?style=flat-square" height="20" alt="下载 Windows 安装程序" /></a>
+  <a href="https://locution.dpdns.org/#download"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Windows%20%2F%20macOS-315EFB?style=flat-square" height="20" alt="下载 Windows 或 macOS 安装包" /></a>
   <a href="https://helpx.locution.dpdns.org/"><img src="https://img.shields.io/badge/%E9%98%85%E8%AF%BB-%E7%94%A8%E6%88%B7%E6%8C%87%E5%8D%97-6E56CF?style=flat-square" height="20" alt="阅读用户指南" /></a>
 </p>
 
@@ -40,7 +40,7 @@ Locution Pro 将**媒体管理、画面检索、镜头整理与片段导出**汇
     </td>
     <td width="50%" valign="top">
       <h3>为灵感建立秩序</h3>
-      <p>用媒体箱组织素材，以星级、旗标、色标和层级关键字筛选镜头。将相关镜头组成堆叠，让素材库保持清晰。</p>
+      <p>用媒体箱组织媒体，以星级、旗标、色标和层级关键字筛选镜头。将精选镜头与对白片段收入项目素材库，随时继续整理和导出。</p>
       <p><a href="docs/user-guide/storyboard/storyboards.md">了解镜头整理 →</a></p>
     </td>
   </tr>
@@ -80,7 +80,7 @@ Locution Pro 将**媒体管理、画面检索、镜头整理与片段导出**汇
 
 ## 开始创作
 
-1. 下载并安装 Locution Pro，首次安装建议保留内置媒体工具和语义检索组件。
+1. 下载并安装 Locution Pro。Windows 首次安装时建议保留内置媒体工具和语义检索组件。
 2. 新建项目，导入视频或其他素材；无需先准备字幕。
 3. 在分镜面板浏览镜头，搜索画面、添加标记并选出所需片段。
 4. 进入导出工作区，确认范围和输出设置，生成交付文件。
@@ -89,7 +89,7 @@ Locution Pro 将**媒体管理、画面检索、镜头整理与片段导出**汇
 
 ## 运行环境
 
-- Windows 10 或 Windows 11，64 位。
+- Windows 10 / 11（x64），或搭载 Apple 芯片的 macOS 13 及以上版本。
 - 可用窗口至少为 1080 × 700，建议使用 1920 × 1080 或更高分辨率显示器。
 - 为原始素材、媒体缓存、可选语义检索组件、代理和导出文件预留充足磁盘空间。
 

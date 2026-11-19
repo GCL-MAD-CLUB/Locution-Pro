@@ -29,7 +29,7 @@ features:
 
 Locution Pro 帮助你从大量视频中发现、筛选和整理可用素材。无需字幕，也可以完成镜头检测、画面检索、标注和导出；已有字幕时，还可按对白文字或含义查找片段。
 
-本指南适用于 Locution Pro 0.4.3，按实际工作任务介绍操作方法。首次使用请从[安装与首次启动](/getting-started/install)和[创建第一个项目](/getting-started/first-project)开始；已经熟悉基本操作时，可直接选择下面的任务。需要按画面关系比较和整理镜头时，阅读[使用分镜图谱](/storyboard/graph)。
+本指南适用于 Locution Pro 5.0.0。首次使用请从[安装与首次启动](/getting-started/install)和[创建第一个项目](/getting-started/first-project)开始。需要按画面关系比较和整理镜头时，阅读[使用分镜图谱](/storyboard/graph)。
 
 ## 按功能浏览帮助
 
@@ -59,6 +59,8 @@ Locution Pro 帮助你从大量视频中发现、筛选和整理可用素材。�
 | 审看画面、调整切点或导出静帧 | [使用源监视器](/source/source-monitor)                 |
 | 改善大文件的预览流畅度       | [生成代理以流畅预览](/workflows/create-proxy)          |
 | 输出片段或合并交付           | [导出所选片段或成片](/workflows/export-video)          |
+| 收集要复用的镜头或对白片段   | [使用项目素材库](/media/asset-library)                 |
+| 批量转换媒体格式             | [转码媒体文件](/workflows/transcode-media)             |
 | 解决导入、预览或导出问题     | [故障排查](/troubleshooting/troubleshooting)           |
 
 ## 按工作流程学习
@@ -75,7 +77,7 @@ Locution Pro 帮助你从大量视频中发现、筛选和整理可用素材。�
 1. 在[导入和整理媒体](/media/import-organize)中选择复制方式与媒体箱结构。
 2. 有独立录音或字幕时，按[管理音频与字幕轨](/media/tracks-binding)完成绑定。
 3. 使用[分镜](/storyboard/storyboards)浏览和筛选镜头，再用[关键字](/storyboard/use-keywords)建立长期分类。
-4. 通过[创建和管理项目](/projects/projects)保存、备份和移交整理结果。
+4. 把精选片段[添加到素材库](/media/asset-library)，然后保存项目。
 
 ### 查找并交付片段
 

@@ -31,14 +31,14 @@ npm run site:preview
 - `index.html`：官网首页。
 - `404.html`：未知路径的错误页，阻止 Pages 将未知路径回退到首页。
 - `src/`：样式和交互；字体通过独立 WOFF2 文件加载。
-- `src/scroll-motion.ts`: 原生滚动驱动页面位移、缩放和显现，尊重减少动态效果设置。
+- `src/scroll-motion.ts`：原生滚动驱动页面位移、缩放和显现，尊重减少动态效果设置。
 - `src/demo.ts`：以真实应用截图为界面底稿，按脚本自动演示素材选择、分镜查找、关键字标注和输出设置。访客无需操作；视口外与后台暂停，减少动态效果时显示静态界面。不运行视频分析、模型或编码。
 - `assets/`：本地图标、应用截图、视觉示意和字体许可证。
 - `_headers`：安全头；使用 Pages 默认的 ETag 与重新验证缓存策略，避免未带哈希的资源更新后仍显示旧版本。
 - `_redirects`：原文档内页目录以 301 跳转到用户指南新子域名，保留后续路径。
 - `_worker.ts` 和 `_routes.json` 负责下载 API。构建生成 Pages 要求的 `_worker.js`，仅在 `/api/release` 与 `/api/download` 路由运行。
 - `robots.txt`：抓取规则。构建会加入正式站点地图地址。
-- `DESIGN.md`: 视觉规范，不发布。
+- `DESIGN.md`：视觉规范，不发布。
 - `brand-spec.md`：维护中的品牌约束，不发布。
 
 默认正式域名为 `https://locution.dpdns.org`。如需变更，在构建时设置 `SITE_URL` 为 HTTPS 源站地址，不带路径、查询参数或片段。构建生成首页 canonical、Open Graph 绝对地址和 `sitemap.xml`。预览部署由 Pages 默认添加禁止索引响应头。
@@ -72,18 +72,15 @@ npm run site:preview
 
 Git 集成构建需要安装仓库的 npm 依赖。不能将桌面程序的 `npm run build` 用作官网构建。Direct Upload 和 Git 集成的选择应在创建项目时确定，Cloudflare 不支持将 Direct Upload 项目直接切换为 Git 集成项目。
 
-## 域名切换和用户指南
+## 域名
 
-仓库已将官网、README 和桌面应用的用户指南入口统一为 `https://helpx.locution.dpdns.org/`。文档站的 `public/CNAME`、站点地图和部署基址也已切换。
+官网与用户指南分别绑定自己的域名：
 
-官网和用户指南分别绑定各自的域名，按以下步骤配置：
+1. 用户指南：在 GitHub **Settings → Pages → Custom domain** 填写 `helpx.locution.dpdns.org`，DNS 以 CNAME 指向实际承载文档的仓库所有者的 `<用户或组织>.github.io`，并完成 HTTPS 验证。站点使用自定义 Actions 发布，域名绑定以控制台设置为准，产物中的 `public/CNAME` 不能替代该设置。部署工作流将文档基址固定为 `/`；帮助中心图标 `docs/user-guide/public/favicon.ico` 与 `src-tauri/icons/icon.ico` 保持一致。
+2. 官网：在 Cloudflare Pages 项目的 **Custom domains** 添加 `locution.dpdns.org`，按控制台提示让 DNS 指向项目的 `<项目>.pages.dev`，等待域名和 HTTPS 证书激活。
+3. 验证官网首页、`/sitemap.xml`、不存在路径的 404，以及下载、GitHub、更新日志和用户指南入口。
 
-1. 先在 GitHub **Settings → Pages → Custom domain** 填写 `helpx.locution.dpdns.org`，然后配置该域名指向现有 GitHub Pages 站点的 DNS，完成 HTTPS 验证。CNAME 目标使用 `<GitHub 用户或组织>.github.io`，例如当前 origin 对应 `inexplicable-yl.github.io`；以实际承载文档的仓库所有者为准。当前使用自定义 Actions 发布，GitHub 的域名绑定以控制台设置为准，产物中的 `CNAME` 文件不能替代该设置。
-2. 发布用户指南并确认新域名上的首页和内页均正常，浏览器标签页显示产品图标。帮助中心使用 `docs/user-guide/public/favicon.ico`，与 `src-tauri/icons/icon.ico` 保持一致。部署工作流将文档基址固定为 `/`，旧的 `DOCS_BASE` 仓库变量不再生效。
-3. 在 Cloudflare Pages 项目的 **Custom domains** 添加 `locution.dpdns.org`，然后按控制台提示添加或更新 DNS，使其指向项目实际提供的 `<项目>.pages.dev` 目标，等待域名和 HTTPS 证书激活。
-4. 验证官网首页、`/sitemap.xml`、随机不存在路径的 404，以及下载、GitHub、更新日志和用户指南入口。
-
-官网上的历史文档内页路径会以 301 跳转到帮助子域名；其他旧域名的跳转需在原托管服务单独配置。更新收藏和对外链接时使用新地址。已安装的旧版应用仍使用其内置的帮助地址，更新应用后才会直接打开新帮助地址。
+`_redirects` 将官网上的历史文档内页以 301 跳转到用户指南域名；其他旧域名的跳转需在原托管服务单独配置。已安装的旧版应用仍使用其内置的帮助地址。
 
 ## 检查和维护
 

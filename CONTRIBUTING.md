@@ -1,10 +1,10 @@
 # 参与 Locution Pro 开发
 
-本指南面向维护者，以 0.4.2 产品基线为准。小型修复可直接提交 Pull Request；较大功能、项目格式或外部资源变化，应先说明使用场景与设计。
+本指南面向维护者。小型修复可直接提交 Pull Request；较大功能、项目格式或外部资源变化，应先说明使用场景与设计。
 
 ## 开发环境
 
-使用 Windows 10 / 11 x64、WebView2 和 Tauri 的 Windows 构建依赖。Node.js 与 Rust 版本以 `.node-version`、`rust-toolchain.toml` 为准，npm 版本见 `package.json`。
+使用 Windows 10 / 11 x64、WebView2 和 Tauri 的 Windows 构建依赖。Node.js 与 Rust 版本以 `.node-version`、`rust-toolchain.toml` 为准，npm 版本见 `package.json`。在 macOS 上构建和调试见 [macOS 构建](docs/macos.md)。
 
 ```powershell
 npm ci
@@ -52,7 +52,7 @@ cargo test --manifest-path src-tauri/thumbnail-provider/Cargo.toml --locked
 | README           | 只呈现产品价值、能力、开始使用与运行条件；不出现应用版本号、更新说明、变更日志、开发命令或架构 |
 | docs/user-guide  | 按用户任务介绍入口、条件、步骤、结果和必要限制                                                 |
 | CHANGELOG        | 产品变化、发布状态与升级注意事项                                                               |
-| docs 顶层        | 系统、错误、媒体处理与发布的维护契约                                                           |
+| docs 顶层        | 系统、错误、媒体处理、发布与 macOS 构建的维护契约                                              |
 | 资源与模块说明   | 对应目录的维护要求、来源和技术约束                                                             |
 | 许可与第三方声明 | 保留原始授权、署名和来源事实                                                                   |
 

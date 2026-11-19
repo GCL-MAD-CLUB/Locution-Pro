@@ -1,65 +1,65 @@
-# Error handling contracts
+# 错误处理契约
 
-This maintainer reference describes the Locution Pro 0.4.2 baseline. User recovery steps belong in the user guide; diagnostic formats and implementation details belong here.
+本文面向维护者，记录错误分类、诊断格式与实现约束。用户恢复步骤只在用户指南中描述。
 
-## Classify at the source
+## 在来源处分类
 
-Every recoverable native failure is an `AppError` with a literal `ErrorCode` from `src-tauri/src/error.rs`. The catalog defines a stable public code, category and retryability. Internal functions return `AppResult<T>`; Tauri commands return `CommandResult<T>`.
+每个可恢复的原生失败都是 `AppError`，携带 `src-tauri/src/error.rs` 中的字面量 `ErrorCode`。目录为每个代码定义稳定的公开代码、类别和可重试性。内部函数返回 `AppResult<T>`，Tauri 命令返回 `CommandResult<T>`。
 
-Diagnostic detail is written in English and logged with the assigned error ID. Do not infer categories from text, wrap errors as strings or introduce implicit string conversion.
+诊断详情使用英文，并与分配的错误 ID 一起记录日志。不得根据文本推断类别，不得将错误包装为字符串，也不得引入隐式字符串转换。
 
-Only allow-listed public fields cross the native boundary: `errorId`, `code`, `category` and `retryable`. Native detail, full paths, tool stderr and secret material must not be serialized as public errors.
+只有白名单中的公开字段可以跨越原生边界：`errorId`、`code`、`category` 和 `retryable`。原生详情、完整路径、工具 stderr 和密钥材料不得序列化为公开错误。
 
-## Normalize at one boundary
+## 在单一边界归一化
 
-`invokeCommand` is the application command boundary. It accepts categories only from the shared closed set. Malformed failures become the explicitly classified `UNEXPECTED_ERROR/runtime` fallback, without inspecting diagnostic text.
+`invokeCommand` 是应用命令边界，只接受共享封闭集合中的类别。格式错误的失败显式归类为 `UNEXPECTED_ERROR/runtime` 回退，不检查诊断文本。
 
-Application failures use `clientError` with a typed entry in `src/core/errors.ts`. The application catalog also declares category and retryability. Do not throw raw `Error`, `DOMException` or unclassified values.
+应用层失败使用 `clientError`，并在 `src/core/errors.ts` 中有类型化条目；应用目录同样声明类别与可重试性。不得抛出原始 `Error`、`DOMException` 或未分类的值。
 
-`src/runtime/errors/runtime.ts` owns normalization, operation policy, incident state and global handling. `src/app/ErrorUI.tsx` provides the React boundary and shared modal outlet; the facade must not expose internal storage.
+`src/runtime/errors/runtime.ts` 负责归一化、操作策略、事件状态和全局处理。`src/app/ErrorUI.tsx` 提供 React 边界和共享模态出口；对外接口不得暴露内部存储。
 
-## Present safe recovery information
+## 呈现安全的恢复信息
 
-The visible body comes from the exhaustive category template, rather than the native code or diagnostic text.
+可见正文来自按类别穷举的模板，而不是原生代码或诊断文本。
 
-| Category     | Recovery topic                             |
-| ------------ | ------------------------------------------ |
-| cancelled    | Normal cancellation, normally silent       |
-| validation   | Invalid input or settings                  |
-| resource     | Missing required resource                  |
-| state        | Operation unavailable in the current state |
-| io           | File read or write failure                 |
-| format       | Unrecognized content                       |
-| security     | Failed security verification               |
-| externalTool | Media component failure                    |
-| media        | Media processing failure                   |
-| platform     | Operating system failure                   |
-| runtime      | Unexpected application failure             |
-| unsupported  | Unsupported operation or content           |
+| 类别         | 恢复主题             |
+| ------------ | -------------------- |
+| cancelled    | 正常取消，通常不提示 |
+| validation   | 输入或设置无效       |
+| resource     | 缺少必需资源         |
+| state        | 当前状态下操作不可用 |
+| io           | 文件读写失败         |
+| format       | 无法识别的内容       |
+| security     | 安全校验失败         |
+| externalTool | 媒体组件失败         |
+| media        | 媒体处理失败         |
+| platform     | 操作系统失败         |
+| runtime      | 意外的应用失败       |
+| unsupported  | 不支持的操作或内容   |
 
-Operation policy selects silence and title. Safe context may include a basename; an opaque error ID links the report to private logs. Full diagnostics must never become modal text.
+操作策略决定是否静默以及标题。安全上下文可以包含文件名；不透明的错误 ID 将报告与私有日志关联。完整诊断不得出现在模态文本中。
 
-Successful operations may return sanitized `UserNotice` values with code, severity and public message. Private warning details are logged separately.
+成功的操作可以返回经过清理的 `UserNotice`，包含代码、严重程度和公开消息。私有警告详情单独记录。
 
-## Aggregate and isolate incidents
+## 聚合与隔离事件
 
-Operations, task progress and the React boundary route normalized failures through `IncidentCenter`. Repeated operation/code pairs aggregate within the logging window, retaining count and last occurrence.
+操作、任务进度和 React 边界通过 `IncidentCenter` 传递归一化后的失败。同一操作与代码组合在日志窗口内聚合，保留次数和最后一次发生时间。
 
-Cancellation is an expected outcome. `TASK_NOT_RUNNING` during cancellation of completed native work is handled at that boundary. Detection or extraction failure must not fail unrelated queued media.
+取消是预期结果。取消已完成的原生工作时出现的 `TASK_NOT_RUNNING` 在该边界处理。检测或提取失败不得使无关的排队媒体失败。
 
-Panel persistence failures use their own load/save operation policies and must not be reported as successful project saves. Background cache maintenance can log a failure while retaining usable records; it must not turn a successful append into an unrelated warning.
+面板持久化失败使用各自的加载／保存操作策略，不得报告为项目保存成功。后台缓存维护可以在保留可用记录的同时记录失败，但不得将一次成功的追加变成无关的警告。
 
-## Enforce the contract
+## 执行契约
 
-`npm run check:errors` checks command boundaries, typed creation sites, English diagnostics and forbidden raw errors. The explicit infallible command allow-list covers `path_is_file` and the terminal `record_frontend_incident` sink.
+`npm run check:errors` 检查命令边界、类型化创建位置、英文诊断和禁止的原始错误。显式的无失败命令白名单包括 `path_is_file` 和终端 `record_frontend_incident` 接收端。
 
-For a new failure:
+新增失败时：
 
-1. Add a typed catalog code with category and retryability.
-2. Construct the error at its source with useful private context.
-3. Propagate without reclassification.
-4. Add an operation policy only for a new workflow.
-5. Keep visible recovery text in category templates and user instructions in the guide.
-6. Run the error gate, applicable tests and build checks.
+1. 添加带类别和可重试性的类型化目录代码。
+2. 在来源处构造错误，附带有用的私有上下文。
+3. 原样传递，不重新分类。
+4. 只有新工作流才添加操作策略。
+5. 可见恢复文本保留在类别模板中，用户说明放在用户指南。
+6. 运行错误检查、适用测试和构建检查。
 
-See [system contracts](system-architecture.md), [media processing](media-processing.md) and [contribution guidance](../CONTRIBUTING.md).
+另见[系统维护契约](system-architecture.md)、[媒体处理](media-processing.md)和[贡献指南](../CONTRIBUTING.md)。

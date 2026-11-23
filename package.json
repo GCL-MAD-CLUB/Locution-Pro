@@ -91,8 +91,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
-    "@playwright/test": "^1.65.0",
-    "@tauri-apps/cli": "^2.12.4",
+    "@playwright/test": "^1.65.1",
+    "@tauri-apps/cli": "^2.12.6",
     "@types/d3-force": "^3.0.10",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",

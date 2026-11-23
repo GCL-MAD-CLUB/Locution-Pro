@@ -90,7 +90,7 @@
     "zustand": "^5.1.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.5",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.65.0",
     "@tauri-apps/cli": "^2.12.4",
     "@types/d3-force": "^3.0.10",
